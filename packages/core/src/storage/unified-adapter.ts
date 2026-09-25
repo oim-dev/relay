@@ -2,8 +2,7 @@ import { z } from "zod";
 import { entityAddress } from "@relay/contracts/entities/graph";
 import type { EntityRef } from "@relay/contracts/entities/graph";
 import type { JsonValue } from "@relay/contracts/storage";
-import { createEntityStorageRegistry, markdownCodec } from "./entity-store/codecs.js";
-import { releaseSnapshotSchema, releaseSnapshotEntrySchema } from "../domain/release-snapshot.js";
+import { createEntityStorageRegistry } from "./entity-store/codecs.js";
 import type { EntityRecord } from "./entity-store/registry.js";
 import { EntityStorageRegistry } from "./entity-store/registry.js";
 import type { StorageSession } from "./entity-store/store.js";
@@ -48,31 +47,6 @@ export function workspaceStorageRegistry() {
     );
   return new EntityStorageRegistry([
     ...definitions,
-    {
-      kind: "release-snapshot",
-      collection: "release-snapshots",
-      dataVersion: 1,
-      addressable: false,
-      schema: releaseSnapshotSchema,
-      ...markdownCodec([]),
-      card: () => ({ title: "Снимок выпуска", status: "", selectors: [] }),
-    },
-    {
-      kind: "release-snapshot-entry",
-      collection: "release-snapshot-entries",
-      dataVersion: 1,
-      addressable: false,
-      schema: releaseSnapshotEntrySchema,
-      ...markdownCodec([
-        ["item", "content"],
-        ["plan", "goal"],
-        ["plan", "rationale"],
-        ["plan", "boundaries"],
-        ["plan", "expectedResult"],
-        ["plan", "result"],
-      ]),
-      card: () => ({ title: "Содержание снимка выпуска", status: "", selectors: [] }),
-    },
     {
       kind: "scope",
       collection: "scopes",

@@ -87,8 +87,6 @@ import { getReleasePlansForProject } from "./operations/get-release-plans-for-pr
 import { getReleasePlans } from "./operations/get-release-plans.js";
 import { getReleaseProgressForProject } from "./operations/get-release-progress-for-project.js";
 import { getReleaseProgress } from "./operations/get-release-progress.js";
-import { getReleaseSnapshotForProject } from "./operations/get-release-snapshot-for-project.js";
-import { getReleaseSnapshot } from "./operations/get-release-snapshot.js";
 import { getRelease } from "./operations/get-release.js";
 import { getReleasesForProject } from "./operations/get-releases-for-project.js";
 import { getReleases } from "./operations/get-releases.js";
@@ -257,7 +255,6 @@ export const operationsTree = {
     previewRelease: previewRelease,
     getRelease: getRelease,
     getReleasePlans: getReleasePlans,
-    getReleaseSnapshot: getReleaseSnapshot,
     updateRelease: updateRelease,
     transitionRelease: transitionRelease,
     getReleasesForProject: getReleasesForProject,
@@ -265,7 +262,6 @@ export const operationsTree = {
     previewReleaseForProject: previewReleaseForProject,
     getReleaseForProject: getReleaseForProject,
     getReleasePlansForProject: getReleasePlansForProject,
-    getReleaseSnapshotForProject: getReleaseSnapshotForProject,
     updateReleaseForProject: updateReleaseForProject,
     transitionReleaseForProject: transitionReleaseForProject,
   },

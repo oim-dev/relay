@@ -51,16 +51,6 @@ export const workPlanFieldsSchema = z.strictObject({
     .default([])
     .describe("Участники плана; не определяют права исполнения"),
 });
-export const workPlanDataSchema = workPlanFieldsSchema.extend({
-  kind: z.literal("work-plan").describe("План работ"),
-  projectId: planningIdSchema.describe("Постоянный ID проекта-владельца"),
-  status: planStatusSchema,
-  result: text(256 * 1024).describe("Итог завершения либо причина отмены в Markdown"),
-  startedAt: timestampSchema.nullable().describe("Фактическое время начала либо null"),
-  closedAt: timestampSchema
-    .nullable()
-    .describe("Фактическое время завершения или отмены либо null"),
-});
 export const stageFieldsSchema = z.strictObject({
   title: singleLine(160).describe("Однострочное название этапа"),
   summary: text(16 * 1024)
@@ -73,15 +63,37 @@ export const stageFieldsSchema = z.strictObject({
     .default("")
     .describe("Условия завершения в Markdown; не исполняемая формула"),
 });
-export const planStageDataSchema = stageFieldsSchema.extend({
-  kind: z.literal("plan-stage").describe("Этап плана работ"),
-  projectId: planningIdSchema,
-  planId: planningIdSchema.describe("Единственный план-владелец"),
-  rank: z.number().int().nonnegative().describe("Порядок отображения; не зависимость исполнения"),
+// Отсутствующие поля изменения не получают значения по умолчанию создания.
+export const stageChangesSchema = z.strictObject({
+  title: stageFieldsSchema.shape.title.optional(),
+  summary: stageFieldsSchema.shape.summary
+    .removeDefault()
+    .optional()
+    .describe("Новое краткое описание обычным текстом; пустая строка очищает поле"),
+  outcome: stageFieldsSchema.shape.outcome
+    .removeDefault()
+    .optional()
+    .describe("Новый ожидаемый результат в Markdown; пустая строка очищает поле"),
+  completionConditions: stageFieldsSchema.shape.completionConditions
+    .removeDefault()
+    .optional()
+    .describe("Новые условия завершения в Markdown; пустая строка очищает поле"),
+});
+export const planStageSchema = stageFieldsSchema.extend({
+  id: planningIdSchema.describe("Внутренний ID этапа в плане; не ключ сущности"),
   taskIds: z
     .array(planningIdSchema)
     .max(2000)
-    .describe("Полный набор ID включённых задач, максимум 2000; карточки читаются страницами"),
+    .describe("Только явно выбранные ID задач; потомки автоматически не записываются"),
+});
+export const workPlanDataSchema = workPlanFieldsSchema.extend({
+  kind: z.literal("work-plan").describe("План работ"),
+  projectId: planningIdSchema.describe("Постоянный ID проекта-владельца"),
+  stages: z.array(planStageSchema).max(200).describe("Этапы внутри плана в порядке отображения"),
+  status: planStatusSchema,
+  result: text(256 * 1024).describe("Итог завершения либо причина отмены в Markdown"),
+  startedAt: timestampSchema.nullable().describe("Фактическое время начала либо null"),
+  closedAt: timestampSchema.nullable().describe("Фактическое время закрытия либо null"),
 });
 export const planningMetadata = {
   id: planningIdSchema,
@@ -93,7 +105,6 @@ export const planningMetadata = {
   updatedBy: actorSchema,
 };
 export const workPlanSchema = workPlanDataSchema.extend(planningMetadata);
-export const planStageSchema = planStageDataSchema.extend(planningMetadata);
 export const planningCountsSchema = z.strictObject({
   total: z.number().int().nonnegative().describe("Все уникальные задачи собственного состава"),
   completed: z
@@ -146,7 +157,7 @@ export const planningPage = <T extends z.ZodType>(item: T) =>
       .describe("Смещение следующей страницы либо null"),
     version: z.string().describe("Версия согласованного состава и фильтров"),
   });
-export const planSummarySchema = workPlanSchema.extend({
+export const planSummarySchema = workPlanSchema.omit({ stages: true }).extend({
   scopeLabels: z
     .array(
       z.strictObject({
@@ -251,10 +262,12 @@ export const changeStageSchema = z.strictObject({
   action: z
     .enum(["create", "update", "remove", "move"])
     .describe("Создать, изменить, удалить пустой этап или переместить"),
-  stage: entityReferenceSchema.optional().describe("Ключ или ID этапа; обязателен кроме создания"),
-  fields: stageFieldsSchema
+  stage: planningIdSchema
     .optional()
-    .describe("Полное содержание этапа для создания или изменения"),
+    .describe("Внутренний ID этапа плана; обязателен кроме создания"),
+  fields: stageChangesSchema
+    .optional()
+    .describe("Поля этапа: создание требует title, изменение — непустой набор переданных полей"),
   before: planningIdSchema
     .nullable()
     .optional()
@@ -267,7 +280,7 @@ export const changeStageSchema = z.strictObject({
 export const changePlanTasksSchema = z.strictObject({
   ...planningWrite,
   ifRevision: planningRevision,
-  stage: entityReferenceSchema.describe("Ключ или ID этапа выбранного плана"),
+  stage: planningIdSchema.describe("Внутренний ID этапа выбранного плана"),
   add: z
     .array(entityReferenceSchema)
     .max(2000)
@@ -283,7 +296,8 @@ export const transferPlanTaskSchema = z.strictObject({
   ...planningWrite,
   ifRevision: planningRevision.describe("Ревизия исходного плана"),
   task: entityReferenceSchema.describe("Переносимая задача, ключ или ID"),
-  targetStage: entityReferenceSchema.describe("Целевой этап, ключ или ID"),
+  targetPlan: entityReferenceSchema.describe("Ключ или ID целевого плана"),
+  targetStage: planningIdSchema.describe("Внутренний ID этапа целевого плана"),
   targetRevision: planningRevision.describe("Ревизия целевого плана"),
   reason: text(16 * 1024)
     .min(1)
@@ -313,9 +327,10 @@ export const planMembershipsSchema = planningPage(planMembershipSchema);
 export const planningCandidatesQuerySchema = planningPageQuerySchema.extend({
   q: z.string().max(1024).optional().describe("Поиск задач по ключу и названию"),
   board: entityReferenceSchema.optional().describe("Доска: ключ, slug или ID"),
-  stage: entityReferenceSchema
+  plan: entityReferenceSchema.optional().describe("План редактируемого этапа, ключ или ID"),
+  stage: planningIdSchema
     .optional()
-    .describe("Редактируемый этап; его задачи остаются допустимым выбором"),
+    .describe("Внутренний ID редактируемого этапа; требует plan, сохраняет его задачи в выборе"),
   availableOnly: z
     .enum(["true", "false"])
     .default("true")

@@ -45,11 +45,13 @@ export const storedProjectSettingsSchema = projectSettingsSchema.extend({
 });
 
 /** Полная идемпотентная замена редактируемых настроек. */
-export const saveProjectSettingsSchema = projectSettingsSchema.omit({ revision: true, documentSections: true }).extend({
-  ifRevision: projectSettingsSchema.shape.revision.describe(
-    "Исходная ревизия; конфликт возвращает REVISION_CONFLICT",
-  ),
-});
+export const saveProjectSettingsSchema = projectSettingsSchema
+  .omit({ revision: true, documentSections: true })
+  .extend({
+    ifRevision: projectSettingsSchema.shape.revision.describe(
+      "Исходная ревизия; конфликт возвращает REVISION_CONFLICT",
+    ),
+  });
 
 /** Настройки, видимые пользователю. */
 export type ProjectSettings = z.infer<typeof projectSettingsSchema>;

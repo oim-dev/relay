@@ -24,14 +24,4 @@ export type PlanFormValues = {
   summary: string;
   /** Цель Markdown. */
   goal: string;
-  /** Обоснование Markdown. */
-  rationale: string;
-  /** Границы Markdown. */
-  boundaries: string;
-  /** Ожидаемый результат Markdown. */
-  expectedResult: string;
-  /** Участники плана. */
-  participants: string[];
-  /** Постоянные адреса областей. */
-  scope: string[];
 };

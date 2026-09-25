@@ -30,7 +30,7 @@ import { digest } from "../../storage/entity-store/format.js";
 import { actorSchema, requestIdSchema } from "@relay/contracts/primitives";
 import { validateProduct } from "../product/model.js";
 import { planningRecords } from "../../storage/planning.js";
-import { syncPlanRelations, syncStageRelations } from "../planning/relations.js";
+import { syncPlanRelations } from "../planning/relations.js";
 import { syncReleaseRelations } from "../releases/relations.js";
 
 /** Только явное обслуживание меняет физический формат существующего проекта. */
@@ -120,8 +120,6 @@ export class StorageService {
       await syncTaskRelations(this.workspace, tasks, author);
       for (const plan of await planningRecords(this.workspace, "work-plan"))
         await syncPlanRelations(this.workspace, plan, author);
-      for (const stage of await planningRecords(this.workspace, "plan-stage"))
-        await syncStageRelations(this.workspace, stage, author);
       for (const release of await planningRecords(this.workspace, "release"))
         await syncReleaseRelations(this.workspace, release, author);
       const after = (await graph.open(owned)).index.entries;

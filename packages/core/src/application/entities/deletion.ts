@@ -102,11 +102,11 @@ export class EntityDeletionService {
     }
     for (const entry of catalog.entries) {
       const data = entry.data;
-      if (data.kind === "plan-stage")
+      if (data.kind === "work-plan")
         invariant(
-          !data.taskIds.some((id) => has("task", id)),
+          !data.stages.some((stage) => stage.taskIds.some((id) => has("task", id))),
           "PLANNING_REFERENCE_IN_USE",
-          `Удаление затрагивает задачи этапа ${entry.key}. Сначала явно пересмотрите состав плана; историческое участие сохраняется.`,
+          `Удаление затрагивает задачи плана ${entry.key}. Сначала явно пересмотрите его состав.`,
           4,
         );
       if (data.kind === "work-plan")

@@ -39,13 +39,15 @@ for (const scoped of [false, true])
           );
       }
     }
-    assert.equal(operations.size, 159);
+    assert.equal(operations.size, 157);
     for (const path of [
       "/api/v1/tasks",
       "/api/v1/board",
       "/api/v1/overview",
       "/api/v1/project/state",
       "/api/v1/project/records",
+      "/api/v1/releases/{reference}/snapshot",
+      "/api/v1/projects/{project}/releases/{reference}/snapshot",
     ])
       assert.equal(document.paths[path], undefined, `Удалённый маршрут ${path}`);
     for (const [name, schema] of Object.entries(document.components!.schemas!)) {

@@ -30,12 +30,6 @@ import { invariant } from "../../shared/errors.js";
 import { readPlanningState } from "../planning/model.js";
 import { releaseComposition } from "./model.js";
 import { syncReleaseRelations } from "./relations.js";
-import {
-  captureRelease,
-  readReleaseSnapshot,
-  readSnapshotEntry,
-  archivedPlans,
-} from "./snapshot.js";
 
 /** Самостоятельный владелец выпуска; планы и задачи не меняют состояния вслед за релизом. */
 export class ReleasesService {
@@ -66,15 +60,10 @@ export class ReleasesService {
         planningSession(this.workspace).state.version,
       ];
       const page = planningPage(selected, query, source);
-      const state = page.items.some((release) => release.status !== "released")
-        ? await readPlanningState(this.workspace)
-        : undefined;
+      const state = await readPlanningState(this.workspace);
       const items = await Promise.all(
         page.items.map(async (release) => {
-          const readiness =
-            release.status === "released"
-              ? (await readReleaseSnapshot(this.workspace, release)).readiness
-              : releaseComposition(release.planIds, state!).readiness;
+          const readiness = releaseComposition(release.planIds, state).readiness;
           return {
             ...release,
             readiness: {
@@ -99,10 +88,10 @@ export class ReleasesService {
   async get(reference: string) {
     return this.workspace.locked(async () => {
       const release = await planningRecord(this.workspace, reference, "release");
-      const readiness =
-        release.status === "released"
-          ? (await readReleaseSnapshot(this.workspace, release)).readiness
-          : releaseComposition(release.planIds, await readPlanningState(this.workspace)).readiness;
+      const readiness = releaseComposition(
+        release.planIds,
+        await readPlanningState(this.workspace),
+      ).readiness;
       return {
         ...release,
         readiness: {
@@ -115,17 +104,6 @@ export class ReleasesService {
   async composition(reference: string, query: PlanningPageQuery = {}) {
     return this.workspace.locked(async () => {
       const release = await planningRecord(this.workspace, reference, "release");
-      if (release.status === "released") {
-        const manifest = await readReleaseSnapshot(this.workspace, release);
-        const items = (await archivedPlans(this.workspace, release)).map((plan) => ({
-          id: plan.id,
-          plan,
-        }));
-        return {
-          ...planningPage(items, query, [release, manifest, query.limit]),
-          readiness: { ...manifest.readiness, canRelease: false },
-        };
-      }
       const state = await readPlanningState(this.workspace);
       const result = releaseComposition(release.planIds, state);
       return {
@@ -165,29 +143,6 @@ export class ReleasesService {
       };
     });
   }
-  async snapshot(reference: string, query: PlanningPageQuery = {}) {
-    return this.workspace.locked(async () => {
-      const release = await planningRecord(this.workspace, reference, "release");
-      const manifest = await readReleaseSnapshot(this.workspace, release);
-      const page = planningPage(manifest.entryIds, query, [
-        release.snapshotId,
-        manifest,
-        query.limit,
-      ]);
-      return {
-        ...page,
-        snapshotId: release.snapshotId!,
-        releaseId: release.id,
-        capturedAt: manifest.capturedAt,
-        capturedBy: manifest.capturedBy,
-        items: await Promise.all(
-          page.items.map(
-            async (id) => (await readSnapshotEntry(this.workspace, release.snapshotId!, id)).item,
-          ),
-        ),
-      };
-    });
-  }
   async create(input: SaveRelease, actor: string) {
     const command = saveReleaseSchema.parse(input);
     invariant(
@@ -211,7 +166,7 @@ export class ReleasesService {
       "release",
       { ...command, operation: "save", ...(reference === undefined ? {} : { reference }) },
       author,
-      async (owned) => {
+      async () => {
         planningSession(this.workspace);
         const previous =
           reference === undefined
@@ -228,7 +183,7 @@ export class ReleasesService {
           invariant(
             previous.status !== "released",
             "RELEASE_IMMUTABLE",
-            "Выпущенный релиз и его снимок неизменяемы",
+            "Выпущенный релиз неизменяем",
             4,
           );
           invariant(
@@ -259,15 +214,14 @@ export class ReleasesService {
                 status: "planned",
                 releasedAt: null,
                 releasedBy: null,
-                snapshotId: null,
               },
               author,
             );
         release.status = status;
         if (status === "released") {
+          this.assertReady(release, state);
           release.releasedAt = new Date().toISOString();
           release.releasedBy = author;
-          release.snapshotId = await captureRelease(this.workspace, release, state, author, owned);
         }
         if (previous || status !== "planned")
           release = (await savePlanning(
@@ -292,7 +246,7 @@ export class ReleasesService {
       "release",
       { ...command, operation: "transition", reference },
       author,
-      async (owned) => {
+      async () => {
         const release = await planningRecord(this.workspace, reference, "release");
         assertRevision(release, command.ifRevision);
         invariant(
@@ -309,15 +263,9 @@ export class ReleasesService {
             4,
           );
           release.status = "released";
+          this.assertReady(release, await readPlanningState(this.workspace));
           release.releasedAt = new Date().toISOString();
           release.releasedBy = author;
-          release.snapshotId = await captureRelease(
-            this.workspace,
-            release,
-            await readPlanningState(this.workspace),
-            author,
-            owned,
-          );
         } else {
           const next = command.action === "plan" ? "planned" : "cancelled";
           invariant(
@@ -331,6 +279,14 @@ export class ReleasesService {
         const saved = await savePlanning(this.workspace, release, author, command.action);
         return planningSaved(saved, command.action, command.requestId);
       },
+    );
+  }
+  private assertReady(release: Release, state: Awaited<ReturnType<typeof readPlanningState>>) {
+    invariant(
+      releaseComposition(release.planIds, state).readiness.canRelease,
+      "RELEASE_INCOMPLETE",
+      "Сначала завершите все планы и их текущие обязательства",
+      4,
     );
   }
   private async resolvePlans(refs: string[]) {

@@ -66,10 +66,15 @@ export interface PlanningCandidatesQuery {
    */
   board?: string;
   /**
-   * Редактируемый этап; его задачи остаются допустимым выбором
+   * План редактируемого этапа, ключ или ID
    * @minLength 1
    * @maxLength 257
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  plan?: string;
+  /**
+   * Внутренний ID редактируемого этапа; требует plan, сохраняет его задачи в выборе
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
    */
   stage?: string;
   /**
@@ -311,7 +316,7 @@ export interface PlansPage {
     result: string;
     /** Фактическое время начала либо null */
     startedAt: string | null;
-    /** Фактическое время завершения или отмены либо null */
+    /** Фактическое время закрытия либо null */
     closedAt: string | null;
     /**
      * Постоянный ID записи выбранного проекта
@@ -503,7 +508,7 @@ export interface PlanSummary {
   result: string;
   /** Фактическое время начала либо null */
   startedAt: string | null;
-  /** Фактическое время завершения или отмены либо null */
+  /** Фактическое время закрытия либо null */
   closedAt: string | null;
   /**
    * Постоянный ID записи выбранного проекта
@@ -641,64 +646,16 @@ export interface StagesPage {
      * @default ""
      */
     completionConditions: string;
-    /** Этап плана работ */
-    kind: "plan-stage";
     /**
-     * Постоянный ID записи выбранного проекта
-     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-     */
-    projectId: string;
-    /**
-     * Единственный план-владелец
-     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-     */
-    planId: string;
-    /**
-     * Порядок отображения; не зависимость исполнения
-     * @min 0
-     * @max 9007199254740991
-     */
-    rank: number;
-    /**
-     * Полный набор ID включённых задач, максимум 2000; карточки читаются страницами
-     * @maxItems 2000
-     */
-    taskIds: string[];
-    /**
-     * Постоянный ID записи выбранного проекта
+     * Внутренний ID этапа в плане; не ключ сущности
      * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
      */
     id: string;
-    /** Читаемый ключ записи */
-    key: string;
     /**
-     * Ревизия записи
-     * @exclusiveMin 0
-     * @max 9007199254740991
+     * Только явно выбранные ID задач; потомки автоматически не записываются
+     * @maxItems 2000
      */
-    revision: number;
-    /**
-     * Момент времени в UTC
-     * @format date-time
-     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
-     */
-    createdAt: string;
-    /**
-     * Момент времени в UTC
-     * @format date-time
-     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
-     */
-    updatedAt: string;
-    /**
-     * Автор операции
-     * @maxLength 128
-     */
-    createdBy: string;
-    /**
-     * Автор операции
-     * @maxLength 128
-     */
-    updatedBy: string;
+    taskIds: string[];
     counts: {
       /**
        * Все уникальные задачи собственного состава
@@ -1064,30 +1021,19 @@ export interface ChangePlanStage {
   /** Создать, изменить, удалить пустой этап или переместить */
   action: ChangePlanStageActionEnum;
   /**
-   * Ключ или ID этапа; обязателен кроме создания
-   * @minLength 1
-   * @maxLength 257
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   * Внутренний ID этапа плана; обязателен кроме создания
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
    */
   stage?: string;
-  /** Полное содержание этапа для создания или изменения */
+  /** Поля этапа: создание требует title, изменение — непустой набор переданных полей */
   fields?: {
     /** Однострочное название этапа */
-    title: string;
-    /**
-     * Краткое описание этапа обычным текстом
-     * @default ""
-     */
+    title?: string;
+    /** Новое краткое описание обычным текстом; пустая строка очищает поле */
     summary?: string;
-    /**
-     * Ожидаемый результат этапа в Markdown
-     * @default ""
-     */
+    /** Новый ожидаемый результат в Markdown; пустая строка очищает поле */
     outcome?: string;
-    /**
-     * Условия завершения в Markdown; не исполняемая формула
-     * @default ""
-     */
+    /** Новые условия завершения в Markdown; пустая строка очищает поле */
     completionConditions?: string;
   };
   /** ID следующего этапа; null — конец полного списка */
@@ -1113,10 +1059,8 @@ export interface ChangePlanTasks {
    */
   ifRevision: number;
   /**
-   * Ключ или ID этапа выбранного плана
-   * @minLength 1
-   * @maxLength 257
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   * Внутренний ID этапа выбранного плана
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
    */
   stage: string;
   /**
@@ -1157,10 +1101,15 @@ export interface TransferPlanTask {
    */
   task: string;
   /**
-   * Целевой этап, ключ или ID
+   * Ключ или ID целевого плана
    * @minLength 1
    * @maxLength 257
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  targetPlan: string;
+  /**
+   * Внутренний ID этапа целевого плана
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
    */
   targetStage: string;
   /**
@@ -1288,8 +1237,6 @@ export interface ReleasesPage {
     releasedAt: string | null;
     /** Автор фиксации выпуска */
     releasedBy: string | null;
-    /** Постоянный ID самодостаточного снимка */
-    snapshotId: string | null;
     /**
      * Постоянный ID записи выбранного проекта
      * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
@@ -1413,8 +1360,6 @@ export interface ReleaseSummary {
   releasedAt: string | null;
   /** Автор фиксации выпуска */
   releasedBy: string | null;
-  /** Постоянный ID самодостаточного снимка */
-  snapshotId: string | null;
   /**
    * Постоянный ID записи выбранного проекта
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
@@ -1628,7 +1573,7 @@ export interface ReleaseComposition {
      * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
      */
     id: string;
-    /** План текущего или сохранённого состава; null при недоступности */
+    /** Актуальный план выбранного состава; null при недоступности */
     plan: {
       /**
        * Однострочное название плана
@@ -1693,7 +1638,7 @@ export interface ReleaseComposition {
       result: string;
       /** Фактическое время начала либо null */
       startedAt: string | null;
-      /** Фактическое время завершения или отмены либо null */
+      /** Фактическое время закрытия либо null */
       closedAt: string | null;
       /**
        * Постоянный ID записи выбранного проекта
@@ -1848,64 +1793,6 @@ export interface ReleaseComposition {
   };
 }
 
-export interface ReleaseSnapshotPage {
-  /** Записи текущей страницы */
-  items: {
-    /** Вид архивированной записи */
-    kind: string;
-    /**
-     * Постоянный ID записи выбранного проекта
-     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-     */
-    id: string;
-    /** Ключ на момент выпуска */
-    key: string;
-    /**
-     * Ревизия исходной записи
-     * @min 0
-     * @max 9007199254740991
-     */
-    revision: number;
-    /** Название на момент выпуска */
-    title: string;
-    /** Основание включения: состав, обязательство, требование или материал */
-    reason: string;
-    /** Самодостаточное содержание записи в Markdown, включая критерии и реквизиты */
-    content: string;
-  }[];
-  /**
-   * Полное число записей выбранной области
-   * @min 0
-   * @max 9007199254740991
-   */
-  total: number;
-  /** Смещение следующей страницы либо null */
-  nextOffset: number | null;
-  /** Версия согласованного состава и фильтров */
-  version: string;
-  /**
-   * Постоянный ID записи выбранного проекта
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-   */
-  snapshotId: string;
-  /**
-   * Постоянный ID записи выбранного проекта
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-   */
-  releaseId: string;
-  /**
-   * Момент времени в UTC
-   * @format date-time
-   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
-   */
-  capturedAt: string;
-  /**
-   * Автор операции
-   * @maxLength 128
-   */
-  capturedBy: string;
-}
-
 export interface WorkPlanProgress {
   /** Адрес выбранной сущности */
   entity: {
@@ -1997,7 +1884,7 @@ export interface WorkPlanProgress {
   };
   /** Черновик имеет цель и непустой состав */
   canStart: boolean;
-  /** Начатый план имеет фактически выполненный непустой состав */
+  /** Открытый план имеет фактически выполненный непустой состав */
   canComplete: boolean;
   /** Сохранённое завершение расходится с текущим выполнением задач */
   diverged: boolean;
@@ -2007,8 +1894,6 @@ export interface WorkPlanProgress {
     items: {
       /** ID этапа */
       id: string;
-      /** Ключ этапа */
-      key: string;
       /** Название этапа */
       title: string;
       counts: {
@@ -2136,7 +2021,7 @@ export interface ReleaseProgress {
     /** Следующее смещение или null */
     nextOffset: number | null;
   };
-  /** Готовность планового либо исторический результат состоявшегося выпуска */
+  /** Текущая готовность планов выбранного релиза */
   kind: "release";
   /** Собственное состояние: запланирован, выпущен или отменён */
   status: ReleaseProgressStatusEnum;
@@ -2168,7 +2053,7 @@ export interface ReleaseProgress {
     /** Весь состав готов к явному выпуску */
     canRelease: boolean;
   };
-  /** Выбранные планы: текущие до выпуска, архивные после фиксации */
+  /** Актуальные выбранные планы независимо от состояния выпуска */
   plans: {
     /** Строки текущей страницы */
     items: {
@@ -2194,10 +2079,6 @@ export interface ReleaseProgress {
     /** Следующее смещение или null */
     nextOffset: number | null;
   };
-  /** Результат прочитан из неизменяемого снимка выпуска */
-  historical: boolean;
-  /** ID снимка либо null */
-  snapshotId: string | null;
 }
 
 export interface ProgressQuery {
@@ -3926,59 +3807,50 @@ export interface EntityDetail {
          * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
          */
         projectId: string;
+        /**
+         * Этапы внутри плана в порядке отображения
+         * @maxItems 200
+         */
+        stages: {
+          /**
+           * Однострочное название этапа
+           * @minLength 1
+           */
+          title: string;
+          /**
+           * Краткое описание этапа обычным текстом
+           * @default ""
+           */
+          summary: string;
+          /**
+           * Ожидаемый результат этапа в Markdown
+           * @default ""
+           */
+          outcome: string;
+          /**
+           * Условия завершения в Markdown; не исполняемая формула
+           * @default ""
+           */
+          completionConditions: string;
+          /**
+           * Внутренний ID этапа в плане; не ключ сущности
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          id: string;
+          /**
+           * Только явно выбранные ID задач; потомки автоматически не записываются
+           * @maxItems 2000
+           */
+          taskIds: string[];
+        }[];
         /** Состояние плана: черновик, в работе, завершён или отменён */
         status: EntityDetailStatusEnum1;
         /** Итог завершения либо причина отмены в Markdown */
         result: string;
         /** Фактическое время начала либо null */
         startedAt: string | null;
-        /** Фактическое время завершения или отмены либо null */
+        /** Фактическое время закрытия либо null */
         closedAt: string | null;
-      }
-    | {
-        /**
-         * Однострочное название этапа
-         * @minLength 1
-         */
-        title: string;
-        /**
-         * Краткое описание этапа обычным текстом
-         * @default ""
-         */
-        summary: string;
-        /**
-         * Ожидаемый результат этапа в Markdown
-         * @default ""
-         */
-        outcome: string;
-        /**
-         * Условия завершения в Markdown; не исполняемая формула
-         * @default ""
-         */
-        completionConditions: string;
-        /** Этап плана работ */
-        kind: "plan-stage";
-        /**
-         * Постоянный ID записи выбранного проекта
-         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-         */
-        projectId: string;
-        /**
-         * Единственный план-владелец
-         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-         */
-        planId: string;
-        /**
-         * Порядок отображения; не зависимость исполнения
-         * @min 0
-         * @max 9007199254740991
-         */
-        rank: number;
-        /**
-         * Полный набор ID включённых задач, максимум 2000; карточки читаются страницами
-         * @maxItems 2000
-         */
-        taskIds: string[];
       }
     | {
         /**
@@ -4025,8 +3897,6 @@ export interface EntityDetail {
         releasedAt: string | null;
         /** Автор фиксации выпуска */
         releasedBy: string | null;
-        /** Постоянный ID самодостаточного снимка */
-        snapshotId: string | null;
       }
     | {
         /**
@@ -9185,7 +9055,6 @@ export type EntityDeletionPreviewKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
@@ -9213,7 +9082,6 @@ export type EntityDeletionPreviewKindEnum2 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
@@ -9241,7 +9109,6 @@ export type EntityDeletionPreviewKindEnum4 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
@@ -9278,7 +9145,6 @@ export type EntityDeletedKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Роль автора: оператор, оркестратор или воркер */
@@ -9314,7 +9180,6 @@ export type EntityTypeQueryKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -9329,7 +9194,6 @@ export type EntityTypesKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -9344,7 +9208,6 @@ export type EntityTypeDetailKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -9359,7 +9222,6 @@ export type EntitiesQueryKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Активность реализации; прежние ссылки доступны без фильтра */
@@ -9399,7 +9261,6 @@ export type EntitiesPageKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
@@ -9427,7 +9288,6 @@ export type EntityGetQueryKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -9442,7 +9302,6 @@ export type EntitySummaryKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
@@ -9470,7 +9329,6 @@ export type EntityDetailKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
@@ -9554,7 +9412,6 @@ export type EntityDetailKindEnum4 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -9572,7 +9429,6 @@ export type EntityDetailKindEnum5 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
@@ -9600,7 +9456,6 @@ export type EntityKeysQueryKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -9615,7 +9470,6 @@ export type EntityKeysPageKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -9630,7 +9484,6 @@ export type EntityKeySpacesQueryKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -9645,7 +9498,6 @@ export type EntityKeySpacesKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Назначение приложения: клиентское, серверное или внутреннее */
@@ -9694,7 +9546,6 @@ export type CreateEntityKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -9730,7 +9581,6 @@ export type UpdateEntityKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -9760,7 +9610,6 @@ export type EntitySavedKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Выполненное действие */
@@ -9938,7 +9787,6 @@ export type ProductStateKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -10004,7 +9852,6 @@ export type ProductEntityKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -10046,7 +9893,6 @@ export type ProductMutationKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -10091,7 +9937,6 @@ export type ProductContextKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -10132,7 +9977,6 @@ export type ProductListKindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -10674,10 +10518,15 @@ export interface GetPlanningCandidatesParams {
    */
   board?: string;
   /**
-   * Редактируемый этап; его задачи остаются допустимым выбором
+   * План редактируемого этапа, ключ или ID
    * @minLength 1
    * @maxLength 257
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  plan?: string;
+  /**
+   * Внутренний ID редактируемого этапа; требует plan, сохраняет его задачи в выборе
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
    */
   stage?: string;
   /**
@@ -10761,7 +10610,7 @@ export interface GetPlanStageTasksParams {
    * @maxLength 128
    */
   version?: string;
-  /** ID или ключ этапа этого плана */
+  /** Внутренний ID этапа этого плана */
   stage: any;
   /** ID или ключ плана */
   reference: any;
@@ -10866,32 +10715,6 @@ export interface GetReleasePlansParams {
    */
   version?: string;
   /** ID или ключ релиза */
-  reference: any;
-}
-
-export type GetReleaseSnapshotOkEnum = true;
-
-export interface GetReleaseSnapshotParams {
-  /**
-   * Смещение страницы
-   * @min 0
-   * @max 9007199254740991
-   * @default 0
-   */
-  offset?: number;
-  /**
-   * Размер страницы: 12 по умолчанию, максимум 100
-   * @min 1
-   * @max 100
-   * @default 12
-   */
-  limit?: number;
-  /**
-   * Версия первой страницы; обязательна для продолжения
-   * @maxLength 128
-   */
-  version?: string;
-  /** ID или ключ выпущенного релиза */
   reference: any;
 }
 
@@ -11474,7 +11297,6 @@ export type KindEnum3 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -11489,7 +11311,6 @@ export type DescribeEntityTypeParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type ListEntitiesOkEnum = true;
@@ -11605,7 +11426,6 @@ export type KindEnum4 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Активность реализации; прежние ссылки доступны без фильтра */
@@ -11645,7 +11465,6 @@ export type ListEntitiesParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Активность реализации; прежние ссылки доступны без фильтра */
@@ -11701,7 +11520,6 @@ export type KindEnum5 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
@@ -11716,7 +11534,6 @@ export type GetEntityParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type ResolveEntityOkEnum = true;
@@ -11745,7 +11562,6 @@ export type KindEnum6 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
@@ -11760,7 +11576,6 @@ export type ResolveEntityParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type GetEntityKeysOkEnum = true;
@@ -11808,7 +11623,6 @@ export type KindEnum7 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
@@ -11823,7 +11637,6 @@ export type GetEntityKeysParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type GetEntityKeySpacesOkEnum = true;
@@ -11864,7 +11677,6 @@ export type KindEnum8 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -11879,7 +11691,6 @@ export type GetEntityKeySpacesParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type GetEntityHistoryOkEnum = true;
@@ -11927,7 +11738,6 @@ export type KindEnum9 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
@@ -11942,7 +11752,6 @@ export type GetEntityHistoryParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type UpdateEntityOkEnum = true;
@@ -12511,10 +12320,15 @@ export interface GetPlanningCandidatesForProjectParams {
    */
   board?: string;
   /**
-   * Редактируемый этап; его задачи остаются допустимым выбором
+   * План редактируемого этапа, ключ или ID
    * @minLength 1
    * @maxLength 257
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  plan?: string;
+  /**
+   * Внутренний ID редактируемого этапа; требует plan, сохраняет его задачи в выборе
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
    */
   stage?: string;
   /**
@@ -12608,7 +12422,7 @@ export interface GetPlanStageTasksForProjectParams {
    * @maxLength 128
    */
   version?: string;
-  /** ID или ключ этапа этого плана */
+  /** Внутренний ID этапа этого плана */
   stage: any;
   /** ID или ключ плана */
   reference: any;
@@ -12740,34 +12554,6 @@ export interface GetReleasePlansForProjectParams {
    */
   version?: string;
   /** ID или ключ релиза */
-  reference: any;
-  /** Slug, имя из реестра или постоянный идентификатор проекта */
-  project: string;
-}
-
-export type GetReleaseSnapshotForProjectOkEnum = true;
-
-export interface GetReleaseSnapshotForProjectParams {
-  /**
-   * Смещение страницы
-   * @min 0
-   * @max 9007199254740991
-   * @default 0
-   */
-  offset?: number;
-  /**
-   * Размер страницы: 12 по умолчанию, максимум 100
-   * @min 1
-   * @max 100
-   * @default 12
-   */
-  limit?: number;
-  /**
-   * Версия первой страницы; обязательна для продолжения
-   * @maxLength 128
-   */
-  version?: string;
-  /** ID или ключ выпущенного релиза */
   reference: any;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
@@ -13424,7 +13210,6 @@ export type KindEnum13 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -13439,7 +13224,6 @@ export type DescribeEntityTypeForProjectParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type ListEntitiesForProjectOkEnum = true;
@@ -13557,7 +13341,6 @@ export type KindEnum14 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Активность реализации; прежние ссылки доступны без фильтра */
@@ -13597,7 +13380,6 @@ export type ListEntitiesForProjectParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Активность реализации; прежние ссылки доступны без фильтра */
@@ -13660,7 +13442,6 @@ export type KindEnum15 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
@@ -13675,7 +13456,6 @@ export type GetEntityForProjectParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type ResolveEntityForProjectOkEnum = true;
@@ -13706,7 +13486,6 @@ export type KindEnum16 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
@@ -13721,7 +13500,6 @@ export type ResolveEntityForProjectParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type GetEntityKeysForProjectOkEnum = true;
@@ -13771,7 +13549,6 @@ export type KindEnum17 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
@@ -13786,7 +13563,6 @@ export type GetEntityKeysForProjectParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type GetEntityKeySpacesForProjectOkEnum = true;
@@ -13829,7 +13605,6 @@ export type KindEnum18 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Вид основной сущности */
@@ -13844,7 +13619,6 @@ export type GetEntityKeySpacesForProjectParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type GetEntityHistoryForProjectOkEnum = true;
@@ -13894,7 +13668,6 @@ export type KindEnum19 =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
@@ -13909,7 +13682,6 @@ export type GetEntityHistoryForProjectParams1KindEnum =
   | "task"
   | "document"
   | "work-plan"
-  | "plan-stage"
   | "release";
 
 export type UpdateEntityForProjectOkEnum = true;

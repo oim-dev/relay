@@ -41,6 +41,7 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
   const boardNavigationItems = boardItems.map((board, index) => ({
     id: board.id,
     name: board.name,
+    label: board.kind === "application" ? board.prefix : board.name,
     href: `${basePath}/boards/${board.slug}`,
     isActive: isKanbanTask && openedTask.data?.boardSlug === board.slug,
     hasSeparator: index > 0 && board.kind !== boardItems[index - 1]?.kind,
@@ -142,7 +143,8 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
               <NavLink
                 component={RouterNavLink}
                 to={board.href}
-                label={board.name}
+                label={board.label}
+                title={board.name}
                 active={board.isActive}
                 className={clsx(styles.link, styles._child)}
                 classNames={LINK_CLASSES}

@@ -34,11 +34,10 @@ import {
   releaseText,
   planningColumnLabel,
 } from "../presentation/planning.js";
-import { renderMarkdown } from "../presentation/markdown.js";
 
 type Options = Record<string, unknown>;
 const details =
-  "Запись выполняется через общие правила Core, с автором, прочитанной ревизией и ключом повтора. После потери ответа повторите исходный запрос с тем же --request-id. Старые базы сначала перенесите через storage migrate.";
+  "Запись выполняется через общие правила Core, с автором, прочитанной ревизией и ключом повтора. После потери ответа повторите исходный запрос с тем же --request-id. Старый формат планов и релизов не поддерживается; автоматического переноса нет.";
 const refArgument = { reference: "Ключ или постоянный ID выбранной сущности" };
 const paging = (command: Command) =>
   command
@@ -99,7 +98,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
   });
   const release = commandGroup(program, {
     name: "release",
-    description: "Самостоятельные релизы и сохранённые результаты",
+    description: "Самостоятельные релизы, актуальный состав и готовность",
     details,
     examples: [["relay-cli release list", "Прочитать релизы проекта"]],
   });
@@ -113,7 +112,8 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
       paging(command)
         .option("--q <text>", "Поиск по ключу и названию")
         .option("--board <reference>", "Доска: slug, ключ или ID")
-        .option("--stage <reference>", "Редактируемый этап: ключ или ID")
+        .option("--plan <reference>", "План редактируемого этапа: ключ или ID")
+        .option("--stage <id>", "Внутренний ID этапа; требует --plan")
         .option(
           "--available-only <value>",
           "true — доступные задачи, false — также занятые и отменённые",
@@ -190,12 +190,13 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
           text: (options) =>
             planningListText(
               "Релизы",
-              ["Ключ", "Название", "Версия", "Состояние"],
+              ["Ключ", "Название", "Версия", "Состояние", "Готово сейчас"],
               data.items.map((item) => [
                 item.key,
                 item.title,
                 item.version,
                 planningStatusLabels[item.status]!,
+                `${item.readiness.ready}/${item.readiness.total}`,
               ]),
               data,
               "release list",
@@ -316,9 +317,9 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         text: (options) =>
           planningListText(
             "Этапы",
-            ["Ключ", "Название", "Задачи"],
+            ["ID этапа", "Название", "Задачи"],
             data.items.map((item) => [
-              item.key,
+              item.id,
               item.title,
               `${item.counts.completed}/${item.counts.total}`,
             ]),
@@ -335,8 +336,8 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     name: "tasks <reference> <stage>",
     description: "Актуальные задачи этапа",
     details: "Состав не включает подзадачи и зависимости автоматически.",
-    arguments: { ...refArgument, stage: "ID или ключ этапа" },
-    examples: [["relay-cli plan tasks PLN-1 STG-1", "Прочитать задачи этапа"]],
+    arguments: { ...refArgument, stage: "Внутренний ID этапа плана" },
+    examples: [["relay-cli plan tasks PLN-1 Ab12Cd34", "Прочитать задачи этапа по его ID"]],
     configure: paging,
     run: async (context, input) => {
       const data = await context.backend.plans.tasks(
@@ -408,15 +409,21 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
       name: `${action} <reference>${action === "create" ? "" : " <stage>"}`,
       description: {
         create: "Создать этап",
-        update: "Изменить содержание этапа",
+        update: "Изменить только переданные поля этапа",
         remove: "Удалить пустой этап",
         move: "Изменить порядок этапа",
       }[action],
-      details,
-      arguments: { ...refArgument, ...(action === "create" ? {} : { stage: "ID или ключ этапа" }) },
+      details:
+        action === "update"
+          ? `${details} Укажите хотя бы одно поле. Неуказанные поля сохраняются; пустая строка очищает краткое описание, результат или условия завершения.`
+          : details,
+      arguments: {
+        ...refArgument,
+        ...(action === "create" ? {} : { stage: "Внутренний ID этапа плана" }),
+      },
       examples: [
         [
-          `relay-cli --actor human plan stage ${action} PLN-1${action === "create" ? ' --title "Первый этап"' : " STG-1"} --if-revision 2`,
+          `relay-cli --actor human plan stage ${action} PLN-1${action === "create" ? ' --title "Первый этап"' : ` Ab12Cd34${action === "update" ? ' --outcome "Проверенный результат"' : ""}`} --if-revision 2`,
           "Изменить этап",
         ],
       ],
@@ -433,16 +440,10 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
           command.option("--before <id>", "ID следующего этапа; без параметра — конец списка");
       },
       run: async (context, input) => {
-        const old =
-          action === "update"
-            ? (await context.backend.entities.get({ ref: input.argument(1), kind: "plan-stage" }))
-                .data
-            : {};
         const fields = Object.fromEntries(
-          Object.keys(stageFieldsSchema.shape).map((key) => [
-            key,
-            input.options[key] ?? (key in old ? old[key as keyof typeof old] : undefined),
-          ]),
+          Object.keys(stageFieldsSchema.shape)
+            .filter((key) => input.options[key] !== undefined)
+            .map((key) => [key, input.options[key]]),
         );
         const data = await context.backend.plans.changeStage(
           input.argument(),
@@ -467,10 +468,10 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
       name: `${action} <reference> <stage>`,
       description: action === "include" ? "Включить задачи в этап" : "Исключить задачи из этапа",
       details,
-      arguments: { ...refArgument, stage: "ID или ключ этапа" },
+      arguments: { ...refArgument, stage: "Внутренний ID этапа плана" },
       examples: [
         [
-          `relay-cli --actor human plan ${action} PLN-1 STG-1 --tasks PRODUCT-1 --if-revision 2`,
+          `relay-cli --actor human plan ${action} PLN-1 Ab12Cd34 --tasks PRODUCT-1 --if-revision 2`,
           "Изменить состав",
         ],
       ],
@@ -503,16 +504,17 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     arguments: {
       ...refArgument,
       task: "Ключ или ID задачи",
-      targetStage: "Ключ или ID целевого этапа",
+      targetStage: "Внутренний ID целевого этапа",
     },
     examples: [
       [
-        "relay-cli --actor human plan transfer PLN-1 PRODUCT-1 STG-2 --if-revision 3 --target-revision 2 --reason 'Пересмотр состава'",
+        "relay-cli --actor human plan transfer PLN-1 PRODUCT-1 Ef56Gh78 --target-plan PLN-2 --if-revision 3 --target-revision 2 --reason 'Пересмотр состава'",
         "Перенести задачу",
       ],
     ],
     configure: (command) =>
       revision(command)
+        .requiredOption("--target-plan <reference>", "Ключ или ID целевого плана")
         .requiredOption(
           "--target-revision <n>",
           "Ревизия целевого плана",
@@ -567,12 +569,13 @@ function registerReleases(group: Command, runtime: Runtime) {
         data,
         text: (options) =>
           planningListText(
-            `Готово планов: ${data.readiness.ready}/${data.readiness.total}`,
-            ["Ключ", "Название", "Состояние"],
+            `Текущая готовность: ${data.readiness.ready}/${data.readiness.total} планов`,
+            ["Ключ", "Название", "Состояние", "Задачи сейчас"],
             data.items.map(({ id, plan }) => [
               plan?.key ?? id,
               plan?.title ?? "План недоступен",
               plan ? planningStatusLabels[plan.status]! : "Недоступен",
+              plan ? `${plan.counts.completed}/${plan.counts.total}` : "—",
             ]),
             data,
             "release preview",
@@ -615,7 +618,7 @@ function registerReleases(group: Command, runtime: Runtime) {
           .option("--planned-for <date>", "Плановая дата YYYY-MM-DD; пустая строка очищает дату")
           .option(
             "--status <status>",
-            "planned, cancelled или released; released фиксирует снимок",
+            "planned, cancelled или released; released фиксирует выпуск",
           );
       },
       run: async (context, input) => {
@@ -665,7 +668,7 @@ function registerReleases(group: Command, runtime: Runtime) {
       description: {
         plan: "Перепланировать отменённый релиз",
         cancel: "Отменить плановый релиз",
-        publish: "Зафиксировать выпуск и самодостаточный снимок",
+        publish: "Зафиксировать выпуск выбранных планов",
       }[action],
       details,
       arguments: refArgument,
@@ -689,58 +692,36 @@ function registerReleases(group: Command, runtime: Runtime) {
         return { data, text: () => planningSavedText(data) };
       },
     });
-  for (const action of ["plans", "snapshot"] as const)
-    registerCommand<Options>(group, runtime, {
-      name: `${action} <reference>`,
-      description:
-        action === "plans"
-          ? "Планы текущего либо исторического состава"
-          : "Полные тексты сохранённого снимка выпуска",
-      details: "Страницы имеют версию и явное продолжение; исходные правки не изменяют снимок.",
-      arguments: refArgument,
-      examples: [[`relay-cli release ${action} REL-1 --limit 12`, "Прочитать страницу"]],
-      configure: paging,
-      run: async (context, input) => {
-        const query = parse(planningPageQuerySchema, pageInput(input.options), "страница релиза");
-        if (action === "plans") {
-          const data = await context.backend.releases.composition(input.argument(), query);
-          return {
+  registerCommand<Options>(group, runtime, {
+    name: "plans <reference>",
+    description: "Актуальные планы выбранного состава",
+    details:
+      "Страницы имеют версию и явное продолжение. Готовность отражает текущие задачи даже после выпуска.",
+    arguments: refArgument,
+    examples: [["relay-cli release plans REL-1 --limit 12", "Прочитать страницу"]],
+    configure: paging,
+    run: async (context, input) => {
+      const query = parse(planningPageQuerySchema, pageInput(input.options), "страница релиза");
+      const data = await context.backend.releases.composition(input.argument(), query);
+      return {
+        data,
+        text: (options) =>
+          planningListText(
+            `Планы релиза · текущая готовность: ${data.readiness.ready}/${data.readiness.total}`,
+            ["Ключ", "Название", "Состояние", "Задачи сейчас"],
+            data.items.map(({ id, plan }) => [
+              plan?.key ?? id,
+              plan?.title ?? "План недоступен",
+              plan ? planningStatusLabels[plan.status]! : "Недоступен",
+              plan ? `${plan.counts.completed}/${plan.counts.total}` : "—",
+            ]),
             data,
-            text: (options) =>
-              planningListText(
-                "Планы релиза",
-                ["Ключ", "Название", "Состояние"],
-                data.items.map(({ id, plan }) => [
-                  plan?.key ?? id,
-                  plan?.title ?? "План недоступен",
-                  plan ? planningStatusLabels[plan.status]! : "Недоступен",
-                ]),
-                data,
-                `release plans ${input.argument()}`,
-                input.options,
-                options,
-                context.globals,
-              ),
-          };
-        }
-        const data = await context.backend.releases.snapshot(input.argument(), query);
-        return {
-          data,
-          text: (options) =>
-            [
-              planningListText(
-                `Снимок ${data.snapshotId} · ${data.capturedAt}`,
-                ["Ключ", "Название", "Основание"],
-                data.items.map((item) => [item.key, item.title, item.reason]),
-                data,
-                `release snapshot ${input.argument()}`,
-                input.options,
-                options,
-                context.globals,
-              ),
-              ...data.items.map((item) => renderMarkdown(item.content, options)),
-            ].join("\n\n"),
-        };
-      },
-    });
+            `release plans ${input.argument()}`,
+            input.options,
+            options,
+            context.globals,
+          ),
+      };
+    },
+  });
 }

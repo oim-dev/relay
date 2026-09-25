@@ -86,7 +86,7 @@ export const ReleasePlanPicker = (props: ReleasePlanPickerProps) => {
             { value: "all", label: "Все состояния" },
             { value: "active", label: "В работе" },
             { value: "completed", label: "Завершённые" },
-            { value: "draft", label: "Черновики" },
+            { value: "draft", label: "Запланированы" },
             { value: "cancelled", label: "Отменённые" },
           ]}
         />

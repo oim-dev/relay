@@ -22,7 +22,7 @@ export const StageForm = (props: StageFormProps) => {
       .object({
         title: z.string(),
         summary: z.string(),
-        revision: z.number(),
+        revision: z.number().int().positive(),
         outcome: z.array(z.string()).transform((lines) => lines.join("\n")),
         completionConditions: z.array(z.string()).transform((lines) => lines.join("\n")),
       })

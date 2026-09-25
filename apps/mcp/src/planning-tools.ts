@@ -10,6 +10,7 @@ import {
   changePlanTasksSchema,
   transferPlanTaskSchema,
   stageFieldsSchema,
+  stageChangesSchema,
   planningWrite,
   planningRevision,
   planningCandidatesQuerySchema,
@@ -44,9 +45,32 @@ const paging = { ...ref, ...planningPageQuerySchema.shape };
 const revision = { ...write, ...ref, ifRevision: planningRevision };
 const address = (input: Record<string, unknown>) => entityReferenceSchema.parse(input.ref);
 const actor = (input: Record<string, unknown>) => actorSchema.parse(input.actor);
+const statusLabels: Record<string, string> = {
+  draft: "Черновик",
+  active: "В работе",
+  completed: "Завершён",
+  cancelled: "Отменён",
+  planned: "Запланирован",
+  released: "Выпущен",
+};
+const actionLabels: Record<string, string> = {
+  create: "Запись создана",
+  update: "Изменения сохранены",
+  start: "План начат",
+  complete: "План завершён",
+  cancel: "Отмена сохранена",
+  tasks: "Состав задач обновлён",
+  transfer: "Задача перенесена",
+  release: "Выпуск зафиксирован",
+  plan: "Релиз перепланирован",
+  "stage-create": "Этап создан",
+  "stage-update": "Этап изменён",
+  "stage-remove": "Этап удалён",
+  "stage-move": "Порядок этапов изменён",
+};
 const saved = (data: PlanningSaved): Result => ({
   data,
-  text: `${data.key}: ${data.action}. ID: ${data.id}. Ревизия: ${data.revision}. Ключ повтора: ${data.requestId}.${data.stageId ? ` Этап: ${data.stageId}.` : ""}`,
+  text: `${data.key}: ${actionLabels[data.action] ?? data.action}. ID: ${data.id}. Ревизия: ${data.revision}. Ключ повтора: ${data.requestId}.${data.stageId ? ` Этап: ${data.stageId}.` : ""}${data.targetRevision ? ` Ревизия целевого плана: ${data.targetRevision}.` : ""}`,
 });
 
 /** Инструменты сохраняют одинаковые последствия с Web, REST и local CLI. */
@@ -81,7 +105,7 @@ export const planningTools: PlanningTool[] = [
       const data = await backend.plans.get(address(input));
       return {
         data,
-        text: `${data.key} · ${data.title}\nСостояние: ${data.status}. Выполнено задач: ${data.counts.completed}/${data.counts.total}.\n\n${data.goal}`,
+        text: `${data.key} · ${data.title}\nСостояние: ${statusLabels[data.status]}. Выполнено задач: ${data.counts.completed}/${data.counts.total}.\n\n${data.goal}`,
       };
     },
   },
@@ -103,7 +127,7 @@ export const planningTools: PlanningTool[] = [
       "Прочитать актуальные задачи этапа; задача не копируется в план, полное описание доступно через board_task_get",
     schema: z.strictObject({
       ...paging,
-      stage: entityReferenceSchema.describe("Ключ или ID этапа этого плана"),
+      stage: changePlanTasksSchema.shape.stage,
     }),
     readOnly: true,
     run: async (backend, input) => ({
@@ -222,20 +246,20 @@ export const planningTools: PlanningTool[] = [
   },
   {
     name: "release_get",
-    description: "Прочитать реквизиты релиза, готовность и сведения о состоявшемся выпуске",
+    description: "Прочитать реквизиты релиза, текущую готовность и сведения о состоявшемся выпуске",
     schema: z.strictObject(ref),
     readOnly: true,
     run: async (backend, input) => {
       const data = await backend.releases.get(address(input));
       return {
         data,
-        text: `${data.key} · ${data.title}\nВерсия: ${data.version}. Состояние: ${data.status}. Готово планов: ${data.readiness.ready}/${data.readiness.total}.\n\n${data.description}`,
+        text: `${data.key} · ${data.title}\nВерсия: ${data.version}. Состояние: ${statusLabels[data.status]}.\nТекущая готовность: ${data.readiness.ready}/${data.readiness.total} планов.\nВыпущен: ${data.releasedAt ?? "—"}. Автор выпуска: ${data.releasedBy ?? "—"}.\n\n${data.description}`,
       };
     },
   },
   {
     name: "release_plans_list",
-    description: "Прочитать планы состава; после выпуска они читаются из неизменяемого снимка",
+    description: "Прочитать актуальные планы состава независимо от состояния выпуска",
     schema: z.strictObject(paging),
     readOnly: true,
     run: async (backend, input) => ({
@@ -256,22 +280,9 @@ export const planningTools: PlanningTool[] = [
     }),
   },
   {
-    name: "release_snapshot",
-    description:
-      "Прочитать страницу полных текстов самодостаточного снимка: работы, критерии, требования, материалы и основания включения",
-    schema: z.strictObject(paging),
-    readOnly: true,
-    run: async (backend, input) => ({
-      data: await backend.releases.snapshot(
-        address(input),
-        planningPageQuerySchema.strip().parse(input),
-      ),
-    }),
-  },
-  {
     name: "release_create",
     description:
-      "Создать самостоятельный релиз с планами и статусом. released выполняет полную проверку и фиксацию снимка, не запускает CI/CD",
+      "Создать самостоятельный релиз с планами и статусом. released проверяет готовность и фиксирует выпуск, не запускает CI/CD",
     schema: saveReleaseSchema.omit({ ifRevision: true }).extend(write),
     readOnly: false,
     run: async (backend, input) =>
@@ -300,7 +311,7 @@ for (const action of ["start", "complete", "cancel"] as const)
     description: {
       start: "Явно начать черновик с целью и непустым составом; колонки задач не меняются",
       complete:
-        "Завершить начатый план с итогом; Core повторно проверяет фактическое выполнение всех обязательств",
+        "Завершить готовый план с итогом без обязательного начала; Core повторно проверяет фактическое выполнение всех обязательств",
       cancel: "Отменить план с причиной, сохранив историю включений и сами задачи",
     }[action],
     schema: z.strictObject({
@@ -330,16 +341,19 @@ for (const action of ["create", "update", "remove", "move"] as const)
     description: {
       create:
         "Создать этап плана с ожидаемым результатом; все содержательные поля доступны напрямую",
-      update: "Заменить полное содержание этапа с проверкой ревизии плана",
-      remove: "Удалить пустой этап без внешних связей; задачи предварительно исключаются явно",
+      update:
+        "Изменить только переданные поля этапа с проверкой ревизии плана. Укажите хотя бы одно поле; название необязательно. Пустая строка очищает краткое описание, результат или условия завершения",
+      remove: "Удалить пустую запись этапа из плана; задачи предварительно исключаются явно",
       move: "Изменить порядок этапа по ID следующего этапа, null — конец полного списка",
     }[action],
     schema: z.strictObject({
       ...revision,
+      ...(action === "create" ? {} : { stage: changePlanTasksSchema.shape.stage }),
       ...(action === "create"
-        ? {}
-        : { stage: entityReferenceSchema.describe("Ключ или ID этапа") }),
-      ...(action === "create" || action === "update" ? stageFieldsSchema.shape : {}),
+        ? stageFieldsSchema.shape
+        : action === "update"
+          ? stageChangesSchema.shape
+          : {}),
       ...(action === "move"
         ? {
             before: changeStageSchema.shape.before
@@ -356,9 +370,11 @@ for (const action of ["create", "update", "remove", "move"] as const)
           changeStageSchema.strip().parse({
             ...input,
             action,
-            ...(action === "create" || action === "update"
+            ...(action === "create"
               ? { fields: stageFieldsSchema.strip().parse(input) }
-              : {}),
+              : action === "update"
+                ? { fields: stageChangesSchema.strip().parse(input) }
+                : {}),
           }),
           actor(input),
         ),
@@ -371,7 +387,7 @@ for (const action of ["plan", "cancel", "release"] as const)
       plan: "Явно перепланировать отменённый релиз",
       cancel: "Отменить плановый релиз, сохранив планы и задачи",
       release:
-        "Зафиксировать выпуск: проверить готовность, сохранить автора, дату и полный снимок одной восстанавливаемой операцией",
+        "Зафиксировать выпуск: проверить готовность, сохранить автора и дату одной восстанавливаемой операцией",
     }[action],
     schema: z.strictObject(revision),
     readOnly: false,
@@ -390,7 +406,7 @@ for (const kind of ["workPlan", "release"] as const)
     description:
       kind === "workPlan"
         ? "Прочитать прогресс плана, этапы, причины и расхождение с сохранённым завершением"
-        : "Прочитать готовность выбранных планов либо исторический результат выпуска; статус не меняется автоматически",
+        : "Прочитать текущую готовность выбранных планов; статус выпуска не меняется автоматически",
     schema: progressQuerySchema,
     readOnly: true,
     run: async (backend, input) => {

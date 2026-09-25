@@ -19,12 +19,11 @@ export const releaseView = (release: z.infer<typeof releaseSummarySchema>): Rele
   releasedAt: release.releasedAt,
   releasedBy: release.releasedBy,
   updatedAt: release.updatedAt,
-  snapshotId: release.snapshotId,
   readiness: release.readiness,
 });
 
 /**
- * Различает отсутствующий план и его сохранённый результат.
+ * Адаптирует актуальный состав, не приписывая недоступному плану состояние отмены.
  */
 export const releaseCompositionView = (
   page: z.infer<typeof releaseCompositionSchema>,
@@ -37,7 +36,7 @@ export const releaseCompositionView = (
     summary: plan?.summary ?? "Уточните выбранный состав.",
     goal: plan?.goal ?? "",
     result: plan?.result ?? "",
-    status: plan?.status ?? "cancelled",
+    status: plan?.status ?? null,
     done: plan?.counts.completed ?? 0,
     total: plan?.counts.total ?? 0,
     percent: plan?.counts.percent ?? 0,
@@ -62,7 +61,6 @@ export const createReleaseDraft = (): Release => ({
   releasedAt: null,
   releasedBy: null,
   updatedAt: new Date().toISOString(),
-  snapshotId: null,
   readiness: { total: 0, ready: 0, missing: 0, percent: 0, canRelease: false },
 });
 

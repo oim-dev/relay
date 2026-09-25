@@ -1,0 +1,26 @@
+{
+  "name": "@relay/relay-skill",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Исходники и сборщик переносимого продуктового скилла Relay",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "node --conditions=tasks-source --import tsx scripts/build.mjs",
+    "check": "node --conditions=tasks-source --import tsx scripts/check.mjs",
+    "test": "tsx --tsconfig ../server-runtime/tsconfig.json --conditions=tasks-source --test scripts/*.test.mjs"
+  },
+  "devDependencies": {
+    "@oim-dev/relay-cli": "workspace:*",
+    "@oim-dev/relay-mcp": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@relay/core": "workspace:*",
+    "@relay/project-runtime": "workspace:*",
+    "@relay/server-runtime": "workspace:*",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
+    "zod": "^4.1.0"
+  }
+}

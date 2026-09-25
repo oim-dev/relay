@@ -119,6 +119,6 @@ registerCommand(group, runtime, definition);
 ```bash
 pnpm run build
 pnpm run docs:check
-pnpm --filter @gromlab/relay-cli run typecheck
-pnpm --filter @gromlab/relay-cli run test
+pnpm --filter @oim-dev/relay-cli run typecheck
+pnpm --filter @oim-dev/relay-cli run test
 ```

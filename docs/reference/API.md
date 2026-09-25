@@ -15,8 +15,8 @@ Swagger — `/api/docs`. Сервер вызывает Core, SDK генерир�
 | Метод и путь                                | Назначение                                                 |
 | ------------------------------------------- | ---------------------------------------------------------- |
 | `GET /plans`                                | Каталог, поиск, статус, полные счётчики и продолжение      |
-| `GET /plans/:reference`                     | Содержание и полный прогресс плана                         |
-| `GET /plans/:reference/stages`              | Страница этапов с показателями                             |
+| `GET /plans/:reference`                     | Реквизиты и полные показатели плана                        |
+| `GET /plans/:reference/stages`              | Страница вложенных этапов, показатели и `planRevision`     |
 | `GET /plans/:reference/stages/:stage/tasks` | Страница актуальных задач этапа                            |
 | `GET /plans/task-candidates`                | Серверный поиск задач по доске и доступности               |
 | `GET /plans/task-memberships/:reference`    | Текущее и историческое участие задачи                      |
@@ -28,23 +28,27 @@ Swagger — `/api/docs`. Сервер вызывает Core, SDK генерир�
 | `POST /plans/:reference/transition`         | Начать/завершить/отменить план                             |
 | `GET /releases`                             | Каталог релизов с полными счётчиками                       |
 | `GET /releases/:reference`                  | Реквизиты, состояние и готовность                          |
-| `GET /releases/:reference/plans`            | Текущий либо архивный состав                               |
-| `GET /releases/:reference/snapshot`         | Страница сохранённых полных текстов                        |
+| `GET /releases/:reference/plans`            | Актуальные планы состава, в том числе после выпуска        |
 | `POST /releases/preview`                    | Чтение готовности выбранных планов без записи              |
 | `POST /releases`                            | Создать с выбором состава и состояния                      |
 | `POST /releases/:reference/update`          | Сохранить реквизиты, состав и выбранное состояние атомарно |
 | `POST /releases/:reference/transition`      | Перепланировать/отменить/зафиксировать выпуск              |
 | `GET /progress/work-plan`                   | Предметное выполнение плана                                |
-| `GET /progress/release`                     | Готовность или исторический результат релиза               |
+| `GET /progress/release`                     | Текущая готовность планов и сохранённый статус релиза      |
 
 Контракты: [PLANNING](PLANNING.md), [RELEASES](RELEASES.md). Записи проверяют `ifRevision`
 и `requestId`; страницы — `offset/limit/version`. `PLANNING_CHANGED`, конфликты ревизии,
 неготовность и неизменяемый выпуск возвращаются как 409. API не выполняет второй
 клиентский запрос для записи связей: это обязательный шаг предметного сервиса Core.
 
+У этапа используется локальный ID вместе с адресом плана; собственного ключа или
+ревизии нет. Все изменения этапов и задач состава защищает ревизия плана.
+`GET /plans/task-candidates` с `stage` требует `plan`; перенос принимает `targetPlan`,
+`targetStage` и ревизии `ifRevision`/`targetRevision`. API снимков выпуска отсутствует.
+
 ## Запуск и транспорт
 
-`npx @gromlab/relay-server --actor human --open` запускает общий Web/REST-сервер.
+`npx @oim-dev/relay-server --actor human --open` запускает общий Web/REST-сервер.
 Префикс API — `/api/v1`, JSON UTF-8, Content-Type application/json, тело до 1 МиБ.
 Успех: `{ok:true,data}`; ошибка: `{ok:false,error:{code,message,exitCode?,details?}}`.
 400 — аргументы, 403 — источник, 404 — объект/маршрут, 409 — конфликт, 413 — размер,

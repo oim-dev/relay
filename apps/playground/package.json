@@ -9,7 +9,7 @@
     "mcp": "tsx --conditions=tasks-source ../mcp/src/main.ts --config relay.workspace.json"
   },
   "devDependencies": {
-    "@gromlab/relay-cli": "workspace:*",
+    "@oim-dev/relay-cli": "workspace:*",
     "tsx": "^4.20.5"
   }
 }

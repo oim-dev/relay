@@ -22,7 +22,6 @@ import {
   Layers3,
   MoreHorizontal,
   Pencil,
-  Play,
   Target,
 } from "lucide-react";
 import { z } from "zod";
@@ -37,8 +36,8 @@ import {
 import { MarkdownView } from "ui/markdown-view";
 import { MarkdownField } from "ui/markdown-field";
 import { useProjectId } from "domains/project";
-import { readSessionStored, removeSessionStored, writeSessionStored } from "infra/browser-storage";
-import { isDefined, isNonEmptyArray } from "shared/value-predicates";
+import { readSessionValue, removeSessionStored, writeSessionStored } from "infra/browser-storage";
+import { isDefined } from "shared/value-predicates";
 import { PlanStages } from "./ui/plan-stages";
 import { PlanOverview } from "./ui/plan-overview/plan-overview";
 import type { PlanDetailProps } from "./types/plan-detail-props.type";
@@ -58,29 +57,40 @@ export const PlanDetail = (props: PlanDetailProps) => {
   const [transitionMode, setTransitionMode] = useState<"complete" | "cancel" | null>(null);
   const projectId = useProjectId();
   const refresh = usePlanningRefresh(projectId);
-  const [isStarting, setIsStarting] = useState(false);
-  const outcomeKey = `relay:planning-outcome:server-v1:${projectId}:${plan.id}`;
+  const outcomeKey = `relay:planning-outcome:server-v2:${projectId}:${plan.id}`;
+  const [storedOutcomeDraft] = useState(() => readSessionValue(outcomeKey));
   const [outcomeDraft] = useState(() =>
     z
-      .object({ result: z.array(z.string()), revision: z.number() })
-      .safeParse(readSessionStored(outcomeKey)),
+      .object({ result: z.array(z.string()), revision: z.number().int().positive() })
+      .safeParse(storedOutcomeDraft.value),
   );
-  const [transitionRevision, setTransitionRevision] = useState(
-    outcomeDraft.success ? outcomeDraft.data.revision : plan.revision,
+  const [draftError, setDraftError] = useState(
+    storedOutcomeDraft.error ??
+      (!outcomeDraft.success && isDefined(storedOutcomeDraft.value)
+        ? "Черновик итога имеет неизвестный формат. Отбросьте его явно, чтобы продолжить."
+        : null),
   );
+  const [hasOutcomeDraft, setHasOutcomeDraft] = useState(outcomeDraft.success);
+  const [canPersistOutcome, setCanPersistOutcome] = useState(true);
   const outcomeForm = useForm({
     mode: "uncontrolled",
     initialValues: {
       result: outcomeDraft.success ? outcomeDraft.data.result.join("\n") : plan.result,
+      revision: outcomeDraft.success ? outcomeDraft.data.revision : plan.revision,
     },
     validate: {
       result: (result) => (result.trim() === "" ? "Опишите результат или причину отмены" : null),
     },
     onValuesChange: (values) => {
-      writeSessionStored(outcomeKey, {
-        result: values.result.split("\n"),
-        revision: transitionRevision,
-      });
+      if (draftError !== null) return;
+      setHasOutcomeDraft(true);
+      setCanPersistOutcome(
+        writeSessionStored(outcomeKey, {
+          result: values.result.split("\n"),
+          revision: values.revision,
+        }),
+      );
+      setError(null);
     },
   });
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -93,13 +103,8 @@ export const PlanDetail = (props: PlanDetailProps) => {
   const statusLabel = PLAN_STATUS_LABELS[plan.status];
   const canFinish = plan.isReady;
   const hasDivergence = isCompleted && !plan.isReady;
-  const canStart = summaryData.total > 0 && plan.goal.trim() !== "";
-  const actionLabel = isDraft ? "Начать план" : "Завершить план";
-  const ActionIcon = isDraft ? Play : Check;
-  const isActionDisabled = isDraft ? !canStart : !canFinish;
-  const actionHint = isDraft
-    ? "Добавьте цель и хотя бы одну задачу для начала."
-    : "Завершение доступно после выполнения всего состава.";
+  const isActionDisabled = !canFinish;
+  const actionHint = "Завершение доступно после выполнения всего состава.";
   const defaultTab = "stages";
   const requestedTab = searchParams.get("tab") ?? defaultTab;
   const activeTab = ["stages", "overview"].includes(requestedTab) ? requestedTab : defaultTab;
@@ -107,24 +112,10 @@ export const PlanDetail = (props: PlanDetailProps) => {
     new Date(plan.updatedAt),
   );
   const hasError = isDefined(error);
+  const hasDraftError = isDefined(draftError);
   const hasBlockers = summaryData.blocked > 0;
   const hasResult = plan.result !== "";
-  const hasScope = isNonEmptyArray(plan.scope);
   const resultLabel = isCancelled ? "ПРИЧИНА ОТМЕНЫ" : "ИТОГ ПЛАНА";
-  const nextTitle = isCancelled
-    ? "План отменён"
-    : isCompleted
-      ? "Результат зафиксирован"
-      : isDraft
-        ? "Подготовьте состав"
-        : (plan.nextStageTitle ?? "Проверьте результат");
-  const nextDescription = isCancelled
-    ? "Основание выполнения снято. Причина сохранена в плане."
-    : isCompleted
-      ? "Итог сохранён в описании плана."
-      : isDraft
-        ? "Уточните этапы и задачи, затем явно начните план."
-        : "Начало плана не перемещает задачи между колонками автоматически.";
   const actionTitle = isActionDisabled ? actionHint : undefined;
   const isTransitionOpen = isDefined(transitionMode);
   const transitionTitle = transitionMode === "cancel" ? "Отменить план" : "Завершить план";
@@ -148,36 +139,43 @@ export const PlanDetail = (props: PlanDetailProps) => {
   };
 
   /**
-   * Выполняет начало либо открывает подтверждение с исходной ревизией.
+   * Закрепляет ревизию при первом открытии; сворачивание не обновляет базу черновика.
    */
-  const handleTransition = async () => {
-    if (isDraft) {
-      setIsStarting(true);
-      try {
-        await transitionPlan(projectId, plan.id, plan.revision, "start");
-        void refresh().catch(() => undefined);
-        setError(null);
-      } catch (error) {
-        if (error instanceof PlanningError) setError(error.message);
-        else throw error;
-      } finally {
-        setIsStarting(false);
-      }
-      return;
+  const handleTransition = (mode: "complete" | "cancel") => {
+    if (!hasOutcomeDraft && draftError === null) {
+      outcomeForm.setFieldValue("revision", plan.revision);
     }
-    setTransitionRevision(outcomeDraft.success ? outcomeDraft.data.revision : plan.revision);
-    setTransitionMode("complete");
+    setError(null);
+    setTransitionMode(mode);
+  };
+
+  /**
+   * Явно отбрасывает итог и позволяет начать ввод по актуальной ревизии плана.
+   */
+  const handleDiscardOutcome = () => {
+    const values = { result: plan.result, revision: plan.revision };
+    outcomeForm.setValues(values);
+    outcomeForm.resetDirty(values);
+    outcomeForm.clearErrors();
+    removeSessionStored(outcomeKey);
+    setHasOutcomeDraft(false);
+    setDraftError(null);
+    setCanPersistOutcome(true);
+    setError(null);
+    void refresh().catch(() => undefined);
   };
 
   /**
    * Фиксирует итог только после повторной серверной проверки состава.
    */
   const handleOutcome = async (values: typeof outcomeForm.values) => {
+    if (draftError !== null) return;
     const action = transitionMode === "cancel" ? "cancel" : "complete";
     try {
-      await transitionPlan(projectId, plan.id, transitionRevision, action, values.result);
+      await transitionPlan(projectId, plan.id, values.revision, action, values.result);
       void refresh().catch(() => undefined);
       removeSessionStored(outcomeKey);
+      setHasOutcomeDraft(false);
       setError(null);
       setTransitionMode(null);
     } catch (error) {
@@ -217,12 +215,11 @@ export const PlanDetail = (props: PlanDetailProps) => {
           {canEdit && (
             <Button
               disabled={isActionDisabled}
-              loading={isStarting}
               title={actionTitle}
-              leftSection={<ActionIcon size={14} />}
-              onClick={handleTransition}
+              leftSection={<Check size={14} />}
+              onClick={() => handleTransition("complete")}
             >
-              {actionLabel}
+              Завершить план
             </Button>
           )}
           {canEdit && (
@@ -240,12 +237,7 @@ export const PlanDetail = (props: PlanDetailProps) => {
                 <Menu.Item
                   color="red"
                   leftSection={<Ban size={14} />}
-                  onClick={() => {
-                    setTransitionRevision(
-                      outcomeDraft.success ? outcomeDraft.data.revision : plan.revision,
-                    );
-                    setTransitionMode("cancel");
-                  }}
+                  onClick={() => handleTransition("cancel")}
                 >
                   Отменить план
                 </Menu.Item>
@@ -307,7 +299,7 @@ export const PlanDetail = (props: PlanDetailProps) => {
                 Этапы и задачи<span className={styles.tabCount}>{plan.stageCount}</span>
               </Tabs.Tab>
               <Tabs.Tab value="overview" leftSection={<FileText size={14} />}>
-                Описание
+                Материалы и история
               </Tabs.Tab>
             </Tabs.List>
             <Tabs.Panel value="stages" pt="lg">
@@ -387,24 +379,7 @@ export const PlanDetail = (props: PlanDetailProps) => {
               </div>
             )}
           </section>
-          <section className={styles.asideSection}>
-            <h2 className={styles.asideTitle}>Область изменения</h2>
-            <div className={styles.scope}>
-              {plan.scopeLabels.map((scope) => (
-                <span key={scope}>{scope}</span>
-              ))}
-            </div>
-            {!hasScope && <p className={styles.hint}>Область ещё не указана.</p>}
-          </section>
-          <section className={styles.next}>
-            <span className={styles.sectionLabel}>СЛЕДУЮЩИЙ ШАГ</span>
-            <h2>{nextTitle}</h2>
-            <p>{nextDescription}</p>
-          </section>
-          <div className={styles.updated}>
-            Обновлён {dateLabel}
-            <span>Ревизия {plan.revision}</span>
-          </div>
+          <div className={styles.updated}>Обновлён {dateLabel}</div>
         </aside>
       </div>
       <Modal
@@ -419,22 +394,38 @@ export const PlanDetail = (props: PlanDetailProps) => {
           <p className={styles.hint}>
             Состояние и итог сохранятся в проекте. Готовность повторно проверит сервер.
           </p>
+          {hasDraftError && (
+            <Alert color="orange" mb="md" title="Проверьте черновик итога">
+              {draftError}
+              <Button size="xs" variant="subtle" onClick={handleDiscardOutcome}>
+                Отбросить черновик и перечитать
+              </Button>
+            </Alert>
+          )}
           <MarkdownField
             label={outcomeLabel}
             disabled={outcomeForm.submitting}
             key={outcomeForm.key("result")}
             {...outcomeForm.getInputProps("result")}
           />
+          {!canPersistOutcome && (
+            <Alert color="orange" mt="md">
+              Черновик итога не сохранился в браузере. Не закрывайте страницу до сохранения плана.
+            </Alert>
+          )}
           {hasError && (
             <Alert color="red" mt="md">
               {error}
+              <Button size="xs" variant="subtle" onClick={handleDiscardOutcome}>
+                Отбросить итог и перечитать
+              </Button>
             </Alert>
           )}
           <Group justify="flex-end" mt="lg">
             <Button variant="default" onClick={() => setTransitionMode(null)}>
               Свернуть
             </Button>
-            <Button type="submit" loading={outcomeForm.submitting}>
+            <Button type="submit" loading={outcomeForm.submitting} disabled={hasDraftError}>
               {transitionTitle}
             </Button>
           </Group>

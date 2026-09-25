@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "generator": "@relay/dev-agents",
+  "outputs": [
+    {
+      "path": ".claude/agents/relay-backend.md",
+      "sha256": "e589c997e8aac0a08c5f2f0b6da383f3261dee6182f689771ab752c23100cc5c"
+    },
+    {
+      "path": ".claude/agents/relay-cli.md",
+      "sha256": "c9e460cb8dc9c6653c6efa3c55dfe156c2c9f3eb0918987d5bc663977195c981"
+    },
+    {
+      "path": ".claude/agents/relay-core.md",
+      "sha256": "2205c2a461e0ef49ed1df1a1668f822e33ec4b3ca8fb5799b5d45bdbc43b74d6"
+    },
+    {
+      "path": ".claude/agents/relay-delivery.md",
+      "sha256": "e6b2379d69fee02bad1a08902fa48223c3e73605b5bd02dd2cce79e5d6a93300"
+    },
+    {
+      "path": ".claude/agents/relay-docs.md",
+      "sha256": "64258902866c90f8799eeee1f38f1b04c1c22f0f75bdb7f060b113e72204cdbc"
+    },
+    {
+      "path": ".claude/agents/relay-frontend.md",
+      "sha256": "897b96bb281cb61a7cae59d5e5a49a79e33a0daed21141e749a768c8dbacbb7d"
+    },
+    {
+      "path": ".claude/agents/relay-mcp.md",
+      "sha256": "76ff7bcb26ab73da07f479325ba920a391b448ebc8e25ea3a11c58cb883b31f0"
+    },
+    {
+      "path": ".claude/agents/relay-orchestrator.md",
+      "sha256": "aade1fc96fecf14cd4cceafcedf1c8a6b46e1436f1485e7fe34ca620a20acb03"
+    },
+    {
+      "path": ".claude/agents/relay-qa.md",
+      "sha256": "bce9c2a2bd257682ad70bbebfe05953eb4721529f923a8c8b5efba9a6ae3650b"
+    },
+    {
+      "path": ".claude/settings.json",
+      "sha256": "05448b8b6c3e24ae7dfa10b4fc6161a4f6fd682946f06b2002e7d496e7f0ca8a"
+    },
+    {
+      "path": ".codex/agents/relay-backend.toml",
+      "sha256": "ca6972a54c83a35553bc52fc4801c67fafb231a9fa9d189ed33cd614d5d01d36"
+    },
+    {
+      "path": ".codex/agents/relay-cli.toml",
+      "sha256": "aca7233d5e8897b9caa86965db99c50888d1e1c37190d4d40750c4698bac16a0"
+    },
+    {
+      "path": ".codex/agents/relay-core.toml",
+      "sha256": "6711b497d275d68b6e527f6cac99414b1e3ae21d8be24ab13412ac5ec9eefbf1"
+    },
+    {
+      "path": ".codex/agents/relay-delivery.toml",
+      "sha256": "5bb8aa006bf5269db882557f19a3b593e22a7ba4bd4909ee0f40ccd19d2e8287"
+    },
+    {
+      "path": ".codex/agents/relay-docs.toml",
+      "sha256": "74da60adfbe06f501fa9d49e24ed19a4fe9e089668aff275eda6da343150a5e9"
+    },
+    {
+      "path": ".codex/agents/relay-frontend.toml",
+      "sha256": "13c45575a34f6010df7df7e08c530c52f71553ad27f8a79ad4f2f01bffc33a2c"
+    },
+    {
+      "path": ".codex/agents/relay-mcp.toml",
+      "sha256": "8a8a08b80952dae4eec8ff552cd0412446a1e45bf650b40c97dcc830f57dd5ba"
+    },
+    {
+      "path": ".codex/agents/relay-qa.toml",
+      "sha256": "10dd7aa2ed421e15929afad82a24b00d488365a17cb288287eddd2f17513293b"
+    },
+    {
+      "path": ".codex/config.toml",
+      "sha256": "a383a1c4e2632527fa28662483fd4b63151a57ace6cbfc59272bc04244a96968"
+    },
+    {
+      "path": ".opencode/agents/relay-backend.md",
+      "sha256": "421bf6617472ec0a43ebf8ec24d867891c7fc72a59ea9e75c82a5f6de4a42dec"
+    },
+    {
+      "path": ".opencode/agents/relay-cli.md",
+      "sha256": "e1bd6d36dec7464a555c9d5930de3c29658c20c0e51e045378ed3d43f20433c5"
+    },
+    {
+      "path": ".opencode/agents/relay-core.md",
+      "sha256": "53db6266ecba90f30021d4a79a53c8afd9eb7dcfd893700f78b27719c4d46143"
+    },
+    {
+      "path": ".opencode/agents/relay-delivery.md",
+      "sha256": "4ac382e5d47e9d15b99bd1ee9ea86f26e829d715b00c4a1370a772d9b1f7df3a"
+    },
+    {
+      "path": ".opencode/agents/relay-docs.md",
+      "sha256": "2d1b7094eb5a4d8fc630ae07e6b38f522f5f3720b7dc73dfb15dd877746b339d"
+    },
+    {
+      "path": ".opencode/agents/relay-frontend.md",
+      "sha256": "b4c328ce768481ca278ab72bffdde6bb8f443d9c0ee371ca0ce80508273dcfa1"
+    },
+    {
+      "path": ".opencode/agents/relay-mcp.md",
+      "sha256": "a543d6fe07e52f023a6bcf511b761cd4adfe2ac605c264f5805d98a4cc6f740b"
+    },
+    {
+      "path": ".opencode/agents/relay-orchestrator.md",
+      "sha256": "690d2010ac604da4f0bb36109effeca2ce7dfa5f8fde0792328ca0f498bf3de5"
+    },
+    {
+      "path": ".opencode/agents/relay-qa.md",
+      "sha256": "6a648e02df578a20bf0f495f476c14a94b32aed0dd1c60e8663957af08bc2de6"
+    },
+    {
+      "path": "opencode.json",
+      "sha256": "fa2680032b8b4210dca0047f0ba7ef5db1b8877f9005865024998ac25afc8e73"
+    }
+  ]
+}

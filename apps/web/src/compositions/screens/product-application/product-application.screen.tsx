@@ -108,7 +108,9 @@ export const ProductApplicationScreen = () => {
         </Accordion>
         <ApplicationFeatures applicationId={applicationData.id} />
       </div>
-      <div style={{ marginTop: "1.5rem" }}><EntityDocuments target={{ kind: "application", id: applicationData.id }} /></div>
+      <div style={{ marginTop: "1.5rem" }}>
+        <EntityDocuments target={{ kind: "application", id: applicationData.id }} />
+      </div>
     </ProductPage>
   );
 };

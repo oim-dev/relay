@@ -10,8 +10,8 @@ Core, OpenAPI, MCP и валидаторы Web используют эти сх�
 Краткое описание — обычный текст, Markdown основного контура — строка API.
 [Контракт движка](../../docs/reference/ENTITIES.md).
 
-Источник требований: [PLAN.md](../../docs/PLAN.md), описание протокола —
-[API.md](../../docs/reference/API.md), интерфейс — [UI_SPEC.md](../../apps/web/UI_SPEC.md).
+Источники требований: [предметные возможности](../../docs/product/CAPABILITIES.md),
+[API](../../docs/reference/API.md) и [контракт Web](../../docs/product/applications/web/README.md).
 
 Важные соглашения:
 

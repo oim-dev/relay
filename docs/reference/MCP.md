@@ -6,7 +6,7 @@
 
 [Документация](../README.md) → Справочники → MCP
 
-`@gromlab/relay-mcp` — отдельный npm-пакет и приложение `apps/mcp`.
+`@oim-dev/relay-mcp` — отдельный npm-пакет и приложение `apps/mcp`.
 Один процесс обслуживает оркестратора и субагентов через **Streamable HTTP**.
 Все операции проекта выполняются через общий `@relay/rest-sdk` и REST API.
 
@@ -23,36 +23,40 @@
 | `plan_get`              | Полные тексты и показатели плана по `ref`                                                                          |
 | `plan_stages_list`      | Этапы плана по `ref`, страница                                                                                     |
 | `plan_tasks_list`       | Задачи этапа: `ref`, `stage`, страница                                                                             |
-| `plan_task_candidates`  | Поиск задач: `q`, `board`, `stage`, `availableOnly`, страница                                                      |
+| `plan_task_candidates`  | Поиск задач: `q`, `board`, `plan`, `stage`, `availableOnly`, страница                                              |
 | `task_plan_memberships` | Текущее и историческое участие задачи по `ref`                                                                     |
 | `plan_create`           | Создать черновик: `title`, `summary`, `goal`, `rationale`, `boundaries`, `expectedResult`, `scope`, `participants` |
 | `plan_update`           | Частично изменить те же поля по `ref` и `ifRevision`                                                               |
 | `plan_stage_create`     | Создать этап: `ref`, `title`, `summary`, `outcome`, `completionConditions`, ревизия плана                          |
-| `plan_stage_update`     | Полностью заменить содержание этапа: те же поля и `stage`                                                          |
+| `plan_stage_update`     | Изменить переданные поля этапа: `stage` и хотя бы одно из `title`, `summary`, `outcome`, `completionConditions`    |
 | `plan_stage_remove`     | Удалить пустой этап: `ref`, `stage`, ревизия плана                                                                 |
 | `plan_stage_move`       | Переместить этап: `ref`, `stage`, `before` (ID либо null), ревизия плана                                           |
 | `plan_tasks_include`    | Включить `tasks` в `stage` выбранного плана `ref`                                                                  |
 | `plan_tasks_exclude`    | Исключить `tasks` из этапа без удаления задач                                                                      |
-| `plan_task_transfer`    | Перенести `task` в `targetStage`: `ref`, ревизии `ifRevision`/`targetRevision`, `reason`                           |
+| `plan_task_transfer`    | Перенести `task` в `targetPlan`/`targetStage`: `ref`, ревизии `ifRevision`/`targetRevision`, `reason`              |
 | `plan_start`            | Начать план по `ref` и ревизии                                                                                     |
-| `plan_complete`         | Завершить с `result` после проверки готовности                                                                     |
+| `plan_complete`         | Завершить с `result` после проверки готовности; предварительный `plan_start` не требуется                          |
 | `plan_cancel`           | Отменить с причиной в `result`                                                                                     |
 | `work_plan_progress`    | Выполнение состава, этапы, причины и расхождение: `ref`, страница                                                  |
 | `releases_list`         | Каталог релизов: `q`, собственный `status`, страница                                                               |
 | `release_get`           | Реквизиты и готовность по `ref`                                                                                    |
-| `release_plans_list`    | Текущий или архивный состав по `ref`, страница                                                                     |
+| `release_plans_list`    | Актуальные планы состава по `ref`, страница                                                                        |
 | `release_preview`       | Проверить выбранные `plans` без создания релиза                                                                    |
-| `release_snapshot`      | Полные тексты неизменяемого снимка по `ref`, страница                                                              |
 | `release_create`        | Создать: `title`, `version`, `summary`, `description`, `planIds`, `plannedFor`, `status`                           |
 | `release_update`        | Заменить полные реквизиты, состав и выбранный статус одной операцией по `ref` и ревизии                            |
 | `release_plan`          | Перепланировать отменённый релиз                                                                                   |
 | `release_cancel`        | Отменить будущий выпуск, сохранив планы                                                                            |
-| `release_publish`       | Явно проверить состав и зафиксировать выпуск со снимком                                                            |
-| `release_progress`      | Текущая готовность либо исторический результат выпуска: `ref`, страница                                            |
+| `release_publish`       | Явно проверить состав и зафиксировать статус, дату и автора выпуска                                                |
+| `release_progress`      | Текущая готовность выбранных планов: `ref`, страница                                                               |
 
 `scope` содержит реальные адреса `{kind,id}`. Планы выбираются в релиз целиком, максимум
 200; задачи включаются в этап по ID, максимум 2000. Заголовки однострочные, краткие описания
-обычные, цель/границы/итоги/содержимое снимка — Markdown. Снимок не пересчитывается после выпуска.
+обычные, цель/границы/итоги — Markdown. Этапы хранятся внутри плана и адресуются
+внутренними ID без ключей; `stage` в подборе требует `plan`. Релиз хранит ссылки
+на планы без снимков; содержание и готовность планов читаются актуальными.
+Создание и изменение этапов, включая их порядок и задачи, используют `ifRevision`
+плана; `plan_stages_list` возвращает `planRevision` для прочитанного состава.
+В `taskIds` сохраняются только явно выбранные задачи, без автоматического добавления детей.
 
 ## Предметный прогресс
 
@@ -66,7 +70,7 @@
 ## Движок основных сущностей
 
 [Контракт сущностей](ENTITIES.md). Виды: project, product, feature, scenario, application,
-implementation, board, task, document. Ключ — основной адрес для агента; во всех ссылках
+implementation, board, task, document, work-plan, release. Ключ — основной адрес для агента; во всех ссылках
 допустим также ID. Резолвер Core переводит адрес в постоянный ID под общей блокировкой.
 
 | Инструмент          | Назначение и аргументы                                                                                                       |
@@ -226,9 +230,9 @@ ID сохраняется. `relation`: `depends-on`, `related`, `parent`.
 ## Запуск и конфигурация
 
 ```bash
-npx @gromlab/relay-mcp --server-url http://127.0.0.1:4700
-npx @gromlab/relay-mcp --config /work/app/.relay/config.json
-npx @gromlab/relay-mcp --config /work/relay.workspace.json --port 4710
+npx @oim-dev/relay-mcp --server-url http://127.0.0.1:4700
+npx @oim-dev/relay-mcp --config /work/app/.relay/config.json
+npx @oim-dev/relay-mcp --config /work/relay.workspace.json --port 4710
 ```
 
 Это три независимых способа запуска. Конфиг: `--config` → `RELAY_CONFIG` → поиск вверх

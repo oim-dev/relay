@@ -2,28 +2,31 @@
 
 [Документация](README.md) → Первый проект
 
+Примеры npm рассчитаны на опубликованный комплект пакетов в `@oim-dev`.
+До первого ручного выпуска используйте [запуск из исходников](DEVELOPMENT.md#запуск).
+
 ## Локальный проект
 
 Из каталога кода выполните:
 
 ```bash
-npx @gromlab/relay-cli init
-npx @gromlab/relay-cli task create --board product --title "Первая задача" --actor human
-npx @gromlab/relay-cli task list
+npx @oim-dev/relay-cli init
+npx @oim-dev/relay-cli task create --board product --title "Первая задача" --actor human
+npx @oim-dev/relay-cli task list
 ```
 
 Создаются `.relay/config.json`, постоянный ID проекта и системные доски в `.relay/boards`.
 Для интерфейса и общего API запустите отдельный процесс:
 
 ```bash
-npx @gromlab/relay-server --open
+npx @oim-dev/relay-server --open
 ```
 
 Web доступен на `http://127.0.0.1:4700`, Swagger — на `/api/docs`.
 Без URL CLI использует прямой Core; для HTTP:
 
 ```bash
-npx @gromlab/relay-cli --server-url http://127.0.0.1:4700 task get PRODUCT-1
+npx @oim-dev/relay-cli --server-url http://127.0.0.1:4700 task get PRODUCT-1
 ```
 
 Постоянное подключение задаётся `server.url` в `.relay/config.json`.
@@ -45,9 +48,9 @@ npx @gromlab/relay-cli --server-url http://127.0.0.1:4700 task get PRODUCT-1
 ```
 
 ```bash
-npx @gromlab/relay-server --open
-npx @gromlab/relay-cli a task list
-npx @gromlab/relay-cli b task create --board product --title "Задача Б" --actor human
+npx @oim-dev/relay-server --open
+npx @oim-dev/relay-cli a task list
+npx @oim-dev/relay-cli b task create --board product --title "Задача Б" --actor human
 ```
 
 Один сервер работает с обеими базами, во фронтенде доступен переключатель проектов.
@@ -57,7 +60,7 @@ Workspace CLI использует только сервер. Запуск CLI �
 ## Агенты через MCP
 
 ```bash
-npx @gromlab/relay-mcp --server-url http://127.0.0.1:4700
+npx @oim-dev/relay-mcp --server-url http://127.0.0.1:4700
 ```
 
 Подключите клиента к `http://127.0.0.1:4710/mcp`, вызовите `projects_list`.

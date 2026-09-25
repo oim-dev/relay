@@ -133,7 +133,7 @@ importers:
 
   apps/playground:
     devDependencies:
-      '@gromlab/relay-cli':
+      '@oim-dev/relay-cli':
         specifier: workspace:*
         version: link:../cli
       tsx:
@@ -152,7 +152,7 @@ importers:
         specifier: ^14.0.0
         version: 14.0.3
     devDependencies:
-      '@gromlab/relay-cli':
+      '@oim-dev/relay-cli':
         specifier: workspace:*
         version: link:../cli
       '@relay/contracts':
@@ -351,6 +351,12 @@ importers:
         specifier: ^5.9.2
         version: 5.9.3
 
+  packages/dev-agents:
+    devDependencies:
+      prettier:
+        specifier: ^3.6.2
+        version: 3.9.6
+
   packages/project-runtime:
     dependencies:
       '@relay/contracts':
@@ -378,6 +384,36 @@ importers:
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
+
+  packages/relay-skill:
+    devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 1.30.0
+        version: 1.30.0(supports-color@10.2.2)(zod@4.6.2)
+      '@oim-dev/relay-cli':
+        specifier: workspace:*
+        version: link:../../apps/cli
+      '@oim-dev/relay-mcp':
+        specifier: workspace:*
+        version: link:../../apps/mcp
+      '@relay/core':
+        specifier: workspace:*
+        version: link:../core
+      '@relay/project-runtime':
+        specifier: workspace:*
+        version: link:../project-runtime
+      '@relay/server-runtime':
+        specifier: workspace:*
+        version: link:../server-runtime
+      prettier:
+        specifier: ^3.6.2
+        version: 3.9.6
+      tsx:
+        specifier: ^4.20.5
+        version: 4.23.13
+      zod:
+        specifier: ^4.1.0
+        version: 4.6.2
 
   packages/rest-sdk:
     devDependencies:

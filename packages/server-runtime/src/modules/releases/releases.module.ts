@@ -73,7 +73,7 @@ class ReleasesController {
   @ApiParam({ name: "reference", description: "ID или ключ релиза" })
   @ApiEndpoint({
     id: "getRelease",
-    summary: "Реквизиты релиза и готовность текущего либо исторического состава",
+    summary: "Реквизиты релиза и текущая готовность выбранных планов",
     response: "ReleaseSummary",
   })
   async get(@Param("reference", new ZodValidationPipe(entityReferenceSchema)) reference: string) {
@@ -83,7 +83,7 @@ class ReleasesController {
   @ApiParam({ name: "reference", description: "ID или ключ релиза" })
   @ApiEndpoint({
     id: "getReleasePlans",
-    summary: "Планы состава; после выпуска читаются из неизменяемого снимка",
+    summary: "Актуальные планы состава независимо от состояния выпуска",
     query: "PlanningPageQuery",
     response: "ReleaseComposition",
   })
@@ -95,27 +95,12 @@ class ReleasesController {
       await new ReleasesService(await this.workspace.open()).composition(reference, query),
     );
   }
-  @Get(":reference/snapshot")
-  @ApiParam({ name: "reference", description: "ID или ключ выпущенного релиза" })
-  @ApiEndpoint({
-    id: "getReleaseSnapshot",
-    summary: "Страница самодостаточного снимка с полными текстами и основаниями включения",
-    query: "PlanningPageQuery",
-    response: "ReleaseSnapshotPage",
-  })
-  async snapshot(
-    @Param("reference", new ZodValidationPipe(entityReferenceSchema)) reference: string,
-    @Query(new ZodValidationPipe(planningPageQuerySchema)) query: PlanningPageQuery,
-  ) {
-    return success(
-      await new ReleasesService(await this.workspace.open()).snapshot(reference, query),
-    );
-  }
   @Post()
   @HttpCode(200)
   @ApiEndpoint({
     id: "createRelease",
-    summary: "Создать релиз с выбранными планами; статус released выполняет полную фиксацию снимка",
+    summary:
+      "Создать релиз с выбранными планами; статус released проверяет готовность и фиксирует выпуск",
     body: "SaveRelease",
     response: "PlanningSaved",
   })

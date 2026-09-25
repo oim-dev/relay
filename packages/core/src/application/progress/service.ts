@@ -14,7 +14,6 @@ import { PlanningService } from "../planning/service.js";
 import { workPlanProgress } from "./planning.js";
 import { ReleasesService } from "../releases/service.js";
 import type { ProgressReason } from "@relay/contracts/progress";
-import { archivedPlans } from "../releases/snapshot.js";
 import { readPlanningState } from "../planning/model.js";
 import { AppError } from "../../shared/errors.js";
 import { readProgressSnapshot } from "./snapshot.js";
@@ -67,14 +66,10 @@ export class ProgressService {
         });
       if (release.status === "cancelled")
         reasons.push({ code: "INACTIVE", source: entity, message: "Релиз отменён" });
-      const current =
-        release.status === "released" ? undefined : await readPlanningState(this.workspace);
-      const plans =
-        release.status === "released"
-          ? await archivedPlans(this.workspace, release)
-          : current!.plans
-              .filter((plan) => release.planIds.includes(plan.id))
-              .map(current!.summary);
+      const current = await readPlanningState(this.workspace);
+      const plans = current.plans
+        .filter((plan) => release.planIds.includes(plan.id))
+        .map(current.summary);
       for (const id of release.planIds) {
         const plan = plans.find((entry) => entry.id === id);
         if (!plan)
@@ -96,8 +91,6 @@ export class ProgressService {
           composition.readiness.ready === composition.readiness.total &&
           composition.readiness.total > 0,
         readiness: release.readiness,
-        historical: release.status === "released",
-        snapshotId: release.snapshotId,
         plans: {
           total: composition.total,
           nextOffset: composition.nextOffset,

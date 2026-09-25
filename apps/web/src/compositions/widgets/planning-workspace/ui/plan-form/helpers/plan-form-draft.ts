@@ -7,11 +7,6 @@ const DRAFT_SCHEMA = z.object({
   title: z.string(),
   summary: z.string(),
   goal: MARKDOWN,
-  rationale: MARKDOWN,
-  boundaries: MARKDOWN,
-  expectedResult: MARKDOWN,
-  participants: z.array(z.string()),
-  scope: z.array(z.string()),
 });
 
 /**
@@ -25,10 +20,9 @@ export const readPlanDraft = (
     const raw = sessionStorage.getItem(key);
     if (raw === null) return { values: fallback, error: null };
     const content: unknown = JSON.parse(raw);
-    if (z.object({ kind: z.literal("release") }).safeParse(content).success)
-      return { values: fallback, error: null };
     const parsed = DRAFT_SCHEMA.safeParse(content);
-    if (parsed.success) return { values: parsed.data, error: null };
+    if (parsed.success && (parsed.data.revision === 0) === (fallback.revision === 0))
+      return { values: parsed.data, error: null };
     return {
       values: fallback,
       error: "Черновик имеет неизвестный формат. Перед новым сохранением явно сбросьте его.",
@@ -51,9 +45,6 @@ export const writePlanDraft = (key: string, values: PlanFormValues): string | nu
       JSON.stringify({
         ...values,
         goal: values.goal.split("\n"),
-        rationale: values.rationale.split("\n"),
-        boundaries: values.boundaries.split("\n"),
-        expectedResult: values.expectedResult.split("\n"),
       }),
     );
     return null;

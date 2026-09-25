@@ -27,7 +27,6 @@ import {
   releaseActionSchema,
   releasePreviewSchema,
   releaseCompositionSchema,
-  releaseSnapshotPageSchema,
 } from "@relay/contracts/releases";
 import {
   progressQuerySchema,
@@ -299,18 +298,26 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             ),
           input.requestId,
         ),
-      changeStage: async (reference, input, actor) =>
-        decode(
+      changeStage: async (reference, input, actor) => {
+        const { fields, ...command } = changeStageSchema.parse({
+          ...input,
+          actor: input.actor ?? actor,
+        });
+        return decode(
           planningSavedSchema.required({ stageId: true }),
           await writePlanning(
             () =>
               api.plans.changePlanStage(
                 { reference },
-                defined(changeStageSchema.parse({ ...input, actor: input.actor ?? actor })),
+                defined({
+                  ...command,
+                  ...(fields === undefined ? {} : { fields: defined(fields) }),
+                }),
               ),
             input.requestId,
           ),
-        ),
+        );
+      },
       changeTasks: (reference, input, actor) =>
         writePlanning(
           () =>
@@ -355,16 +362,6 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         decode(
           releaseCompositionSchema,
           await call(() => api.releases.previewRelease(defined(releasePreviewSchema.parse(input)))),
-        ),
-      snapshot: async (reference, query = {}) =>
-        decode(
-          releaseSnapshotPageSchema,
-          await call(() =>
-            api.releases.getReleaseSnapshot({
-              reference,
-              ...defined(planningPageQuerySchema.parse(query)),
-            }),
-          ),
         ),
       create: (input, actor) =>
         writePlanning(

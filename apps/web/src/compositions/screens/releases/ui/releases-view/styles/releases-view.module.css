@@ -1,8 +1,11 @@
 .root {
-  max-width: 94rem;
-  margin-inline: auto;
-  padding: 0 var(--tasks-page-gutter) 3rem;
+  padding: 1.75rem var(--tasks-page-gutter) 4rem;
+
+  @media (--md) {
+    padding-top: 2.25rem;
+  }
 }
+
 .preview {
   display: flex;
   flex-wrap: wrap;

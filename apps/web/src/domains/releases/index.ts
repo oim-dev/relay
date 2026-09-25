@@ -4,8 +4,8 @@ export type {
   ReleaseSummary,
   ReleasePlanItem,
   ReleaseComposition,
+  ReleasePreviewState,
   ReleaseFilters,
-  ReleaseSnapshotItem,
 } from "./types/release.type";
 export {
   RELEASE_STATUS_LABELS,
@@ -20,6 +20,5 @@ export {
   useRelease,
   useReleasePlans,
   useReleasePreview,
-  useReleaseSnapshot,
   useReleasesRefresh,
 } from "./hooks/releases.hook";

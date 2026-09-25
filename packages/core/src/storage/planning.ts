@@ -1,10 +1,6 @@
 import { z } from "zod";
-import {
-  workPlanSchema,
-  planStageSchema,
-  planningPageQuerySchema,
-} from "@relay/contracts/planning";
-import type { WorkPlan, PlanStage, PlanningPageQuery } from "@relay/contracts/planning";
+import { workPlanSchema, planningPageQuerySchema } from "@relay/contracts/planning";
+import type { WorkPlan, PlanningPageQuery } from "@relay/contracts/planning";
 import { releaseSchema } from "@relay/contracts/releases";
 import type { Release } from "@relay/contracts/releases";
 import type { Workspace } from "./workspace.js";
@@ -15,14 +11,13 @@ import { digest } from "./entity-store/format.js";
 import { saveAudit, readAudit, json } from "./unified-adapter.js";
 import { actorSchema, timestampSchema } from "@relay/contracts/primitives";
 
-export type PlanningRecord = WorkPlan | PlanStage | Release;
+export type PlanningRecord = WorkPlan | Release;
 export type PlanningKind = PlanningRecord["kind"];
 const schemas = {
   "work-plan": workPlanSchema,
-  "plan-stage": planStageSchema,
   release: releaseSchema,
 };
-const prefixes = { "work-plan": "PLN", "plan-stage": "STG", release: "REL" };
+const prefixes = { "work-plan": "PLN", release: "REL" };
 
 /** Планирование использует только единую сессию: старые базы переводятся явной командой. */
 export function planningSession(workspace: Workspace) {
@@ -38,7 +33,7 @@ export function planningSession(workspace: Workspace) {
 
 export function decodePlanning(record: EntityRecord): PlanningRecord {
   const schema = schemas[record.kind as PlanningKind];
-  invariant(schema, "ENTITY_KIND_MISMATCH", "Ожидается план, этап или релиз", 4);
+  invariant(schema, "ENTITY_KIND_MISMATCH", "Ожидается план или релиз", 4);
   return schema.parse({
     ...record.data,
     kind: record.kind,
@@ -102,7 +97,7 @@ export async function savePlanning(
   });
   await session.put(toRecord(next, prior.aliases), value.revision);
   const description = [
-    ...(details?.stageId ? [`Этап: plan-stage:${details.stageId}`] : []),
+    ...(details?.stageId ? [`Внутренний ID этапа: ${details.stageId}`] : []),
     ...(details?.taskId
       ? [`Задача: task:${details.taskId}\n\nИз этапа: ${details.from}\n\nВ этап: ${details.to}`]
       : []),
@@ -169,7 +164,7 @@ function toRecord(value: PlanningRecord, aliases: string[] = []): EntityRecord {
   const { id, kind, key, revision, createdAt, updatedAt, createdBy, updatedBy, ...data } = value;
   return {
     schemaVersion: 1,
-    dataVersion: 1,
+    dataVersion: 2,
     id,
     kind,
     key,

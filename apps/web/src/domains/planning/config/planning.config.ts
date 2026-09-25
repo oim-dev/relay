@@ -1,6 +1,6 @@
 import type { PlanStatus } from "../types/planning.type";
 export const PLAN_STATUS_LABELS: Record<PlanStatus, string> = {
-  draft: "Черновик",
+  draft: "Запланирован",
   active: "В работе",
   completed: "Завершён",
   cancelled: "Отменён",

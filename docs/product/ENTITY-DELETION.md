@@ -29,4 +29,4 @@
 Удалённые ключи и алиасы не выдаются новым сущностям: прежняя ссылка не должна
 начать открывать другую запись. Новый объект получает новый ключ.
 
-[Web](applications/web/README.md) · [Досье реализации](../work/entity-deletion/README.md)
+[Web](applications/web/README.md) · [Техническое устройство](../engineering/entity-deletion.md)

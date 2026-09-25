@@ -243,11 +243,10 @@ export class EntityEngine {
       const refs: { kind: string; id: string }[] = [];
       const data = entry.data;
       if (data.kind === "work-plan")
-        refs.push({ kind: "project", id: data.projectId }, ...data.scope);
-      if (data.kind === "plan-stage")
         refs.push(
-          { kind: "work-plan", id: data.planId },
-          ...data.taskIds.map((id) => ({ kind: "task", id })),
+          { kind: "project", id: data.projectId },
+          ...data.scope,
+          ...data.stages.flatMap((stage) => stage.taskIds).map((id) => ({ kind: "task", id })),
         );
       if (data.kind === "release")
         refs.push(
@@ -364,7 +363,6 @@ export class EntityEngine {
                   scenario: "SCENARIO",
                   document: "DOC",
                   "work-plan": "PLN",
-                  "plan-stage": "STG",
                   release: "REL",
                 }[
                   kind as
@@ -374,7 +372,6 @@ export class EntityEngine {
                     | "scenario"
                     | "document"
                     | "work-plan"
-                    | "plan-stage"
                     | "release"
                 ],
                 pattern:
@@ -382,7 +379,7 @@ export class EntityEngine {
                     ? "PROJECT"
                     : kind === "product"
                       ? "PRODUCT"
-                      : `${kind === "document" ? "DOC" : kind === "work-plan" ? "PLN" : kind === "plan-stage" ? "STG" : kind === "release" ? "REL" : kind.toUpperCase()}-<номер>`,
+                      : `${kind === "document" ? "DOC" : kind === "work-plan" ? "PLN" : kind === "release" ? "REL" : kind.toUpperCase()}-<номер>`,
               },
             ];
       return this.page(items, page, entityDigest(items));

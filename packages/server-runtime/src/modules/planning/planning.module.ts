@@ -118,7 +118,7 @@ class PlanningController {
   }
   @Get(":reference/stages/:stage/tasks")
   @ApiParam({ name: "reference", description: "ID или ключ плана" })
-  @ApiParam({ name: "stage", description: "ID или ключ этапа этого плана" })
+  @ApiParam({ name: "stage", description: "Внутренний ID этапа этого плана" })
   @ApiEndpoint({
     id: "getPlanStageTasks",
     summary: "Страница актуальных задач этапа; описание задачи читается адресно",

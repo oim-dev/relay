@@ -8,8 +8,8 @@
 | [Прежнее видение Relay](PRODUCT-VISION.md)                        | [Концепция Relay](../product/README.md)                                                                   |
 | [Спецификация продуктового прототипа](entities/product/README.md) | [Предметная модель](../product/entities/product/README.md), [Web](../product/applications/web/PRODUCT.md) |
 | [Заметки о фичах и сценариях](FEATURE_SCENARIOS_NOTES.md)         | [Модель](../product/entities/product/MODEL.md)                                                            |
-| [ТЗ Web](../../apps/web/UI_SPEC.md)                               | [Контракт Web](../product/applications/web/README.md)                                                     |
 
-История выполненных работ хранится в [work](../work/README.md), включая первое внедрение
-продукта и прежнюю переработку контекста. Отчёты [проверок Web](../../apps/web/VERIFICATION.md)
-и [генерации](../../apps/web/GENERATION.md) сохраняют локальное историческое происхождение.
+Журналы исполнения и генерации удалены, их ведение не является процессом разработки.
+Текущее [поведение Web](../product/applications/web/README.md) и
+[границы прежних проверок](../engineering/implementation/applications.md#границы-исторической-приёмки)
+отделены от спецификаций прототипа.

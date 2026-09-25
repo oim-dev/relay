@@ -14,7 +14,7 @@ import styles from "./styles/release-content.module.css";
  * Показывает готовность самостоятельных планов, включённых в выпуск.
  *
  * Используется для:
- *  - чтения текущего либо зафиксированного состава самостоятельного релиза
+ *  - чтения актуальных планов самостоятельного релиза
  */
 export const ReleaseContent = (props: ReleaseContentProps) => {
   const { release, basePath, onEdit } = props;
@@ -25,20 +25,20 @@ export const ReleaseContent = (props: ReleaseContentProps) => {
   const planItems = (query.data?.items ?? []).map((plan) => ({
     ...plan,
     canOpen: !plan.isMissing,
-    hasResult: plan.result !== "",
+    hasContent: plan.goal.trim() !== "" || plan.result.trim() !== "",
+    statusLabel: isDefined(plan.status) ? PLAN_STATUS_LABELS[plan.status] : "Недоступен",
+    statusColor: isDefined(plan.status) ? PLAN_STATUS_COLORS[plan.status] : "gray",
   }));
   const hasReadError = isDefined(query.error);
   const isEmpty = !query.isLoading && !hasReadError && isEmptyArray(planItems);
   const canEdit = release.status !== "released";
   const hasMore = isDefined(query.data?.nextOffset);
-  const hasSnapshot = release.snapshotId !== null;
-  const heading = hasSnapshot ? "Состав на момент выпуска" : "Состав релиза";
   return (
     <div className={styles.root}>
       <div className={styles.heading}>
         <div>
-          <h2>{heading}</h2>
-          <p>Выбранные планы входят целиком и остаются самостоятельными.</p>
+          <h2>Планы релиза</h2>
+          <p>Показаны актуальные планы и выполнение их задач.</p>
         </div>
         {canEdit && (
           <Button variant="default" size="xs" leftSection={<Pencil size={13} />} onClick={onEdit}>
@@ -51,7 +51,7 @@ export const ReleaseContent = (props: ReleaseContentProps) => {
         <strong>
           {summary.ready} из {summary.total}
         </strong>
-        <span>планов завершено</span>
+        <span>планов готовы сейчас</span>
       </div>
       {query.isLoading && <p role="status">Загружаем состав…</p>}
       {hasReadError && (
@@ -76,38 +76,35 @@ export const ReleaseContent = (props: ReleaseContentProps) => {
               <Flag size={13} />
               {included.key}
             </span>
-            <Badge
-              size="sm"
-              color={PLAN_STATUS_COLORS[included.status]}
-              variant="light"
-              className={styles.badge}
-            >
-              {PLAN_STATUS_LABELS[included.status]}
+            <Badge size="sm" color={included.statusColor} variant="light" className={styles.badge}>
+              {included.statusLabel}
             </Badge>
           </div>
           <h3 className={styles.planTitle}>{included.title}</h3>
           {included.canOpen && (
             <Link to={`${basePath}/plans/${included.id}`} className={styles.currentLink}>
-              Открыть текущий план
+              Открыть план
               <ArrowUpRight size={13} />
             </Link>
           )}
           <p className={styles.summary}>{included.summary}</p>
-          <div className={styles.progress}>
-            <Progress
-              value={included.percent}
-              size={4}
-              color="teal"
-              className={styles.track}
-              aria-label={`Завершено ${included.done} из ${included.total}`}
-            />
-            <span>
-              {included.done} / {included.total} задач
-            </span>
-          </div>
-          {hasSnapshot && (
-            <details className={styles.snapshot}>
-              <summary>Сохранённые цель и результат</summary>
+          {included.canOpen && (
+            <div className={styles.progress}>
+              <Progress
+                value={included.percent}
+                size={4}
+                color="teal"
+                className={styles.track}
+                aria-label={`Завершено ${included.done} из ${included.total}`}
+              />
+              <span>
+                {included.done} / {included.total} задач
+              </span>
+            </div>
+          )}
+          {included.hasContent && (
+            <details className={styles.planContent}>
+              <summary>Цель и результат плана</summary>
               <MarkdownView text={included.goal} compact />
               <MarkdownView text={included.result} compact emptyText="Итог не указан." />
             </details>

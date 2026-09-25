@@ -19,24 +19,24 @@ test("Core и Contracts изолированы от приложений, сер
   for (const [directory, forbidden] of [
     [
       "packages/core/src",
-      /^(?:@nestjs|react|commander|picocolors|@(?:tasks|relay)\/(?:server-runtime|server|cli|web)|@gromlab\/(?:tasks-cli|relay-cli))|apps\/|server-runtime\/|presentation/,
+      /^(?:@nestjs|react|commander|picocolors|@(?:tasks|relay)\/(?:server-runtime|server|cli|web)|@gromlab\/(?:tasks-cli|relay-cli)|@oim-dev\/relay-(?:cli|server|mcp))|apps\/|server-runtime\/|presentation/,
     ],
     [
       "packages/contracts/src",
-      /^(?:node:|@nestjs|react|@(?:tasks|relay)\/(?:core|server-runtime|server|cli)|@gromlab\/(?:tasks-cli|relay-cli))|apps\/|core\/|server-runtime\//,
+      /^(?:node:|@nestjs|react|@(?:tasks|relay)\/(?:core|server-runtime|server|cli)|@gromlab\/(?:tasks-cli|relay-cli)|@oim-dev\/relay-(?:cli|server|mcp))|apps\/|core\/|server-runtime\//,
     ],
     [
       "packages/server-runtime/src",
-      /^(?:commander|picocolors|@tasks\/cli|@gromlab\/tasks-cli)|apps\/|cli\/(?:src|dist)/,
+      /^(?:commander|picocolors|@tasks\/cli|@gromlab\/tasks-cli|@oim-dev\/relay-cli)|apps\/|cli\/(?:src|dist)/,
     ],
     [
       "apps/server/src",
-      /^(?:picocolors|@tasks\/cli|@gromlab\/(?:tasks-cli|relay-cli))|apps\/cli|cli\/(?:src|dist)/,
+      /^(?:picocolors|@tasks\/cli|@gromlab\/(?:tasks-cli|relay-cli)|@oim-dev\/relay-cli)|apps\/cli|cli\/(?:src|dist)/,
     ],
     ["packages/project-runtime/src", /^(?:commander|picocolors|@tasks\/server-runtime)|apps\//],
     [
       "apps/mcp/src",
-      /apps\/cli|cli\/(?:src|dist)|@tasks\/core\/(?:storage|application\/(?:tasks\/service|comments|logs\/service))/,
+      /@oim-dev\/relay-cli|apps\/cli|cli\/(?:src|dist)|@tasks\/core\/(?:storage|application\/(?:tasks\/service|comments|logs\/service))/,
     ],
     [
       "apps/web/src",

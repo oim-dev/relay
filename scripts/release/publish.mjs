@@ -21,7 +21,7 @@ export async function publishPackages(
       console.log(`${metadata.name}@${metadata.version}: опубликованный архив совпадает`);
       continue;
     }
-    // Локально используется npm login, в CI — OIDC и проверенные архивы из задания сборки.
+    // Явный запуск использует готовые архивы и существующую авторизацию npm, не меняя её настройки.
     const result = await executeNpm(
       [
         "publish",

@@ -80,11 +80,9 @@ export const getEntityContent = async (projectId: string, ref: string): Promise<
           ? [fields.goal, fields.rationale, fields.boundaries, fields.expectedResult, fields.result]
               .filter(Boolean)
               .join("\n\n")
-          : fields.kind === "plan-stage"
-            ? [fields.outcome, fields.completionConditions].filter(Boolean).join("\n\n")
-            : "description" in fields
-              ? fields.description
-              : "";
+          : "description" in fields
+            ? fields.description
+            : "";
     return {
       title: entry.title,
       markdown,

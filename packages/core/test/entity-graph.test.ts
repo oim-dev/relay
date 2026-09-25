@@ -257,7 +257,10 @@ test("движок: сценарий документа пишет свои св
     "agent",
   );
   assert.equal((await fresh.read({ root: task.key })).edges[0]?.id, id);
-  assert.equal((await fresh.read()).edges.some((edge) => edge.type === "documents"), false);
+  assert.equal(
+    (await fresh.read()).edges.some((edge) => edge.type === "documents"),
+    false,
+  );
   await fresh.mutate(
     {
       ifVersion: (await fresh.read()).version,

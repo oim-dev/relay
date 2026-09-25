@@ -1,4 +1,4 @@
-name: Release
+name: Проверка выпуска
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
 permissions:
   contents: read
 
-# Одновременно выполняется один релиз; уже начатая публикация не прерывается.
+# Только проверки и архивы. Публикация выполняется вручную отдельным поручением.
 concurrency:
-  group: npm-publication
+  group: release-check-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -39,75 +39,3 @@ jobs:
     name: Проверить и упаковать релиз
     needs: metadata
     uses: ./.github/workflows/ci.yml
-
-  publish:
-    name: Опубликовать все пакеты в npm
-    needs: ci
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Получить релизные скрипты
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Версия 7.0.1
-        with:
-          persist-credentials: false
-      - name: Подготовить npm Trusted Publishing
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # Версия 7.0.0
-        with:
-          node-version: "24"
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-      - name: Установить npm с поддержкой OIDC
-        run: npm install --global npm@11.16.0
-      - name: Подготовить pnpm из packageManager
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # Версия 4
-        with:
-          run_install: false
-      - name: Получить все архивы из проверок этого запуска
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # Версия 8.0.1
-        with:
-          artifact-ids: ${{ needs.ci.outputs.artifact_id }}
-          path: apps
-          merge-multiple: true
-          digest-mismatch: error
-      - name: Опубликовать общую версию CLI, Server и MCP
-        run: pnpm run release:publish
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-
-  github-release:
-    name: Создать GitHub Release
-    needs: publish
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    steps:
-      - name: Получить описание выпуска
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Версия 7.0.1
-        with:
-          persist-credentials: false
-      - name: Подготовить Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # Версия 7.0.0
-        with:
-          node-version: "24"
-          package-manager-cache: false
-      - name: Создать релиз после публикации npm
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          node scripts/release/relay.mjs notes > "$RUNNER_TEMP/relay-release-notes.md"
-          if ! gh release view "$RELEASE_TAG" --json url; then
-            flags=(--latest)
-            version="${RELEASE_TAG#v}"
-            if [[ "$version" == *-* ]]; then
-              flags=(--prerelease)
-            fi
-            gh release create "$RELEASE_TAG" --verify-tag --title "Relay $RELEASE_TAG" \
-              --notes-file "$RUNNER_TEMP/relay-release-notes.md" "${flags[@]}"
-          fi

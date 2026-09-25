@@ -23,7 +23,7 @@ import styles from "./styles/release-form.module.css";
 export const ReleaseForm = (props: ReleaseFormProps) => {
   const { release, projectId, isNew, onSave, onClose } = props;
   const scope = isNew ? "new" : release.id;
-  const draftKey = `relay:release-form:server-v1:${projectId}:${scope}`;
+  const draftKey = `relay:release-form:server-v2:${projectId}:${scope}`;
   const [draft] = useState(() =>
     readReleaseDraft(draftKey, {
       revision: release.revision,
@@ -207,7 +207,7 @@ export const ReleaseForm = (props: ReleaseFormProps) => {
           />
           {isReleasing && (
             <Alert color="gray" title="Явная фиксация выпуска">
-              {readinessLabel} При сохранении будет зафиксирован самодостаточный снимок состава.
+              {readinessLabel} При сохранении будут зафиксированы дата и автор выпуска.
               Незавершённые планы препятствуют статусу «Выпущен».
             </Alert>
           )}
@@ -227,7 +227,7 @@ export const ReleaseForm = (props: ReleaseFormProps) => {
         {hasPreviewError && (
           <Alert color="orange" title="Готовность состава недоступна">
             {preview.error?.message}
-            <Button size="xs" variant="subtle" onClick={() => void preview.mutate()}>
+            <Button size="xs" variant="subtle" onClick={() => void preview.refresh()}>
               Повторить проверку
             </Button>
           </Alert>

@@ -1,4 +1,4 @@
-import type { WorkPlan, PlanStage } from "@relay/contracts/planning";
+import type { WorkPlan } from "@relay/contracts/planning";
 import type { Workspace } from "../../storage/workspace.js";
 import { planningSession } from "../../storage/planning.js";
 import { replaceOwnedRelations } from "../../storage/entity-store/relations.js";
@@ -21,28 +21,20 @@ export async function syncPlanRelations(workspace: Workspace, plan: WorkPlan, ac
     ],
     actor,
   );
-}
-
-/** Владелец включений — этап; группа не пересекается с task-links канбана. */
-export async function syncStageRelations(workspace: Workspace, stage: PlanStage, actor: string) {
-  const owner = { kind: "plan-stage", id: stage.id };
+  // Этапы — записи плана. Только явные включения дают отдельные связи с планом.
   await replaceOwnedRelations(
     planningSession(workspace),
     owner,
     "planning-membership",
     [
-      {
-        type: "part-of",
-        from: owner,
-        to: { kind: "work-plan", id: stage.planId },
-        description: "",
-      },
-      ...stage.taskIds.map((id) => ({
-        type: "part-of",
-        from: { kind: "task", id },
-        to: owner,
-        description: "",
-      })),
+      ...plan.stages
+        .flatMap((stage) => stage.taskIds)
+        .map((id) => ({
+          type: "part-of",
+          from: { kind: "task", id },
+          to: owner,
+          description: "",
+        })),
     ],
     actor,
   );

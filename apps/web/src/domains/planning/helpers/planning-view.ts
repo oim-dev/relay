@@ -51,12 +51,10 @@ export const planningView = (plan: z.infer<typeof planSummarySchema>): PlanningP
  */
 export const stageView = (stage: z.infer<typeof stageSummarySchema>): PlanStage => ({
   id: stage.id,
-  key: stage.key,
   title: stage.title,
   summary: stage.summary,
   outcome: stage.outcome,
   completionConditions: stage.completionConditions,
-  rank: stage.rank,
   taskIds: stage.taskIds,
   progress: planningCountsView(stage.counts),
 });

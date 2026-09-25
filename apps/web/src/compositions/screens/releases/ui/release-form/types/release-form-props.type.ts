@@ -14,7 +14,7 @@ export type ReleaseFormProps = {
   onClose: () => void;
 };
 
-/** Ввод формы релиза без технических полей снимка. */
+/** Реквизиты, статус и выбор планов в форме релиза. */
 export type ReleaseFormValues = {
   /** Ревизия исходной записи; фоновые ответы не заменяют её. */
   revision: number;

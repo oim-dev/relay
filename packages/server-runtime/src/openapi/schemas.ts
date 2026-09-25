@@ -26,7 +26,6 @@ import {
   releaseActionSchema,
   releasePreviewSchema,
   releaseCompositionSchema,
-  releaseSnapshotPageSchema,
 } from "@relay/contracts/releases";
 import {
   progressQuerySchema,
@@ -168,7 +167,6 @@ export const schemas = {
   ReleaseAction: releaseActionSchema,
   ReleasePreview: releasePreviewSchema,
   ReleaseComposition: releaseCompositionSchema,
-  ReleaseSnapshotPage: releaseSnapshotPageSchema,
   WorkPlanProgress: workPlanProgressSchema,
   ReleaseProgress: releaseProgressSchema,
   ProgressQuery: progressQuerySchema,

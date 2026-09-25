@@ -1,6 +1,6 @@
 # Relay Server
 
-`@gromlab/relay-server` предоставляет REST API, SSE, OpenAPI, Swagger и готовый
+`@oim-dev/relay-server` предоставляет REST API, SSE, OpenAPI, Swagger и готовый
 веб-интерфейс. Команда: `relay-server`. Требуется Node.js 22+.
 
 [Контракт приложения](../../docs/product/applications/server/README.md) ·
@@ -8,8 +8,8 @@
 [Протокол разработки](../../docs/development/PROTOCOL.md).
 
 ```bash
-npx @gromlab/relay-server --open
-npx @gromlab/relay-server --config ./relay.workspace.json --port 3001
+npx @oim-dev/relay-server --open
+npx @oim-dev/relay-server --config ./relay.workspace.json --port 3001
 ```
 
 Сервер ищет конфигурацию вверх от текущего каталога:
@@ -44,4 +44,4 @@ Runtime принадлежит `packages/server-runtime`; приложение �
 
 Разработка: `pnpm run dev:server`, `pnpm run build:server`, `pnpm run test:server`.
 Поставка: `pnpm run package:check` из корня монорепозитория.
-Исходники: <https://github.com/gromlab-ru/relay>.
+Исходники: <https://github.com/oim-dev/relay>.

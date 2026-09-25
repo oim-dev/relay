@@ -76,7 +76,7 @@ export const PlanStages = (props: PlanStagesProps) => {
   const hasMoreReasons = isDefined(progressQuery.data?.nextOffset);
   const hasTaskError = isDefined(taskQuery.error);
   const hasProgressError = isDefined(progressQuery.error);
-  const stageDraftKey = `relay:planning-stage:server-v1:${projectId}:${plan.id}:${editor?.isNew ? "new" : editor?.stage.id}`;
+  const stageDraftKey = `relay:planning-stage:server-v2:${projectId}:${plan.id}:${editor?.isNew ? "new" : editor?.stage.id}`;
 
   /**
    * Создаёт ввод этапа без предварительной записи пустой сущности.
@@ -87,12 +87,10 @@ export const PlanStages = (props: PlanStagesProps) => {
       isNew: true,
       stage: {
         id: "new",
-        key: "",
         title: "",
         summary: "",
         outcome: "",
         completionConditions: "",
-        rank: total,
         taskIds: [],
         progress: { ...EMPTY_PLAN_SUMMARY },
       },

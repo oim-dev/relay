@@ -156,7 +156,7 @@ test("движок: определения и типизированные сх�
     const definition = await engine.describe({ kind });
     assert.ok(definition.description);
     assert.equal(definition.schema.type, "object");
-    if (["work-plan", "plan-stage", "release"].includes(kind)) {
+    if (["work-plan", "release"].includes(kind)) {
       assert.equal(definition.createSchema, null);
       assert.ok(definition.actions.includes(kind === "release" ? "releases" : "planning"));
     } else assert.ok(definition.actions.includes("rename"));
@@ -175,7 +175,7 @@ test("движок: все виды, вложенные ссылки ключ/ID
   const all = await engine.list();
   assert.deepEqual(
     new Set(all.items.map((entry) => entry.ref.kind)),
-    new Set(entityKinds.filter((kind) => !["work-plan", "plan-stage", "release"].includes(kind))),
+    new Set(entityKinds.filter((kind) => !["work-plan", "release"].includes(kind))),
   );
   for (const item of all.items) {
     assert.deepEqual(await engine.get({ ref: item.key }), await engine.get({ ref: item.ref.id }));

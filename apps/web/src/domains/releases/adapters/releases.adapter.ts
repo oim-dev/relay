@@ -3,7 +3,6 @@ import {
   releasesPageSchema,
   releaseSummarySchema,
   releaseCompositionSchema,
-  releaseSnapshotPageSchema,
   saveReleaseSchema,
   updateReleaseSchema,
 } from "@relay/contracts/releases";
@@ -17,12 +16,7 @@ import {
 } from "infra/tasks-api";
 import type { PlanningPage } from "domains/planning";
 import { releaseView, releaseCompositionView } from "../helpers/release-view";
-import type {
-  Release,
-  ReleaseComposition,
-  ReleaseFilters,
-  ReleaseSnapshotItem,
-} from "../types/release.type";
+import type { Release, ReleaseComposition, ReleaseFilters } from "../types/release.type";
 
 const FAILURE_SCHEMA = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 /** Предусмотренный отказ работы с выпуском. */
@@ -39,11 +33,12 @@ export class ReleaseError extends Error {
 }
 
 /**
- * Проверяет ответ сервера до адаптации; сетевой отказ сохраняет черновик.
+ * Проверяет ответ и отличает ошибку чтения от неподтверждённой записи релиза.
  */
 const request = async <Result>(
   schema: z.ZodType<Result>,
   operation: () => Promise<{ data: unknown }>,
+  isWrite = false,
 ): Promise<Result> => {
   try {
     return schema.parse((await operation()).data);
@@ -61,7 +56,9 @@ const request = async <Result>(
       throw new ReleaseError(
         error instanceof PendingRequestError
           ? error.message
-          : "Сервер не подтвердил действие. Ввод сохранён; повторите после восстановления соединения.",
+          : isWrite
+            ? "Сервер не подтвердил действие. Ввод сохранён; повторите после восстановления соединения."
+            : "Не удалось загрузить данные релизов. Проверьте соединение и повторите загрузку.",
         "UNAVAILABLE",
       );
     throw error;
@@ -100,7 +97,7 @@ export const getRelease = async (project: string, reference: string): Promise<Re
   );
 
 /**
- * Читает текущий либо неизменяемый архивный состав.
+ * Читает актуальные планы выбранного состава.
  */
 export const getReleasePlans = async (
   project: string,
@@ -133,39 +130,6 @@ export const getReleasePreview = async (
     ),
   );
 
-/**
- * Получает сохранённые полные тексты отдельной страницей.
- */
-export const getReleaseSnapshot = async (
-  project: string,
-  reference: string,
-  count = 12,
-): Promise<PlanningPage<ReleaseSnapshotItem>> => {
-  const page = await readApiPages(count, (offset, limit, version) =>
-    request(releaseSnapshotPageSchema, () =>
-      getProjectApi(project).releases.getReleaseSnapshot({
-        reference,
-        offset,
-        limit,
-        ...(version === undefined ? {} : { version }),
-      }),
-    ),
-  );
-  return {
-    items: page.items.map(({ id, kind, key, title, reason, content }) => ({
-      id,
-      kind,
-      key,
-      title,
-      reason,
-      content,
-    })),
-    total: page.total,
-    nextOffset: page.nextOffset,
-    version: page.version,
-  };
-};
-
 /** Квитанция сохранённого релиза. */
 export type ReleaseSaved = z.infer<typeof planningSavedSchema>;
 
@@ -184,20 +148,23 @@ export const saveRelease = async (project: string, release: Release): Promise<Re
     actor: "Оператор",
     ...(release.revision === 0 ? {} : { ifRevision: release.revision }),
   };
-  return request(planningSavedSchema, () =>
-    pendingApiRequest(
-      project,
-      `release-save:${release.id}:${release.revision}`,
-      payload,
-      (requestId) => {
-        const command = saveReleaseSchema.parse({ ...payload, requestId });
-        return release.revision === 0
-          ? getProjectApi(project).releases.createRelease(command)
-          : getProjectApi(project).releases.updateRelease(
-              { reference: release.id },
-              updateReleaseSchema.parse(command),
-            );
-      },
-    ),
+  return request(
+    planningSavedSchema,
+    () =>
+      pendingApiRequest(
+        project,
+        `release-save:v2:${release.id}:${release.revision}`,
+        payload,
+        (requestId) => {
+          const command = saveReleaseSchema.parse({ ...payload, requestId });
+          return release.revision === 0
+            ? getProjectApi(project).releases.createRelease(command)
+            : getProjectApi(project).releases.updateRelease(
+                { reference: release.id },
+                updateReleaseSchema.parse(command),
+              );
+        },
+      ),
+    true,
   );
 };

@@ -68,7 +68,6 @@ await cp(join(cliRoot, "dist/web"), join(stageDirectory, "dist/web"), { recursiv
 const documentation = new Map([
   ["README.md", "README.md"],
   ["apps/cli/CHANGELOG.md", "CHANGELOG.md"],
-  ["apps/web/UI_SPEC.md", "docs/development/UI_SPEC.md"],
   ...["CLI", "TERMINAL", "EXTENDING", "RELEASING"].map(
     (name) => /** @type {[string, string]} */ ([`apps/cli/docs/${name}.md`, `docs/${name}.md`]),
   ),

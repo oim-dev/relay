@@ -398,7 +398,6 @@ const planningHandler: EntityHandler = {
 };
 export const entityHandlers: Readonly<Record<EntityKind, EntityHandler>> = {
   "work-plan": planningHandler,
-  "plan-stage": planningHandler,
   release: planningHandler,
   project: {
     update: (entry, changes, revision, context) => {

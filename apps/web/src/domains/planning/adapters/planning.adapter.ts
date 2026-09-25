@@ -46,11 +46,12 @@ export class PlanningError extends Error {
 }
 
 /**
- * Валидирует технический ответ до преобразования в предметную модель.
+ * Валидирует ответ и различает недоступность чтения и неподтверждённую запись.
  */
 const request = async <Result>(
   schema: z.ZodType<Result>,
   operation: () => Promise<{ data: unknown }>,
+  isWrite = false,
 ): Promise<Result> => {
   try {
     return schema.parse((await operation()).data);
@@ -68,7 +69,9 @@ const request = async <Result>(
       throw new PlanningError(
         error instanceof PendingRequestError
           ? error.message
-          : "Сервер не подтвердил действие. Ввод сохранён; повторите после восстановления соединения.",
+          : isWrite
+            ? "Сервер не подтвердил действие. Ввод сохранён; повторите после восстановления соединения."
+            : "Не удалось загрузить данные планирования. Проверьте соединение и повторите загрузку.",
         "UNAVAILABLE",
       );
     throw error;
@@ -197,15 +200,24 @@ export const savePlan = async (project: string, plan: PlanningPlan): Promise<Pla
   };
   const isNew = plan.revision === 0;
   const payload = { ...fields, ...(isNew ? {} : { ifRevision: plan.revision }) };
-  return request(planningSavedSchema, () =>
-    pendingApiRequest(project, `plan-save:${plan.id}:${plan.revision}`, payload, (requestId) =>
-      isNew
-        ? getProjectApi(project).plans.createPlan(createPlanSchema.parse({ ...payload, requestId }))
-        : getProjectApi(project).plans.updatePlan(
-            { reference: plan.id },
-            updatePlanSchema.parse({ ...payload, requestId }),
-          ),
-    ),
+  return request(
+    planningSavedSchema,
+    () =>
+      pendingApiRequest(
+        project,
+        `plan-save:v2:${plan.id}:${plan.revision}`,
+        payload,
+        (requestId) =>
+          isNew
+            ? getProjectApi(project).plans.createPlan(
+                createPlanSchema.parse({ ...payload, requestId }),
+              )
+            : getProjectApi(project).plans.updatePlan(
+                { reference: plan.id },
+                updatePlanSchema.parse({ ...payload, requestId }),
+              ),
+      ),
+    true,
   );
 };
 
@@ -242,17 +254,20 @@ export const changePlanStage = async (
         : { direction }
       : {}),
   };
-  return request(planningSavedSchema, () =>
-    pendingApiRequest(
-      project,
-      `plan-stage:${planId}:${revision}:${stage.id}:${action}`,
-      payload,
-      (requestId) =>
-        getProjectApi(project).plans.changePlanStage(
-          { reference: planId },
-          changeStageSchema.parse({ ...payload, requestId }),
-        ),
-    ),
+  return request(
+    planningSavedSchema,
+    () =>
+      pendingApiRequest(
+        project,
+        `plan-stage:v2:${planId}:${revision}:${stage.id}:${action}`,
+        payload,
+        (requestId) =>
+          getProjectApi(project).plans.changePlanStage(
+            { reference: planId },
+            changeStageSchema.parse({ ...payload, requestId }),
+          ),
+      ),
+    true,
   );
 };
 
@@ -270,17 +285,20 @@ export const changePlanTasks = async (
   const remove = stage.taskIds.filter((id) => !selectedIds.includes(id));
   if (add.length + remove.length === 0) return null;
   const payload = { actor: "Оператор", ifRevision: revision, stage: stage.id, add, remove };
-  return request(planningSavedSchema, () =>
-    pendingApiRequest(
-      project,
-      `plan-tasks:${planId}:${revision}:${stage.id}`,
-      payload,
-      (requestId) =>
-        getProjectApi(project).plans.changePlanTasks(
-          { reference: planId },
-          changePlanTasksSchema.parse({ ...payload, requestId }),
-        ),
-    ),
+  return request(
+    planningSavedSchema,
+    () =>
+      pendingApiRequest(
+        project,
+        `plan-tasks:v2:${planId}:${revision}:${stage.id}`,
+        payload,
+        (requestId) =>
+          getProjectApi(project).plans.changePlanTasks(
+            { reference: planId },
+            changePlanTasksSchema.parse({ ...payload, requestId }),
+          ),
+      ),
+    true,
   );
 };
 
@@ -295,17 +313,20 @@ export const transitionPlan = async (
   result = "",
 ): Promise<PlanningSaved> => {
   const payload = { actor: "Оператор", ifRevision: revision, action, result };
-  return request(planningSavedSchema, () =>
-    pendingApiRequest(
-      project,
-      `plan-transition:${planId}:${revision}:${action}`,
-      payload,
-      (requestId) =>
-        getProjectApi(project).plans.transitionPlan(
-          { reference: planId },
-          transitionPlanSchema.parse({ ...payload, requestId }),
-        ),
-    ),
+  return request(
+    planningSavedSchema,
+    () =>
+      pendingApiRequest(
+        project,
+        `plan-transition:v2:${planId}:${revision}:${action}`,
+        payload,
+        (requestId) =>
+          getProjectApi(project).plans.transitionPlan(
+            { reference: planId },
+            transitionPlanSchema.parse({ ...payload, requestId }),
+          ),
+      ),
+    true,
   );
 };
 
@@ -324,20 +345,24 @@ export const transferPlanTask = async (
     actor: "Оператор",
     ifRevision: source.revision,
     targetRevision: target.revision,
+    targetPlan: target.id,
     task,
     targetStage,
     reason,
   };
-  return request(planningSavedSchema, () =>
-    pendingApiRequest(
-      project,
-      `plan-transfer:${task}:${source.revision}:${target.revision}`,
-      payload,
-      (requestId) =>
-        getProjectApi(project).plans.transferPlanTask(
-          { reference: source.id },
-          transferPlanTaskSchema.parse({ ...payload, requestId }),
-        ),
-    ),
+  return request(
+    planningSavedSchema,
+    () =>
+      pendingApiRequest(
+        project,
+        `plan-transfer:v2:${source.id}:${task}:${source.revision}:${target.id}:${target.revision}`,
+        payload,
+        (requestId) =>
+          getProjectApi(project).plans.transferPlanTask(
+            { reference: source.id },
+            transferPlanTaskSchema.parse({ ...payload, requestId }),
+          ),
+      ),
+    true,
   );
 };

@@ -163,7 +163,12 @@ export const TaskModal = (props: TaskModalProps) => {
                 />
               </Tabs.Panel>
               <Tabs.Panel value="documents" className={styles.tabPanel}>
-                {tab === "documents" && (<EntityDocuments target={{ kind: "task", id: task.id }} onOpenedChange={setDeleteOpened} />)}
+                {tab === "documents" && (
+                  <EntityDocuments
+                    target={{ kind: "task", id: task.id }}
+                    onOpenedChange={setDeleteOpened}
+                  />
+                )}
               </Tabs.Panel>
               <Tabs.Panel value="history" className={styles.tabPanel}>
                 <TaskActivity

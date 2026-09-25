@@ -1,15 +1,20 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "tasks": {
+    "check": {
+      "dependsOn": [],
+      "cache": false,
+      "outputs": []
+    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "@gromlab/relay-server#build": {
+    "@oim-dev/relay-server#build": {
       "dependsOn": ["^build", "@relay/web#build"],
       "outputs": ["dist/**"]
     },
-    "@gromlab/relay-cli#build": {
+    "@oim-dev/relay-cli#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
@@ -24,7 +29,7 @@
         "RELAY_WEB_PORT"
       ]
     },
-    "@gromlab/relay-cli#dev": {
+    "@oim-dev/relay-cli#dev": {
       "cache": false,
       "persistent": false,
       "passThroughEnv": [
@@ -54,7 +59,7 @@
       "dependsOn": ["build"],
       "outputs": []
     },
-    "@gromlab/relay-cli#test": {
+    "@oim-dev/relay-cli#test": {
       "dependsOn": ["build"],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -62,6 +67,9 @@
         "$TURBO_ROOT$/README.md",
         "$TURBO_ROOT$/docs/**",
         "$TURBO_ROOT$/skills/relay/**",
+        "$TURBO_ROOT$/packages/dev-agents/src/**",
+        "$TURBO_ROOT$/packages/dev-agents/README.md",
+        "$TURBO_ROOT$/packages/relay-skill/README.md",
         "$TURBO_ROOT$/scripts/release/**"
       ],
       "outputs": []
@@ -79,18 +87,18 @@
       ],
       "outputs": []
     },
-    "@gromlab/relay-mcp#test": {
+    "@oim-dev/relay-mcp#test": {
       "dependsOn": ["build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/release/**"],
       "outputs": []
     },
-    "@gromlab/relay-mcp#start": {
+    "@oim-dev/relay-mcp#start": {
       "dependsOn": ["build"],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["RELAY_CONFIG", "RELAY_MCP_PORT", "RELAY_SERVER_URL"]
     },
-    "@gromlab/relay-server#test": {
+    "@oim-dev/relay-server#test": {
       "dependsOn": ["build"],
       "inputs": [
         "$TURBO_DEFAULT$",

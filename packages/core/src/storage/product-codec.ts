@@ -22,7 +22,13 @@ export const storedProductSchema = productRecordSchema.extend({
         .array(fields[4].shape.contracts.element.extend({ description: lines }))
         .max(10000),
     }),
-    fields[5].extend({ body: lines, relations: z.array(documentRelationSchema.extend({ description: lines })).max(100).optional() }),
+    fields[5].extend({
+      body: lines,
+      relations: z
+        .array(documentRelationSchema.extend({ description: lines }))
+        .max(100)
+        .optional(),
+    }),
   ]),
 });
 
@@ -42,9 +48,18 @@ export function decodeProduct(value: unknown, path: string): ProductRecord {
           })),
         }
       : data.kind === "document"
-        ? { ...data, body: toText(data.body), ...(data.relations === undefined ? {} : {
-            relations: data.relations.map((relation) => ({ ...relation, description: toText(relation.description) })),
-          }) }
+        ? {
+            ...data,
+            body: toText(data.body),
+            ...(data.relations === undefined
+              ? {}
+              : {
+                  relations: data.relations.map((relation) => ({
+                    ...relation,
+                    description: toText(relation.description),
+                  })),
+                }),
+          }
         : { ...data, description: toText(data.description) };
   return parse(productRecordSchema, { ...stored, version: 1, fields: decoded }, path, true);
 }
@@ -61,9 +76,22 @@ export function encodeProduct(record: ProductRecord): z.infer<typeof storedProdu
           })),
         }
       : data.kind === "document"
-        ? { ...data, body: data.body.split("\n"), ...(data.relations === undefined ? {} : {
-            relations: data.relations.map((relation) => ({ ...relation, description: relation.description.split("\n") })),
-          }) }
+        ? {
+            ...data,
+            body: data.body.split("\n"),
+            ...(data.relations === undefined
+              ? {}
+              : {
+                  relations: data.relations.map((relation) => ({
+                    ...relation,
+                    description: relation.description.split("\n"),
+                  })),
+                }),
+          }
         : { ...data, description: data.description.split("\n") };
-  return storedProductSchema.parse({ ...record, version: data.kind === "document" ? 4 : 3, fields: encoded });
+  return storedProductSchema.parse({
+    ...record,
+    version: data.kind === "document" ? 4 : 3,
+    fields: encoded,
+  });
 }

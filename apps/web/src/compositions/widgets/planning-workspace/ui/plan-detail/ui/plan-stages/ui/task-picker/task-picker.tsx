@@ -28,7 +28,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
   const projectId = useProjectId();
   const refresh = usePlanningRefresh(projectId);
   const boardsQuery = useBoards(projectId);
-  const storageKey = `relay:planning-selection:server-v1:${projectId}:${plan.id}:${stage.id}`;
+  const storageKey = `relay:planning-selection:server-v2:${projectId}:${plan.id}:${stage.id}`;
   const [draft] = useState(() => {
     const stored = readSessionValue(storageKey);
     const raw = stored.value;
@@ -36,7 +36,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
       .object({
         selectedIds: z.array(z.string()),
         baseIds: z.array(z.string()),
-        revision: z.number(),
+        revision: z.number().int().positive(),
       })
       .safeParse(raw);
     return {
@@ -60,7 +60,13 @@ export const TaskPicker = (props: TaskPickerProps) => {
   const [canPersist, setCanPersist] = useState(true);
   const candidates = usePlanningCandidates(
     projectId,
-    { q: query, stage: stage.id, isAvailableOnly, ...(board === "all" ? {} : { board }) },
+    {
+      q: query,
+      plan: plan.id,
+      stage: stage.id,
+      isAvailableOnly,
+      ...(board === "all" ? {} : { board }),
+    },
     limit,
   );
   const boards = boardsQuery.data?.flatMap((page) => page.items) ?? [];
@@ -69,15 +75,25 @@ export const TaskPicker = (props: TaskPickerProps) => {
     { value: "all", label: "Все доски" },
     ...boards.map((entry) => ({ value: entry.slug, label: entry.name })),
   ];
-  const taskItems = (candidates.data?.items ?? []).map((task) => ({
-    ...task,
-    isSelected: selectedIds.includes(task.id),
-    isUnavailable:
-      (isDefined(task.assignment) && task.assignment.stageId !== stage.id) ||
-      (task.status === "cancelled" && !draft.values.baseIds.includes(task.id)),
-    assignment: task.assignment?.label,
-    statusLabel: PLANNING_TASK_LABELS[task.status],
-  }));
+  const taskItems = (candidates.data?.items ?? []).map((task) => {
+    const isSelected = selectedIds.includes(task.id);
+    const hasOtherAssignment =
+      isDefined(task.assignment) &&
+      (task.assignment.stageId !== stage.id || task.assignment.planId !== plan.id);
+    const isUnavailable =
+      hasOtherAssignment ||
+      (task.status === "cancelled" && !draft.values.baseIds.includes(task.id));
+    return {
+      ...task,
+      isSelected,
+      isUnavailable,
+      isDisabled: isSaving || (isUnavailable && !isSelected),
+      unavailabilityLabel: hasOtherAssignment
+        ? `В плане ${task.assignment?.label}`
+        : "Отменённую задачу нельзя добавить в этап",
+      statusLabel: PLANNING_TASK_LABELS[task.status],
+    };
+  });
   const hiddenCount = selectedIds.filter((id) => !taskItems.some((task) => task.id === id)).length;
   const hasHiddenSelection = hiddenCount > 0;
   const total = candidates.data?.total ?? 0;
@@ -91,6 +107,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
    * Изменяет полный выбор, а не только видимую страницу.
    */
   const handleSelection = (nextIds: string[]) => {
+    if (isSaving) return;
     if (draft.error !== null) {
       setError(draft.error);
       return;
@@ -104,6 +121,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
    * Применяет разницу относительно исходного состава, не подменяя ревизию после SSE.
    */
   const handleApply = async () => {
+    if (isSaving) return;
     if (draft.error !== null) {
       setError(draft.error);
       return;
@@ -113,6 +131,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
       return;
     }
     setIsSaving(true);
+    setError(null);
     try {
       await changePlanTasks(
         projectId,
@@ -136,7 +155,12 @@ export const TaskPicker = (props: TaskPickerProps) => {
     <Modal
       attributes={{ header: { role: "presentation" } }}
       opened
-      onClose={onClose}
+      onClose={() => {
+        if (!isSaving) onClose();
+      }}
+      closeOnClickOutside={!isSaving}
+      closeOnEscape={!isSaving}
+      withCloseButton={!isSaving}
       title="Выбрать задачи"
       size="lg"
       closeButtonProps={{ "aria-label": "Свернуть выбор задач" }}
@@ -215,11 +239,11 @@ export const TaskPicker = (props: TaskPickerProps) => {
               className={styles.task}
               key={task.id}
               data-selected={task.isSelected}
-              data-disabled={task.isUnavailable}
+              data-disabled={task.isDisabled}
             >
               <Checkbox
                 checked={task.isSelected}
-                disabled={task.isUnavailable || isSaving}
+                disabled={task.isDisabled}
                 aria-label={`Выбрать ${task.key}`}
                 size="xs"
                 onChange={(event) =>
@@ -238,7 +262,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
                   <span>{task.statusLabel}</span>
                 </span>
                 {task.isUnavailable && (
-                  <span className={styles.assignment}>В плане {task.assignment}</span>
+                  <span className={styles.assignment}>{task.unavailabilityLabel}</span>
                 )}
               </span>
             </label>
@@ -286,13 +310,13 @@ export const TaskPicker = (props: TaskPickerProps) => {
             <strong>Выбрано: {selectedIds.length}</strong>
             {hasHiddenSelection && <span>Вне текущего списка: {hiddenCount}</span>}
             {hasSelection && (
-              <button type="button" onClick={() => handleSelection([])}>
+              <button type="button" disabled={isSaving} onClick={() => handleSelection([])}>
                 Снять выбор
               </button>
             )}
           </div>
           <Group gap="xs">
-            <Button variant="default" onClick={onClose}>
+            <Button variant="default" disabled={isSaving} onClick={onClose}>
               Свернуть
             </Button>
             <Button onClick={handleApply} loading={isSaving}>

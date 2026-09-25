@@ -343,7 +343,7 @@ export async function readEntityCatalog(
     );
   }
   if (workspace.storageSession) {
-    for (const kind of ["work-plan", "plan-stage", "release"] as const) {
+    for (const kind of ["work-plan", "release"] as const) {
       for (const record of await planningRecords(workspace, kind)) {
         const {
           id,
@@ -365,15 +365,13 @@ export async function readEntityCatalog(
   for (const entry of entries) {
     const data = entry.data;
     const parentId =
-      data.kind === "plan-stage"
-        ? data.planId
-        : data.kind === "implementation"
-          ? data.applicationId
-          : data.kind === "task"
-            ? data.boardId
-            : data.kind === "scenario"
-              ? data.featureId
-              : null;
+      data.kind === "implementation"
+        ? data.applicationId
+        : data.kind === "task"
+          ? data.boardId
+          : data.kind === "scenario"
+            ? data.featureId
+            : null;
     const parent = entries.find((candidate) => candidate.ref.id === parentId);
     if (parent) entry.context = `${parent.key} · ${parent.title}`;
   }

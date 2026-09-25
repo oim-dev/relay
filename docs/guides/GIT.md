@@ -24,7 +24,7 @@
 Выполняйте команды Git в той рабочей копии, в которой хранятся изменения:
 
 ```bash
-npx @gromlab/relay-cli --local validate
+npx @oim-dev/relay-cli --local validate
 git diff -- .relay
 git add .relay/config.json .relay/boards .relay/product .relay/relations
 git commit -m "Обновить задачи и результаты работы"
@@ -47,7 +47,7 @@ Relay сохраняет файлы; решение о коммите и его 
 Альтернативный прямой доступ на одном хосте:
 
 ```bash
-npx @gromlab/relay-cli --local --config /work/orchestrator/.relay/config.json task list
+npx @oim-dev/relay-cli --local --config /work/orchestrator/.relay/config.json task list
 ```
 
 Такие обращения используют одну базу и одну блокировку, независимо от рабочего
@@ -70,7 +70,7 @@ Git-копий выполняется отдельно.
 После слияния выполните:
 
 ```bash
-npx @gromlab/relay-cli --local validate
+npx @oim-dev/relay-cli --local validate
 ```
 
 Проверка охватывает документы, записи и весь граф. Чистое текстовое слияние само

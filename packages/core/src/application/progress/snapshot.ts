@@ -126,12 +126,7 @@ export async function readProgressSnapshot(
         records,
         tasks,
         boards,
-        ...(kind === "task"
-          ? [
-              await planningRecords(workspace, "work-plan"),
-              await planningRecords(workspace, "plan-stage"),
-            ]
-          : []),
+        ...(kind === "task" ? [await planningRecords(workspace, "work-plan")] : []),
       ]),
     )
     .digest("hex");

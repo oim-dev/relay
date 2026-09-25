@@ -47,7 +47,7 @@ export function workspaceRelease(manifests, explicitTag) {
     const path = `apps/${component}/package.json`;
     const entry = manifests.find((candidate) => candidate.path === path);
     assert(entry, `В выпуске отсутствует ${path}`);
-    assert.equal(entry.manifest.name, `@gromlab/relay-${component}`);
+    assert.equal(entry.manifest.name, `@oim-dev/relay-${component}`);
     assert.equal(
       entry.manifest.version,
       metadata.version,

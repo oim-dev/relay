@@ -13,7 +13,7 @@ async function fixture(t, version = "0.6.0") {
   const manifests = [
     {
       path: "package.json",
-      manifest: { name: "@gromlab/relay-monorepo", version: "0.0.0", private: true },
+      manifest: { name: "@oim-dev/relay-monorepo", version: "0.0.0", private: true },
     },
     {
       path: "apps/web/package.json",
@@ -23,14 +23,18 @@ async function fixture(t, version = "0.6.0") {
       path: "packages/core/package.json",
       manifest: { name: "@relay/core", version: "0.0.0", private: true },
     },
+    ...["dev-agents", "relay-skill"].map((name) => ({
+      path: `packages/${name}/package.json`,
+      manifest: { name: `@relay/${name}`, version: "0.0.0", private: true, type: "module" },
+    })),
     ...["cli", "server", "mcp"].map((component) => ({
       path: `apps/${component}/package.json`,
       manifest: {
-        name: `@gromlab/relay-${component}`,
+        name: `@oim-dev/relay-${component}`,
         version,
         bin: { [`relay-${component}`]: component === "cli" ? "dist/cli/main.js" : "dist/main.js" },
         publishConfig: { access: "public", registry: "https://registry.npmjs.org" },
-        repository: { type: "git", url: "git+https://github.com/gromlab-ru/relay.git" },
+        repository: { type: "git", url: "git+https://github.com/oim-dev/relay.git" },
         engines: { node: ">=22" },
         dependencies: { "@relay/core": "workspace:*" },
       },
@@ -110,7 +114,7 @@ test("проверка отклоняет рассинхронизацию ве�
     () =>
       workspaceRelease([
         ...manifests,
-        { path: "packages/new/package.json", manifest: { name: "@gromlab/new", version: "0.6.0" } },
+        { path: "packages/new/package.json", manifest: { name: "@oim-dev/new", version: "0.6.0" } },
       ]),
     /не включён/,
   );
@@ -160,7 +164,7 @@ test("повтор после сбоя допубликовывает компл
     executeNpm: async (args) => {
       const { name } = release.packages.find(({ name }) => archives.get(name).path === args[1]);
       attempts.push(name);
-      if (name === "@gromlab/relay-server" && fail) {
+      if (name === "@oim-dev/relay-server" && fail) {
         fail = false;
         throw new Error("Сбой registry");
       }
@@ -173,10 +177,10 @@ test("повтор после сбоя допубликовывает компл
   await publishPackages(root, release.packages, options);
   await publishPackages(root, release.packages, options);
   assert.deepEqual(attempts, [
-    "@gromlab/relay-cli",
-    "@gromlab/relay-server",
-    "@gromlab/relay-server",
-    "@gromlab/relay-mcp",
+    "@oim-dev/relay-cli",
+    "@oim-dev/relay-server",
+    "@oim-dev/relay-server",
+    "@oim-dev/relay-mcp",
   ]);
   assert.equal(published.size, 3);
 });
@@ -185,12 +189,12 @@ test("ошибка любого архива или registry останавли�
   for (const failure of ["missing", "integrity", "registry"]) {
     await t.test(failure, async (t) => {
       const { root, release, archives } = await fixture(t);
-      if (failure === "missing") await rm(archives.get("@gromlab/relay-mcp").path);
+      if (failure === "missing") await rm(archives.get("@oim-dev/relay-mcp").path);
       let publications = 0;
       await assert.rejects(() =>
         publishPackages(root, release.packages, {
           getIntegrity: async (name) => {
-            if (name !== "@gromlab/relay-mcp") return null;
+            if (name !== "@oim-dev/relay-mcp") return null;
             if (failure === "registry") throw new Error("Ошибка доступа к npm");
             return "sha512-другой-архив";
           },
@@ -203,4 +207,27 @@ test("ошибка любого архива или registry останавли�
       assert.equal(publications, 0);
     });
   }
+});
+
+test("CI проверяет выпуск без автопубликации, ручная команда выпуска сохранена", async () => {
+  const root = new URL("../../", import.meta.url);
+  const release = await readFile(new URL(".github/workflows/release.yml", root), "utf8");
+  const ci = await readFile(new URL(".github/workflows/ci.yml", root), "utf8");
+  for (const workflow of [release, ci]) {
+    assert.doesNotMatch(workflow, /^\s*(?:contents|id-token):\s*write\b/m);
+    assert.doesNotMatch(
+      workflow,
+      /\brelease:publish\b|\b(?:npm|pnpm|yarn)\s+publish\b|\brelay\.mjs\s+publish\b|\bgh\s+release\s+create\b/,
+    );
+  }
+  const jobs = release.split(/^jobs:\s*$/m)[1];
+  assert(jobs, "В workflow выпуска отсутствуют задания");
+  assert.deepEqual(
+    [...jobs.matchAll(/^ {2}([\w-]+):\s*$/gm)].map((match) => match[1]),
+    ["metadata", "ci"],
+  );
+  assert.match(jobs, /^ {4}needs: metadata$/m);
+  assert.match(jobs, /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m);
+  const manifest = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  assert.equal(manifest.scripts["release:publish"], "node scripts/release/relay.mjs publish");
 });

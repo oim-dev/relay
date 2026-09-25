@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { workPlanDataSchema, planStageDataSchema } from "./planning.js";
+import { workPlanDataSchema } from "./planning.js";
 import { releaseDataSchema } from "./releases.js";
 import {
   actorSchema,
@@ -49,7 +49,6 @@ export const entityKinds = [
   "task",
   "document",
   "work-plan",
-  "plan-stage",
   "release",
 ] as const;
 export const entityKindSchema = z.enum(entityKinds).describe("Вид основной сущности");
@@ -67,7 +66,6 @@ export type EntityRef = z.infer<typeof entityRefSchema>;
 const [passport, feature, scenario, application, , document] = productFieldsSchema.options;
 export const entityDataSchemas = {
   "work-plan": workPlanDataSchema,
-  "plan-stage": planStageDataSchema,
   release: releaseDataSchema,
   project: projectSettingsSchema
     .omit({ revision: true })
@@ -102,7 +100,6 @@ export const entityDataSchemas = {
 };
 export const entityDataSchema = z.discriminatedUnion("kind", [
   workPlanDataSchema,
-  planStageDataSchema,
   releaseDataSchema,
   entityDataSchemas.project,
   entityDataSchemas.product,
@@ -504,18 +501,9 @@ export const entityDefinitions: readonly EntityType[] = [
     actions: ["planning"],
   },
   {
-    kind: "plan-stage",
-    title: "Этап плана",
-    description:
-      "Промежуточный результат и ссылки на задачи одного плана; изменяется через владельца плана",
-    keyPolicy: "STG-<номер>; ключ не зависит от порядка",
-    filters: [],
-    actions: ["planning"],
-  },
-  {
     kind: "release",
     title: "Релиз",
-    description: "Самостоятельный выпуск выбранных планов с неизменяемым снимком результатов",
+    description: "Самостоятельный выпуск со ссылками на реализованные планы",
     keyPolicy: "REL-<номер>; обозначение версии не является идентичностью",
     filters: ["status"],
     actions: ["releases"],

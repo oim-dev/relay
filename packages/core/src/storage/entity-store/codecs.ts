@@ -55,21 +55,26 @@ const definitions: EntityCodec[] = Object.entries(entityDataSchemas).map(([kind,
   const schema = z.strictObject(shape.shape as z.ZodRawShape).omit({ kind: true });
   const paths =
     kind === "work-plan"
-      ? [["goal"], ["rationale"], ["boundaries"], ["expectedResult"], ["result"]]
-      : kind === "plan-stage"
-        ? [["outcome"], ["completionConditions"]]
-        : kind === "document"
-          ? [["body"], ["relations", "*", "description"]]
-          : kind === "task"
-            ? [["description"], ["acceptanceCriteria", "*", "description"]]
-            : ["project", "board"].includes(kind)
-              ? []
-              : [["description"]];
+      ? [
+          ["goal"],
+          ["rationale"],
+          ["boundaries"],
+          ["expectedResult"],
+          ["result"],
+          ["stages", "*", "outcome"],
+          ["stages", "*", "completionConditions"],
+        ]
+      : kind === "document"
+        ? [["body"], ["relations", "*", "description"]]
+        : kind === "task"
+          ? [["description"], ["acceptanceCriteria", "*", "description"]]
+          : ["project", "board"].includes(kind)
+            ? []
+            : [["description"]];
   return {
     kind,
-    collection:
-      kind === "work-plan" ? "work-plans" : kind === "plan-stage" ? "plan-stages" : `${kind}s`,
-    dataVersion: 1,
+    collection: kind === "work-plan" ? "work-plans" : `${kind}s`,
+    dataVersion: kind === "work-plan" || kind === "release" ? 2 : 1,
     schema:
       kind === "task"
         ? schema.extend({ acceptanceCriteria: z.array(acceptanceCriterionSchema).max(100) })

@@ -13,7 +13,7 @@
     text-decoration: underline;
   }
 }
-.snapshot {
+.planContent {
   margin-top: 1rem;
   font-size: 0.75rem;
   & summary {

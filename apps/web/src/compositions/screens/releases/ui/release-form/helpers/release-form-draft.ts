@@ -29,7 +29,8 @@ export const readReleaseDraft = (key: string, fallback: ReleaseFormValues): Draf
     const raw = sessionStorage.getItem(key);
     if (raw !== null) {
       const parsed = DRAFT_SCHEMA.safeParse(JSON.parse(raw));
-      if (parsed.success) return { values: parsed.data, error: null };
+      if (parsed.success && (parsed.data.revision === 0) === (fallback.revision === 0))
+        return { values: parsed.data, error: null };
       return {
         values: fallback,
         error: "Черновик релиза имеет неизвестный формат. Сбросьте его явно, чтобы продолжить.",

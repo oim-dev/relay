@@ -15,11 +15,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Создать релиз с выбранными планами; статус released выполняет полную фиксацию снимка
+ * @description Создать релиз с выбранными планами; статус released проверяет готовность и фиксирует выпуск
  *
  * @tags releases
  * @name CreateReleaseForProject
- * @summary Создать релиз с выбранными планами; статус released выполняет полную фиксацию снимка
+ * @summary Создать релиз с выбранными планами; статус released проверяет готовность и фиксирует выпуск
  * @request POST:/api/v1/projects/{project}/releases
  */
 export const createReleaseForProject = (

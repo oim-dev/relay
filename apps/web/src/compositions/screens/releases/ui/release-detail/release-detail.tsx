@@ -1,11 +1,20 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Alert, Badge, Button } from "@mantine/core";
-import { ArrowLeft, Check, Pencil } from "lucide-react";
-import { getReleaseSummary, RELEASE_STATUS_LABELS, RELEASE_STATUS_COLORS } from "domains/releases";
+import { Alert, Badge, Button, Group, Modal } from "@mantine/core";
+import { ArrowLeft, Rocket, Pencil } from "lucide-react";
+import {
+  getReleaseSummary,
+  RELEASE_STATUS_LABELS,
+  RELEASE_STATUS_COLORS,
+  saveRelease,
+  useReleasesRefresh,
+  ReleaseError,
+} from "domains/releases";
+import type { Release } from "domains/releases";
+import { useProjectId } from "domains/project";
+import { isDefined } from "shared/value-predicates";
 import { MarkdownView } from "ui/markdown-view";
 import { ReleaseContent } from "./ui/release-content/release-content";
-import { ReleaseSnapshot } from "./ui/release-snapshot/release-snapshot";
 import { EntityDocuments } from "compositions/widgets/entity-documents";
 import { EntityHistory } from "compositions/widgets/entity-history";
 import type { ReleaseDetailProps } from "./types/release-detail-props.type";
@@ -15,16 +24,26 @@ import styles from "./styles/release-detail.module.css";
  * Показывает версию, собственный статус и выбранные результаты одного выпуска.
  *
  * Используется для:
- *  - чтения запланированного релиза и неизменяемого состава состоявшегося выпуска
+ *  - чтения реквизитов выпуска и актуальных выбранных планов
  */
 export const ReleaseDetail = (props: ReleaseDetailProps) => {
   const { release, basePath, onEdit } = props;
+  const projectId = useProjectId();
+  const refresh = useReleasesRefresh(projectId);
+  const [releaseDraft, setReleaseDraft] = useState<Release | null>(null);
+  const [isReleasing, setIsReleasing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const summary = getReleaseSummary(release);
   const isReleased = release.status === "released";
-  const materialsTitle = isReleased ? "Текущие прикреплённые материалы" : "Материалы релиза";
   const canEdit = !isReleased;
   const canRelease = release.status === "planned" && summary.canRelease;
+  const isPlanned = release.status === "planned";
+  const isCancelled = release.status === "cancelled";
+  const isBlocked = isPlanned && !canRelease;
+  const releaseDescriptionId = isBlocked ? "release-blockers" : undefined;
+  const isConfirmationOpen = isDefined(releaseDraft);
+  const hasError = isDefined(error);
   const hasDescription = release.description.trim() !== "";
   const dateFormatter = new Intl.DateTimeFormat("ru", {
     day: "numeric",
@@ -40,15 +59,38 @@ export const ReleaseDetail = (props: ReleaseDetailProps) => {
       ? "Не зафиксирован"
       : dateFormatter.format(new Date(release.releasedAt));
   const hasMissing = summary.missing > 0;
-  const hasSnapshot = release.snapshotId !== null;
-  const snapshotDescription = hasSnapshot
-    ? "Показан сохранённый состав. Изменения исходных планов не переписывают этот результат."
-    : "Снимок выпуска недоступен; перечитайте релиз. Текущие планы не заменяют исторический результат.";
 
   useEffect(() => {
     document.title = `${release.title} · Relay`;
     headingRef.current?.focus({ preventScroll: true });
   }, [release.id, release.title]);
+
+  /**
+   * Фиксирует подтверждённый состав с исходной ревизией; повтор сохраняет тот же запрос.
+   */
+  const handleRelease = async () => {
+    if (!isDefined(releaseDraft) || isReleasing) return;
+    setIsReleasing(true);
+    setError(null);
+    try {
+      await saveRelease(projectId, releaseDraft);
+      setReleaseDraft(null);
+      void refresh().catch(() => undefined);
+    } catch (error) {
+      if (error instanceof ReleaseError) setError(error.message);
+      else throw error;
+    } finally {
+      setIsReleasing(false);
+    }
+  };
+
+  /**
+   * Сохраняет реквизиты подтверждения отдельно от несохранённого редактора релиза.
+   */
+  const handleConfirm = () => {
+    setError(null);
+    setReleaseDraft({ ...release, status: "released" });
+  };
 
   return (
     <div className={styles.root}>
@@ -79,13 +121,29 @@ export const ReleaseDetail = (props: ReleaseDetailProps) => {
               Изменить релиз
             </Button>
           )}
-          {canRelease && (
-            <Button leftSection={<Check size={14} />} onClick={() => onEdit("released")}>
-              Зафиксировать выпуск
+          {isPlanned && (
+            <Button
+              leftSection={<Rocket size={14} aria-hidden="true" />}
+              disabled={!canRelease}
+              aria-describedby={releaseDescriptionId}
+              onClick={handleConfirm}
+            >
+              Выпустить релиз
             </Button>
           )}
         </div>
       </header>
+      {isBlocked && (
+        <Alert id="release-blockers" color="orange" mb="lg" title="Что нужно для выпуска">
+          Завершите включённые планы и выполните все их задачи, критерии и зависимости. Сейчас
+          готово {summary.ready} из {summary.total} планов. Откройте нужный план в составе ниже.
+        </Alert>
+      )}
+      {isCancelled && (
+        <Alert color="gray" mb="lg" title="Релиз отменён">
+          Чтобы выпустить его, выберите статус «Запланирован» в редакторе и сохраните релиз.
+        </Alert>
+      )}
       <dl className={styles.facts}>
         <div>
           <dt>Версия</dt>
@@ -110,7 +168,7 @@ export const ReleaseDetail = (props: ReleaseDetailProps) => {
       </dl>
       {isReleased && (
         <Alert color="gray" mb="lg" title="Выпуск зафиксирован">
-          {snapshotDescription}
+          Ниже показаны актуальные планы, включённые в этот релиз.
           <p>Автор: {release.releasedBy}</p>
         </Alert>
       )}
@@ -125,18 +183,46 @@ export const ReleaseDetail = (props: ReleaseDetailProps) => {
         </section>
       )}
       <ReleaseContent release={release} basePath={basePath} onEdit={() => onEdit()} />
-      {hasSnapshot && <ReleaseSnapshot releaseId={release.id} />}
       <section className={styles.description}>
-        <h2>{materialsTitle}</h2>
-        {isReleased && (
-          <p>
-            Текущая библиотека может изменяться. Зафиксированные тексты доступны в снимке выпуска
-            выше.
-          </p>
-        )}
+        <h2>Материалы релиза</h2>
         <EntityDocuments target={{ kind: "release", id: release.id }} />
       </section>
       <EntityHistory reference={`release:${release.id}`} />
+      <Modal
+        attributes={{ header: { role: "presentation" } }}
+        opened={isConfirmationOpen}
+        onClose={() => {
+          if (!isReleasing) setReleaseDraft(null);
+        }}
+        title="Выпустить релиз"
+        closeOnClickOutside={!isReleasing}
+        closeOnEscape={!isReleasing}
+        withCloseButton={!isReleasing}
+        closeButtonProps={{ "aria-label": "Закрыть подтверждение выпуска" }}
+      >
+        <p>
+          Выпустить «{releaseDraft?.title}», версия {releaseDraft?.version}? Будут зафиксированы
+          статус, дата и автор выпуска выбранных планов.
+        </p>
+        <p>Сборка и развёртывание этим действием не запускаются.</p>
+        {hasError && (
+          <Alert color="red" title="Релиз не выпущен">
+            {error}
+          </Alert>
+        )}
+        <Group justify="flex-end" mt="lg">
+          <Button variant="default" disabled={isReleasing} onClick={() => setReleaseDraft(null)}>
+            Отмена
+          </Button>
+          <Button
+            leftSection={<Rocket size={14} aria-hidden="true" />}
+            loading={isReleasing}
+            onClick={handleRelease}
+          >
+            Подтвердить выпуск
+          </Button>
+        </Group>
+      </Modal>
     </div>
   );
 };

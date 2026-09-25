@@ -11,6 +11,7 @@ import {
   inspectMarkdown,
   packageMarkdown,
   filesBelow,
+  documentationFiles,
 } from "../scripts/lib/documentation.mjs";
 import { repoRoot } from "../scripts/lib/project.mjs";
 import { createProgram } from "../src/program.js";
@@ -63,6 +64,28 @@ test("документация проверяет якоря GitHub и файл�
   await assert.rejects(() => checkDocumentation(app.root, ["README.md"]), /вне репозитория/);
 });
 
+test("обход документации включает полные профили нового пакета, отделяя виртуальные ссылки скилла", async (t) => {
+  const app = await documentationFixture(t);
+  await mkdir(join(app.root, "packages/dev-agents/src"), { recursive: true });
+  await mkdir(join(app.root, "packages/relay-skill/src"), { recursive: true });
+  await writeFile(join(app.root, "packages/dev-agents/README.md"), "# Агенты\n");
+  await writeFile(join(app.root, "packages/relay-skill/README.md"), "# Скилл\n");
+  const profile = "packages/dev-agents/src/worker.md";
+  await writeFile(join(app.root, profile), "# Работник\n\n[Документ](../../../docs/guide.md)\n");
+  await writeFile(
+    join(app.root, "packages/relay-skill/src/skill.md"),
+    "[Виртуальный документ](references/API.md)\n",
+  );
+  const files = await documentationFiles(app.root);
+  assert(files.includes(profile));
+  assert(files.includes("packages/dev-agents/README.md"));
+  assert(files.includes("packages/relay-skill/README.md"));
+  assert(!files.includes("packages/relay-skill/src/skill.md"));
+  await checkDocumentation(app.root, files);
+  await writeFile(join(app.root, profile), "[Ошибка](missing.md)\n");
+  await assert.rejects(checkDocumentation(app.root, files), /missing.md/);
+});
+
 test("README npm получает версионные ссылки и raw-изображения с сохранением Markdown", async (t) => {
   const app = await documentationFixture(t);
   const markdown = [
@@ -75,7 +98,8 @@ test("README npm получает версионные ссылки и raw-из�
     "",
     "[Исходники](apps/cli/)",
     "[Локальный якорь](#tasks)",
-    "[npm](https://www.npmjs.com/package/@gromlab/tasks-cli)",
+    "[npm](https://www.npmjs.com/package/@oim-dev/relay-cli)",
+    "[Генератор](https://github.com/gromlab-ru/rest-api-codegen)",
     "```md",
     "[Пример](docs/guide.md)",
     "```",
@@ -83,21 +107,20 @@ test("README npm получает версионные ссылки и raw-из�
   const result = await packageMarkdown({ ...app, source: "README.md", markdown, absolute: true });
   const urls = inspectMarkdown(result).destinations.map((node) => node.url);
   assert(
-    urls.includes(
-      "https://github.com/gromlab-ru/relay/blob/v0.4.0-rc.1/docs/guide.md#режим---local",
-    ),
+    urls.includes("https://github.com/oim-dev/relay/blob/v0.4.0-rc.1/docs/guide.md#режим---local"),
   );
   assert.equal(
     urls.filter(
       (url) =>
         url ===
-        "https://raw.githubusercontent.com/gromlab-ru/relay/v0.4.0-rc.1/docs/assets/board%20(dark).png",
+        "https://raw.githubusercontent.com/oim-dev/relay/v0.4.0-rc.1/docs/assets/board%20(dark).png",
     ).length,
     2,
   );
-  assert(urls.includes("https://github.com/gromlab-ru/relay/tree/v0.4.0-rc.1/apps/cli/"));
+  assert(urls.includes("https://github.com/oim-dev/relay/tree/v0.4.0-rc.1/apps/cli/"));
   assert(urls.includes("#tasks"));
-  assert(urls.includes("https://www.npmjs.com/package/@gromlab/tasks-cli"));
+  assert(urls.includes("https://www.npmjs.com/package/@oim-dev/relay-cli"));
+  assert(urls.includes("https://github.com/gromlab-ru/rest-api-codegen"));
   assert(result.includes('"Текст ]( внутри title"'));
   assert(result.includes("```md\n[Пример](docs/guide.md)\n```"));
 });
@@ -114,7 +137,7 @@ test("документы архива сохраняют локальные пе
     [
       "../README.md",
       "../CHANGELOG.md",
-      "https://github.com/gromlab-ru/relay/tree/v0.4.0-rc.1/apps/cli/",
+      "https://github.com/oim-dev/relay/tree/v0.4.0-rc.1/apps/cli/",
     ],
   );
 });

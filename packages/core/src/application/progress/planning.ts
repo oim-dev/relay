@@ -56,7 +56,7 @@ export async function workPlanProgress(workspace: Workspace, input: ProgressQuer
     completed: summary.ready && plan.status !== "cancelled",
     counts: summary.counts,
     canStart: plan.status === "draft" && plan.goal.trim() !== "" && summary.counts.total > 0,
-    canComplete: plan.status === "active" && summary.ready,
+    canComplete: (plan.status === "draft" || plan.status === "active") && summary.ready,
     diverged,
     tasks: strip(tasks),
     reasons: strip(reasons),
@@ -65,7 +65,6 @@ export async function workPlanProgress(workspace: Workspace, input: ProgressQuer
         const counts = state.counts(stage.taskIds);
         return {
           id: stage.id,
-          key: stage.key,
           title: stage.title,
           counts,
           completed: counts.total > 0 && counts.completed === counts.total,

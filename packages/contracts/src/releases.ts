@@ -44,7 +44,6 @@ export const releaseDataSchema = releaseFieldsSchema.extend({
   status: releaseStatusSchema,
   releasedAt: timestampSchema.nullable().describe("Фактическая дата фиксации выпуска"),
   releasedBy: actorSchema.nullable().describe("Автор фиксации выпуска"),
-  snapshotId: planningIdSchema.nullable().describe("Постоянный ID самодостаточного снимка"),
 });
 export const releaseSchema = releaseDataSchema.extend(planningMetadata);
 export const releaseReadinessSchema = z.strictObject({
@@ -94,29 +93,10 @@ export const releasePlanItemSchema = z.strictObject({
   id: planningIdSchema,
   plan: planSummarySchema
     .nullable()
-    .describe("План текущего или сохранённого состава; null при недоступности"),
+    .describe("Актуальный план выбранного состава; null при недоступности"),
 });
 export const releaseCompositionSchema = planningPage(releasePlanItemSchema).extend({
   readiness: releaseReadinessSchema,
-});
-export const releaseSnapshotItemSchema = z.strictObject({
-  kind: z.string().describe("Вид архивированной записи"),
-  id: planningIdSchema,
-  key: z.string().describe("Ключ на момент выпуска"),
-  revision: z.number().int().nonnegative().describe("Ревизия исходной записи"),
-  title: z.string().describe("Название на момент выпуска"),
-  reason: z
-    .string()
-    .describe("Основание включения: состав, обязательство, требование или материал"),
-  content: text(8 * 1024 * 1024).describe(
-    "Самодостаточное содержание записи в Markdown, включая критерии и реквизиты",
-  ),
-});
-export const releaseSnapshotPageSchema = planningPage(releaseSnapshotItemSchema).extend({
-  snapshotId: planningIdSchema,
-  releaseId: planningIdSchema,
-  capturedAt: timestampSchema,
-  capturedBy: actorSchema,
 });
 export type Release = z.infer<typeof releaseSchema>;
 export type ReleaseSummary = z.infer<typeof releaseSummarySchema>;
@@ -125,4 +105,3 @@ export type UpdateRelease = z.input<typeof updateReleaseSchema>;
 export type ReleaseAction = z.input<typeof releaseActionSchema>;
 export type ReleasesQuery = z.input<typeof releasesQuerySchema>;
 export type ReleasePreview = z.input<typeof releasePreviewSchema>;
-export type ReleaseSnapshotItem = z.infer<typeof releaseSnapshotItemSchema>;

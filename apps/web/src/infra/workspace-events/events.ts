@@ -32,6 +32,7 @@ const createConnection = (projectId: string, onReleased: () => void) => {
   let releaseTimer: ReturnType<typeof setTimeout> | undefined;
   let disconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let reconnectDelay = RECONNECT_DELAY;
+  let isPageSuspended = false;
   let signal: WorkspaceSignal = { state: "connecting", sequence: 0 };
 
   /**
@@ -48,11 +49,25 @@ const createConnection = (projectId: string, onReleased: () => void) => {
   };
 
   /**
+   * Освобождает HTTP-соединение и таймеры, сохраняя подписчиков для восстановления страницы.
+   */
+  const closeTransport = (): void => {
+    clearTimeout(connectTimer);
+    connectTimer = undefined;
+    clearTimeout(disconnectTimer);
+    disconnectTimer = undefined;
+    const previous = source;
+    source = undefined;
+    previous?.close();
+    reconnectDelay = RECONNECT_DELAY;
+  };
+
+  /**
    * Открывает транспорт после завершения текущего цикла эффектов React.
    */
   const connect = (): void => {
     connectTimer = undefined;
-    if (listeners.size === 0 || source !== undefined) return;
+    if (isPageSuspended || listeners.size === 0 || source !== undefined) return;
     const connection = new EventSource(`/api/v1/projects/${encodeURIComponent(projectId)}/events`);
     source = connection;
     disconnectTimer ??= setTimeout(() => emit("disconnected"), DISCONNECT_DELAY);
@@ -100,13 +115,35 @@ const createConnection = (projectId: string, onReleased: () => void) => {
   };
 
   /**
+   * BFCache не размонтирует React: оставленный поток занял бы HTTP-слот следующей страницы.
+   */
+  const handlePageHide = (): void => {
+    isPageSuspended = true;
+    closeTransport();
+  };
+
+  /**
+   * Возвращает сохранённым подписчикам новый поток; connected инициирует сверку REST.
+   */
+  const handlePageShow = (): void => {
+    if (!isPageSuspended) return;
+    isPageSuspended = false;
+    if (listeners.size === 0) return;
+    emit("connecting");
+    connectTimer = setTimeout(connect, 0);
+  };
+
+  window.addEventListener("pagehide", handlePageHide);
+  window.addEventListener("pageshow", handlePageShow);
+
+  /**
    * Разделяет SSE между подписчиками и переживает короткий dev-remount без отмены запроса.
    */
   const subscribe = (onSignal: (value: WorkspaceSignal) => void): (() => void) => {
     clearTimeout(releaseTimer);
     releaseTimer = undefined;
     listeners.add(onSignal);
-    if (source === undefined && connectTimer === undefined) {
+    if (!isPageSuspended && source === undefined && connectTimer === undefined) {
       connectTimer = setTimeout(connect, 0);
     }
     onSignal(signal);
@@ -118,11 +155,9 @@ const createConnection = (projectId: string, onReleased: () => void) => {
         releaseTimer = setTimeout(() => {
           releaseTimer = undefined;
           if (listeners.size !== 0) return;
-          source?.close();
-          source = undefined;
-          clearTimeout(disconnectTimer);
-          disconnectTimer = undefined;
-          reconnectDelay = RECONNECT_DELAY;
+          closeTransport();
+          window.removeEventListener("pagehide", handlePageHide);
+          window.removeEventListener("pageshow", handlePageShow);
           signal = { state: "connecting", sequence: signal.sequence + 1 };
           onReleased();
         }, RELEASE_DELAY);

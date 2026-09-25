@@ -60,10 +60,8 @@ export type PlanningPlan = {
 };
 /** Этап с отдельным постраничным чтением задач. */
 export type PlanStage = {
-  /** Постоянный ID. */
+  /** Внутренний ID записи этапа в плане. */
   id: string;
-  /** Ключ. */
-  key: string;
   /** Название. */
   title: string;
   /** Краткий текст. */
@@ -72,8 +70,6 @@ export type PlanStage = {
   outcome: string;
   /** Условия Markdown. */
   completionConditions: string;
-  /** Порядок. */
-  rank: number;
   /** Полные ID для сохранения скрытого выбора; карточки читаются страницами. */
   taskIds: string[];
   /** Полные показатели этапа. */
@@ -118,6 +114,8 @@ export type PlanFilters = {
 };
 /** Поиск задач для этапа. */
 export type PlanningTaskFilters = {
+  /** План редактируемого этапа. */
+  plan?: string;
   /** Текст поиска. */
   q?: string;
   /** Доска. */

@@ -1,5 +1,5 @@
 {
-  "name": "@gromlab/relay-server",
+  "name": "@oim-dev/relay-server",
   "version": "0.6.0",
   "description": "Relay Server: проектный контекст, планы, задачи, REST API и веб-приложение для людей и AI-агентов",
   "bin": {
@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gromlab-ru/relay.git",
+    "url": "git+https://github.com/oim-dev/relay.git",
     "directory": "apps/server"
   },
   "publishConfig": {
@@ -41,7 +41,7 @@
     "commander": "^14.0.0"
   },
   "devDependencies": {
-    "@gromlab/relay-cli": "workspace:*",
+    "@oim-dev/relay-cli": "workspace:*",
     "@relay/contracts": "workspace:*",
     "@relay/typescript-config": "workspace:*",
     "@types/node": "^22.18.0",

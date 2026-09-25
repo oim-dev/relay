@@ -1,7 +1,7 @@
 # Раздельное JSON-хранилище отношений
 
 Принято к реализации 20 сентября 2026 по запросу пользователя. Контракт:
-[GRAPH.md](../../reference/GRAPH.md), проверки: [досье](../../work/entity-relations/README.md).
+[GRAPH.md](../../reference/GRAPH.md). Состояние реализации: [связи сущностей](../implementation/relations.md).
 
 ## Причина
 

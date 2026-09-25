@@ -22,7 +22,6 @@
 playground/
   relay.workspace.json       # Общий реестр двух проектов
   init.mjs                   # Инициализация без наполнения
-  AGENTS.md                  # Инструкция для отдельной агентской сессии
   coffee-shop/
     product-spec.md
     .relay/config.json
@@ -30,6 +29,8 @@ playground/
     product-spec.md
     .relay/config.json
 ```
+
+Инструкции владельца Playground — в [профиле relay-delivery](../../packages/dev-agents/src/delivery.md).
 
 Хранилища задач и служебные каталоги создаёт Relay. Пустые каталоги Git не хранит.
 Все папки `.relay` внутри Playground игнорируются. Уже отслеживаемые конфигурации
@@ -71,28 +72,11 @@ node /путь/к/relay/apps/playground/init.mjs
 
 ## Web и Server
 
-Обкатка универсального графа v2 в `p2p-rental`: карточки **PRODUCT-10**, **WEB-4**, **API-2**
-помечены «Обкатка Relay» и проверяют связи SCENARIO-8 с WEB-SI-8/API-SI-8 и документами.
-Они не подтверждают реализацию продукта. Пример восстановления из этой папки:
-
-```bash
-pnpm --silent run cli p2p-rental graph context task:NZHbkrtc --depth 6 --format json --max-bytes 131072
-```
-
-В Web откройте «Связи проекта» и выберите WEB-4. Результаты и резервная копия —
-в [досье связей](../../docs/work/entity-relations/README.md).
-
-Текущая приёмка множественных досок проводится в `p2p-rental`: «Продукт»,
-«Веб-приложение» (`web`), «Серверное API» (`api`), «Инфраструктура».
-Прежняя доска доступна отдельным пунктом навигации. Локальные данные этого примера
-адаптированы с сохранением ID и содержания; они не поставляются как автоматический seed.
-Результаты и резервная копия: [досье досок](../../docs/work/multiple-boards/README.md).
-
-Разработчик запускает их отдельно от агентской сессии. Для одновременной работы
+Разработчик запускает Web и Server отдельно от агентской сессии. Для одновременной работы
 с обоими проектами из корня репозитория Relay:
 
 ```bash
-RELAY_CONFIG=apps/playground/relay.workspace.json pnpm dev
+pnpm dev
 ```
 
 - Web: <http://127.0.0.1:5173> — выбрать `coffee-shop` или `p2p-rental`.
@@ -100,9 +84,21 @@ RELAY_CONFIG=apps/playground/relay.workspace.json pnpm dev
 - Проверка доступности: <http://127.0.0.1:4700/api/v1/health>.
 - API: <http://127.0.0.1:4700/api/docs>.
 
-Обычный `pnpm dev` без `RELAY_CONFIG` открывает только кофейню в однопроектном режиме;
-Web автоматически выбирает её. Для команд workspace ниже нужен именно запуск
-с `relay.workspace.json`. Перезапуск dev-процессов не очищает данные.
+`pnpm dev` и `pnpm dev:server` без `RELAY_CONFIG` используют
+`apps/playground/relay.workspace.json`. Для отдельной кофейни в однопроектном режиме
+передайте её конфиг явно:
+
+```bash
+RELAY_CONFIG=apps/playground/coffee-shop/.relay/config.json pnpm dev
+```
+
+Для команд workspace ниже нужен Server с `relay.workspace.json`.
+Перезапуск dev-процессов не очищает данные.
+
+Для проверки [досок](../../docs/product/entities/boards/README.md) и
+[визуального контекста](../../docs/product/applications/web/README.md#визуальный-контекст)
+выберите существующие записи своего проекта. Наличие конкретных карточек и связей
+в локальной базе не гарантируется исходной поставкой Playground.
 
 ## CLI из папки playground
 
@@ -110,12 +106,16 @@ Web автоматически выбирает её. Для команд worksp
 pnpm --silent run cli projects list
 pnpm --silent run cli coffee-shop product overview
 pnpm --silent run cli p2p-rental product overview
-pnpm --silent run cli coffee-shop list --all --format json
+pnpm --silent run cli coffee-shop task list --limit 20 --format json
 ```
 
 CLI запускается из актуальных исходников; workspace-конфиг передаётся явно.
 Запросы идут через общий Server, адрес которого задан в `relay.workspace.json`.
 Команды записи требуют автора: передавайте `--actor <имя>` или задайте `RELAY_ACTOR`.
+
+Пример `task list` выводит первую страницу — до 20 записей.
+Параметры выдачи и известное ограничение `--version` описаны в
+[справочнике CLI](../../docs/reference/CLI.md).
 
 Для локальной проверки без сервера:
 

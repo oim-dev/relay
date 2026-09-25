@@ -8,6 +8,11 @@
 работника: от паспорта и плана до исполнения, приёмки, выпуска и передачи контекста.
 Главный файл даёт самостоятельный рабочий алгоритм, подробности находятся в `references`.
 
+Его источники и сборщик принадлежат private ESM workspace-пакету
+[`@relay/relay-skill`](../../packages/relay-skill/README.md). Он предназначен для пользователей
+Relay; [пакет `@relay/dev-agents`](../../packages/dev-agents/README.md) содержит роли разработки
+самого Relay и собирает конфигурации OpenCode, Claude Code и Codex.
+
 Локальная установка собранного пакета:
 
 ```bash
@@ -17,8 +22,8 @@ npx skills@1.5.26 add ./skills/relay --skill relay --agent opencode
 После публикации изменений в репозитории:
 
 ```bash
-npx skills add gromlab-ru/relay --skill relay
-npx skills add gromlab-ru/relay --skill relay --agent opencode
+npx skills add oim-dev/relay --skill relay
+npx skills add oim-dev/relay --skill relay --agent opencode
 ```
 
 Имя скилла — `relay`; прежний `relay-cli` заменён. Обновите установленную копию через
@@ -29,27 +34,32 @@ npx skills add gromlab-ru/relay --skill relay --agent opencode
 ## Исходники и результат
 
 ```text
-src-skills/relay/
-├── skill.md
-├── bundle.json
-└── references/
-scripts/skill-bundle/
-├── build.mjs
-├── check.mjs
-├── lib.mjs
-├── generate.mjs
-├── bundle.test.mjs
-└── examples.test.mjs
+packages/relay-skill/
+├── package.json
+├── src/
+│   ├── skill.md
+│   ├── bundle.json
+│   └── references/
+└── scripts/
+    ├── build.mjs
+    ├── check.mjs
+    ├── lib.mjs
+    ├── generate.mjs
+    ├── bundle.test.mjs
+    └── examples.test.mjs
 skills/relay/
 ├── SKILL.md
 ├── bundle-info.json
 └── references/
 ```
 
-- `src-skills/relay` — авторские инструкции и манифест пакета.
-- `scripts/skill-bundle` — сборщик, генераторы справочников и проверки.
+- `packages/relay-skill/src` — авторские инструкции и манифест пакета.
+- `packages/relay-skill/scripts` — сборщик, генераторы справочников и проверки рядом с источниками.
 - `skills/relay` — распространяемый результат; целиком хранится в Git.
 - `.agents/skills` — локальные установленные копии, исключённые из Git.
+
+Сборка также обновляет установленный пакет `apps/playground/.agents/skills/relay`.
+Перенос исходников в workspace не меняет эти выходные пути и способ установки готового скилла.
 
 Главный исходник называется `skill.md`. Обнаруживаемый `SKILL.md` создаётся только в
 готовом пакете. Другие каталоги с именем `skills` для исходников или сборщиков не
@@ -57,9 +67,9 @@ skills/relay/
 
 ## Что собирается
 
-Манифест [`bundle.json`](../../src-skills/relay/bundle.json) явно определяет:
+Манифест [`bundle.json`](../../packages/relay-skill/src/bundle.json) явно определяет:
 
-- `files` — авторские материалы относительно `src-skills/relay`;
+- `files` — авторские материалы относительно `packages/relay-skill/src`;
 - `documents` — включаемую документацию продукта относительно корня репозитория;
 - `generated` — справочники из определений CLI и схем Core;
 - `aliases` — соответствие навигации исходных документов материалам пакета;
@@ -90,13 +100,20 @@ pnpm run docs:check
 npx skills@1.5.26 add ./skills/relay --list
 ```
 
+Корневые `skills:build`, `skills:check` и `skills:test` вызывают соответствующие
+`build`, `check` и `test` пакета `@relay/relay-skill` через `pnpm --filter`.
+Например, прямой запуск проверки: `pnpm --filter @relay/relay-skill run check`.
 Сборка использует TypeScript-исходники через tsx и не требует запуска Relay Server,
-сборки Web или установки скилла. `skills:check` собирает ожидаемое содержимое во
-временном каталоге и сравнивает с `skills/relay`, не исправляя его. Ручная правка,
-устаревший файл, лишний файл или забытый прежний скилл дают ошибку.
+сборки Web или установки скилла. `check` вычисляет ожидаемый пакет в памяти, без записи
+на диск и предварительного `build`, затем сравнивает его с `skills/relay` и существующей
+установленной копией `apps/playground/.agents/skills/relay`. На чистом checkout установленная
+копия может отсутствовать; если она существует, её содержимое также проверяется.
+Ручная правка, устаревший или лишний файл дают ошибку, а не молчаливую пересборку.
+Генерация и проверка в Turbo имеют `cache: false`, поскольку их выходы находятся вне
+пакета и должны проверяться на диске без обхода защитных проверок сборщика.
 
 В `pnpm run check` входят проверка актуальности и тесты скилла. Его сквозной тест
-в `scripts/skill-bundle/examples.test.mjs` выполняет через MCP сценарий непосредственно
+в `packages/relay-skill/scripts/examples.test.mjs` выполняет через MCP сценарий непосредственно
 из собранного `EXAMPLES.md`: проверяются запросы,
 связи, ревизии, успешная приёмка и ветка неуспешной проверки. Внешняя работа с кодом и
 установка представлены фикстурой; производственный выпуск тест не выполняет.

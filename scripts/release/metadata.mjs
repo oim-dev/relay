@@ -33,8 +33,11 @@ export function versionMetadata(version) {
  * @param {string} [tag] Git-тег, если проверяется релиз.
  */
 export function releaseMetadata(manifest, tag) {
-  const component = manifest.name.replace("@gromlab/relay-", "");
-  assert(["cli", "server", "mcp"].includes(component), "Неверное имя публикуемого пакета");
+  const component = manifest.name.replace("@oim-dev/relay-", "");
+  assert(
+    ["cli", "server", "mcp"].includes(component) && manifest.name === `@oim-dev/relay-${component}`,
+    "Неверное имя публикуемого пакета",
+  );
   assert(!manifest.private, "Приватный манифест нельзя публиковать");
   assert.equal(manifest.publishConfig.access, "public", "Ожидается публичный пакет");
   assert.equal(manifest.publishConfig.registry, "https://registry.npmjs.org");
@@ -46,7 +49,7 @@ export function releaseMetadata(manifest, tag) {
   );
   assert.equal(
     manifest.repository.url,
-    "git+https://github.com/gromlab-ru/relay.git",
+    "git+https://github.com/oim-dev/relay.git",
     "Неверный repository.url для npm provenance",
   );
   const version = versionMetadata(manifest.version);
@@ -59,7 +62,7 @@ export function releaseMetadata(manifest, tag) {
   return {
     name: manifest.name,
     ...version,
-    archiveName: `gromlab-relay-${component}-${manifest.version}.tgz`,
+    archiveName: `oim-dev-relay-${component}-${manifest.version}.tgz`,
   };
 }
 

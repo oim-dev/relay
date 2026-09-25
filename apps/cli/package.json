@@ -1,15 +1,15 @@
 {
-  "name": "@gromlab/relay-cli",
+  "name": "@oim-dev/relay-cli",
   "version": "0.6.0",
   "description": "Relay CLI: продукт, задачи досок и связи для людей и AI-агентов",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gromlab-ru/relay.git",
+    "url": "git+https://github.com/oim-dev/relay.git",
     "directory": "apps/cli"
   },
-  "homepage": "https://github.com/gromlab-ru/relay#readme",
+  "homepage": "https://github.com/oim-dev/relay#readme",
   "bugs": {
-    "url": "https://github.com/gromlab-ru/relay/issues"
+    "url": "https://github.com/oim-dev/relay/issues"
   },
   "keywords": [
     "cli",

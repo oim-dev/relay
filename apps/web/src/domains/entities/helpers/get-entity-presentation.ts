@@ -36,7 +36,6 @@ export const ENTITY_PRESENTATION = {
   board: { label: "Доска", icon: Kanban, color: "gray" },
   task: { label: "Задача", icon: ListTodo, color: "cyan" },
   "work-plan": { label: "План работ", icon: Flag, color: "blue" },
-  "plan-stage": { label: "Этап плана", icon: Layers, color: "indigo" },
   release: { label: "Релиз", icon: Rocket, color: "teal" },
 } satisfies Record<EntityKind, EntityPresentation>;
 

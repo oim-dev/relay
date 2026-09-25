@@ -1,6 +1,7 @@
 .root {
-  max-width: 68rem;
+  display: block;
 }
+
 .back {
   display: inline-flex;
   align-items: center;

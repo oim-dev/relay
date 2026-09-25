@@ -1,5 +1,5 @@
 {
-  "name": "@gromlab/relay-mcp",
+  "name": "@oim-dev/relay-mcp",
   "version": "0.6.0",
   "description": "Relay MCP: продукт, задачи досок, сущности и контекст для AI-агентов",
   "type": "module",
@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gromlab-ru/relay.git",
+    "url": "git+https://github.com/oim-dev/relay.git",
     "directory": "apps/mcp"
   },
   "publishConfig": {

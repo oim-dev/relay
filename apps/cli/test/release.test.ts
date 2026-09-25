@@ -6,11 +6,11 @@ import { publishedIntegrity, shouldPublish } from "../scripts/release/registry.m
 
 function manifest(version = "0.2.0") {
   return {
-    name: "@gromlab/relay-cli",
+    name: "@oim-dev/relay-cli",
     version,
     bin: { "relay-cli": "dist/cli/main.js" },
     publishConfig: { access: "public", registry: "https://registry.npmjs.org" },
-    repository: { type: "git", url: "git+https://github.com/gromlab-ru/relay.git" },
+    repository: { type: "git", url: "git+https://github.com/oim-dev/relay.git" },
     engines: { node: ">=22" },
   };
 }
@@ -22,17 +22,26 @@ test("релиз сверяет общий тег с манифестом CLI и
   ]) {
     const metadata = releaseMetadata(manifest(version), `v${version}`);
     assert.equal(metadata.distTag, channel);
-    assert.equal(metadata.archiveName, `gromlab-relay-cli-${version}.tgz`);
+    assert.equal(metadata.archiveName, `oim-dev-relay-cli-${version}.tgz`);
   }
   const candidate = manifest();
   assert.throws(() => releaseMetadata(candidate, "v0.2.1"));
   assert.throws(() => releaseMetadata(candidate, "cli-v0.2.0"));
   assert.throws(() => releaseMetadata({ ...candidate, private: true }));
-  assert.throws(() => releaseMetadata({ ...candidate, name: "@gromlab/tasks-monorepo" }));
+  for (const name of ["@oim-dev/relay-monorepo", "@gromlab/relay-cli", "@relay/cli", "cli"])
+    assert.throws(() => releaseMetadata({ ...candidate, name }), /Неверное имя/);
   assert.throws(() => releaseMetadata({ ...candidate, bin: { "relay-cli": "dist/main.js" } }));
   assert.throws(() => releaseMetadata({ ...candidate, engines: { node: ">=18" } }));
   assert.throws(() =>
     releaseMetadata({ ...candidate, repository: { type: "git", url: "https://example.com" } }),
+  );
+  assert.throws(
+    () =>
+      releaseMetadata({
+        ...candidate,
+        repository: { type: "git", url: "git+https://github.com/gromlab-ru/relay.git" },
+      }),
+    /repository.url/,
   );
   for (const version of ["01.1.0", "0.1", "0.1.0-01", "0.1.0+build.1", "0.1.0\n"]) {
     assert.throws(() => releaseMetadata(manifest(version), `v${version}`));
@@ -104,10 +113,10 @@ test("дистрибутив содержит внешние зависимос�
 test("MCP использует общий тег и собственный архив", () => {
   const source = {
     ...manifest("0.1.0"),
-    name: "@gromlab/relay-mcp",
+    name: "@oim-dev/relay-mcp",
     bin: { "relay-mcp": "dist/main.js" },
   };
-  assert.equal(releaseMetadata(source, "v0.1.0").archiveName, "gromlab-relay-mcp-0.1.0.tgz");
+  assert.equal(releaseMetadata(source, "v0.1.0").archiveName, "oim-dev-relay-mcp-0.1.0.tgz");
   assert.throws(() => releaseMetadata(source, "mcp-v0.1.0"));
   assert.throws(() => releaseMetadata(source, "v0.2.0"));
 });
@@ -115,10 +124,10 @@ test("MCP использует общий тег и собственный ар�
 test("Relay Server использует общий тег и собственный архив", () => {
   const source = {
     ...manifest("0.1.0"),
-    name: "@gromlab/relay-server",
+    name: "@oim-dev/relay-server",
     bin: { "relay-server": "dist/main.js" },
   };
-  assert.equal(releaseMetadata(source, "v0.1.0").archiveName, "gromlab-relay-server-0.1.0.tgz");
+  assert.equal(releaseMetadata(source, "v0.1.0").archiveName, "oim-dev-relay-server-0.1.0.tgz");
   assert.throws(() => releaseMetadata(source, "server-v0.1.0"));
 });
 
@@ -131,7 +140,7 @@ test("повторный релиз пропускается только при
 });
 
 test("проверка npm отличает отсутствие версии от ошибок доступа и сервера", async () => {
-  const name = "@gromlab/tasks-cli";
+  const name = "@oim-dev/relay-cli";
   const version = "0.1.0";
   assert.equal(
     await publishedIntegrity(name, version, async () => new Response(null, { status: 404 })),

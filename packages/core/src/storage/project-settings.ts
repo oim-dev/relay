@@ -29,7 +29,12 @@ export function createProjectSlug(): string {
 export function projectSettings(config: Config, configPath: string): ProjectSettings {
   if (config.projectSettings) {
     const { name, slug, revision, documentSections } = config.projectSettings;
-    return { name, slug, revision, ...(documentSections === undefined ? {} : { documentSections }) };
+    return {
+      name,
+      slug,
+      revision,
+      ...(documentSections === undefined ? {} : { documentSections }),
+    };
   }
   const suffix = createHash("sha256")
     .update(config.projectId ?? configPath)

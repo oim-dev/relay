@@ -1,7 +1,7 @@
 # Relay Server
 
 Server — общая точка доступа клиентов к данным Relay на одном хосте. Пакет
-`@gromlab/relay-server`, команда `relay-server`. Предоставляет REST, SSE, OpenAPI,
+`@oim-dev/relay-server`, команда `relay-server`. Предоставляет REST, SSE, OpenAPI,
 Swagger и собранный Web. Пользовательский запуск отделён от бизнес-операций Core.
 
 ## Режимы и выбор проекта

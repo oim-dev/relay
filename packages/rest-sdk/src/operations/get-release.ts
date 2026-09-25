@@ -13,11 +13,11 @@ import type {
 import type { ApiRequestClient, RequestParams } from "../http-client.js";
 
 /**
- * @description Реквизиты релиза и готовность текущего либо исторического состава
+ * @description Реквизиты релиза и текущая готовность выбранных планов
  *
  * @tags releases
  * @name GetRelease
- * @summary Реквизиты релиза и готовность текущего либо исторического состава
+ * @summary Реквизиты релиза и текущая готовность выбранных планов
  * @request GET:/api/v1/releases/{reference}
  */
 export const getRelease = (

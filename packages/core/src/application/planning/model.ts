@@ -9,12 +9,12 @@ import { invariant } from "../../shared/errors.js";
 export async function readPlanningState(workspace: Workspace) {
   planningSession(workspace);
   const plans = await planningRecords(workspace, "work-plan");
-  const stages = (await planningRecords(workspace, "plan-stage")).sort(
-    (a, b) => a.rank - b.rank || a.id.localeCompare(b.id),
+  const stages = plans.flatMap((plan) =>
+    plan.stages.map((stage) => ({ ...stage, planId: plan.id })),
   );
   const tasks = await new BoardTaskRepository(workspace).all();
   const byTask = new Map(tasks.map((task) => [task.id, task]));
-  const current = new Map<string, string>();
+  const current = new Map<string, { planId: string; stageId: string }>();
   const scopeLabels = new Map<string, string>();
   for (const plan of plans)
     for (const ref of plan.scope) {
@@ -25,15 +25,22 @@ export async function readPlanningState(workspace: Workspace) {
       }
     }
   const perPlan = new Map<string, Set<string>>();
+  for (const plan of plans)
+    invariant(
+      new Set(plan.stages.map((stage) => stage.id)).size === plan.stages.length,
+      "DUPLICATE_VALUE",
+      `В плане ${plan.key} повторяется ID этапа`,
+      4,
+    );
   for (const stage of stages) {
     const plan = plans.find((entry) => entry.id === stage.planId);
-    invariant(plan, "INVALID_REFERENCE", `Этап ${stage.key} ссылается на отсутствующий план`, 4);
+    invariant(plan, "INVALID_REFERENCE", `Этап ${stage.id} ссылается на отсутствующий план`, 4);
     const ids = perPlan.get(plan.id) ?? new Set<string>();
     for (const id of stage.taskIds) {
       invariant(
         byTask.has(id),
         "INVALID_REFERENCE",
-        `Этап ${stage.key} ссылается на отсутствующую task:${id}`,
+        `Этап ${stage.id} ссылается на отсутствующую task:${id}`,
         4,
       );
       invariant(
@@ -50,7 +57,7 @@ export async function readPlanningState(workspace: Workspace) {
           `Задача task:${id} уже включена в текущий план`,
           4,
         );
-        current.set(id, stage.id);
+        current.set(id, { planId: plan.id, stageId: stage.id });
       }
     }
     perPlan.set(plan.id, ids);
@@ -78,6 +85,7 @@ export async function readPlanningState(workspace: Workspace) {
     };
   };
   const summary = (plan: WorkPlan) => {
+    const { stages: _stages, ...fields } = plan;
     const selected = stages.filter((stage) => stage.planId === plan.id);
     const progress = counts(selected.flatMap((stage) => stage.taskIds));
     const next = selected.find((stage) => {
@@ -85,7 +93,7 @@ export async function readPlanningState(workspace: Workspace) {
       return progress.total === 0 || progress.completed !== progress.total;
     });
     return {
-      ...plan,
+      ...fields,
       stageCount: selected.length,
       counts: progress,
       scopeLabels: plan.scope.map((ref) => ({

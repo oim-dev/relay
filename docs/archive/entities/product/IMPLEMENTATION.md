@@ -25,7 +25,7 @@
 | [Contracts](../../../../packages/contracts/README.md)                        | Переносимые публичные DTO                                                     |
 | [Server Runtime](../../../../packages/server-runtime/README.md)              | Выбор проекта, REST, OpenAPI и SSE                                            |
 | [REST SDK](../../../../packages/rest-sdk/README.md)                          | Клиент, генерируемый из OpenAPI                                               |
-| [Web](../../../../apps/web/README.md#архитектура)                            | Unit Architecture, доменные адаптеры, SWR, проектную область, общий transport |
+| [Web](../../../../apps/web/README.md)                                        | Unit Architecture, доменные адаптеры, SWR, проектную область, общий transport |
 | [CLI](../../../../apps/cli/README.md), [MCP](../../../../apps/mcp/README.md) | Агентские интерфейсы к общей модели                                           |
 
 В `projectFieldsSchema` пока нет самостоятельных фич, сценариев, приложений, вкладов и
@@ -100,8 +100,8 @@
 
 ## Владельцы в веб-приложении
 
-Применяется [профиль приложения](../../../../apps/web/README.md#архитектура) и
-[блокирующий протокол разработки](../../../../apps/web/AGENTS.md).
+Архитектурные правила приложения находятся в
+[профиле frontend](../../../../packages/dev-agents/src/frontend.md).
 
 - `app/router` подключает существующие публичные экраны и маршруты.
 - `compositions/layouts/project` владеет общей навигацией; продуктовый каркас подключает

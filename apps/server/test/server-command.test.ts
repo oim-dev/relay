@@ -26,7 +26,7 @@ test("server раздаёт React-статику, API и Swagger из чужог
   ).json()) as ApiSuccess<ContextResponse>;
   assert.equal(context.data.actor, "web-human");
   assert.equal(context.data.configPath, join(app.root, ".relay/config.json"));
-  assert.equal(context.data.storagePath, join(app.root, ".relay/tasks"));
+  assert.equal(context.data.storagePath, join(app.root, ".relay"));
   const created = await fetch(`${server.url}/api/v1/board-tasks`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -4,7 +4,7 @@ import {
   Files,
   Flag,
   History,
-  Layers3,
+  Rocket,
   Network,
   Server,
   Sparkles,
@@ -20,7 +20,7 @@ export const PRODUCT_NAVIGATION = [
 /** Рабочие разделы проекта после продуктового контекста. */
 export const PROJECT_NAVIGATION = [
   { path: "plans", label: "Планы", Icon: Flag },
-  { path: "releases", label: "Релизы", Icon: Layers3 },
+  { path: "releases", label: "Релизы", Icon: Rocket },
 ];
 
 /** Общие материалы и сопровождение проекта после разделителя. */

@@ -4,6 +4,7 @@ import type { TextOptions } from "./theme.js";
 import type { GlobalOptions } from "../context.js";
 import { wrap, section } from "./layout.js";
 import { safeText } from "./text.js";
+import { planningStatusLabels } from "./planning.js";
 
 /** Человек видит полный итог и может раскрыть составляющую отдельной командой. */
 export function progressText(
@@ -90,7 +91,7 @@ export function progressText(
     list("Обязательные зависимости", progress.dependencies);
   } else if (progress.kind === "release") {
     parts.push(
-      `Готово планов: ${progress.readiness.ready}/${progress.readiness.total}\nСостояние: ${progress.status}\nИсточник: ${progress.historical ? "снимок выпуска" : "текущий состав"}`,
+      `Текущая готовность: ${progress.readiness.ready}/${progress.readiness.total} планов\nСостояние: ${planningStatusLabels[progress.status]}\nИсточник: актуальные планы`,
     );
     list("Планы", progress.plans);
   } else {
@@ -109,7 +110,7 @@ export function progressText(
     if (progress.kind === "product") list("Фичи", progress.features);
     if (progress.kind === "work-plan") {
       parts.push(
-        `Состояние: ${progress.status}\nМожно начать: ${progress.canStart ? "да" : "нет"}\nМожно завершить: ${progress.canComplete ? "да" : "нет"}\nРасхождение с завершением: ${progress.diverged ? "есть" : "нет"}`,
+        `Состояние: ${planningStatusLabels[progress.status]}\nМожно начать: ${progress.canStart ? "да" : "нет"}\nМожно завершить: ${progress.canComplete ? "да" : "нет"}\nРасхождение с завершением: ${progress.diverged ? "есть" : "нет"}`,
       );
       parts.push(
         section(
@@ -117,7 +118,7 @@ export function progressText(
           progress.stages.items
             .map((stage) =>
               wrap(
-                `${stage.key} · ${safeText(stage.title)} · ${stage.counts.completed}/${stage.counts.total}`,
+                `${safeText(stage.title)} · ${stage.counts.completed}/${stage.counts.total}\nID этапа: ${stage.id}`,
                 options.width,
               ),
             )

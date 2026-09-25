@@ -1,20 +1,7 @@
 import { useState } from "react";
-import {
-  Accordion,
-  Alert,
-  Button,
-  Group,
-  Modal,
-  Stack,
-  TagsInput,
-  Textarea,
-  TextInput,
-  Pill,
-} from "@mantine/core";
+import { Alert, Button, Group, Modal, Stack, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { MarkdownField } from "ui/markdown-field";
-import { EntityPicker } from "compositions/widgets/entity-picker";
-import { isPlanScope } from "domains/planning";
 import { isDefined } from "shared/value-predicates";
 import { clearPlanDraft, readPlanDraft, writePlanDraft } from "./helpers/plan-form-draft";
 import type { PlanFormProps, PlanFormValues } from "./types/plan-form-props.type";
@@ -29,18 +16,13 @@ import styles from "./styles/plan-form.module.css";
  */
 export const PlanForm = (props: PlanFormProps) => {
   const { plan, isNew, projectId, onSave, onClose } = props;
-  const draftKey = `relay:planning-form:server-v1:${projectId}:${isNew ? "new" : plan.id}`;
+  const draftKey = `relay:planning-form:server-v2:${projectId}:${isNew ? "new" : plan.id}`;
   const [initialDraft] = useState(() =>
     readPlanDraft(draftKey, {
       revision: plan.revision,
       title: plan.title,
       summary: plan.summary,
       goal: plan.goal,
-      rationale: plan.rationale,
-      boundaries: plan.boundaries,
-      expectedResult: plan.expectedResult,
-      participants: plan.participants,
-      scope: plan.scope,
     }),
   );
   const [draftError, setDraftError] = useState(initialDraft.error);
@@ -50,10 +32,6 @@ export const PlanForm = (props: PlanFormProps) => {
     initialValues: initialDraft.values,
     validateInputOnBlur: true,
     validate: {
-      scope: (scope) =>
-        scope.every(isPlanScope)
-          ? null
-          : "Областью может быть проект, продукт, приложение, фича, сценарий или реализация",
       title: (title) =>
         title.trim() === ""
           ? "Назовите результат плана"
@@ -71,11 +49,6 @@ export const PlanForm = (props: PlanFormProps) => {
   const submitLabel = isNew ? "Создать план" : "Сохранить изменения";
   const hasError = isDefined(error);
   const hasDraftError = isDefined(draftError);
-  const scopeIds = form.useWatchValue("scope");
-  const scopeItems = scopeIds.map((ref) => ({
-    ref,
-    label: plan.scopeLabels[plan.scope.indexOf(ref)] ?? ref,
-  }));
 
   /**
    * Очищает ввод только после серверной квитанции; исходная ревизия принадлежит черновику.
@@ -87,8 +60,10 @@ export const PlanForm = (props: PlanFormProps) => {
     }
     const outcome = await onSave({
       ...plan,
-      ...values,
+      revision: values.revision,
       title: values.title.trim(),
+      summary: values.summary,
+      goal: values.goal,
     });
     if (outcome !== null) {
       setError(outcome);
@@ -125,9 +100,6 @@ export const PlanForm = (props: PlanFormProps) => {
         noValidate
         onSubmit={form.onSubmit(handleSubmit, handleValidationError)}
       >
-        <p className={styles.intro}>
-          Начните с намерения. Этапы и задачи можно добавить следующим шагом.
-        </p>
         {hasDraftError && (
           <Alert color="orange" title="Проверьте черновик">
             {draftError}
@@ -174,78 +146,6 @@ export const PlanForm = (props: PlanFormProps) => {
               key={form.key("goal")}
               {...form.getInputProps("goal")}
             />
-            <Accordion variant="separated" radius="md">
-              <Accordion.Item value="details">
-                <Accordion.Control>
-                  Область, основания и границы
-                  <span className={styles.optional}>Необязательно сейчас</span>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <Stack gap="md">
-                    <EntityPicker
-                      label="Область изменения"
-                      placeholder="Приложение, фича или весь проект"
-                      projectId={projectId}
-                      value={null}
-                      error={form.errors.scope}
-                      onChange={(ref) => {
-                        if (ref !== null && !isPlanScope(ref)) {
-                          form.setFieldError(
-                            "scope",
-                            "Выберите проект, продукт, приложение, фичу, сценарий или реализацию",
-                          );
-                          return;
-                        }
-                        form.clearFieldError("scope");
-                        if (ref !== null && !scopeIds.includes(ref))
-                          form.setFieldValue("scope", [...scopeIds, ref]);
-                      }}
-                    />
-                    <Pill.Group>
-                      {scopeItems.map((scope) => (
-                        <Pill
-                          key={scope.ref}
-                          withRemoveButton
-                          removeButtonProps={{
-                            tabIndex: 0,
-                            "aria-hidden": false,
-                            "aria-label": `Убрать область ${scope.label}`,
-                          }}
-                          onRemove={() =>
-                            form.setFieldValue(
-                              "scope",
-                              scopeIds.filter((ref) => ref !== scope.ref),
-                            )
-                          }
-                        >
-                          {scope.label}
-                        </Pill>
-                      ))}
-                    </Pill.Group>
-                    <TagsInput
-                      label="Участники"
-                      key={form.key("participants")}
-                      {...form.getInputProps("participants")}
-                    />
-                    <MarkdownField
-                      label="Почему начинаем"
-                      key={form.key("rationale")}
-                      {...form.getInputProps("rationale")}
-                    />
-                    <MarkdownField
-                      label="Границы работы"
-                      key={form.key("boundaries")}
-                      {...form.getInputProps("boundaries")}
-                    />
-                    <MarkdownField
-                      label="Ожидаемый результат"
-                      key={form.key("expectedResult")}
-                      {...form.getInputProps("expectedResult")}
-                    />
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
-            </Accordion>
           </Stack>
         </fieldset>
         {hasError && (

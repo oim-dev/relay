@@ -13,11 +13,20 @@ import { initialize } from "@relay/core/storage/workspace";
 import { defaultConfig } from "@relay/core/domain/config";
 import { startServer } from "@relay/server-runtime";
 import { initializeRegistry, registerProject } from "@relay/project-runtime/registry";
-import { startMcp } from "../dist/server.js";
+import { startMcp } from "../src/server.js";
 import { entitySavedSchema, entityDetailSchema } from "@relay/contracts/entities";
 import { fullContextSchema } from "@relay/contracts/entities/graph";
 import { taskProgressSchema, productProgressSchema } from "@relay/contracts/progress";
-import { planningSavedSchema } from "@relay/contracts/planning";
+import {
+  planningSavedSchema,
+  stagesPageSchema,
+  planningCandidatesPageSchema,
+} from "@relay/contracts/planning";
+import {
+  releaseSummarySchema,
+  releaseCompositionSchema,
+  releasesPageSchema,
+} from "@relay/contracts/releases";
 
 async function setup(t: TestContext) {
   const root = await mkdtemp(join(tmpdir(), "tasks-mcp-"));
@@ -67,6 +76,15 @@ test("MCP планирования: discovery, запись состава, по
   ])
     assert(tools.find((tool) => tool.name === name)?.inputSchema.required?.includes("actor"));
   assert(tools.find((tool) => tool.name === "plan_stage_create")?.inputSchema.properties?.title);
+  const transferTool = tools.find((tool) => tool.name === "plan_task_transfer")!;
+  assert(transferTool.inputSchema.required?.includes("targetPlan"));
+  assert(transferTool.inputSchema.required?.includes("targetStage"));
+  assert.match(JSON.stringify(transferTool.inputSchema.properties?.targetStage), /Внутренний ID/);
+  assert(
+    !JSON.stringify(tools.filter((tool) => /^(plan|release|work_plan)/.test(tool.name))).includes(
+      "STG-",
+    ),
+  );
   const input = {
     title: "План агента",
     goal: "Постоянный результат",
@@ -86,6 +104,43 @@ test("MCP планирования: discovery, запись состава, по
       })
     ).data,
   );
+  assert.equal(
+    (await call(client, "plan_task_candidates", { stage: stage.stageId })).error?.code,
+    "INVALID_ARGUMENT",
+  );
+  const secondStage = planningSavedSchema.parse(
+    (
+      await call(client, "plan_stage_create", {
+        ref: plan.id,
+        title: "Другой этап",
+        ifRevision: stage.revision,
+        actor: "agent",
+        requestId: "stage-2",
+      })
+    ).data,
+  );
+  const page = stagesPageSchema.parse(
+    (await call(client, "plan_stages_list", { ref: plan.id, limit: 1 })).data,
+  );
+  assert.equal(page.nextOffset, 1);
+  assert.equal("key" in page.items[0]!, false);
+  assert.equal("revision" in page.items[0]!, false);
+  const nextPage = stagesPageSchema.parse(
+    (
+      await call(client, "plan_stages_list", {
+        ref: plan.id,
+        limit: 1,
+        offset: 1,
+        version: page.version,
+      })
+    ).data,
+  );
+  assert.equal(nextPage.items[0]?.id, secondStage.stageId);
+  assert.equal(nextPage.nextOffset, null);
+  assert.equal(
+    (await call(client, "plan_stages_list", { ref: plan.id, limit: 1, offset: 1 })).error?.code,
+    "INVALID_ARGUMENT",
+  );
   const task = await call(client, "board_task_create", {
     title: "Готовый результат",
     board: "product",
@@ -99,12 +154,79 @@ test("MCP планирования: discovery, запись состава, по
         ref: plan.id,
         stage: stage.stageId,
         tasks: [task.data?.id],
-        ifRevision: stage.revision,
+        ifRevision: secondStage.revision,
         actor: "agent",
         requestId: "include",
       })
     ).data,
   );
+  const candidates = planningCandidatesPageSchema.parse(
+    (
+      await call(client, "plan_task_candidates", {
+        plan: plan.id,
+        stage: stage.stageId,
+        availableOnly: "true",
+        limit: 1,
+      })
+    ).data,
+  );
+  assert.equal(candidates.items[0]?.id, task.data?.id);
+  assert.equal(candidates.items[0]?.assignment?.planId, plan.id);
+  assert.equal(
+    (
+      await call(client, "plan_stages_list", {
+        ref: plan.id,
+        limit: 1,
+        offset: 1,
+        version: page.version,
+      })
+    ).error?.code,
+    "PLANNING_CHANGED",
+  );
+  const transfer = {
+    ref: plan.id,
+    task: task.data?.id,
+    targetPlan: plan.id,
+    targetStage: secondStage.stageId,
+    ifRevision: saved.revision,
+    targetRevision: saved.revision,
+    reason: "## Причина\n\nПерестановка работы",
+    actor: "agent",
+    requestId: "transfer",
+  };
+  const { targetPlan: _targetPlan, ...withoutPlan } = transfer;
+  assert.equal(
+    (await call(client, "plan_task_transfer", withoutPlan)).error?.code,
+    "VALIDATION_ERROR",
+  );
+  saved = planningSavedSchema.parse((await call(client, "plan_task_transfer", transfer)).data);
+  assert.deepEqual((await call(client, "plan_task_transfer", transfer)).data, saved);
+  assert.equal(saved.targetRevision, saved.revision);
+  assert.equal(
+    (await call(client, "plan_tasks_list", { ref: plan.id, stage: stage.stageId })).data?.total,
+    0,
+  );
+  assert.equal(
+    (await call(client, "plan_tasks_list", { ref: plan.id, stage: secondStage.stageId })).data
+      ?.total,
+    1,
+  );
+  const stageUpdate = {
+    ref: plan.id,
+    stage: secondStage.stageId,
+    title: "Актуальный этап",
+    outcome: "## Результат\n\nПроверенный Markdown\n",
+    ifRevision: saved.revision,
+    actor: "agent",
+    requestId: "stage-update",
+  };
+  saved = planningSavedSchema.parse((await call(client, "plan_stage_update", stageUpdate)).data);
+  assert.deepEqual((await call(client, "plan_stage_update", stageUpdate)).data, saved);
+  const currentStages = stagesPageSchema.parse(
+    (await call(client, "plan_stages_list", { ref: plan.id })).data,
+  );
+  assert.equal(currentStages.items[1]?.outcome, stageUpdate.outcome);
+  assert.deepEqual(currentStages.items[1]?.taskIds, [task.data?.id]);
   assert.equal(
     (
       await call(client, "plan_update", {
@@ -150,22 +272,184 @@ test("MCP планирования: discovery, запись состава, по
       })
     ).data,
   );
+  const publish = {
+    ref: release.id,
+    ifRevision: release.revision,
+    actor: "agent",
+    requestId: "publish",
+  };
+  const publishedReceipt = await call(client, "release_publish", publish);
+  assert.equal(publishedReceipt.ok, true);
+  assert.match(publishedReceipt.text, /Выпуск зафиксирован/);
+  assert.equal(
+    (await call(client, "release_plans_list", { ref: release.id, limit: 1 })).data?.total,
+    1,
+  );
+  const published = releaseSummarySchema.parse(
+    (await call(client, "release_get", { ref: release.id })).data,
+  );
+  assert.equal(published.status, "released");
+  assert.equal(published.readiness.ready, 1);
+  assert.equal("snapshotId" in published, false);
   assert.equal(
     (
-      await call(client, "release_publish", {
-        ref: release.id,
-        ifRevision: release.revision,
+      await call(client, "board_task_move", {
+        reference: task.data?.id,
+        column: "ready",
+        ifRevision: 1,
         actor: "agent",
-        requestId: "publish",
+        requestId: "reopen-task",
       })
     ).ok,
     true,
   );
-  assert.equal(
-    (await call(client, "release_snapshot", { ref: release.id, limit: 1 })).data?.nextOffset,
-    1,
+  const read = await call(client, "release_get", { ref: release.id });
+  const current = releaseSummarySchema.parse(read.data);
+  assert.equal(current.status, "released");
+  assert.equal(current.releasedAt, published.releasedAt);
+  assert.equal(current.releasedBy, "agent");
+  assert.equal(current.readiness.ready, 0);
+  assert.match(read.text, /Состояние: Выпущен/);
+  assert.match(read.text, /Текущая готовность: 0\/1 планов/);
+  assert(read.text.includes(published.releasedAt!));
+  assert.deepEqual((await call(client, "release_publish", publish)).data, publishedReceipt.data);
+  const currentComposition = releaseCompositionSchema.parse(
+    (await call(client, "release_plans_list", { ref: release.id })).data,
   );
+  assert.equal(currentComposition.items[0]?.plan?.counts.completed, 0);
+  assert.equal(
+    (await call(client, "release_progress", { ref: release.id })).data?.completed,
+    false,
+  );
+  const currentList = releasesPageSchema.parse(
+    (await call(client, "releases_list", { status: "released" })).data,
+  );
+  assert.equal(currentList.items[0]?.readiness.ready, 0);
+  const large = planningSavedSchema.parse(
+    (
+      await call(client, "release_create", {
+        title: "Большое описание",
+        version: "next",
+        planIds: [plan.id],
+        description: "Описание ".repeat(500),
+        actor: "agent",
+        requestId: "large-release",
+      })
+    ).data,
+  );
+  assert.equal(
+    (await call(client, "release_get", { ref: large.id, maxBytes: 1024 })).error?.code,
+    "RESPONSE_TOO_LARGE",
+  );
+  assert(!(await client.listTools()).tools.some((entry) => entry.name === "release_snapshot"));
   assert.equal((await call(client, "plans_list", { project: "missing" })).ok, false);
+});
+
+test("MCP частичного изменения этапа: необязательные поля без defaults, повтор после другой правки и очистка", async (t) => {
+  const app = await setup(t);
+  const server = await app.start(join(app.root, "a/.relay/config.json"));
+  const client = await app.connect(server.url);
+  const tools = (await client.listTools()).tools;
+  const createTool = tools.find((tool) => tool.name === "plan_stage_create")!;
+  const updateTool = tools.find((tool) => tool.name === "plan_stage_update")!;
+  assert(createTool.inputSchema.required?.includes("title"));
+  assert.match(updateTool.description!, /Изменить только переданные поля/);
+  for (const name of ["title", "summary", "outcome", "completionConditions"]) {
+    assert(!updateTool.inputSchema.required?.includes(name));
+    const field = updateTool.inputSchema.properties?.[name] as Record<string, unknown>;
+    assert(field);
+    assert.equal("default" in field, false);
+  }
+  const plan = planningSavedSchema.parse(
+    (
+      await call(client, "plan_create", {
+        title: "Частичные изменения",
+        actor: "agent",
+        requestId: "plan",
+      })
+    ).data,
+  );
+  const fields = {
+    title: "Исходный этап",
+    summary: "Первое описание",
+    outcome: "## Результат\n\n- Сохранить Markdown\n",
+    completionConditions: "## Условия\n\nПроверить повтор\n",
+  };
+  const stage = planningSavedSchema.parse(
+    (
+      await call(client, "plan_stage_create", {
+        ...fields,
+        ref: plan.id,
+        ifRevision: plan.revision,
+        actor: "agent",
+        requestId: "stage",
+      })
+    ).data,
+  );
+  const titleInput = {
+    ref: plan.id,
+    stage: stage.stageId,
+    title: "Новое название",
+    ifRevision: stage.revision,
+    actor: "agent",
+    requestId: "title",
+  };
+  const title = planningSavedSchema.parse(
+    (await call(client, "plan_stage_update", titleInput)).data,
+  );
+  const summary = "Отдельная правка\nС переносом строки";
+  const changed = planningSavedSchema.parse(
+    (
+      await call(client, "plan_stage_update", {
+        ref: plan.id,
+        stage: stage.stageId,
+        summary,
+        ifRevision: title.revision,
+        actor: "another-agent",
+        requestId: "summary",
+      })
+    ).data,
+  );
+  const replay = await call(client, "plan_stage_update", titleInput);
+  assert.deepEqual(replay.data, title);
+  assert.match(replay.text, /Этап изменён/);
+  assert(replay.text.includes(`Ревизия: ${title.revision}`));
+  const read = async () =>
+    stagesPageSchema.parse((await call(client, "plan_stages_list", { ref: plan.id })).data);
+  const afterReplay = await read();
+  assert.equal(afterReplay.planRevision, changed.revision);
+  assert.equal(afterReplay.items[0]?.title, titleInput.title);
+  assert.equal(afterReplay.items[0]?.summary, summary);
+  assert.equal(afterReplay.items[0]?.outcome, fields.outcome);
+  assert.equal(afterReplay.items[0]?.completionConditions, fields.completionConditions);
+  const clearInput = {
+    ref: plan.id,
+    stage: stage.stageId,
+    summary: "",
+    outcome: "",
+    completionConditions: "",
+    ifRevision: changed.revision,
+    actor: "agent",
+    requestId: "clear",
+  };
+  const cleared = planningSavedSchema.parse(
+    (await call(client, "plan_stage_update", clearInput)).data,
+  );
+  assert.deepEqual((await call(client, "plan_stage_update", clearInput)).data, cleared);
+  const empty = await call(client, "plan_stage_update", {
+    ref: plan.id,
+    stage: stage.stageId,
+    ifRevision: cleared.revision,
+    actor: "agent",
+    requestId: "empty",
+  });
+  assert.equal(empty.error?.code, "INVALID_ARGUMENT");
+  const afterEmpty = await read();
+  assert.equal(afterEmpty.planRevision, cleared.revision);
+  assert.equal(afterEmpty.items[0]?.title, titleInput.title);
+  assert.equal(afterEmpty.items[0]?.summary, "");
+  assert.equal(afterEmpty.items[0]?.outcome, "");
+  assert.equal(afterEmpty.items[0]?.completionConditions, "");
 });
 
 test("MCP: прогресс задачи и продукта, discovery, продолжение и изоляция", async (t) => {
@@ -355,22 +639,17 @@ async function call(client: Client, name: string, args: Record<string, unknown> 
     (/^entity_.*(?:create|update|move|link|rename_key)$/.test(name) || name === "entity_get")
   ) {
     assert.match(content, /Ревизия/);
-  } else if (
-    body.ok &&
-    /^(plan_|release_)/.test(name) &&
-    (name.endsWith("_create") ||
-      name.endsWith("_update") ||
-      name.endsWith("_include") ||
-      name.endsWith("_publish") ||
-      name.endsWith("_start") ||
-      name.endsWith("_complete"))
-  ) {
+  } else if (body.ok && /^(plan_|release_)/.test(name) && typeof body.data?.action === "string") {
     assert.match(content, /Ревизия:/);
     assert.match(content, /Ключ повтора:/);
+    if (body.data?.targetRevision !== undefined)
+      assert(content.includes(`Ревизия целевого плана: ${body.data.targetRevision}`));
+  } else if (body.ok && (name === "plan_get" || name === "release_get")) {
+    assert.match(content, /Состояние:/);
   } else if (body.ok && name.endsWith("_progress")) {
     assert.match(content, /выполнено|не выполнено/);
   } else assert.deepEqual(JSON.parse(content), result.structuredContent);
-  return { ...body, isError: result.isError };
+  return { ...body, isError: result.isError, text: content };
 }
 
 test("MCP обсуждений: discovery, имена агентов, повтор, история, бюджет и изоляция", async (t) => {
@@ -449,7 +728,7 @@ test("MCP движка: discovery из контрактов, публичные 
   for (const name of ["board", "title", "targets", "dependencies", "actor", "requestId"])
     assert.match(properties[name]?.description ?? "", /[А-Яа-яЁё]/);
   assert.equal("data" in properties, false);
-  assert.equal((await call(client, "entity_types")).data?.total, 12);
+  assert.equal((await call(client, "entity_types")).data?.total, 11);
   const args = {
     board: "BOARD-PRODUCT",
     title: "Проверить движок",

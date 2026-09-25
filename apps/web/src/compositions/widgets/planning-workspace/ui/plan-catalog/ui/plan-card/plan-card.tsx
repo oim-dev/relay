@@ -37,8 +37,6 @@ export const PlanCard = (props: PlanCardProps) => {
   const nextPrefix = isCompleted || isCancelled ? "" : "Далее: ";
   const progressLabel = "Выполнение задач";
   const progressColor = hasDivergence ? "orange" : isCompleted ? "teal" : "var(--tasks-muted)";
-  const scopeItems = plan.scopeLabels.slice(0, 3);
-  const hasExtraScopes = plan.scope.length > 3;
   const stageItems = plan.stagePreview;
 
   return (
@@ -64,14 +62,6 @@ export const PlanCard = (props: PlanCardProps) => {
         </Link>
       </h2>
       <p className={styles.summary}>{plan.summary}</p>
-      <div className={styles.scope}>
-        {scopeItems.map((scope) => (
-          <span key={scope} className={styles.scopeItem}>
-            {scope}
-          </span>
-        ))}
-        {hasExtraScopes && <span className={styles.scopeItem}>+{plan.scope.length - 3}</span>}
-      </div>
       <div className={styles.progress}>
         <div className={styles.progressLabel}>
           <span>{progressLabel}</span>

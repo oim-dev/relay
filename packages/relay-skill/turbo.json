@@ -1,0 +1,70 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/docs/**",
+        "$TURBO_ROOT$/apps/cli/src/**",
+        "$TURBO_ROOT$/apps/cli/package.json",
+        "$TURBO_ROOT$/apps/cli/scripts/lib/documentation.mjs",
+        "$TURBO_ROOT$/apps/mcp/src/**",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/core/src/**",
+        "$TURBO_ROOT$/packages/project-runtime/src/**",
+        "$TURBO_ROOT$/packages/rest-sdk/src/**"
+      ],
+      "outputs": [
+        "$TURBO_ROOT$/skills/relay/**",
+        "$TURBO_ROOT$/apps/playground/.agents/skills/relay/**"
+      ]
+    },
+    "check": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/docs/**",
+        "$TURBO_ROOT$/apps/cli/src/**",
+        "$TURBO_ROOT$/apps/cli/package.json",
+        "$TURBO_ROOT$/apps/cli/scripts/lib/documentation.mjs",
+        "$TURBO_ROOT$/apps/mcp/src/**",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/core/src/**",
+        "$TURBO_ROOT$/packages/project-runtime/src/**",
+        "$TURBO_ROOT$/packages/rest-sdk/src/**",
+        "$TURBO_ROOT$/skills/relay/**",
+        "$TURBO_ROOT$/apps/playground/.agents/skills/relay/**"
+      ],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": [],
+      "cache": false,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/apps/cli/src/**",
+        "$TURBO_ROOT$/apps/cli/package.json",
+        "$TURBO_ROOT$/apps/cli/scripts/lib/documentation.mjs",
+        "$TURBO_ROOT$/apps/mcp/src/**",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/core/src/**",
+        "$TURBO_ROOT$/packages/project-runtime/src/**",
+        "$TURBO_ROOT$/packages/rest-sdk/src/**",
+        "$TURBO_ROOT$/packages/server-runtime/src/**",
+        "$TURBO_ROOT$/packages/server-runtime/tsconfig.json",
+        "$TURBO_ROOT$/packages/typescript-config/**",
+        "$TURBO_ROOT$/skills/relay/**"
+      ],
+      "outputs": []
+    },
+    "lint": { "dependsOn": [], "outputs": [] },
+    "typecheck": { "dependsOn": [], "outputs": [] }
+  }
+}

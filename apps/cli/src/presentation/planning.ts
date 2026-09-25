@@ -46,18 +46,15 @@ export function planText(plan: PlanSummary, options: TextOptions): string {
     `Этапы: relay-cli plan stages ${quote(plan.key)}\nПрогресс: relay-cli progress work-plan ${quote(plan.key)}`,
   ].join("\n\n");
 }
-/** Плановая готовность и исторический факт выпуска различаются в человеческом выводе. */
+/** Текущая готовность и сохранённый факт выпуска различаются в человеческом выводе. */
 export function releaseText(release: ReleaseSummary, options: TextOptions): string {
   return [
     wrap(`${release.key} · ${safeText(release.title)}`, options.width),
-    `Версия: ${safeText(release.version)}\nСостояние: ${planningStatusLabels[release.status]}\nID: ${release.id}\nРевизия: ${release.revision}\nГотово планов: ${release.readiness.ready}/${release.readiness.total}`,
+    `Версия: ${safeText(release.version)}\nСостояние: ${planningStatusLabels[release.status]}\nID: ${release.id}\nРевизия: ${release.revision}\nТекущая готовность: ${release.readiness.ready}/${release.readiness.total} планов`,
     `Плановая дата: ${release.plannedFor || "—"}\nВыпущен: ${release.releasedAt ?? "—"}\nАвтор выпуска: ${safeText(release.releasedBy ?? "—")}`,
     wrap(safeText(release.summary), options.width),
     renderMarkdown(release.description || "Описание пока не заполнено.", options),
     `Состав: relay-cli release plans ${quote(release.key)}`,
-    ...(release.snapshotId
-      ? [`Снимок: ${release.snapshotId}\nЧтение: relay-cli release snapshot ${quote(release.key)}`]
-      : []),
   ].join("\n\n");
 }
 /** Таблица предметных строк с узким представлением и точной командой продолжения. */
@@ -90,6 +87,8 @@ export function planningListText(
     config: globals.config,
     project: globals.project,
     "server-url": globals.serverUrl,
+    "max-bytes": globals.maxBytes,
+    format: globals.format,
     ...(globals.local ? { local: true } : {}),
   })
     .filter(([, value]) => value !== undefined)

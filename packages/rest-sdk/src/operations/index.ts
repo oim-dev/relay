@@ -87,8 +87,6 @@ export { getReleasePlansForProject } from "./get-release-plans-for-project.js";
 export { getReleasePlans } from "./get-release-plans.js";
 export { getReleaseProgressForProject } from "./get-release-progress-for-project.js";
 export { getReleaseProgress } from "./get-release-progress.js";
-export { getReleaseSnapshotForProject } from "./get-release-snapshot-for-project.js";
-export { getReleaseSnapshot } from "./get-release-snapshot.js";
 export { getRelease } from "./get-release.js";
 export { getReleasesForProject } from "./get-releases-for-project.js";
 export { getReleases } from "./get-releases.js";

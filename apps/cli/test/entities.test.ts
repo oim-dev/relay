@@ -6,7 +6,7 @@ import { fixture, successful, invokeRaw } from "./helpers/cli.js";
 
 test("CLI движка: определения, ключи вместо ID, содержимое, пагинация и сохранные связи", async (t) => {
   const app = await fixture(t);
-  assert.equal(successful(await app.run<{ total: number }>(["entities", "types"])).data.total, 12);
+  assert.equal(successful(await app.run<{ total: number }>(["entities", "types"])).data.total, 11);
   const feature = successful(
     await app.run<EntitySaved>([
       "entities",

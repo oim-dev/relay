@@ -1,7 +1,7 @@
 # Relay MCP
 
 MCP предоставляет агентским клиентам предметные инструменты Relay. Пакет
-`@gromlab/relay-mcp` запускает отдельный Streamable HTTP-сервис и обращается к
+`@oim-dev/relay-mcp` запускает отдельный Streamable HTTP-сервис и обращается к
 работающему Relay Server через общий REST SDK.
 
 ## Подключение
@@ -58,5 +58,5 @@ Markdown передаётся строкой; краткое описание о
 
 [Состояние реализации](../../../engineering/implementation/applications.md),
 [код и запуск](../../../../apps/mcp/README.md),
-[инструкции](../../../../apps/mcp/AGENTS.md),
+[профиль владельца](../../../../packages/dev-agents/src/mcp.md),
 [продуктовый скилл](../../../development/SKILLS.md).

@@ -1,6 +1,6 @@
 # Relay MCP
 
-`@gromlab/relay-mcp` подключает AI-агентов к Relay Server через Streamable HTTP.
+`@oim-dev/relay-mcp` подключает AI-агентов к Relay Server через Streamable HTTP.
 Требуется Node.js 22+.
 
 [Контракт приложения](../../docs/product/applications/mcp/README.md) ·
@@ -8,7 +8,7 @@
 [Протокол разработки](../../docs/development/PROTOCOL.md).
 
 ```bash
-npx @gromlab/relay-mcp --server-url http://127.0.0.1:4700
+npx @oim-dev/relay-mcp --server-url http://127.0.0.1:4700
 ```
 
 Адрес MCP по умолчанию — `http://127.0.0.1:4710/mcp`.
@@ -27,5 +27,5 @@ board_task_get({ project: "a", reference: "PRODUCT-1" })
 Проекты регистрируются на Relay Server. MCP использует общий REST SDK и получает
 изменения реестра без перезапуска. При недоступном сервере инструмент возвращает ошибку.
 
-Исходники и справочник: <https://github.com/gromlab-ru/relay>.
+Исходники и справочник: <https://github.com/oim-dev/relay>.
 Разработка: `pnpm run build:mcp`, `pnpm run test:mcp`, `pnpm run package:check`.

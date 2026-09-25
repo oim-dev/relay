@@ -55,7 +55,6 @@ export const documentRelationSchema = z.strictObject({
           "task",
           "document",
           "work-plan",
-          "plan-stage",
           "release",
         ])
         .describe("Вид связанной сущности проекта"),

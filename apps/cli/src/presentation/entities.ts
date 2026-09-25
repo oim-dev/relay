@@ -14,7 +14,15 @@ import { renderMarkdown } from "./markdown.js";
 
 const labels = new Map(entityDefinitions.map((entry) => [entry.kind, entry.title]));
 const documentStates = { draft: "Черновик", active: "Действующий", archived: "Архив" };
-const documentKinds = { specification: "Техническое задание", description: "Описание", rules: "Правила", instruction: "Инструкция", proposal: "Проект решения", decision: "Решение", research: "Исследование" };
+const documentKinds = {
+  specification: "Техническое задание",
+  description: "Описание",
+  rules: "Правила",
+  instruction: "Инструкция",
+  proposal: "Проект решения",
+  decision: "Решение",
+  research: "Исследование",
+};
 const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
 type Page = { total: number; nextOffset: number | null; version: string };
 
@@ -41,7 +49,7 @@ export function entitiesText(page: EntitiesPage, query: object, options: TextOpt
     item.key,
     labels.get(item.ref.kind) ?? item.ref.kind,
     item.title,
-    item.document ? documentStates[item.document.status] : item.status ?? "—",
+    item.document ? documentStates[item.document.status] : (item.status ?? "—"),
   ]);
   table.push(...rows.map((row) => row.map(safeText)));
   const content =
@@ -113,8 +121,21 @@ export function entityText(entity: EntityDetail, options: TextOptions): string {
     lines.push(
       `Тип документа: ${documentKinds[data.documentKind]}\nСостояние: ${documentStates[data.documentStatus ?? "active"]}\nРаздел: ${safeText(entity.document?.sectionId ?? "Без раздела")}\nЗакреплён: ${data.pinned ? "да" : "нет"}`,
     );
-    const relations = [...data.links.map((link) => ({ target: { kind: link.kind, id: link.kind === "product" ? "passport" : link.id }, type: "documents", description: "" })), ...(data.relations ?? [])];
-    lines.push("Связи:", ...relations.map((link) => `${link.type === "documents" ? "Описывает" : "Контекст"}: ${address(link.target.kind, link.target.id)}${link.description ? `\n${renderMarkdown(link.description, options)}` : ""}`));
+    const relations = [
+      ...data.links.map((link) => ({
+        target: { kind: link.kind, id: link.kind === "product" ? "passport" : link.id },
+        type: "documents",
+        description: "",
+      })),
+      ...(data.relations ?? []),
+    ];
+    lines.push(
+      "Связи:",
+      ...relations.map(
+        (link) =>
+          `${link.type === "documents" ? "Описывает" : "Контекст"}: ${address(link.target.kind, link.target.id)}${link.description ? `\n${renderMarkdown(link.description, options)}` : ""}`,
+      ),
+    );
     if (relations.length === 0) lines.push("Пока без связей.");
   }
   if (data.kind === "task")

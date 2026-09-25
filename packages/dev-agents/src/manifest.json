@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "orchestrator": "relay-orchestrator",
+  "agents": [
+    {
+      "name": "relay-orchestrator",
+      "kind": "orchestrator",
+      "description": "Главный агент Relay: уточняет результат, поручает все проектные задачи профильным воркерам, согласует контракты и принимает проверенный результат.",
+      "prompt": "orchestrator.md"
+    },
+    {
+      "name": "relay-frontend",
+      "kind": "worker",
+      "description": "Web Relay: React SPA, Unit Architecture, формы, маршруты, состояние, доступность и визуальное качество. Использовать для разработки, исследования и проверки apps/web.",
+      "prompt": "frontend.md"
+    },
+    {
+      "name": "relay-backend",
+      "kind": "worker",
+      "description": "Бекенд Relay: Server, REST/OpenAPI/SSE, проектные контексты, project-runtime и генерация REST SDK. Согласует транспорт с Core и клиентами.",
+      "prompt": "backend.md"
+    },
+    {
+      "name": "relay-cli",
+      "kind": "worker",
+      "description": "CLI Relay: предметные команды, русская справка, терминальный UX, Markdown, страницы и стабильный JSON; согласованность local и HTTP.",
+      "prompt": "cli.md"
+    },
+    {
+      "name": "relay-mcp",
+      "kind": "worker",
+      "description": "MCP Relay: предметные инструменты для агента, discovery, описания всех аргументов, квитанции, ошибки, бюджеты и интеграция через Server.",
+      "prompt": "mcp.md"
+    },
+    {
+      "name": "relay-core",
+      "kind": "worker",
+      "description": "Core и Contracts Relay: предметные правила, сущности, прогресс, хранилище, явные связи, контекст, ревизии, повторы и миграции.",
+      "prompt": "core.md"
+    },
+    {
+      "name": "relay-delivery",
+      "kind": "worker",
+      "description": "Инструменты разработки Relay: сборка, зависимости, CI, поставка, Playground, сборщики скилла и мультиэкосистемных агентов.",
+      "prompt": "delivery.md"
+    },
+    {
+      "name": "relay-docs",
+      "kind": "worker",
+      "description": "Знания Relay: библиотека документации, продуктовые требования, исходники продуктового скилла и содержание профилей агентов.",
+      "prompt": "docs.md"
+    },
+    {
+      "name": "relay-qa",
+      "kind": "worker",
+      "description": "Независимая приёмка Relay: ревью изменений, сквозные сценарии, UX/UI и машинные контракты; воспроизведение дефектов и проверка доказательств готовности.",
+      "prompt": "qa.md"
+    }
+  ]
+}

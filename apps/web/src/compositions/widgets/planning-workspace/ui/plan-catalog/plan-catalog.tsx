@@ -42,7 +42,7 @@ export const PlanCatalog = (props: PlanCatalogProps) => {
     },
     {
       value: "draft",
-      label: "Черновики",
+      label: "Запланированы",
       count: counts?.draft ?? "…",
     },
     {

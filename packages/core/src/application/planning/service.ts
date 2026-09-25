@@ -3,6 +3,7 @@ import {
   updatePlanSchema,
   transitionPlanSchema,
   changeStageSchema,
+  stageFieldsSchema,
   workPlanSchema,
   changePlanTasksSchema,
   transferPlanTaskSchema,
@@ -35,13 +36,11 @@ import {
   planningPage,
   planningSaved,
 } from "../../storage/planning.js";
-import { replaceOwnedRelations } from "../../storage/entity-store/relations.js";
-import { readOwned } from "../../storage/entity-store/relations.js";
-import { saveAudit } from "../../storage/unified-adapter.js";
+import { shortId } from "../../shared/ids.js";
 import { invariant } from "../../shared/errors.js";
 import { BoardTasksService } from "../board-tasks/service.js";
 import { readPlanningState } from "./model.js";
-import { syncPlanRelations, syncStageRelations } from "./relations.js";
+import { syncPlanRelations } from "./relations.js";
 
 /** Владелец планов, этапов и участия существующих задач. */
 export class PlanningService {
@@ -124,9 +123,11 @@ export class PlanningService {
       const boardId = query.board
         ? (await session.resolve(query.board, "board")).ref.id
         : undefined;
-      const stageId = query.stage
-        ? (await session.resolve(query.stage, "plan-stage")).ref.id
+      invariant(!query.stage || query.plan, "INVALID_ARGUMENT", "Для этапа укажите его план", 2);
+      const plan = query.plan
+        ? await planningRecord(this.workspace, query.plan, "work-plan")
         : undefined;
+      const stageId = query.stage && plan ? (await this.stage(plan, query.stage)).id : undefined;
       const needle = query.q?.trim().toLocaleLowerCase();
       const selected = state.tasks
         .filter(
@@ -134,7 +135,9 @@ export class PlanningService {
             (!boardId || task.boardId === boardId) &&
             (!needle || `${task.key} ${task.title}`.toLocaleLowerCase().includes(needle)) &&
             (query.availableOnly === "false" ||
-              (state.current.get(task.id) === stageId && stageId !== undefined) ||
+              (stageId !== undefined &&
+                state.current.get(task.id)?.stageId === stageId &&
+                state.current.get(task.id)?.planId === plan?.id) ||
               (!state.current.has(task.id) && task.column !== "cancelled")),
         )
         .sort(
@@ -144,6 +147,7 @@ export class PlanningService {
         this.workspace.config.projectId,
         "candidates",
         boardId,
+        plan?.id,
         stageId,
         query.q,
         query.availableOnly,
@@ -158,7 +162,10 @@ export class PlanningService {
         items: await Promise.all(
           page.items.map(async (task) => {
             const { description: _description, ...summary } = await service.get(task.id);
-            const stage = state.stages.find((entry) => entry.id === state.current.get(task.id));
+            const membership = state.current.get(task.id);
+            const stage = state.stages.find(
+              (entry) => entry.id === membership?.stageId && entry.planId === membership?.planId,
+            );
             const plan = stage ? state.plans.find((entry) => entry.id === stage.planId) : undefined;
             return {
               ...summary,
@@ -191,7 +198,7 @@ export class PlanningService {
     return this.workspace.locked(async () => {
       const plan = await planningRecord(this.workspace, reference, "work-plan");
       const state = await readPlanningState(this.workspace);
-      const stages = state.stages.filter((stage) => stage.planId === plan.id);
+      const stages = plan.stages;
       return {
         ...planningPage(
           stages.map((stage) => ({ ...stage, counts: state.counts(stage.taskIds) })),
@@ -225,7 +232,9 @@ export class PlanningService {
       const session = planningSession(this.workspace);
       const ref = await session.resolve(task, "task");
       const plans = await planningRecords(this.workspace, "work-plan");
-      const stages = await planningRecords(this.workspace, "plan-stage");
+      const stages = plans.flatMap((plan) =>
+        plan.stages.map((stage) => ({ ...stage, planId: plan.id })),
+      );
       const items = stages
         .filter((stage) => stage.taskIds.includes(ref.ref.id))
         .map((stage) => {
@@ -258,7 +267,7 @@ export class PlanningService {
       const plan = await createPlanning(
         this.workspace,
         "work-plan",
-        { ...fields, status: "draft", result: "", startedAt: null, closedAt: null },
+        { ...fields, stages: [], status: "draft", result: "", startedAt: null, closedAt: null },
         author,
       );
       await syncPlanRelations(this.workspace, plan, author);
@@ -311,12 +320,6 @@ export class PlanningService {
         );
         if (command.action === "complete") {
           invariant(
-            plan.status === "active",
-            "INVALID_PLAN_TRANSITION",
-            "Завершить можно только начатый план",
-            4,
-          );
-          invariant(
             summary.ready,
             "PLAN_INCOMPLETE",
             "Не выполнен весь состав плана с учётом критериев, детей и зависимостей",
@@ -335,10 +338,7 @@ export class PlanningService {
     const command = changeStageSchema.parse(input);
     return this.write(command, actor, `stage-${command.action}`, reference, async (author) => {
       const plan = await this.editable(reference, command.ifRevision);
-      const session = planningSession(this.workspace);
-      const stages = (await planningRecords(this.workspace, "plan-stage"))
-        .filter((stage) => stage.planId === plan.id)
-        .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id));
+      const stages = plan.stages;
       let stage: PlanStage;
       if (command.action === "create") {
         invariant(
@@ -347,30 +347,26 @@ export class PlanningService {
           "Для создания этапа задайте его содержание",
           2,
         );
+        const fields = stageFieldsSchema.parse(command.fields);
         invariant(stages.length < 200, "PLANNING_LIMIT", "В плане допускается до 200 этапов", 4);
-        stage = await createPlanning(
-          this.workspace,
-          "plan-stage",
-          {
-            ...command.fields,
-            planId: plan.id,
-            rank: (stages.at(-1)?.rank ?? -1) + 1,
-            taskIds: [],
-          },
-          author,
-        );
-        await syncStageRelations(this.workspace, stage, author);
+        let id = shortId();
+        while (stages.some((entry) => entry.id === id)) id = shortId();
+        stage = { ...fields, id, taskIds: [] };
+        stages.push(stage);
       } else {
         invariant(command.stage, "INVALID_ARGUMENT", "Укажите этап", 2);
         stage = await this.stage(plan, command.stage);
         if (command.action === "update") {
-          invariant(command.fields, "INVALID_ARGUMENT", "Задайте содержание этапа", 2);
-          stage = (await savePlanning(
-            this.workspace,
-            { ...stage, ...command.fields },
-            author,
-            "stage-update",
-          )) as PlanStage;
+          const fields = Object.fromEntries(
+            Object.entries(command.fields ?? {}).filter(([, value]) => value !== undefined),
+          );
+          invariant(
+            Object.keys(fields).length > 0,
+            "INVALID_ARGUMENT",
+            "Изменения этапа не заданы",
+            2,
+          );
+          Object.assign(stage, fields);
         } else if (command.action === "remove") {
           invariant(
             stage.taskIds.length === 0,
@@ -378,32 +374,7 @@ export class PlanningService {
             "Сначала явно исключите или перенесите задачи этапа",
             4,
           );
-          const owner = { kind: "plan-stage", id: stage.id };
-          const edges = await session.postings("adjacency", `plan-stage:${stage.id}`);
-          const owned = (await readOwned(session, owner)).entries.filter(
-            (entry) => entry.edge.active && entry.slot === "planning-membership",
-          );
-          invariant(
-            edges.every((id) => owned.some((entry) => entry.edge.id === id)),
-            "ENTITY_HAS_RELATIONS",
-            "Сначала снимите материалы и внешние связи этапа",
-            4,
-          );
-          await replaceOwnedRelations(session, owner, "planning-membership", [], author);
-          await saveAudit(
-            this.workspace,
-            owner,
-            [
-              {
-                action: "remove",
-                revision: stage.revision + 1,
-                actor: author,
-                at: new Date().toISOString(),
-              },
-            ],
-            {},
-          );
-          await session.remove(owner, stage.revision, author);
+          plan.stages = stages.filter((entry) => entry.id !== stage.id);
         } else {
           invariant(
             (command.before !== undefined) !== (command.direction !== undefined),
@@ -426,14 +397,13 @@ export class PlanningService {
             4,
           );
           ordered.splice(position, 0, stage);
-          for (const [rank, item] of ordered.entries())
-            if (item.rank !== rank)
-              await savePlanning(this.workspace, { ...item, rank }, author, "stage-move");
+          plan.stages = ordered;
         }
       }
       const saved = await savePlanning(this.workspace, plan, author, `stage-${command.action}`, {
         stageId: stage.id,
       });
+      await syncPlanRelations(this.workspace, saved as WorkPlan, author);
       return {
         ...planningSaved(saved, `stage-${command.action}`, command.requestId),
         stageId: stage.id,
@@ -469,7 +439,7 @@ export class PlanningService {
           "TASK_IN_PLAN",
           "Задача уже включена в текущий план; используйте явный перенос",
           4,
-          { taskId: id, stageId: state.current.get(id) },
+          { taskId: id, stageId: state.current.get(id)?.stageId },
         );
         invariant(
           state.byTask.get(id)?.column !== "cancelled",
@@ -490,19 +460,13 @@ export class PlanningService {
         "В этапе допускается до 2000 задач",
         4,
       );
-      const next = (await savePlanning(
-        this.workspace,
-        { ...stage, taskIds: [...stage.taskIds.filter((id) => !remove.includes(id)), ...add] },
-        author,
-        "tasks",
-        { add, remove },
-      )) as PlanStage;
-      await syncStageRelations(this.workspace, next, author);
+      stage.taskIds = [...stage.taskIds.filter((id) => !remove.includes(id)), ...add];
       const saved = await savePlanning(this.workspace, plan, author, "tasks", {
         stageId: stage.id,
         add,
         remove,
       });
+      await syncPlanRelations(this.workspace, saved as WorkPlan, author);
       return planningSaved(saved, "tasks", command.requestId);
     });
   }
@@ -511,8 +475,9 @@ export class PlanningService {
     return this.write(command, actor, "transfer", reference, async (author) => {
       invariant(command.reason.trim() !== "", "INVALID_ARGUMENT", "Укажите причину переноса", 2);
       const plan = await this.editable(reference, command.ifRevision);
-      const target = await planningRecord(this.workspace, command.targetStage, "plan-stage");
-      const targetPlan = await this.editable(target.planId, command.targetRevision);
+      const destinationPlan = await this.editable(command.targetPlan, command.targetRevision);
+      const targetPlan = destinationPlan.id === plan.id ? plan : destinationPlan;
+      const target = await this.stage(targetPlan, command.targetStage);
       invariant(
         target.taskIds.length < 2000,
         "PLANNING_LIMIT",
@@ -521,35 +486,27 @@ export class PlanningService {
       );
       const taskId = (await planningSession(this.workspace).resolve(command.task, "task")).ref.id;
       const state = await readPlanningState(this.workspace);
-      const source = state.stages.find((stage) => stage.id === state.current.get(taskId));
+      const membership = state.current.get(taskId);
+      const source = plan.stages.find((stage) => stage.id === membership?.stageId);
       invariant(
-        source?.planId === plan.id && source.id !== target.id,
+        source &&
+          membership?.planId === plan.id &&
+          (plan.id !== targetPlan.id || source.id !== target.id),
         "INVALID_REFERENCE",
         "Задача не входит в исходный план либо уже находится в целевом этапе",
         4,
       );
       const details = { taskId, from: source.id, to: target.id, reason: command.reason };
-      const oldStage = (await savePlanning(
-        this.workspace,
-        { ...source, taskIds: source.taskIds.filter((id) => id !== taskId) },
-        author,
-        "transfer",
-        details,
-      )) as PlanStage;
-      const newStage = (await savePlanning(
-        this.workspace,
-        { ...target, taskIds: [...target.taskIds, taskId] },
-        author,
-        "transfer",
-        details,
-      )) as PlanStage;
-      await syncStageRelations(this.workspace, oldStage, author);
-      await syncStageRelations(this.workspace, newStage, author);
+      source.taskIds = source.taskIds.filter((id) => id !== taskId);
+      target.taskIds.push(taskId);
       const saved = await savePlanning(this.workspace, plan, author, "transfer", details);
+      await syncPlanRelations(this.workspace, saved as WorkPlan, author);
       const destination =
         plan.id === targetPlan.id
           ? saved
           : await savePlanning(this.workspace, targetPlan, author, "transfer", details);
+      if (plan.id !== targetPlan.id)
+        await syncPlanRelations(this.workspace, destination as WorkPlan, author);
       return {
         ...planningSaved(saved, "transfer", command.requestId),
         targetRevision: destination.revision,
@@ -563,8 +520,8 @@ export class PlanningService {
     return plan;
   }
   private async stage(plan: WorkPlan, reference: string) {
-    const stage = await planningRecord(this.workspace, reference, "plan-stage");
-    invariant(stage.planId === plan.id, "INVALID_REFERENCE", "Этап принадлежит другому плану", 4);
+    const stage = plan.stages.find((entry) => entry.id === reference);
+    invariant(stage, "INVALID_REFERENCE", "Этап не найден в выбранном плане", 4);
     return stage;
   }
 }

@@ -42,6 +42,8 @@ jobs:
           run_install: false
       - name: Установить зависимости из lockfile
         run: pnpm install --frozen-lockfile
+      - name: Проверить сохранённые результаты генераторов до сборки
+        run: pnpm run agents:check && pnpm run skills:check
       - name: Проверить общую версию и собрать все пакеты
         run: pnpm run build
       - name: Проверить форматирование, типы, сборку и тесты

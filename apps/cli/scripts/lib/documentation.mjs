@@ -89,6 +89,15 @@ export async function documentationFiles(root) {
         if (entry.isDirectory() && entry.name === "docs")
           for (const child of await filesBelow(join(root, base, "docs")))
             result.push(`${base}/docs/${child}`);
+        // У скилла есть виртуальные ссылки: его src проверяется сборщиком, не этим обходом.
+        if (
+          scope === "packages" &&
+          workspace.name === "dev-agents" &&
+          entry.isDirectory() &&
+          entry.name === "src"
+        )
+          for (const child of await filesBelow(join(root, base, "src")))
+            result.push(`${base}/src/${child}`);
       }
     }
   }
@@ -220,8 +229,8 @@ export async function packageMarkdown({
       const tag = encodeURIComponent(`v${version}`);
       const kind = (await stat(join(root, local.target))).isDirectory() ? "tree" : "blob";
       url = image
-        ? `https://raw.githubusercontent.com/gromlab-ru/relay/${tag}/${path}${local.suffix}`
-        : `https://github.com/gromlab-ru/relay/${kind}/${tag}/${path}${local.suffix}`;
+        ? `https://raw.githubusercontent.com/oim-dev/relay/${tag}/${path}${local.suffix}`
+        : `https://github.com/oim-dev/relay/${kind}/${tag}/${path}${local.suffix}`;
     }
     changes.push({ ...destinationRange(markdown, node), url });
   }

@@ -41,9 +41,24 @@ try {
           ],
           directory,
         );
-        const installed = join(directory, "node_modules", "@gromlab", `relay-${component}`);
+        const installed = join(directory, "node_modules", ...manifest.name.split("/"));
         const packed = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
+        for (const field of [
+          "name",
+          "version",
+          "repository",
+          "homepage",
+          "bugs",
+          "bin",
+          "publishConfig",
+        ])
+          assert.deepEqual(
+            packed[field],
+            manifest[field],
+            `Метаданные установленного пакета: ${field}`,
+          );
         assert.equal(packed.scripts, undefined);
+        assert.equal(packed.devDependencies, undefined);
         assert(
           !Object.values(packed.dependencies).some((version) =>
             /^(workspace:|file:|link:)/.test(version),
@@ -59,7 +74,7 @@ try {
           directory,
         );
         assert.equal(launched.stdout.trim(), manifest.version);
-        return [component, { directory, binary }];
+        return [component, { directory, binary, name: packed.name, version: packed.version }];
       }),
     ),
   );
@@ -82,6 +97,7 @@ try {
     await invoke(join(workspace, name), ["init"]);
   }
   const localTask = await invoke(join(workspace, "a"), [
+    "--local",
     "task",
     "create",
     "--board",
@@ -91,15 +107,10 @@ try {
     "--actor",
     "smoke",
   ]);
-  assert.equal(
-    JSON.parse(
-      await readFile(
-        join(workspace, "a/.relay/boards/product/tasks", `${localTask.id}.json`),
-        "utf8",
-      ),
-    ).id,
-    localTask.id,
-  );
+  // Новый CLI-процесс проверяет сохранность без привязки к физическому формату хранилища Core.
+  const persisted = await invoke(join(workspace, "a"), ["--local", "task", "get", localTask.id]);
+  assert.equal(persisted.id, localTask.id);
+  assert.equal(persisted.title, "Локальная задача А");
   const local = await startServerProcess(
     [installations.server.binary, "--port", "0", "--format", "json"],
     join(workspace, "a"),
@@ -162,6 +173,10 @@ try {
   );
   client = new Client({ name: "relay-package-check", version: "1.0.0" });
   await client.connect(new StreamableHTTPClientTransport(new URL(mcp.url)));
+  assert.deepEqual(client.getServerVersion(), {
+    name: installations.mcp.name,
+    version: installations.mcp.version,
+  });
   const task = await client.callTool({
     name: "board_task_get",
     arguments: { project: "b", reference: remoteTask.id },

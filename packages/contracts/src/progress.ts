@@ -173,12 +173,11 @@ export const workPlanProgressSchema = z.strictObject({
   status: planStatusSchema,
   counts: planningCountsSchema,
   canStart: z.boolean().describe("Черновик имеет цель и непустой состав"),
-  canComplete: z.boolean().describe("Начатый план имеет фактически выполненный непустой состав"),
+  canComplete: z.boolean().describe("Открытый план имеет фактически выполненный непустой состав"),
   diverged: z.boolean().describe("Сохранённое завершение расходится с текущим выполнением задач"),
   stages: page(
     z.strictObject({
       id: z.string().describe("ID этапа"),
-      key: z.string().describe("Ключ этапа"),
       title: z.string().describe("Название этапа"),
       counts: planningCountsSchema,
       completed: z.boolean().describe("Все задачи непустого этапа фактически выполнены"),
@@ -188,16 +187,12 @@ export const workPlanProgressSchema = z.strictObject({
 });
 export const releaseProgressSchema = z.strictObject({
   ...base,
-  kind: z
-    .literal("release")
-    .describe("Готовность планового либо исторический результат состоявшегося выпуска"),
+  kind: z.literal("release").describe("Текущая готовность планов выбранного релиза"),
   status: releaseStatusSchema,
   readiness: releaseReadinessSchema,
   plans: page(progressItemSchema.extend({ status: planStatusSchema })).describe(
-    "Выбранные планы: текущие до выпуска, архивные после фиксации",
+    "Актуальные выбранные планы независимо от состояния выпуска",
   ),
-  historical: z.boolean().describe("Результат прочитан из неизменяемого снимка выпуска"),
-  snapshotId: z.string().nullable().describe("ID снимка либо null"),
 });
 export type ProgressKind = z.infer<typeof progressKindSchema>;
 export type ProgressQuery = z.input<typeof progressQuerySchema>;

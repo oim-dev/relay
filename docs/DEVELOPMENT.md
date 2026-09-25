@@ -1,13 +1,14 @@
 # Разработка Relay
 
-При любых работах обязательны [агентский протокол](development/PROTOCOL.md),
-[правила документации](development/DOCUMENTATION.md) и [досье работы](work/README.md).
-Этот документ — практическая инструкция окружения; [навигатор разработки](development/README.md)
-собирает все действующие правила.
+Этот документ — практическая инструкция окружения. [Навигатор разработки](development/README.md)
+связывает процессы и справочные материалы, [команда](development/AGENT-TEAM.md) —
+приложения и пакеты с самодостаточными профилями исполнителей. [Корневой AGENTS.md](../AGENTS.md)
+содержит общие правила для всех агентов; полная роль главного находится в
+[профиле оркестратора](../packages/dev-agents/src/orchestrator.md).
 
-Перед изменениями обязательны [единые правила интерфейсов](development/INTERFACE-STANDARD.md)
-и `AGENTS.md` владельца. Markdown, русская документация, человекочитаемый CLI и понятные
-MCP-операции — часть готовности, а не последующая косметическая доработка.
+Контракты и спецификации выбираются по задаче. Человеческий результат и машинная
+корректность проверяются отдельно; документы обновляются при смысловом изменении
+публичного поведения. Постоянные журналы агентов и обязательные досье не ведутся.
 
 [Документация](README.md) → Разработка
 
@@ -44,7 +45,7 @@ pnpm run skills:install
 
 Команда использует закреплённый `npx skills@1.5.26` (Node.js 22.20+, рекомендуется 24).
 Весь каталог проектных копий `.agents/skills` исключён из Git без исключений.
-Исходники продуктового скилла находятся в `src-skills/relay`, готовый пакет — в `skills/relay`.
+Исходники продуктового скилла находятся в `packages/relay-skill/src`, готовый пакет — в `skills/relay`.
 Сборка: `pnpm run skills:build`; проверка актуальности: `pnpm run skills:check`.
 Подробности — [устройство и установка скиллов](development/SKILLS.md).
 
@@ -54,15 +55,16 @@ pnpm run skills:install
 - API: http://127.0.0.1:4700/api/v1/health.
 - Swagger: http://127.0.0.1:4700/api/docs.
 
-`dev` запускает API и web через Turbo. По умолчанию backend открывает
-`apps/playground/coffee-shop/.relay/config.json`; Web автоматически открывает кофейню.
+`dev` запускает API и Web через Turbo; `dev:server` — только API. Без `RELAY_CONFIG`
+оба используют `apps/playground/relay.workspace.json` с кофейней и P2P-арендой.
 Два пустых демопроекта инициализируются командой `pnpm --filter @relay/playground run init`.
-Для работы с кофейней и P2P-арендой через один Server используйте workspace-запуск ниже;
+Для однопроектного режима кофейни явно передайте её конфиг через `RELAY_CONFIG`, как ниже;
 подробности — в [README playground](../apps/playground/README.md).
 Для проверки мутаций используйте отдельный временный проект с абсолютным `RELAY_CONFIG`.
 
 ```bash
-RELAY_CONFIG=apps/playground/relay.workspace.json pnpm run dev
+pnpm run dev
+RELAY_CONFIG=apps/playground/coffee-shop/.relay/config.json pnpm run dev
 RELAY_PORT=3001 RELAY_API_URL=http://127.0.0.1:3001 RELAY_WEB_PORT=5174 pnpm run dev
 ```
 
@@ -74,8 +76,12 @@ CLI из исходников запускается отдельно, без Tu
 
 ```bash
 pnpm --silent run dev:cli --version
-pnpm --silent run playground coffee-shop list --format json
+pnpm --silent run playground coffee-shop task list --limit 20 --format json
 ```
+
+`playground` передаёт конфиг `apps/playground/relay.workspace.json`; запрос задач требует
+запущенного workspace-сервера и возвращает одну страницу.
+[Параметры выдачи и ограничения](reference/CLI.md).
 
 `dev:cli` сохраняет рабочий каталог вызова. Условие `tasks-source` позволяет
 CLI и backend использовать исходники библиотек через tsx. Web использует compiled
@@ -106,11 +112,20 @@ MCP обращается к уже запущенному Relay Server чере�
 | [packages/rest-sdk](../packages/rest-sdk/README.md)               | Сгенерированный ESM-клиент OpenAPI                                   |
 | [packages/server-runtime](../packages/server-runtime/README.md)   | Общая NestJS/Fastify-реализация                                      |
 | [packages/typescript-config](../packages/typescript-config)       | Общие строгие настройки Node-пакетов                                 |
+| [packages/dev-agents](../packages/dev-agents/README.md)           | Профили и сборщик агентов разработки Relay                           |
+| [packages/relay-skill](../packages/relay-skill/README.md)         | Источники и сборщик скилла для пользователей Relay                   |
 
 Слои и инварианты описаны в [архитектуре](ARCHITECTURE.md).
 Сервер использует Core, а не CLI. SDK используется CLI, MCP и web. Межпакетных
-TypeScript project references и корневых алиасов исходников нет. Каждый workspace
-собирается в свой `dist`; порядок и кеширование задаёт Turbo.
+TypeScript project references и корневых алиасов исходников нет. Приложения и runtime-пакеты
+собираются в свои `dist`; порядок задач задаёт Turbo.
+
+`@relay/dev-agents` и `@relay/relay-skill` — private ESM workspace-пакеты с собственными
+`build`, `check` и `test`. Источники и манифесты редактируются в их `src`, сборщики —
+в соседних `scripts`. Первый пакет обслуживает разработку Relay, второй — продуктовые
+инструкции для его пользователей. Нативные агентские конфигурации и `agents-lock.json`
+остаются в корне, готовый скилл — в `skills/relay` и установленной копии Playground.
+Корневой `AGENTS.md` — отдельный рукописный источник общих правил, не генерируемый выход.
 
 ## Команды
 
@@ -135,14 +150,20 @@ TypeScript project references и корневых алиасов исходни�
 | `pnpm test`                                                          | Все автоматизированные тесты с необходимыми сборками            |
 | `pnpm run test:cli` / `test:server` / `test:core` / `test:contracts` | Выборочные тесты                                                |
 | `pnpm run docs:check`                                                | Ссылки, файлы и якоря документации                              |
-| `pnpm run skills:build` / `skills:check` / `skills:test`             | Сборка, проверка актуальности и тесты пакета скилла Relay       |
+| `pnpm run agents:build` / `agents:check` / `agents:test`             | Задачи пакета `@relay/dev-agents` через `pnpm --filter`         |
+| `pnpm run skills:build` / `skills:check` / `skills:test`             | Задачи пакета `@relay/relay-skill` через `pnpm --filter`        |
 | `pnpm run format` / `format:check`                                   | Форматирование и его проверка                                   |
 | `pnpm run check`                                                     | Документация, форматирование, lint, типы, сборки и тесты        |
 | `pnpm run package:check`                                             | Три независимые npm-установки, local/workspace, API, Web и MCP  |
 | `pnpm run clean`                                                     | Удаление результатов сборки workspaces с сохранением кеша Turbo |
 
 Локальные инструменты доступны через `pnpm --filter <workspace> run <script>`.
-Корневые команды Turbo предварительно собирают необходимые зависимости.
+Корневые команды компиляции через Turbo предварительно собирают необходимые зависимости.
+Проверки генераторов `@relay/dev-agents` и `@relay/relay-skill` запускаются без `build`:
+они обнаруживают расхождения, не восстанавливая выходы и не исправляя их молча.
+Turbo-задачи генерации и проверки имеют `cache: false`, поскольку пишут или проверяют
+выходы вне пакета; восстановление из кеша не должно обходить защиту владения выходами.
+Установка внешних скиллов `pnpm run skills:install` остаётся отдельной командой.
 
 ## Проверки
 
@@ -151,10 +172,10 @@ API/SSE — `packages/server-runtime/test`, standalone/dev — `apps/server/test
 MCP — `apps/mcp/test`, реестр и маршрутизация — `packages/project-runtime/test`.
 Contracts проверяет совместимость типов с Core. CI запускает проверки на Node.js 22 и 24.
 
-Для web действуют [инструкции приложения](../apps/web/AGENTS.md): Unit Architecture,
+Для Web действуют знания [профиля frontend](../packages/dev-agents/src/frontend.md): Unit Architecture,
 React Reference, генерация новых TSX, lint/typecheck/build и сценарии через изолированный
 headless agent-browser. Автотесты frontend не добавляются по принятому решению.
-Зафиксированная браузерная приёмка — [VERIFICATION.md](../apps/web/VERIFICATION.md).
+Границы прежней приёмки — в [техническом покрытии](engineering/implementation/applications.md#границы-исторической-приёмки).
 
 ## Документация и поставка
 
@@ -167,14 +188,17 @@ headless agent-browser. Автотесты frontend не добавляются 
 включая заголовки с повторяющимися именами. Сеть для этой проверки не требуется.
 При переносе страницы обновляйте внутренние ссылки и сохраняйте переход со старого адреса.
 
-`package:check` включает корневой README и `docs` в stage CLI. Ссылки в npm README
-получают абсолютные GitHub-адреса тега `v<версия>`, изображения — raw-адреса этого тега.
-Документы внутри архива сохраняют локальные переходы между включёнными файлами;
-ссылки на исходники ведут в GitHub. Публичные URL новой документации доступны после
-публикации соответствующего Git-тега.
+`package:check` готовит три независимых npm-архива: `@oim-dev/relay-cli`,
+`@oim-dev/relay-server` и `@oim-dev/relay-mcp`, затем проверяет их установку через
+`scripts/smoke-relay.mjs`. Упаковщик `scripts/package.mjs` создаёт staging в
+`apps/<компонент>/.artifacts/package`, архивы — в `apps/<компонент>/.artifacts/npm`.
 
-Подготовка архива использует dev-инструменты; готовый npm-пакет содержит только
-production-зависимости, CLI и готовый web. Публикуется именно проверенный `.tgz`.
-MCP упаковывается отдельно с Core, Project Runtime, REST SDK и Server Runtime в JavaScript,
-со своим README и CHANGELOG. Общие проверки метаданных и публикации находятся в `scripts/release`.
+Каждый пакет содержит собранный JavaScript приложения и используемых workspace-библиотек,
+манифест с внешними production-зависимостями и README соответствующего приложения.
+Готовый Web (`dist/web`) входит только в Server. Корневой README, общая библиотека `docs`
+и CHANGELOG в текущую упаковку не копируются; ссылки в README не переписываются.
+
+Команды `release:check`, `release:version`, `release:notes` и `release:publish` используют
+общую цепочку `scripts/release/relay.mjs`. Публикуются подготовленные и проверенные `.tgz`
+без повторной сборки.
 [Добавление команды](development/EXTENDING.md) · [Релизный процесс](development/RELEASING.md).

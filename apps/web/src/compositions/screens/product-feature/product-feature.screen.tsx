@@ -4,11 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ProductKey } from "domains/product";
 import { useProjectBasePath } from "domains/project";
 import { useProductRoute } from "compositions/widgets/product-page";
-import {
-  getFeatureStatus,
-  ProductReadiness,
-  useProductDemo,
-} from "domains/product-demo";
+import { getFeatureStatus, ProductReadiness, useProductDemo } from "domains/product-demo";
 import { getProductReturn, ProductPage, useProductPath } from "compositions/widgets/product-page";
 import { ProductRequirement } from "compositions/widgets/product-requirement";
 import { EntityDelete } from "compositions/widgets/entity-delete";
@@ -103,7 +99,9 @@ export const ProductFeatureScreen = () => {
       >
         <FeatureScenarios key={featureData.id} feature={featureData} />
       </ProductRequirement>
-      <div style={{ marginTop: "1.5rem" }}><EntityDocuments target={{ kind: "feature", id: featureData.id }} /></div>
+      <div style={{ marginTop: "1.5rem" }}>
+        <EntityDocuments target={{ kind: "feature", id: featureData.id }} />
+      </div>
     </ProductPage>
   );
 };

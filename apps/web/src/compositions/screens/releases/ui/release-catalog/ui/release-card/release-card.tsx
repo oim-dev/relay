@@ -33,7 +33,6 @@ export const ReleaseCard = (props: ReleaseCardProps) => {
         new Date(isReleased ? rawDate : `${rawDate}T12:00:00`),
       )
     : "Дата не указана";
-  const progressLabel = isReleased ? "Состав на момент выпуска" : "Готовность состава";
   return (
     <article className={styles.root}>
       <div className={styles.top}>
@@ -68,7 +67,7 @@ export const ReleaseCard = (props: ReleaseCardProps) => {
         {hasCompositionError && <span>Состав временно недоступен</span>}
       </div>
       <div className={styles.progress}>
-        <span>{progressLabel}</span>
+        <span>Текущая готовность состава</span>
         <strong>
           {summary.ready} / {summary.total} планов
         </strong>

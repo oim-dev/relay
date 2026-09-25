@@ -6,7 +6,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TestContext } from "node:test";
 
-export const binary = fileURLToPath(new URL("../../dist/cli/main.js", import.meta.url));
+export const binary = fileURLToPath(
+  new URL(
+    process.env.RELAY_CLI_TEST_SOURCE === "1" ? "../../src/main.ts" : "../../dist/cli/main.js",
+    import.meta.url,
+  ),
+);
 
 interface Success<T> {
   ok: true;
@@ -33,7 +38,7 @@ interface RunOptions {
   nodeArgs?: string[];
 }
 
-/** Сквозные проверки запускают опубликованный JavaScript в отдельном процессе Node.js. */
+/** Сквозные проверки запускают CLI отдельно; RELAY_CLI_TEST_SOURCE=1 выбирает исходники с tsx. */
 export async function invokeRaw(
   cwd: string,
   args: Array<string | number>,

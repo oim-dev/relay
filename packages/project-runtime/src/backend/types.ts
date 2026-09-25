@@ -33,7 +33,7 @@ export interface Backend {
   >;
   releases: Pick<
     ReleasesService,
-    "list" | "get" | "composition" | "preview" | "snapshot" | "create" | "update" | "transition"
+    "list" | "get" | "composition" | "preview" | "create" | "update" | "transition"
   >;
   progress: Pick<
     ProgressService,

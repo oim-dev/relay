@@ -1,6 +1,6 @@
 # Справочник CLI
 
-`relay-cli` означает установленную команду или `npx @gromlab/relay-cli`.
+`relay-cli` означает установленную команду или `npx @oim-dev/relay-cli`.
 В workspace передавайте проект префиксом или `--project`; в local можно работать
 через Core либо HTTP. [Конфигурация](CONFIGURATION.md) определяет поиск и приоритеты.
 Чтение не требует автора; запись требует `--actor` или `RELAY_ACTOR`.
@@ -15,7 +15,7 @@
 
 ### progress release
 
-`progress release <ref>` — готовность планов либо исторический результат выпущенного релиза.
+`progress release <ref>` — текущая готовность планов и сохранённый статус релиза.
 Состояние выпуска и текущая готовность различаются. Те же параметры страниц.
 
 ## Планы и релизы
@@ -37,10 +37,10 @@
 
 ### plan candidates
 
-`plan candidates [--q <текст>] [--board <доска>] [--stage <этап>]
+`plan candidates [--q <текст>] [--board <доска>] [--plan <план>] [--stage <id>]
 [--available-only true|false]` — серверный поиск задач для включения. Свободные и
 текущие задачи выбранного этапа видны при true; false показывает также занятые/отменённые.
-Поддержаны общие параметры страниц.
+`--stage` требует `--plan`: ID этапа локален плану. Поддержаны общие параметры страниц.
 
 ### plan create
 
@@ -56,7 +56,8 @@
 
 ### plan stages
 
-`plan stages <reference>` — страница этапов с полными счётчиками задач.
+`plan stages <reference>` — страница вложенных этапов с полными счётчиками задач
+и `planRevision`. У этапов нет самостоятельных ключей и ревизий.
 
 ### plan tasks
 
@@ -77,10 +78,12 @@
 
 `plan stage update <reference> <stage> --if-revision <n>` — изменить заданные поля этапа.
 Ревизия относится к плану, включая его состав. Поля совпадают с созданием этапа.
+Передаются только заданные параметры, без подстановки актуальных непереданных полей.
+Для повтора сохраняйте исходные аргументы, `--if-revision` и `--request-id`.
 
 ### plan stage remove
 
-`plan stage remove <reference> <stage> --if-revision <n>` — удалить пустой этап без внешних связей.
+`plan stage remove <reference> <stage> --if-revision <n>` — удалить пустой этап.
 
 ### plan stage move
 
@@ -99,7 +102,7 @@
 
 ### plan transfer
 
-`plan transfer <reference> <task> <targetStage> --if-revision <n> --target-revision <n>
+`plan transfer <reference> <task> <targetStage> --target-plan <план> --if-revision <n> --target-revision <n>
 --reason <Markdown>` — явный перенос с ревизиями исходного и целевого планов и причиной.
 
 ### plan start
@@ -108,8 +111,9 @@
 
 ### plan complete
 
-`plan complete <reference> --if-revision <n> --result <Markdown>` — завершить начатый
-план с итогом после серверной проверки всех обязательств задач.
+`plan complete <reference> --if-revision <n> --result <Markdown>` — завершить черновой
+или начатый план с итогом после серверной проверки всех обязательств задач.
+Предварительный `plan start` не требуется.
 
 ### plan cancel
 
@@ -134,7 +138,7 @@
 
 `release create --title <название> --release-version <обозначение> --plans <планы...>` —
 создать самостоятельный релиз. `--summary`, `--description`, `--planned-for YYYY-MM-DD`
-и `--status` задают описание, дату и состояние. `released` выполняет полную фиксацию снимка.
+и `--status` задают описание, дату и состояние. `released` проверяет состав и фиксирует выпуск.
 
 ### release update
 
@@ -152,16 +156,11 @@
 ### release publish
 
 `release publish <reference> --if-revision <n>` — проверить готовность и сохранить
-самодостаточный снимок, автора и дату. Это фиксация сведений, не запуск CI/CD.
+статус, автора и дату. Это фиксация сведений, не запуск CI/CD.
 
 ### release plans
 
-`release plans <reference>` — страница текущего или архивного состава планов.
-
-### release snapshot
-
-`release snapshot <reference>` — страница полных сохранённых текстов. Для большого
-содержания уменьшите `--limit` либо явно увеличьте `--max-bytes`.
+`release plans <reference>` — страница актуальных выбранных планов, в том числе после выпуска.
 
 ## Прогресс существующих сущностей
 
@@ -220,7 +219,11 @@
 Подсказки продолжения также не сохраняют выбранный workspace-проект — указывайте его явно.
 `product overview` на текущих данных `p2p-rental` требует увеличения `--max-bytes`
 до 32768. Это наблюдаемые отклонения, не изменение ожидаемого контракта.
-Воспроизведение и границы: [аудит агентского интерфейса](../work/agent-interface-usability/JOURNAL.md).
+Основание — исследование 22 сентября 2026 поверх `f8615e9`; это не новая проверка ветки.
+Воспроизведение того среза: получить version первой страницы `boards --limit 2`, затем
+передать её в `boards --offset 2 --limit 2 --version <version> --format json`.
+Вместо JSON печаталась версия CLI. Аналогично проверялся `task list`.
+Наблюдение относится к тогдашним параметрам, а не заменяет текущую справку `--help`.
 
 ## Проект и реестр
 

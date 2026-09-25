@@ -239,8 +239,15 @@ for (const configuration of ["default", "relative"] as const)
       await writeFile(join(root, "apps/server/dist/web/index.html"), html);
       const corePath = join(root, "packages/core/src/application/board-tasks/service.ts");
       const core = await readFile(corePath, "utf8");
-      assert(core.includes("title: command.title,"));
-      await writeFile(corePath, core.replace("title: command.title,", 'title: "core reload",'));
+      const createInput = 'parse(createBoardTaskSchema, input, "создание задачи")';
+      assert.equal(core.split(createInput).length, 2, "Ожидается одна точка создания задачи");
+      await writeFile(
+        corePath,
+        core.replace(
+          createInput,
+          'parse(createBoardTaskSchema, { ...input, title: "core reload" }, "создание задачи")',
+        ),
+      );
       url = await nextServer();
       const created = await fetch(`${url}${apiPrefix}/board-tasks`, {
         method: "POST",
