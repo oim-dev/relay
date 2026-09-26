@@ -336,16 +336,32 @@ for (const scoped of [false, true])
       409,
     );
     const deleted = await request("POST", "/api/v1/entities/delete", undefined, deleteCommand);
-    assert.deepEqual(
-      await request("POST", "/api/v1/entities/delete", undefined, deleteCommand),
-      deleted,
-    );
-    await request(
+    assert.equal(deleted.ok, true);
+    const missing = await request(
       "GET",
       "/api/v1/entities/get",
       `/api/v1/entities/get?ref=${entityKey}`,
       undefined,
       404,
+    );
+    assert.equal(missing.error.code, "ENTITY_NOT_FOUND");
+    const repeated = await request(
+      "POST",
+      "/api/v1/entities/delete",
+      undefined,
+      deleteCommand,
+      404,
+    );
+    assert.equal(repeated.error.code, "ENTITY_NOT_FOUND");
+    assert.deepEqual(
+      await request(
+        "GET",
+        "/api/v1/entities/get",
+        `/api/v1/entities/get?ref=${entityKey}`,
+        undefined,
+        404,
+      ),
+      missing,
     );
     assert.equal(visited.size, 52);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
