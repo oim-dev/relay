@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { promisify } from "node:util";
 import { publishPackages } from "./publish.mjs";
 import { readManifests, setWorkspaceVersion, workspaceRelease } from "./workspace.mjs";
 
@@ -118,6 +120,34 @@ test("проверка отклоняет рассинхронизацию ве�
       ]),
     /не включён/,
   );
+});
+
+test("notes описывает согласованный комплект, не утверждая, что публикация состоялась", async (t) => {
+  const { root, release } = await fixture(t, "0.6.1");
+  await cp(new URL("./", import.meta.url), join(root, "scripts/release"), { recursive: true });
+  for (const { component } of release.packages) {
+    // Формирование notes не требует готовых архивов, Git-тега или обращения к npm.
+    await rm(join(root, "apps", component, ".artifacts"), { recursive: true });
+    await writeFile(
+      join(root, "apps", component, "CHANGELOG.md"),
+      `# Изменения\n\n## ${release.version}\n\n- Подготовка ${component}.\n`,
+    );
+  }
+  const { stdout, stderr } = await promisify(execFile)(
+    process.execPath,
+    [join(root, "scripts/release/relay.mjs"), "notes", release.tag],
+    { cwd: root, encoding: "utf8", timeout: 10000 },
+  );
+  assert.equal(stderr, "");
+  assert.deepEqual(stdout.split("\n\n").slice(0, 2), [
+    `# Relay ${release.version}`,
+    "CLI, Server и MCP входят в согласованный комплект с единой версией.",
+  ]);
+  assert.doesNotMatch(stdout, /Все пакеты выпущены с общей версией/);
+  for (const { name, component, version } of release.packages) {
+    assert(stdout.includes(`## ${name}\n\n- Подготовка ${component}.`));
+    assert(stdout.includes(`npx ${name}@${version} --help`));
+  }
 });
 
 test("каждый выпуск публикует все три архива после общей предварительной проверки", async (t) => {

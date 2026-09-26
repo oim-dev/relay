@@ -7,6 +7,21 @@ coverage/
 .artifacts/
 .npmrc
 
+# Файлы окружения могут содержать секреты; безопасные примеры и шаблоны переносимы.
+.env*
+!.env.example
+!.env.*.example
+!.env.template
+!.env.*.template
+
+# Локальные настройки Claude и артефакты Playwright.
+**/.claude/settings.local.json
+.playwright-mcp/
+
+# Локальная база и workspace разработчика в корне этого репозитория.
+/.relay/
+/relay.workspace.json
+
 # Проектные копии скиллов; известные источники перечислены в skills-lock.json.
 /.agents/skills/
 

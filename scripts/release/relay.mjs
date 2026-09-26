@@ -21,7 +21,10 @@ if (action === "version" || action === "check") {
   console.log(`Relay ${release.version}: ${release.tag}, npm dist-tag ${release.distTag}`);
   for (const metadata of release.packages) console.log(`${metadata.name}@${metadata.version}`);
 } else if (action === "notes") {
-  const notes = [`# Relay ${release.version}`, "Все пакеты выпущены с общей версией."];
+  const notes = [
+    `# Relay ${release.version}`,
+    "CLI, Server и MCP входят в согласованный комплект с единой версией.",
+  ];
   for (const metadata of release.packages) {
     const changes = await readFile(join(root, "apps", metadata.component, "CHANGELOG.md"), "utf8");
     const section = changes.split(/^## /m).find((text) => text.startsWith(`${release.version}\n`));

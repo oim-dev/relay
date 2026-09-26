@@ -1,6 +1,6 @@
 {
   "name": "@oim-dev/relay-mcp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Relay MCP: продукт, задачи досок, сущности и контекст для AI-агентов",
   "type": "module",
   "imports": {

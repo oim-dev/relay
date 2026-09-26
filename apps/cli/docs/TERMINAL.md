@@ -1,13 +1,13 @@
 # Терминальный вывод
 
-Документ перенесён в [единый справочник терминала](../../../docs/reference/TERMINAL.md).
+Документ перенесён в [единый справочник терминала](https://github.com/oim-dev/relay/blob/refactor/application-rebuild/docs/reference/TERMINAL.md).
 
 ## Цвета
 
-[Правила цвета](../../../docs/reference/TERMINAL.md#цвет-и-ширина).
+[Правила цвета](https://github.com/oim-dev/relay/blob/refactor/application-rebuild/docs/reference/TERMINAL.md#цвет-и-ширина).
 
 ## Представления
 
-[Карточки, списки и Markdown](../../../docs/reference/TERMINAL.md#чтение).
+[Карточки, списки и Markdown](https://github.com/oim-dev/relay/blob/refactor/application-rebuild/docs/reference/TERMINAL.md#чтение).
 
-См. также [JSON и пагинацию](../../../docs/reference/OUTPUT.md).
+См. также [JSON и пагинацию](https://github.com/oim-dev/relay/blob/refactor/application-rebuild/docs/reference/OUTPUT.md).

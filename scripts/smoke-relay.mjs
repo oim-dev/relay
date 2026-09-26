@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { releaseMetadata } from "./release/metadata.mjs";
 import { runNpm } from "./release/npm.mjs";
+import { assertInstalledContent, readPackageContent } from "./release/package-content.mjs";
 import {
   checkServerSurface,
   startServerProcess,
@@ -26,6 +27,7 @@ try {
           await readFile(join(root, "apps", component, "package.json"), "utf8"),
         );
         const metadata = releaseMetadata(manifest);
+        const content = await readPackageContent(join(root, "apps", component), manifest);
         const directory = join(temporary, component);
         await mkdir(directory);
         await writeFile(join(directory, "package.json"), JSON.stringify({ private: true }));
@@ -51,12 +53,14 @@ try {
           "bugs",
           "bin",
           "publishConfig",
+          "files",
         ])
           assert.deepEqual(
             packed[field],
             manifest[field],
             `Метаданные установленного пакета: ${field}`,
           );
+        await assertInstalledContent(installed, manifest, content);
         assert.equal(packed.scripts, undefined);
         assert.equal(packed.devDependencies, undefined);
         assert(
@@ -195,7 +199,7 @@ try {
   assert.equal(stopped.structuredContent.error.code, "SERVER_UNAVAILABLE");
   assert.equal((await invoke(join(workspace, "a"), ["task", "get", localTask.id])).title, a.title);
   console.log(
-    "Проверены три независимые npm-установки: local, workspace A/B, CLI, Web и MCP, остановка общего сервера.",
+    "Проверены три независимые npm-установки: документация из files, local, workspace A/B, CLI, Web и MCP, остановка общего сервера.",
   );
 } finally {
   await client?.close();
