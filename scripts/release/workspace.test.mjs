@@ -267,8 +267,34 @@ test("CI не публикует; release.published публикует с мин
   assert.match(release, /environment: npm/);
   assert.equal((release.match(/id-token: write/g) ?? []).length, 1);
   assert.match(release, /artifact-ids: \$\{\{ needs.ci.outputs.artifact_id \}\}/);
-  assert.match(ci, /artifact-ids: \$\{\{ needs.package.outputs.artifact_id \}\}/);
-  assert.match(ci, /pnpm run package:smoke/);
+  assert.match(ci, /workflow_call:\n    outputs:\n      artifact_id:/);
+  assert.match(ci, /value: \$\{\{ jobs.package.outputs.artifact_id \}\}/);
+  assert.doesNotMatch(ci, /installed-node22|matrix\.|\b22\b/);
+  assert.doesNotMatch(ci, /^\s+strategy:|^\s+matrix:/m);
+  const ciJobs = ci.split(/^jobs:\s*$/m)[1];
+  assert(ciJobs, "В CI отсутствуют задания");
+  assert.deepEqual(
+    [...ciJobs.matchAll(/^ {2}([\w-]+):\s*$/gm)].map((match) => match[1]),
+    ["check", "package"],
+  );
+  const check = ciJobs.split(/^  check:\s*$/m)[1].split(/^  package:\s*$/m)[0];
+  const packaging = ciJobs.split(/^  package:\s*$/m)[1];
+  for (const job of [check, packaging]) {
+    assert.deepEqual(
+      [...job.matchAll(/node-version: "([^"]+)"/g)].map((match) => match[1]),
+      ["24"],
+    );
+  }
+  assert.match(check, /run: pnpm run agents:check && pnpm run skills:check/);
+  assert.match(check, /run: pnpm run build/);
+  assert.match(check, /shell: bash\n        run: pnpm run check 2>&1 \| tee/);
+  assert.match(packaging, /^ {4}needs: check$/m);
+  assert.match(packaging, /artifact_id: \$\{\{ steps.upload.outputs.artifact-id \}\}/);
+  assert.match(packaging, /run: pnpm run package:check/);
+  assert.match(packaging, /bundle\.mjs create/);
+  assert.match(packaging, /id: upload\n        uses: actions\/upload-artifact@/);
+  assert.match(packaging, /name: npm-packages/);
+  assert.match(packaging, /if-no-files-found: error/);
   assert.match(release, /node scripts\/release\/event.mjs/);
   assert.match(release, /!github.event.release.draft/);
   assert.match(release, /group: relay-npm-publish\n      cancel-in-progress: false/);
@@ -279,13 +305,11 @@ test("CI не публикует; release.published публикует с мин
   assert.match(publisher, /npm@11\.16\.0/);
   assert.match(publisher, /bundle\.mjs verify/);
   assert.match(publisher, /\[\[ "\$ARTIFACT_ID" =~ \^\[1-9\]\[0-9\]\*\$ \]\]/);
-  const installed = ci.split(/^  installed-node22:\s*$/m)[1];
-  assert.match(installed, /needs: package/);
-  assert.match(installed, /bundle\.mjs restore/);
-  assert.doesNotMatch(installed, /pnpm (?:install|run build|run package:check)/);
-  assert.match(ci, /if: matrix.node == 24/);
-  assert.match(ci, /if: matrix.node == 22/);
-  assert.match(ci, /pnpm run release:test && pnpm exec turbo run test/);
+  assert.match(publisher, /artifact-ids: \$\{\{ needs.ci.outputs.artifact_id \}\}/);
+  assert.match(publisher, /digest-mismatch: error/);
+  assert.match(ci, /^permissions:\n  contents: read$/m);
+  assert.match(release, /^permissions:\n  contents: read$/m);
+  assert.match(publisher, /permissions:\n      contents: read\n      id-token: write/);
   const jobs = release.split(/^jobs:\s*$/m)[1];
   assert(jobs, "В workflow выпуска отсутствуют задания");
   assert.deepEqual(
@@ -295,5 +319,6 @@ test("CI не публикует; release.published публикует с мин
   assert.match(jobs, /^ {4}needs: metadata$/m);
   assert.match(jobs, /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m);
   const manifest = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  assert.match(manifest.scripts["package:check"], /&& node scripts\/smoke-relay\.mjs$/);
   assert.equal(manifest.scripts["release:publish"], "node scripts/release/relay.mjs publish");
 });
