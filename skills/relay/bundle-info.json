@@ -2,7 +2,7 @@
   "version": 1,
   "name": "relay",
   "inputs": {
-    "apps/cli/package.json": "ba6daf45e0bd0199122cfe872cad8974c7614d02d983f12dc728d9ddc52105f4",
+    "apps/cli/package.json": "0bc546175f906e475e7a24daf31c4bcef445d08d218001086da9a6a18ad7a972",
     "apps/cli/scripts/lib/documentation.mjs": "ac0e28579f15aa4aa6228f9e75fc7e9a1ff2bd03ba8874ad44a1877914e0a20f",
     "apps/cli/src/commands/board-tasks.ts": "c70f6d2b813a60e2c44b317c63a528e29a38f175076fe8f01febe432f1eb58e0",
     "apps/cli/src/commands/entities.ts": "68d10c67d272555edb102068439b4de2dffb1daed3743153a1ecddcd2bca1a10",
