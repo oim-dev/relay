@@ -43,7 +43,7 @@ export function registerGraph(program: Command, runtime: Runtime): void {
           ? "Перенести единый JSON графа в раздельное хранилище v2"
           : "Восстановить индексы графа из постоянных записей",
       details:
-        "Только локальный режим выбранного проекта. Перед миграцией остановите старые клиенты. Прерванная операция возобновляется; ID, ревизии и квитанции сохраняются. Исходник v1 остаётся резервной копией.",
+        "Только локальный режим выбранного проекта. Перед миграцией остановите старые клиенты. Прерванная операция возобновляется; ID и ревизии сохраняются, история и результаты запросов не переносятся. Исходник v1 остаётся резервной копией.",
       examples: [
         [
           `relay-cli --local --config .relay/config.json graph ${action}`,
@@ -145,7 +145,10 @@ export function registerGraph(program: Command, runtime: Runtime): void {
       configure: (command) => {
         command
           .requiredOption("--if-version <version>", "Версия из graph list/context")
-          .option("--request-id <id>", "Ключ безопасного повтора; по умолчанию генерируется");
+          .option(
+            "--request-id <id>",
+            "Идентификатор корреляции, не дедупликации; по умолчанию UUID",
+          );
         if (action === "link")
           command
             .requiredOption("--from <address>", "Ключ или ID начала связи")

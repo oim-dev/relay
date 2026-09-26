@@ -87,8 +87,8 @@ test("готовый план завершается без начала и до
     { code: "REVISION_CONFLICT" },
   );
   const graphBefore = await new GraphService(workspace).context({ root: plan.id });
-  const receipt = await plans.transition(plan.id, command, "agent");
-  assert.deepEqual(await plans.transition(plan.id, command, "agent"), receipt);
+  await plans.transition(plan.id, command, "agent");
+  await assert.rejects(plans.transition(plan.id, command, "agent"), { code: "REVISION_CONFLICT" });
   const completed = await plans.get(plan.id);
   assert.equal(completed.status, "completed");
   assert.equal(completed.startedAt, null);
@@ -109,14 +109,16 @@ test("готовый план завершается без начала и до
     ifRevision: release.revision,
     requestId: "publish",
   };
-  const published = await releases.update(release.id, publish, "agent");
-  assert.deepEqual(await releases.update(release.id, publish, "agent"), published);
+  await releases.update(release.id, publish, "agent");
+  await assert.rejects(releases.update(release.id, publish, "agent"), {
+    code: "REVISION_CONFLICT",
+  });
   assert.equal((await releases.get(release.id)).status, "released");
   assert.equal((await releases.composition(release.id)).items[0]?.id, plan.id);
   assert.equal("snapshotId" in (await releases.get(release.id)), false);
 });
 
-test("частичная правка этапа сохраняет остальные поля и повторяет исходную квитанцию после чужой правки", async (t) => {
+test("частичная правка этапа сохраняет остальные поля; устаревший повтор отклоняется после чужой правки", async (t) => {
   const { root, workspace, plans } = await fixture(t);
   const plan = await plans.create({ title: "План", requestId: "plan" }, "agent");
   const fields = {
@@ -158,7 +160,9 @@ test("частичная правка этапа сохраняет осталь
   const path = join(workspace.root, "entities/work-plans", `${plan.id}.json`);
   const beforeRepeat = await readFile(path, "utf8");
   const reopened = new PlanningService(await openWorkspace(root));
-  assert.deepEqual(await reopened.changeStage(plan.id, titleOnly, "agent"), renamed);
+  await assert.rejects(reopened.changeStage(plan.id, titleOnly, "agent"), {
+    code: "REVISION_CONFLICT",
+  });
   assert.equal(await readFile(path, "utf8"), beforeRepeat);
   assert.equal((await reopened.get(plan.id)).revision, independent.revision);
   assert.deepEqual(await content(), {
@@ -435,8 +439,12 @@ test("выпуск: прерывание публикации восстанав
     await readFile(join(workspace.root, "entities/releases", `${release.id}.json`), "utf8"),
   );
   const recovered = new ReleasesService(await openWorkspace(root));
-  const receipt = await recovered.transition(release.id, command, "agent");
-  assert.deepEqual(await recovered.transition(release.id, command, "agent"), receipt);
+  await assert.rejects(recovered.transition(release.id, command, "agent"), {
+    code: "REVISION_CONFLICT",
+  });
+  await assert.rejects(recovered.transition(release.id, command, "agent"), {
+    code: "REVISION_CONFLICT",
+  });
   const record = await recovered.get(release.id);
   assert.equal(record.releasedAt, interrupted.data.releasedAt);
   assert.equal(record.releasedBy, "agent");
@@ -486,9 +494,9 @@ test("планы: ревизии, одна текущая принадлежно
     requestId: "include",
   };
   const saved = await plans.changeTasks(a.id, include, "agent");
-  assert.deepEqual(await plans.changeTasks(a.id, include, "agent"), saved);
+  await assert.rejects(plans.changeTasks(a.id, include, "agent"), { code: "REVISION_CONFLICT" });
   await assert.rejects(plans.changeTasks(a.id, { ...include, add: [] }, "agent"), {
-    code: "IDEMPOTENCY_CONFLICT",
+    code: "REVISION_CONFLICT",
   });
   await assert.rejects(
     plans.changeTasks(
@@ -526,12 +534,7 @@ test("планы: ревизии, одна текущая принадлежно
   const detail = await entities.get({ ref: a.id });
   assert.equal(detail.data.kind, "work-plan");
   if (detail.data.kind !== "work-plan") assert.fail();
-  assert(
-    detail.data.planningEvents.some(
-      (event) =>
-        event.action === "transfer" && event.description?.includes("Изменился ближайший результат"),
-    ),
-  );
+  assert.equal("planningEvents" in detail.data, false);
   assert.equal((await tasks.get(task.id)).column, "inbox");
   const after = await new GraphService(workspace).context({ root: task.id });
   assert(!after.edges.some((edge) => edge.from.id === task.id && edge.to.id === a.id));
@@ -669,7 +672,9 @@ test("релиз: актуальные планы и обязательства 
   assert.equal((await releases.get(release.id)).status, "released");
   assert.equal((await progress.release({ ref: release.id })).completed, false);
   assert.equal((await releases.composition(release.id)).readiness.ready, 0);
-  assert.deepEqual(await releases.transition(release.id, command, "agent"), published);
+  await assert.rejects(releases.transition(release.id, command, "agent"), {
+    code: "REVISION_CONFLICT",
+  });
   await assert.rejects(
     releases.transition(
       release.id,
@@ -710,7 +715,7 @@ test("релиз: актуальные планы и обязательства 
   assert.equal((await new GraphService(workspace).context({ root: release.id })).complete, true);
 });
 
-test("планирование: отказ до связей, восстановление WAL и повтор первоначальной квитанции", async (t) => {
+test("планирование: отказ до связей, восстановление WAL и CAS вместо квитанции", async (t) => {
   const { root, workspace, plans, tasks } = await fixture(t);
   const plan = await plans.create({ title: "План", requestId: "plan" }, "agent");
   const stage = await plans.changeStage(
@@ -758,8 +763,10 @@ test("планирование: отказ до связей, восстанов
   await assert.rejects(plans.changeTasks(plan.id, command, "agent"), /Прерывание/);
   interrupted.mock.restore();
   const recovered = new PlanningService(await openWorkspace(root));
-  const receipt = await recovered.changeTasks(plan.id, command, "agent");
-  assert.equal(receipt.revision, stage.revision + 1);
+  await assert.rejects(recovered.changeTasks(plan.id, command, "agent"), {
+    code: "REVISION_CONFLICT",
+  });
+  assert.equal((await recovered.get(plan.id)).revision, stage.revision + 1);
   assert.equal((await recovered.tasks(plan.id, stage.stageId!)).total, 1);
   const graph = await new GraphService(workspace).context({ root: task.id });
   assert.equal(
@@ -967,7 +974,7 @@ test("вложенные этапы: только явные задачи, вн�
   assert.equal(await readFile(path, "utf8"), transferBefore);
   const graphBeforeTransfer = await new GraphService(workspace).context({ root: plan.id });
   const transferred = await plans.transfer(plan.id, transfer, "agent");
-  assert.deepEqual(await plans.transfer(plan.id, transfer, "agent"), transferred);
+  await assert.rejects(plans.transfer(plan.id, transfer, "agent"), { code: "REVISION_CONFLICT" });
   assert.equal(transferred.revision, moved.revision + 1);
   assert.equal(transferred.targetRevision, transferred.revision);
   assert.deepEqual(
@@ -1150,7 +1157,7 @@ test("совпавшие локальные ID этапов разных пла�
   );
   assert.deepEqual(await Promise.all(files.map((path) => readFile(path, "utf8"))), before);
   const saved = await plans.transfer(a.id, command, "agent");
-  assert.deepEqual(await plans.transfer(a.id, command, "agent"), saved);
+  await assert.rejects(plans.transfer(a.id, command, "agent"), { code: "REVISION_CONFLICT" });
   assert.equal(saved.revision, includedA.revision + 1);
   assert.equal(saved.targetRevision, includedB.revision + 1);
   assert.deepEqual((await plans.stages(a.id)).items[0]?.taskIds, []);
@@ -1165,7 +1172,7 @@ test("совпавшие локальные ID этапов разных пла�
   );
 });
 
-test("переполнение файла целевого плана отклоняет перенос атомарно, включая связи и квитанцию", async (t) => {
+test("переполнение файла целевого плана отклоняет перенос атомарно, включая связи", async (t) => {
   const subjectBytes = (value: Record<string, unknown>) => {
     const { receipts: _receipts, comments: _comments, planningEvents: _events, ...subject } = value;
     return Buffer.byteLength(JSON.stringify(subject, null, 2) + "\n");
@@ -1260,8 +1267,8 @@ test("переполнение файла целевого плана откло
     "agent",
   );
   const retry = { ...command, targetRevision: reduced.revision };
-  const saved = await reopened.transfer(source.id, retry, "agent");
-  assert.deepEqual(await reopened.transfer(source.id, retry, "agent"), saved);
+  await reopened.transfer(source.id, retry, "agent");
+  await assert.rejects(reopened.transfer(source.id, retry, "agent"), { code: "REVISION_CONFLICT" });
   assert.equal((await reopened.memberships(task.id)).items[0]?.planId, target.id);
 });
 

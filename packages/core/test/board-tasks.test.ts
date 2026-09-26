@@ -84,8 +84,8 @@ test("привязка и создание подзадачи защищают �
     ifRevision: 1,
     requestId: "link",
   };
-  const saved = await service.link(child.id, command, "agent");
-  assert.deepEqual(await service.link(child.id, command, "agent"), saved);
+  await service.link(child.id, command, "agent");
+  await assert.rejects(service.link(child.id, command, "agent"), { code: "REVISION_CONFLICT" });
   assert.equal((await service.get(parent.id)).blocked, true);
   await assert.rejects(
     service.link(child.id, { ...command, target: other.id, requestId: "stale" }, "agent"),
@@ -339,8 +339,8 @@ test("продуктовые связи: постоянные цели, обра
     { code: "INVALID_REFERENCE" },
   );
   const command = { productLinks: [], ifRevision: 1, requestId: "clear" };
-  const saved = await service.update(created.id, command, "agent");
-  assert.deepEqual(await service.update(created.id, command, "agent"), saved);
+  await service.update(created.id, command, "agent");
+  await assert.rejects(service.update(created.id, command, "agent"), { code: "REVISION_CONFLICT" });
   assert.equal((await service.list({ productTarget: feature.id })).total, 0);
   await assert.rejects(
     service.update(
@@ -352,7 +352,7 @@ test("продуктовые связи: постоянные цели, обра
   );
 });
 
-test("legacy v1 читается без записи; storage migrate сохраняет Markdown и квитанции", async (t) => {
+test("legacy v1 читается без записи; storage migrate сохраняет Markdown без квитанций", async (t) => {
   const { workspace } = await fixture(t);
   const service = new BoardTasksService(workspace);
   const command = { board: "product", description: "## Текст\n\n  код  \n", requestId: "old" };
@@ -371,17 +371,21 @@ test("legacy v1 читается без записи; storage migrate сохра
   assert.equal(await readFile(path, "utf8"), before);
   await assert.rejects(service.create(command, "agent"), { code: "STORAGE_MIGRATION_REQUIRED" });
   await new StorageService(workspace).migrate();
-  assert.deepEqual(await service.create(command, "agent"), created);
+  assert.equal((await service.get(created.id)).revision, created.revision);
   await service.update(
     created.id,
     { title: "Новый заголовок", ifRevision: 1, requestId: "upgrade" },
     "agent",
   );
-  const stored = JSON.parse(await readFile(join(dirname(workspace.configPath), "entities/tasks", `${created.id}.json`), "utf8"));
-  assert.equal(stored.schemaVersion, 2);
+  const stored = JSON.parse(
+    await readFile(
+      join(dirname(workspace.configPath), "entities/tasks", `${created.id}.json`),
+      "utf8",
+    ),
+  );
+  assert.equal(stored.schemaVersion, 3);
   assert.equal((await service.get(created.id)).description, command.description);
-  for (const [key, receipt] of Object.entries(legacy.requests))
-    assert(stored.receipts.some((entry: { result: unknown }) => JSON.stringify(entry.result) === JSON.stringify({ key, value: receipt })));
+  assert.equal(stored.receipts, undefined);
 });
 
 test("канбан: короткие ID, конкурентные номера, Markdown и повтор после переноса", async (t) => {
@@ -409,20 +413,14 @@ test("канбан: короткие ID, конкурентные номера, 
   assert.equal(moved.id, first.id);
   assert.equal(moved.key, "INFRA-1");
   assert.equal((await service.get("PRODUCT-1")).key, "INFRA-1");
-  assert.deepEqual(await service.create(command, "agent"), first);
-  await assert.rejects(service.create({ ...command, title: "Другой" }, "agent"), {
-    code: "IDEMPOTENCY_CONFLICT",
-  });
+  assert.notEqual((await service.create(command, "agent")).id, first.id);
+  assert.notEqual((await service.create({ ...command, title: "Другой" }, "agent")).id, first.id);
   const next = await service.create(
     { board: "product", title: "Следующая", requestId: "next" },
     "agent",
   );
-  assert.equal(next.key, "PRODUCT-8");
-  const path = join(
-    dirname(workspace.configPath),
-    "entities/tasks",
-    `${first.id}.json`,
-  );
+  assert.equal(next.key, "PRODUCT-10");
+  const path = join(dirname(workspace.configPath), "entities/tasks", `${first.id}.json`);
   const stored = JSON.parse(await readFile(path, "utf8"));
   assert.deepEqual(stored.data.description, description.split("\n"));
   assert(stored.aliases.includes("PRODUCT-1"));
@@ -441,7 +439,7 @@ test("пустая задача создаётся одним запросом �
   assert.equal(created.task?.description, "");
   assert.equal(created.task?.key, "PRODUCT-1");
   assert.match(created.id, /[A-Za-z]/);
-  assert.deepEqual(await service.create(command, "human"), created);
+  assert.notEqual((await service.create(command, "human")).id, created.id);
   await service.update(
     created.id,
     { title: "", description: "", ifRevision: 1, requestId: "save-empty" },
@@ -564,12 +562,17 @@ test("прерванный перенос восстанавливается п�
     ifRevision: 1,
     requestId: "move",
   } as const;
-  failWal(t, (stage) => { if (stage === "intent") throw new Error("Имитация остановки после долговечного намерения"); });
+  failWal(t, (stage) => {
+    if (stage === "intent") throw new Error("Имитация остановки после долговечного намерения");
+  });
   await assert.rejects(service.move(task.id, command, "agent"), /долговечного намерения/);
   assert(await exists(join(dirname(workspace.configPath), "transactions/pending.json")));
   t.mock.restoreAll();
   assert.equal((await service.get(task.id)).key, "INFRA-1");
-  assert.equal((await service.move(task.id, command, "agent")).key, "INFRA-1");
+  await assert.rejects(service.move(task.id, command, "agent"), { code: "REVISION_CONFLICT" });
   assert.equal((await service.list()).total, 1);
-  assert.equal(await exists(join(dirname(workspace.configPath), "transactions/pending.json")), false);
+  assert.equal(
+    await exists(join(dirname(workspace.configPath), "transactions/pending.json")),
+    false,
+  );
 });

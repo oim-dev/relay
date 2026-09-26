@@ -16,6 +16,7 @@ import { GraphService } from "../src/application/graph/service.js";
 import { saveProjectSettings } from "../src/application/project-settings/service.js";
 import { StorageService } from "../src/application/storage/service.js";
 import { GraphRepository } from "../src/storage/graph.js";
+import { DocumentLinksRepository } from "../src/storage/document-links.js";
 import type { GraphSnapshot } from "../src/storage/graph.js";
 import { HashIndex } from "../src/storage/entity-store/hash-index.js";
 import { digest, jsonValue, stateSchema } from "../src/storage/entity-store/format.js";
@@ -24,7 +25,8 @@ async function files(root: string, prefix = ""): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
     const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) for (const [key, value] of await files(root, path)) result.set(key, value);
+    if (entry.isDirectory())
+      for (const [key, value] of await files(root, path)) result.set(key, value);
     else if (entry.isFile()) result.set(path, await readFile(join(root, path), "utf8"));
   }
   return result;
@@ -41,7 +43,9 @@ async function fixture(t: TestContext, version: "legacy" | 1 | 2) {
   if (version === "legacy") return { root, workspace: await legacyWorkspace(root) };
   await initialize(root, "tasks");
   const storage = join(root, ".relay");
-  const state = stateSchema.parse(JSON.parse(await readFile(join(storage, ".indexes/state.json"), "utf8")));
+  const state = stateSchema.parse(
+    JSON.parse(await readFile(join(storage, ".indexes/state.json"), "utf8")),
+  );
   const hashes = new Map<string, ReturnType<typeof jsonValue>>();
   for (const [path, text] of await files(join(storage, "entities"))) {
     const record = JSON.parse(text);
@@ -52,70 +56,184 @@ async function fixture(t: TestContext, version: "legacy" | 1 | 2) {
   }
   const index = new HashIndex(storage);
   state.roots["file-hashes"] = await index.update(state.roots["file-hashes"] ?? null, hashes);
-  for (const change of index.changes(Object.values(state.roots))) await put(storage, change.path, change.after);
+  for (const change of index.changes(Object.values(state.roots)))
+    await put(storage, change.path, change.after);
   await put(storage, ".indexes/state.json", state);
   await put(storage, "storage.json", { format: "relay-entities", schemaVersion: version });
   return { root, workspace: await openWorkspace(root) };
 }
 
-for (const version of ["legacy", 1, 2] as const) test(`${version}: обычная запись запрещена без новых файлов; storage migrate открывает запись`, async (t) => {
-  const { root, workspace } = await fixture(t, version);
-  const before = await files(join(root, ".relay"));
-  const tasks = new BoardTasksService(workspace);
-  const entities = new EntityEngine(workspace);
-  const graph = new GraphService(workspace);
-  const command = { board: "product", title: "Новая задача", requestId: "create" };
-  const operations = [
-    () => tasks.create(command, "agent"),
-    () => tasks.update("PRODUCT-1", { ifRevision: 1, title: "Изменение", requestId: "update" }, "agent"),
-    () => tasks.publishComment("PRODUCT-1", { title: "Сообщение", description: "Текст", actor: "agent", actorRole: "worker", requestId: "comment" }),
-    () => entities.create({ data: { kind: "feature", name: "Фича", summary: "Кратко", description: "Описание" }, requestId: "feature" }, "agent"),
-    () => new EntityDeletionService(workspace).delete({ ref: "PRODUCT-1", kind: "task", ifVersion: "0".repeat(64), requestId: "delete" }, "agent"),
-    () => graph.mutate({ ifVersion: "0".repeat(64), requestId: "graph", operations: [{ action: "add", from: "PRODUCT", to: "PROJECT", type: "references", description: "" }] }, "agent"),
-    () => saveProjectSettings(workspace, { name: "Изменённый проект", slug: "changed", ifRevision: 1 }),
-    () => graph.migrate(),
-    () => graph.reindex(),
-    () => new StorageService(workspace).reindex(),
-    () => new GraphRepository(workspace).prepareCommit({} as GraphSnapshot, [], [], "key", "hash", () => ({ ids: [], version: "", revision: 0, requestId: "x" })),
-  ];
-  for (const operation of operations) await assert.rejects(operation(), { code: "STORAGE_MIGRATION_REQUIRED" });
-  assert.deepEqual(await files(join(root, ".relay")), before);
-  assert.equal((await new StorageService(workspace).migrate()).migrated, true);
-  const saved = await tasks.create(command, "agent");
-  assert.deepEqual(await tasks.create(command, "agent"), saved);
-  const after = await files(join(root, ".relay"));
-  assert.equal(JSON.parse(after.get("storage.json")!).schemaVersion, 3);
-  assert.equal(JSON.parse(after.get(`entities/tasks/${saved.id}.json`)!).schemaVersion, 2);
-  assert(![...after.keys()].some((path) => /^(history|operations|relations\/history)\//.test(path)));
-});
+for (const version of ["legacy", 1, 2] as const)
+  test(`${version}: обычная запись запрещена без новых файлов; storage migrate открывает запись`, async (t) => {
+    const { root, workspace } = await fixture(t, version);
+    const before = await files(join(root, ".relay"));
+    const tasks = new BoardTasksService(workspace);
+    const entities = new EntityEngine(workspace);
+    const graph = new GraphService(workspace);
+    const command = { board: "product", title: "Новая задача", requestId: "create" };
+    const operations = [
+      () => tasks.create(command, "agent"),
+      () =>
+        tasks.update(
+          "PRODUCT-1",
+          { ifRevision: 1, title: "Изменение", requestId: "update" },
+          "agent",
+        ),
+      () =>
+        tasks.publishComment("PRODUCT-1", {
+          title: "Сообщение",
+          description: "Текст",
+          actor: "agent",
+          actorRole: "worker",
+          requestId: "comment",
+        }),
+      () =>
+        entities.create(
+          {
+            data: { kind: "feature", name: "Фича", summary: "Кратко", description: "Описание" },
+            requestId: "feature",
+          },
+          "agent",
+        ),
+      () =>
+        new EntityDeletionService(workspace).delete(
+          { ref: "PRODUCT-1", kind: "task", ifVersion: "0".repeat(64), requestId: "delete" },
+          "agent",
+        ),
+      () =>
+        graph.mutate(
+          {
+            ifVersion: "0".repeat(64),
+            requestId: "graph",
+            operations: [
+              {
+                action: "add",
+                from: "PRODUCT",
+                to: "PROJECT",
+                type: "references",
+                description: "",
+              },
+            ],
+          },
+          "agent",
+        ),
+      () =>
+        saveProjectSettings(workspace, {
+          name: "Изменённый проект",
+          slug: "changed",
+          ifRevision: 1,
+        }),
+      () => graph.migrate(),
+      () => graph.reindex(),
+      () => new StorageService(workspace).reindex(),
+      () =>
+        new GraphRepository(workspace).prepareCommit(
+          {} as GraphSnapshot,
+          [],
+          [],
+          "key",
+          "hash",
+          () => ({ ids: [], version: "", revision: 0, requestId: "x" }),
+        ),
+    ];
+    for (const operation of operations)
+      await assert.rejects(operation(), { code: "STORAGE_MIGRATION_REQUIRED" });
+    assert.deepEqual(await files(join(root, ".relay")), before);
+    assert.equal((await new StorageService(workspace).migrate()).migrated, true);
+    const saved = await tasks.create(command, "agent");
+    assert.notEqual((await tasks.create(command, "agent")).id, saved.id);
+    const after = await files(join(root, ".relay"));
+    assert.equal(JSON.parse(after.get("storage.json")!).schemaVersion, 4);
+    assert.equal(JSON.parse(after.get(`entities/tasks/${saved.id}.json`)!).schemaVersion, 3);
+    assert(
+      ![...after.keys()].some((path) => /^(history|operations|relations\/history)\//.test(path)),
+    );
+  });
 
-test("миграция завершает прежнее намерение прикрепления без генерации legacy audit", async (t) => {
-  const { root, workspace } = await fixture(t, "legacy");
-  const task = await seedLegacyTask(workspace);
-  const at = "2026-09-26T00:00:00.000Z";
-  const from = { kind: "task", id: task.id };
-  const to = { kind: "document", id: "LegacyD1" };
-  const record = productRecordSchema.parse({
-    version: 1, productId: "Legacy01", id: to.id, key: "DOC-1", revision: 1,
-    fields: { kind: "document", name: "Документ", summary: "Контекст", body: "Текст", documentKind: "proposal", links: [], relations: [{ type: "references", target: from, description: "Прочитать" }] },
-    createdAt: at, updatedAt: at, createdBy: "agent", updatedBy: "agent", events: [], requests: {},
+for (const crash of [0, 1, 2])
+  test(`миграция завершает прежнее прикрепление без квитанции; сбой контрольной точки ${crash}`, async (t) => {
+    const { root, workspace } = await fixture(t, "legacy");
+    const task = await seedLegacyTask(workspace);
+    const at = "2026-09-26T00:00:00.000Z";
+    const from = { kind: "task", id: task.id };
+    const to = { kind: "document", id: "LegacyD1" };
+    const record = productRecordSchema.parse({
+      version: 1,
+      productId: "Legacy01",
+      id: to.id,
+      key: "DOC-1",
+      revision: 1,
+      fields: {
+        kind: "document",
+        name: "Документ",
+        summary: "Контекст",
+        body: "Текст",
+        documentKind: "proposal",
+        links: [],
+        relations: [{ type: "references", target: from, description: "Прочитать" }],
+      },
+      createdAt: at,
+      updatedAt: at,
+      createdBy: "agent",
+      updatedBy: "agent",
+      events: [],
+      requests: {},
+    });
+    await put(join(root, ".relay"), "product/.transactions/document-links.json", {
+      version: 1,
+      documentId: to.id,
+      actor: "agent",
+      requestKey: "pending",
+      bindingHash: null,
+      files: [{ path: `documents/${to.id}.json`, before: null, after: encodeProduct(record) }],
+      bindings: {},
+      steps: [
+        {
+          key: graphDigest([from, "references", to]),
+          operation: { action: "add", type: "references", from, to, description: "Прочитать" },
+        },
+      ],
+      cursor: 0,
+      command: null,
+    });
+    const pending = await files(join(root, ".relay"));
+    // Новая команда не запускает старый writer даже при наличии прежнего намерения.
+    await assert.rejects(
+      new BoardTasksService(workspace).create({ board: "product", requestId: "blocked" }, "agent"),
+      { code: "STORAGE_MIGRATION_REQUIRED" },
+    );
+    assert.deepEqual(await files(join(root, ".relay")), pending);
+    // Завершается только уже записанное намерение, без генерации аудита.
+    if (crash) {
+      const write = DocumentLinksRepository.prototype.writePending;
+      let checkpoints = 0;
+      t.mock.method(
+        DocumentLinksRepository.prototype,
+        "writePending",
+        async function (this: DocumentLinksRepository, ...args: Parameters<typeof write>) {
+          if (args[0].cursor > 0 && ++checkpoints === crash)
+            throw new Error("Сбой контрольной точки");
+          return write.apply(this, args);
+        },
+      );
+      await assert.rejects(
+        workspace.locked(async () => {}),
+        /Сбой контрольной точки/,
+      );
+      t.mock.restoreAll();
+    }
+    await workspace.locked(async () => {});
+    const recovered = await files(join(root, ".relay"));
+    assert(
+      ![...recovered.keys()].some((path) =>
+        /^(history|operations|relations\/(history|requests))\//.test(path),
+      ),
+    );
+    assert(!recovered.has("product/.transactions/document-links.json"));
+    await new StorageService(workspace).migrate();
+    const context = await new GraphService(workspace).context({ root: task.id });
+    assert.equal(
+      context.edges.filter((edge) => edge.type === "references" && edge.to.id === to.id).length,
+      1,
+    );
   });
-  await put(join(root, ".relay"), "product/.transactions/document-links.json", {
-    version: 1, documentId: to.id, actor: "agent", requestKey: "pending", bindingHash: null,
-    files: [{ path: `documents/${to.id}.json`, before: null, after: encodeProduct(record) }], bindings: {},
-    steps: [{ key: graphDigest([from, "references", to]), operation: { action: "add", type: "references", from, to, description: "Прочитать" } }],
-    cursor: 0, command: null,
-  });
-  const pending = await files(join(root, ".relay"));
-  // Новая команда не запускает старый writer даже при наличии прежнего намерения.
-  await assert.rejects(new BoardTasksService(workspace).create({ board: "product", requestId: "blocked" }, "agent"), { code: "STORAGE_MIGRATION_REQUIRED" });
-  assert.deepEqual(await files(join(root, ".relay")), pending);
-  // Завершается только уже записанное намерение, без генерации аудита.
-  await workspace.locked(async () => {});
-  const recovered = await files(join(root, ".relay"));
-  assert(![...recovered.keys()].some((path) => /^(history|operations|relations\/history)\//.test(path)));
-  assert(!recovered.has("product/.transactions/document-links.json"));
-  await new StorageService(workspace).migrate();
-  const context = await new GraphService(workspace).context({ root: task.id });
-  assert.equal(context.edges.filter((edge) => edge.type === "references" && edge.to.id === to.id).length, 1);
-});

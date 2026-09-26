@@ -283,15 +283,19 @@ export class GraphService {
     return this.workspace.mutate("graph", command, actor, async (assertOwned) => {
       const key = graphDigest([actor, command.requestId]);
       const requestHash = graphDigest({ ...command, actor });
-      const previous = await this.repository.receipt(key);
-      if (previous) {
-        invariant(
-          previous.hash === requestHash,
-          "IDEMPOTENCY_CONFLICT",
-          "Ключ повтора уже использован для другого пакета",
-          4,
-        );
-        return previous.result;
+      // Только завершение уже начатого legacy workflow может прочитать старую квитанцию.
+      // Новая запись её не создаёт; явная миграция затем удаляет прежний источник.
+      if (this.workspace.recoveringDocumentLinks && !this.workspace.storageSession) {
+        const receipt = await this.repository.receipt(key);
+        if (receipt) {
+          invariant(
+            receipt.hash === requestHash,
+            "DOCUMENT_LINK_RECOVERY_CONFLICT",
+            "Прежняя квитанция не соответствует незавершённому прикреплению",
+            5,
+          );
+          return receipt.result;
+        }
       }
       const { catalog, catalogHash, store, version, addresses, references } =
         await this.snapshot(assertOwned);

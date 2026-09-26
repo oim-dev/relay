@@ -69,7 +69,7 @@ export function registerTaskActivity(parent: Command, runtime: Runtime): void {
       description: "Опубликовать сообщение от своего имени",
       arguments: { reference: "ID или ключ задачи" },
       details:
-        "Имя задаётся глобальным --actor. Не требует ревизии задачи. После потери ответа повторите неизменённый запрос с тем же --request-id.",
+        "Имя задаётся глобальным --actor. Не требует ревизии задачи. После потери ответа прочитайте обсуждение. Повторная публикация, в том числе с тем же request-id, может создать новое сообщение; результат для повтора не сохраняется.",
       examples: [
         [
           'relay-cli --actor worker-api task comment publish PRODUCT-1 --role worker --title "Проверка" --description "## Результат\nПроверено." --request-id report-1',
@@ -81,7 +81,10 @@ export function registerTaskActivity(parent: Command, runtime: Runtime): void {
           .requiredOption("--title <text>", "Обязательный однострочный заголовок")
           .requiredOption("--description <markdown>", "Полное сообщение в Markdown")
           .requiredOption("--role <role>", "Роль: operator, orchestrator или worker")
-          .option("--request-id <id>", "Ключ безопасного повтора; по умолчанию UUID"),
+          .option(
+            "--request-id <id>",
+            "Идентификатор корреляции, не дедупликации; по умолчанию UUID",
+          ),
       run: async (context, input) => {
         const { role, ...options } = input.options;
         const command = parse(

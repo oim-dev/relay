@@ -29,7 +29,7 @@ test("HTTP графа: новые связи, контекст, CAS, повто�
   };
   const saved = await app.inject({ method: "POST", url, payload });
   assert.equal(saved.statusCode, 200, saved.body);
-  assert.deepEqual((await app.inject({ method: "POST", url, payload })).json(), saved.json());
+  assert.equal((await app.inject({ method: "POST", url, payload })).statusCode, 409);
   assert.equal(
     (await app.inject({ method: "POST", url, payload: { ...payload, requestId: "stale" } }))
       .statusCode,

@@ -53,12 +53,22 @@ export async function readOwned(session: StorageSession, owner: EntityRef, verif
   const base = address(session, owner);
   const raw = await session.readFile(`${base}.json`);
   if (raw === null) {
-    invariant(!verifyIndex || await session.indexGet("file-hashes", `${base}.json`) === undefined,
-      "STORAGE_INDEX_CORRUPT", "Потерян постоянный файл отношений", 5, { path: `${base}.json` });
+    invariant(
+      !verifyIndex || (await session.indexGet("file-hashes", `${base}.json`)) === undefined,
+      "STORAGE_INDEX_CORRUPT",
+      "Потерян постоянный файл отношений",
+      5,
+      { path: `${base}.json` },
+    );
     return { entries: [] as Entry[], files: [] as string[] };
   }
-  if (verifyIndex) invariant(await session.indexGet("file-hashes", `${base}.json`) === digest(raw),
-    "STORAGE_INDEX_STALE", "Файл отношений изменён вне Core. Выполните storage reindex", 4);
+  if (verifyIndex)
+    invariant(
+      (await session.indexGet("file-hashes", `${base}.json`)) === digest(raw),
+      "STORAGE_INDEX_STALE",
+      "Файл отношений изменён вне Core. Выполните storage reindex",
+      4,
+    );
   const record = ownerSchema.parse(raw);
   invariant(
     entityAddress(record.owner) === entityAddress(owner),
@@ -73,8 +83,13 @@ export async function readOwned(session: StorageSession, owner: EntityRef, verif
     for (const [prefix, hash] of Object.entries(record.segments)) {
       const path = `${base}/${prefix}.json`;
       const rawShard = await session.readFile(path);
-      if (verifyIndex) invariant(rawShard !== null && await session.indexGet("file-hashes", path) === digest(rawShard),
-        "STORAGE_INDEX_STALE", "Сегмент отношений изменён вне Core. Выполните storage reindex", 4);
+      if (verifyIndex)
+        invariant(
+          rawShard !== null && (await session.indexGet("file-hashes", path)) === digest(rawShard),
+          "STORAGE_INDEX_STALE",
+          "Сегмент отношений изменён вне Core. Выполните storage reindex",
+          4,
+        );
       const shard = shardSchema.parse(rawShard);
       invariant(
         digest(json(shard)) === hash &&
@@ -97,32 +112,68 @@ export async function readOwned(session: StorageSession, owner: EntityRef, verif
 }
 
 /** Адресное чтение открывает только манифест и нужный сегмент, проверяя производный отпечаток. */
-export async function readOwnedEntry(session: StorageSession, owner: EntityRef, id: string): Promise<Entry> {
+export async function readOwnedEntry(
+  session: StorageSession,
+  owner: EntityRef,
+  id: string,
+): Promise<Entry> {
   const base = address(session, owner);
   const read = async (path: string) => {
     const value = await session.readFile(path);
     invariant(value, "STORAGE_INDEX_CORRUPT", "Потерян постоянный файл отношения", 5, { path });
-    invariant(await session.indexGet("file-hashes", path) === digest(value),
-      "STORAGE_INDEX_STALE", "Файл отношений изменён вне Core. Выполните storage reindex", 4, { path });
+    invariant(
+      (await session.indexGet("file-hashes", path)) === digest(value),
+      "STORAGE_INDEX_STALE",
+      "Файл отношений изменён вне Core. Выполните storage reindex",
+      4,
+      { path },
+    );
     return value;
   };
   const record = ownerSchema.parse(await read(`${base}.json`));
-  invariant(entityAddress(record.owner) === entityAddress(owner), "INVALID_DATA", "Неверный владелец отношений", 5);
+  invariant(
+    entityAddress(record.owner) === entityAddress(owner),
+    "INVALID_DATA",
+    "Неверный владелец отношений",
+    5,
+  );
   let entries: Entry[];
   if (record.storage === "inline") entries = record.entries;
   else {
-    const prefixes = Object.keys(record.segments).filter((prefix) => keyHash(id).startsWith(prefix));
-    invariant(prefixes.length === 1, "STORAGE_INDEX_CORRUPT", "Потерян или неоднозначен сегмент отношения", 5);
+    const prefixes = Object.keys(record.segments).filter((prefix) =>
+      keyHash(id).startsWith(prefix),
+    );
+    invariant(
+      prefixes.length === 1,
+      "STORAGE_INDEX_CORRUPT",
+      "Потерян или неоднозначен сегмент отношения",
+      5,
+    );
     const prefix = prefixes[0]!;
     const raw = await read(`${base}/${prefix}.json`);
-    invariant(digest(raw) === record.segments[prefix], "INVALID_DATA", "Повреждён сегмент отношений", 5);
+    invariant(
+      digest(raw) === record.segments[prefix],
+      "INVALID_DATA",
+      "Повреждён сегмент отношений",
+      5,
+    );
     const shard = shardSchema.parse(raw);
-    invariant(entityAddress(shard.owner) === entityAddress(owner) && shard.entries.every((entry) => keyHash(entry.edge.id).startsWith(prefix)),
-      "INVALID_DATA", "Сегмент принадлежит другому владельцу или диапазону", 5);
+    invariant(
+      entityAddress(shard.owner) === entityAddress(owner) &&
+        shard.entries.every((entry) => keyHash(entry.edge.id).startsWith(prefix)),
+      "INVALID_DATA",
+      "Сегмент принадлежит другому владельцу или диапазону",
+      5,
+    );
     entries = shard.entries;
   }
   const selected = entries.filter((entry) => entry.edge.id === id);
-  invariant(selected.length === 1, "STORAGE_INDEX_CORRUPT", "Индекс указывает на потерянное или повторное отношение", 5);
+  invariant(
+    selected.length === 1,
+    "STORAGE_INDEX_CORRUPT",
+    "Индекс указывает на потерянное или повторное отношение",
+    5,
+  );
   return selected[0]!;
 }
 
@@ -364,7 +415,6 @@ export async function writeOwnedRelations(
   }
   await saveOwned(session, owner, [...entries.values()], previous.files);
 }
-
 
 /** Перестроение читает сохранённые наборы; продуктовые поля не являются источником рёбер. */
 export async function rebuildOwnedRelations(session: StorageSession) {

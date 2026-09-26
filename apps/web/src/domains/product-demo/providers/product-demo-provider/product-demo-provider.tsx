@@ -24,7 +24,7 @@ const APPLICATION_TYPES = {
  *
  * Используется для:
  *  - проекции общих серверных данных и реальных связей
- *  - сохранения редакторов с исходной версией и безопасным повтором
+ *  - сохранения редакторов с исходной версией без автоматического повтора
  */
 export const ProductDemoProvider = (props: ProductDemoProviderProps) => {
   const { scopeId, children } = props;

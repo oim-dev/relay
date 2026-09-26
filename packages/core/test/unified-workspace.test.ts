@@ -65,7 +65,7 @@ test("потеря заголовка индексов не закрывает �
   assert.equal((await new GraphService(reopened).context({ root: task.key })).complete, true);
 });
 
-test("первоначальные квитанции предметных операций доступны после удаления сущности", async (t) => {
+test("после удаления создание исполняется заново, изменение удалённой сущности отклоняется", async (t) => {
   const { workspace } = await fixture(t);
   await new StorageService(workspace).migrate();
   const engine = new EntityEngine(workspace);
@@ -80,39 +80,54 @@ test("первоначальные квитанции предметных оп�
     ifRevision: 1,
     changes: { kind: "task" as const, title: "Изменённая" },
   };
-  const saved = await engine.update(change, "agent");
+  await engine.update(change, "agent");
   const direct = { requestId: "direct", ifRevision: 2, description: "Описание\n" };
-  const directSaved = await new BoardTasksService(workspace).update(task.ref.id, direct, "agent");
+  await new BoardTasksService(workspace).update(task.ref.id, direct, "agent");
   const deletion = new EntityDeletionService(workspace);
   const preview = await deletion.preview({ ref: task.key, kind: "task" });
   await deletion.delete(
     { ref: task.key, kind: "task", ifVersion: preview.version, requestId: "delete" },
     "agent",
   );
-  assert.deepEqual(await engine.create(input, "agent"), task);
-  assert.deepEqual(await engine.update(change, "agent"), saved);
-  assert.deepEqual(
-    await new BoardTasksService(workspace).update(task.key, direct, "agent"),
-    directSaved,
-  );
+  assert.notEqual((await engine.create(input, "agent")).ref.id, task.ref.id);
+  await assert.rejects(engine.update(change, "agent"), { code: "ENTITY_NOT_FOUND" });
+  await assert.rejects(new BoardTasksService(workspace).update(task.key, direct, "agent"));
 });
 
-test("legacy: квитанция удаления без сохранившейся сущности повторяется после миграции и reindex", async (t) => {
+test("legacy: миграция удаляет квитанцию удаления, но сохраняет резерв адреса", async (t) => {
   const { workspace } = await legacyFixture(t);
-  const command = { ref: "PRODUCT-1", kind: "task" as const, ifVersion: "0".repeat(64), requestId: "delete" };
-  const saved = { action: "delete", ref: { kind: "task", id: "Deleted1" }, requestId: "delete", deleted: 1, detached: 0, relations: 0 };
+  const command = {
+    ref: "PRODUCT-1",
+    kind: "task" as const,
+    ifVersion: "0".repeat(64),
+    requestId: "delete",
+  };
+  const saved = {
+    action: "delete",
+    ref: { kind: "task", id: "Deleted1" },
+    requestId: "delete",
+    deleted: 1,
+    detached: 0,
+    relations: 0,
+  };
   const directory = join(dirname(workspace.configPath), "entity-deletions/receipts");
   await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, `${entityDigest(["agent", command.requestId])}.json`), JSON.stringify({
-    hash: entityDigest({ ...deleteEntitySchema.parse(command), actor: "agent" }), result: saved,
-  }));
+  await writeFile(
+    join(directory, `${entityDigest(["agent", command.requestId])}.json`),
+    JSON.stringify({
+      hash: entityDigest({ ...deleteEntitySchema.parse(command), actor: "agent" }),
+      result: saved,
+    }),
+  );
   await writeFile(join(directory, "../keys.json"), JSON.stringify([command.ref]));
   const deletion = new EntityDeletionService(workspace);
   await new StorageService(workspace).migrate();
-  assert.deepEqual(await deletion.delete(command, "agent"), saved);
+  await assert.rejects(deletion.delete(command, "agent"), { code: "ENTITY_NOT_FOUND" });
   await new StorageService(workspace).reindex();
-  assert.deepEqual(await deletion.delete(command, "agent"), saved);
-  await assert.rejects(deletion.delete({ ...command, ref: "OTHER" }, "agent"), { code: "IDEMPOTENCY_CONFLICT" });
+  await assert.rejects(deletion.delete(command, "agent"), { code: "ENTITY_NOT_FOUND" });
+  await assert.rejects(deletion.delete({ ...command, ref: "OTHER" }, "agent"), {
+    code: "ENTITY_NOT_FOUND",
+  });
 });
 
 test("единая база: явный перенос сохраняет продукт, задачи, прикрепления, обсуждения и повтор", async (t) => {
@@ -219,7 +234,8 @@ test("единая база: явный перенос сохраняет про
   );
   const previous = await engine.get({ ref: document.key });
   const oldEdge = (await new GraphService(workspace).read({ root: document.key })).edges.find(
-    (edge) => edge.type === "references" && edge.from.id === task.ref.id && edge.to.id === document.ref.id,
+    (edge) =>
+      edge.type === "references" && edge.from.id === task.ref.id && edge.to.id === document.ref.id,
   );
   assert(oldEdge, "В исходной фикстуре должно существовать прикрепление документа");
   const oldHistory = await taskService.listComments(task.ref.id);
@@ -231,14 +247,9 @@ test("единая база: явный перенос сохраняет про
   const reopened = await openWorkspace(root);
   const current = new EntityEngine(reopened);
   assert.deepEqual(await current.get({ ref: document.key }), previous);
-  assert.deepEqual(await current.create(command, "agent"), task);
-  assert.deepEqual(
-    await new BoardTasksService(reopened).publishComment(task.ref.id, commentInput),
-    comment,
-  );
+  assert.equal((await current.get({ ref: task.key })).ref.id, task.ref.id);
   assert.equal(
-    (await new BoardTasksService(reopened).getComment(task.ref.id, comment.commentId))
-      .description,
+    (await new BoardTasksService(reopened).getComment(task.ref.id, comment.commentId)).description,
     commentInput.description,
   );
   assert.deepEqual(await new BoardTasksService(reopened).listComments(task.ref.id), oldHistory);
@@ -276,8 +287,8 @@ test("единая база: явный перенос сохраняет про
     requestId: "edit-feature",
     changes: { kind: "feature" as const, name: "Новый заголовок" },
   };
-  const changed = await current.update(featureUpdate, "agent");
-  assert.deepEqual(await current.update(featureUpdate, "agent"), changed);
+  await current.update(featureUpdate, "agent");
+  await assert.rejects(current.update(featureUpdate, "agent"), { code: "REVISION_CONFLICT" });
   assert.equal(
     (await new ProductQueries(reopened).state()).records.find(
       (entry) => entry.id === feature.ref.id,
@@ -460,13 +471,13 @@ for (const kind of [
       ifVersion: (await graph.context({ root: task.key })).version,
       operations: [{ action: "add" as const, type: "related", from: external.ref, to: task.ref }],
     };
-    const diagnosticSaved = await graph.mutate(diagnostic, "agent");
-    assert.deepEqual(await graph.mutate(diagnostic, "agent"), diagnosticSaved);
+    await graph.mutate(diagnostic, "agent");
+    await assert.rejects(graph.mutate(diagnostic, "agent"), { code: "GRAPH_CHANGED" });
     const deletion = new EntityDeletionService(workspace);
     const preview = await deletion.preview({ ref: target.key, kind });
     const command = { ref: target.key, kind, ifVersion: preview.version, requestId: "delete" };
-    const result = await deletion.delete(command, "agent");
-    assert.deepEqual(await deletion.delete(command, "agent"), result);
+    await deletion.delete(command, "agent");
+    await assert.rejects(deletion.delete(command, "agent"), { code: "ENTITY_NOT_FOUND" });
     const deleted = new Set(preview.deleted.map((entry) => `${entry.ref.kind}:${entry.ref.id}`));
     const current = await graph.read({ limit: 100 });
     assert.ok(

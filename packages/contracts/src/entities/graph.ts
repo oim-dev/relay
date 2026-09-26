@@ -136,7 +136,7 @@ export const graphMutationSchema = z.strictObject({
     .min(1)
     .max(128)
     .describe("Версия прочитанного графа; конфликт не теряет изменения"),
-  requestId: requestIdSchema.describe("Ключ безопасного повтора всего пакета"),
+  requestId: requestIdSchema,
   actor: actorSchema.optional().describe("Автор изменения"),
 });
 export const graphSavedSchema = z.strictObject({
@@ -145,7 +145,9 @@ export const graphSavedSchema = z.strictObject({
     .describe("ID созданных, изменённых и отозванных отношений в порядке операций"),
   revision: z.number().int().positive().describe("Ревизия хранилища отношений после пакета"),
   version: z.string().describe("Версия графа после записи"),
-  requestId: z.string().describe("Ключ повтора; повтор возвращает первоначальную квитанцию"),
+  requestId: z
+    .string()
+    .describe("Идентификатор корреляции исходного запроса; результат не сохраняется для повтора"),
 });
 export type EntityRef = z.infer<typeof entityRefSchema>;
 export type GraphNode = z.infer<typeof graphNodeSchema>;

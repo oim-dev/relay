@@ -170,7 +170,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
     ? `Загружено ${items.length} из ${query.data?.[0]?.total ?? 0} подзадач`
     : `${items.filter((entry) => entry.column === "done").length} из ${items.length} готово${cancelledLabel}`;
   /**
-   * Сохраняет родительство с ревизией ребёнка и устойчивым ключом повтора.
+   * Сохраняет родительство с ревизией ребёнка и корреляцией запроса.
    */
   const handleWrite = async (child: TaskSummary, remove = false): Promise<boolean> => {
     setError("");

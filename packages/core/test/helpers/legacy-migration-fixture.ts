@@ -18,8 +18,14 @@ import { z } from "zod";
 /** Явные старые JSON-данные для теста миграции. Это не production writer и не обратная миграция продукта. */
 export async function writeLegacyMigrationFixture(workspace: Workspace) {
   const root = dirname(workspace.configPath);
-  assert(root.startsWith(`${await realpath(tmpdir())}${sep}`), "Фикстура допустима только во временном каталоге");
-  assert(basename(dirname(root)).startsWith("tasks-core-"), "Ожидается собственный каталог helpers/workspace.fixture, не пользовательская копия базы");
+  assert(
+    root.startsWith(`${await realpath(tmpdir())}${sep}`),
+    "Фикстура допустима только во временном каталоге",
+  );
+  assert(
+    basename(dirname(root)).startsWith("tasks-core-"),
+    "Ожидается собственный каталог helpers/workspace.fixture, не пользовательская копия базы",
+  );
   const files = await workspace.locked(async (owned) => {
     const tx = workspace.storageSession!;
     assert(tx);
@@ -28,25 +34,47 @@ export async function writeLegacyMigrationFixture(workspace: Workspace) {
     const products = new ProductRepository(workspace);
     const source = await products.snapshot(owned, false);
     for (const record of source.records) {
-      const stored = record.fields.kind === "scope"
-        ? { ...record, version: 3, storage: "references", fields: {
-          kind: "scope", applicationId: record.fields.applicationId,
-          contracts: record.fields.contracts.map((entry) => ({ id: entry.id, directory: entry.scenarioId === null ? "features" : "scenarios" })),
-        } } : encodeProduct(record);
+      const stored =
+        record.fields.kind === "scope"
+          ? {
+              ...record,
+              version: 3,
+              storage: "references",
+              fields: {
+                kind: "scope",
+                applicationId: record.fields.applicationId,
+                contracts: record.fields.contracts.map((entry) => ({
+                  id: entry.id,
+                  directory: entry.scenarioId === null ? "features" : "scenarios",
+                })),
+              },
+            }
+          : encodeProduct(record);
       output.set(`product/${products.path(record)}`, stored);
     }
     for (const record of source.implementations.values())
-      output.set(`product/${products.implementationPath(record.fields.applicationId, { id: record.id, scenarioId: record.fields.scenarioId })}`, encodeImplementation(record));
+      output.set(
+        `product/${products.implementationPath(record.fields.applicationId, { id: record.id, scenarioId: record.fields.scenarioId })}`,
+        encodeImplementation(record),
+      );
     const boards = await new BoardRepository(workspace).all();
     for (const board of boards) output.set(`boards/${board.slug}/board.json`, board);
     const tasks = await new BoardTaskRepository(workspace).all();
-    const prepared = new BoardTaskRepository(workspace).prepare(tasks.map((task) => ({
-      slug: boards.find((board) => board.id === task.boardId)!.slug, task,
-    })), []);
-    for (const { slug, task } of prepared.writes) output.set(`boards/${slug}/tasks/${task.id}.json`, task);
+    const prepared = new BoardTaskRepository(workspace).prepare(
+      tasks.map((task) => ({
+        slug: boards.find((board) => board.id === task.boardId)!.slug,
+        task,
+      })),
+      [],
+    );
+    for (const { slug, task } of prepared.writes)
+      output.set(`boards/${slug}/tasks/${task.id}.json`, task);
     for (const task of tasks) {
       const record = await tx.get({ kind: "task", id: task.id });
-      output.set(`task-activity/${task.id}/meta.json`, { version: 1, sequence: record.commentSequence ?? 0 });
+      output.set(`task-activity/${task.id}/meta.json`, {
+        version: 1,
+        sequence: record.commentSequence ?? 0,
+      });
       for (const comment of record.comments ?? []) {
         output.set(`task-activity/${task.id}/events/${comment.id}.json`, comment);
         const { description: _description, changes: _changes, ...summary } = comment;
@@ -55,15 +83,13 @@ export async function writeLegacyMigrationFixture(workspace: Workspace) {
     }
     const graphRequests: Record<string, unknown> = {};
     for (const [, value] of await tx.indexEntries("records")) {
-      const { ref, deleted } = z.object({ ref: entityRefSchema, deleted: z.boolean() }).parse(value);
-      assert(!deleted && ref.kind !== "work-plan" && ref.kind !== "release", "Этот набор фикстур описывает только живой продукт и задачи");
-      const record = await tx.get(ref);
-      for (const receipt of record.receipts ?? []) {
-        if (receipt.namespace !== "legacy:task-comment-receipt" && receipt.namespace !== "legacy:graph-receipt") continue;
-        const { key, value } = z.object({ key: z.string(), value: z.json() }).parse(receipt.result);
-        if (receipt.namespace === "legacy:graph-receipt") graphRequests[key] = value;
-        else output.set(`task-activity/receipts/${key}.json`, value);
-      }
+      const { ref, deleted } = z
+        .object({ ref: entityRefSchema, deleted: z.boolean() })
+        .parse(value);
+      assert(
+        !deleted && ref.kind !== "work-plan" && ref.kind !== "release",
+        "Этот набор фикстур описывает только живой продукт и задачи",
+      );
     }
     const owners = new Map<string, z.infer<typeof entityRefSchema>>();
     for (const [, value] of await tx.indexEntries("edges")) {
@@ -79,13 +105,24 @@ export async function writeLegacyMigrationFixture(workspace: Workspace) {
         assert(entry.edge.active, "Для отозванных рёбер нужна отдельная замороженная фикстура");
         const edge = publicRelation(entry);
         edges.push({ ...edge, description: edge.description.split("\n") });
-        if (entry.slot === "document-links") bindings[graphDigest([edge.from, edge.type, edge.to])] = {
-          id: edge.id, from: edge.from, to: edge.to, type: edge.type,
-        };
+        if (entry.slot === "document-links")
+          bindings[graphDigest([edge.from, edge.type, edge.to])] = {
+            id: edge.id,
+            from: edge.from,
+            to: edge.to,
+            type: edge.type,
+          };
       }
-      if (Object.keys(bindings).length) output.set(`product/.document-links/${owner.id}.json`, { version: 1, bindings });
+      if (Object.keys(bindings).length)
+        output.set(`product/.document-links/${owner.id}.json`, { version: 1, bindings });
     }
-    output.set("relations.json", { schemaVersion: 1, revision: edges.length, edges, events: [], requests: graphRequests });
+    output.set("relations.json", {
+      schemaVersion: 1,
+      revision: edges.length,
+      edges,
+      events: [],
+      requests: graphRequests,
+    });
     return output;
   });
   for (const name of ["entities", "relations", "keyspaces", ".indexes", "storage.json"])

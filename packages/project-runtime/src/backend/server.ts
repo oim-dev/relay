@@ -18,19 +18,21 @@ export function createServerApi(url: string) {
       baseUrl: origin,
       timeout: 15000,
       redirect: "error",
-      onError(error) {
+      onError(error, context) {
+        const write = !["GET", "HEAD"].includes(context.request.method ?? "GET");
+        const uncertain = ". Запись могла завершиться. Перечитайте реестр перед новой отправкой";
         if (error instanceof ApiError) {
           const parsed = failure.safeParse(error.error);
           if (parsed.success)
             throw new AppError(
               parsed.data.error.code,
-              parsed.data.error.message,
+              parsed.data.error.message + (write && error.status >= 500 ? uncertain : ""),
               parsed.data.error.exitCode ?? 5,
             );
         }
         throw new AppError(
           "SERVER_UNAVAILABLE",
-          "Relay Server недоступен. Проверьте адрес и запуск сервера",
+          "Relay Server недоступен. Проверьте адрес и запуск сервера" + (write ? uncertain : ""),
           5,
         );
       },

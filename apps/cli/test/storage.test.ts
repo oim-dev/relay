@@ -6,12 +6,12 @@ import { join } from "node:path";
 import { defaultConfig } from "@relay/core/domain/config";
 import { boardTaskRecordSchema } from "@relay/core/domain/board-task";
 import type { FullContext } from "@relay/core/domain/entity-graph";
-import { failed, invoke, invokeRaw, successful } from "./helpers/cli.js";
+import { failed, fixture, invoke, invokeRaw, successful } from "./helpers/cli.js";
 
 test("CLI хранилища: явный перенос, читаемый повтор и восстановление потерянных индексов", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-storage-cli-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  // Прежний формат задаётся файлами: актуальный Core создаёт только v3 и запрещает legacy-записи.
+  // Прежний формат задаётся файлами: актуальный Core запрещает legacy-записи.
   const at = "2026-09-26T00:00:00.000Z";
   await mkdir(join(root, ".relay/boards/product/tasks"), { recursive: true });
   await writeFile(
@@ -84,9 +84,10 @@ test("CLI хранилища: явный перенос, читаемый пов
   assert.equal(migrated.data.migrated, true);
   const path = join(root, ".relay/entities/tasks", `${task.id}.json`);
   assert.equal(JSON.parse(await readFile(path, "utf8")).data.title, "Сохранить данные");
+  const fresh = await fixture(t);
   assert.equal(
     JSON.parse(await readFile(join(root, ".relay/storage.json"), "utf8")).schemaVersion,
-    3,
+    JSON.parse(await readFile(join(fresh.root, ".relay/storage.json"), "utf8")).schemaVersion,
   );
   const restored = successful(
     await invoke<{ description: string }>(root, ["task", "get", task.id]),

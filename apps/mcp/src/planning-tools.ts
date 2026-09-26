@@ -70,7 +70,7 @@ const actionLabels: Record<string, string> = {
 };
 const saved = (data: PlanningSaved): Result => ({
   data,
-  text: `${data.key}: ${actionLabels[data.action] ?? data.action}. ID: ${data.id}. Ревизия: ${data.revision}. Ключ повтора: ${data.requestId}.${data.stageId ? ` Этап: ${data.stageId}.` : ""}${data.targetRevision ? ` Ревизия целевого плана: ${data.targetRevision}.` : ""}`,
+  text: `${data.key}: ${actionLabels[data.action] ?? data.action}. ID: ${data.id}. Ревизия: ${data.revision}. requestId: ${data.requestId}.${data.stageId ? ` Этап: ${data.stageId}.` : ""}${data.targetRevision ? ` Ревизия целевого плана: ${data.targetRevision}.` : ""}`,
 });
 
 /** Инструменты сохраняют одинаковые последствия с Web, REST и local CLI. */
@@ -140,7 +140,7 @@ export const planningTools: PlanningTool[] = [
   },
   {
     name: "task_plan_memberships",
-    description: "Прочитать текущее и историческое участие задачи в планах",
+    description: "Прочитать участие задачи в планах из текущего состояния",
     schema: z.strictObject({
       ...paging,
       ref: entityReferenceSchema.describe("Ключ или ID задачи"),
@@ -312,7 +312,7 @@ for (const action of ["start", "complete", "cancel"] as const)
       start: "Явно начать черновик с целью и непустым составом; колонки задач не меняются",
       complete:
         "Завершить готовый план с итогом без обязательного начала; Core повторно проверяет фактическое выполнение всех обязательств",
-      cancel: "Отменить план с причиной, сохранив историю включений и сами задачи",
+      cancel: "Отменить план с причиной, сохранив сами задачи",
     }[action],
     schema: z.strictObject({
       ...revision,

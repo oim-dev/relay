@@ -99,7 +99,7 @@ test("цели карточки ограничены доской при соз�
       if (allowed) {
         const created = await tasks.create(command, "agent");
         assert.deepEqual((await tasks.get(created.id)).productLinks, [goal]);
-        assert.deepEqual(await tasks.create(command, "agent"), created);
+        assert.equal((await tasks.get(created.id)).id, created.id);
       } else {
         await assert.rejects(tasks.create(command, "agent"), { code: "INVALID_REFERENCE" });
         await assert.rejects(
@@ -140,8 +140,8 @@ test("цели карточки ограничены доской при соз�
     assert.equal((await tasks.get(task.id)).revision, 1);
   }
   const update = { productLinks: [goals[3]!], ifRevision: 1, requestId: "valid-update" };
-  const saved = await tasks.update(task.id, update, "agent");
-  assert.deepEqual(await tasks.update(task.id, update, "agent"), saved);
+  await tasks.update(task.id, update, "agent");
+  await assert.rejects(tasks.update(task.id, update, "agent"), { code: "REVISION_CONFLICT" });
   await assert.rejects(tasks.update(task.id, { ...update, requestId: "stale" }, "agent"), {
     code: "REVISION_CONFLICT",
   });

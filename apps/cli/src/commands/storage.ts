@@ -25,7 +25,7 @@ export function registerStorage(program: Command, runtime: Runtime): void {
     name: "migrate",
     description: "Перенести базу в единый формат",
     details:
-      "Перед переносом остановите старые версии клиентов. ID, ключи, текущие тексты, ревизии, комментарии и квитанции сохраняются. Незавершённый WAL восстанавливается; повтор переноса не дублирует данные.",
+      "Перед переносом остановите старые версии клиентов. ID, ключи, текущие тексты, ревизии и комментарии сохраняются. История и результаты запросов не переносятся. Незавершённый WAL восстанавливается; повтор переноса не дублирует данные.",
     examples: [
       [
         "relay-cli --local --config .relay/config.json storage migrate",
@@ -72,7 +72,7 @@ export function registerStorage(program: Command, runtime: Runtime): void {
     name: "reconcile-relations",
     description: "Согласовать сохранённые связи Core с предметными линками существующих сущностей",
     details:
-      "Явное обслуживание единого формата после обновления: добавляет недостающие и отзывает лишние связи предметных групп. Сохраняет ID неизменённых связей, независимые диагностические рёбра и ревизии сущностей. Все изменения публикуются одной транзакцией. После потери ответа повторите с тем же request-id.",
+      "Явное обслуживание единого формата после обновления: добавляет недостающие и отзывает лишние связи предметных групп. Сохраняет ID неизменённых связей, независимые диагностические рёбра и ревизии сущностей. Все изменения публикуются одной транзакцией. После потери ответа проверьте состояние связей; request-id служит только корреляции.",
     examples: [
       [
         "relay-cli --local --actor agent storage reconcile-relations --request-id relations-v1",
@@ -80,7 +80,10 @@ export function registerStorage(program: Command, runtime: Runtime): void {
       ],
     ],
     configure: (command) =>
-      command.option("--request-id <id>", "Ключ безопасного повтора; по умолчанию генерируется"),
+      command.option(
+        "--request-id <id>",
+        "Идентификатор корреляции, не дедупликации; по умолчанию UUID",
+      ),
     run: async (context, input) => {
       const workspace = context.backend.localWorkspace;
       if (!workspace)
@@ -94,7 +97,7 @@ export function registerStorage(program: Command, runtime: Runtime): void {
       );
       return {
         data,
-        text: `Предметные связи согласованы.\nДобавлено: ${data.added}\nОбновлено: ${data.updated}\nОтозвано: ${data.removed}\nКлюч повтора: ${data.requestId}`,
+        text: `Предметные связи согласованы.\nДобавлено: ${data.added}\nОбновлено: ${data.updated}\nОтозвано: ${data.removed}\nИдентификатор запроса: ${data.requestId}`,
       };
     },
   });

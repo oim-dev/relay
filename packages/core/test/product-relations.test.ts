@@ -39,7 +39,7 @@ test("фича → пустой паспорт → проект: связи за
     },
   };
   const feature = await engine.create(input, "agent");
-  assert.deepEqual(await engine.create(input, "agent"), feature);
+  assert.equal((await engine.get({ ref: feature.key })).ref.id, feature.ref.id);
   const product = await engine.get({ ref: "PRODUCT" });
   const project = await engine.get({ ref: "PROJECT" });
   assert.equal(product.status, "uninitialized");
@@ -167,7 +167,12 @@ for (const withFeature of [false, true])
     assert.equal(result.added, withFeature ? 2 : 1);
     assert.equal(result.removed, 0);
     assert.equal(result.updated, 0);
-    assert.deepEqual(await storage.reconcileRelations(input, "agent"), result);
+    assert.deepEqual(await storage.reconcileRelations(input, "agent"), {
+      ...result,
+      added: 0,
+      updated: 0,
+      removed: 0,
+    });
     assert.deepEqual(await engine.get({ ref: product.key }), product);
     if (feature) assert.deepEqual(await engine.get({ ref: feature.key }), before);
     assert.equal((await graph.context({ root: product.key })).edges.length, withFeature ? 2 : 1);
@@ -416,7 +421,7 @@ test("цели, родитель, зависимости, related и перен�
     },
   };
   const task = await engine.create(command, "agent");
-  assert.deepEqual(await engine.create(command, "agent"), task);
+  assert.equal((await engine.get({ ref: task.key })).ref.id, task.ref.id);
   let context = await graph.context({ root: task.key });
   assert.ok(hasEdge(context, task.ref, "implements", feature.ref));
   assert.ok(hasEdge(context, task.ref, "part-of", parent.ref));
@@ -593,7 +598,7 @@ test("документ: оба направления, замена и снят�
     },
   };
   const saved = await engine.update(update, "agent");
-  assert.deepEqual(await engine.update(update, "agent"), saved);
+  await assert.rejects(engine.update(update, "agent"), { code: "REVISION_CONFLICT" });
   context = await graph.context({ root: doc.key });
   assert.ok(!context.edges.some((edge) => edge.id === managed.id));
   assert.ok(context.edges.some((edge) => edge.id === independent.ids[0]));
@@ -655,7 +660,7 @@ test("отказ после продуктовой записи откатыва
   await assert.rejects(engine.create(input, "agent"), /Обрыв публикации/);
   publishMock.mock.restore();
   const reopened = new EntityEngine(await openWorkspace(root));
-  const saved = await reopened.create(input, "agent");
+  const saved = (await reopened.list({ kind: "document" })).items[0]!;
   assert.equal((await reopened.list({ kind: "document" })).total, 1);
   assert.ok(
     hasEdge(
@@ -665,7 +670,7 @@ test("отказ после продуктовой записи откатыва
       feature.ref,
     ),
   );
-  assert.deepEqual(await reopened.create(input, "agent"), saved);
+  assert.equal((await reopened.get({ ref: saved.key })).ref.id, saved.ref.id);
 });
 
 test("явное согласование исправляет прежние предметные группы, не меняя сущности и диагностические рёбра", async (t) => {
@@ -698,7 +703,12 @@ test("явное согласование исправляет прежние п
   const input = { requestId: "reconcile" };
   const saved = await service.reconcileRelations(input, "agent");
   assert.deepEqual(saved, { added: 1, updated: 0, removed: 0, requestId: "reconcile" });
-  assert.deepEqual(await service.reconcileRelations(input, "agent"), saved);
+  assert.deepEqual(await service.reconcileRelations(input, "agent"), {
+    ...saved,
+    added: 0,
+    updated: 0,
+    removed: 0,
+  });
   assert.deepEqual(await engine.get({ ref: si.key }), before);
   const current = await graph.context({ root: si.key });
   assert.ok(hasEdge(current, si.ref, "part-of", fi.ref));

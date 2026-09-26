@@ -32,7 +32,6 @@ import { validateProduct } from "../product/model.js";
 import type { ProductRecord } from "../../domain/product.js";
 import type { BoardTaskRecord } from "../../domain/board-task.js";
 import { syncProductRelations, syncTaskRelations } from "./owned-relations.js";
-import { json } from "../../storage/unified-adapter.js";
 
 const detachProduct = (
   record: ProductRecord,
@@ -191,16 +190,6 @@ export class EntityDeletionService {
     const hash = entityDigest({ ...command, actor });
     return this.workspace.mutate("entity-delete", command, actor, async (owned) => {
       const repository = new EntityDeletionRepository(this.workspace);
-      const receipt = await repository.receipt(key);
-      if (receipt) {
-        invariant(
-          receipt.hash === hash,
-          "IDEMPOTENCY_CONFLICT",
-          "Ключ удаления использован с другим содержимым",
-          4,
-        );
-        return receipt.result;
-      }
       const { preview, has, graph, graphState, edges, catalog } = await this.snapshot(
         command,
         owned,
@@ -470,8 +459,6 @@ export class EntityDeletionService {
       detached: preview.detached.length,
       relations: preview.relations,
     };
-    session.setCommandOwner(result.ref);
-    await session.saveCompatibilityReceipt(result.ref, "deletion-receipt", key, json({ hash, result }));
     return result;
   }
 }

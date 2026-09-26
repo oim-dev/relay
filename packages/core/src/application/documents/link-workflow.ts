@@ -1,8 +1,7 @@
 import type { ProductRecord } from "../../domain/product.js";
 import type { Workspace } from "../../storage/workspace.js";
 import { ProductRepository } from "../../storage/product.js";
-import { DocumentLinksRepository } from "../../storage/document-links.js";
-import { invariant } from "../../shared/errors.js";
+import { DocumentLinksRepository, advanceDocumentLinks } from "../../storage/document-links.js";
 import { GraphService } from "../graph/service.js";
 
 /** Завершает уже начатую запись; вызывается до допуска внешних читателей под общей блокировкой. */
@@ -30,21 +29,7 @@ export async function recoverDocumentLinks(workspace: Workspace, owned: () => vo
     }
     // Это явный вызов движка после продуктовой записи, а не вычисление рёбер при чтении.
     const result = await graph.mutate(pending.command, pending.actor);
-    for (const [index, step] of steps.entries()) {
-      if (step.operation.action === "remove") delete pending.bindings[step.key];
-      if (step.operation.action === "add") {
-        const { from, to, type } = step.operation;
-        invariant(
-          typeof from === "object" && typeof to === "object" && result.ids[index],
-          "INVALID_DATA",
-          "Не получен адрес сохранённого прикрепления",
-          5,
-        );
-        pending.bindings[step.key] = { id: result.ids[index]!, from, to, type };
-      }
-    }
-    pending.cursor += steps.length;
-    pending.command = null;
+    advanceDocumentLinks(pending, result.ids);
     await repository.writePending(pending, owned);
   }
   await repository.finish(pending, owned);

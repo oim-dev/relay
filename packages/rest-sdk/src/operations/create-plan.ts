@@ -14,11 +14,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Создать черновик плана; ссылки, история и квитанция публикуются вместе
+ * @description Создать черновик плана и атомарно согласовать его связи
  *
  * @tags plans
  * @name CreatePlan
- * @summary Создать черновик плана; ссылки, история и квитанция публикуются вместе
+ * @summary Создать черновик плана и атомарно согласовать его связи
  * @request POST:/api/v1/plans
  */
 export const createPlan = (

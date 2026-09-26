@@ -36,7 +36,7 @@ test("библиотека: черновик, атомарные связи с �
     requestId: "document",
   };
   const saved = await engine.create(command, "agent");
-  assert.deepEqual(await engine.create(command, "agent"), saved);
+  assert.equal((await engine.get({ ref: saved.key })).ref.id, saved.ref.id);
   const entry = await engine.get({ ref: saved.key });
   assert.equal(entry.status, "draft");
   assert.equal(entry.document?.kind, "proposal");
@@ -48,14 +48,17 @@ test("библиотека: черновик, атомарные связи с �
   );
   // Продуктовый сценарий уже установил отдельную связь; чтение ничего не создаёт.
   const graph = await new GraphService(workspace).read({ root: task.key });
-  const attachment = graph.edges.filter((edge) => edge.type === "references" && edge.from.id === task.ref.id && edge.to.id === saved.ref.id);
+  const attachment = graph.edges.filter(
+    (edge) =>
+      edge.type === "references" && edge.from.id === task.ref.id && edge.to.id === saved.ref.id,
+  );
   assert.equal(attachment.length, 1);
   assert.equal(attachment[0]?.source, "graph");
   assert.equal(attachment[0]?.description, command.data.relations[0]!.description);
   const repository = new ProductRepository(workspace);
   const path = join(repository.root, "../entities/documents", `${saved.ref.id}.json`);
   const disk = JSON.parse(await readFile(path, "utf8"));
-  assert.equal(disk.schemaVersion, 2);
+  assert.equal(disk.schemaVersion, 3);
   assert.deepEqual(disk.data.body, command.data.body.split("\n"));
   assert.deepEqual(
     disk.data.relations[0].description,
@@ -72,7 +75,7 @@ test("библиотека: черновик, атомарные связи с �
     },
   };
   const accepted = await engine.update(update, "agent");
-  assert.deepEqual(await engine.update(update, "agent"), accepted);
+  await assert.rejects(engine.update(update, "agent"), { code: "REVISION_CONFLICT" });
   await assert.rejects(engine.update({ ...update, requestId: "stale" }, "agent"), {
     code: "REVISION_CONFLICT",
   });
@@ -209,5 +212,13 @@ test("библиотека: повторяемая миграция прежне
   assert.equal((await new StorageService(workspace).migrate()).migrated, true);
   assert.equal((await new StorageService(workspace).migrate()).migrated, false);
   assert.deepEqual(await engine.get({ ref: saved.key }), before);
-  assert.equal(JSON.parse(await readFile(join(repository.root, "../entities/documents", `${saved.ref.id}.json`), "utf8")).schemaVersion, 2);
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        join(repository.root, "../entities/documents", `${saved.ref.id}.json`),
+        "utf8",
+      ),
+    ).schemaVersion,
+    3,
+  );
 });

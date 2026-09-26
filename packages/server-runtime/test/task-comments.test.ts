@@ -19,7 +19,8 @@ test("HTTP: комментарии, авторство, повтор и отсу
   assert.equal(created.statusCode, 200, created.body);
   const saved = created.json().data;
   const repeated = await app.inject({ method: "POST", url: `${base}/comments`, payload });
-  assert.deepEqual(repeated.json().data, saved);
+  assert.equal(repeated.statusCode, 200, repeated.body);
+  assert.notEqual(repeated.json().data.commentId, saved.commentId);
   assert.equal((await tasks.get(task.id)).revision, 1);
   const page = await app.inject(`${base}/comments?limit=1`);
   assert.equal(page.statusCode, 200, page.body);
@@ -38,12 +39,12 @@ test("HTTP: комментарии, авторство, повтор и отсу
     payload: { ...payload, actor: "", requestId: "bad" },
   });
   assert.equal(invalid.statusCode, 400, invalid.body);
-  const conflict = await app.inject({
+  const another = await app.inject({
     method: "POST",
     url: `${base}/comments`,
     payload: { ...payload, title: "Иное" },
   });
-  assert.equal(conflict.statusCode, 409);
+  assert.equal(another.statusCode, 200, another.body);
   const schema = (await app.inject("/api/openapi.json")).json();
   for (const prefix of ["/api/v1", `/api/v1/projects/${workspace.config.projectId}`]) {
     for (const path of [
@@ -80,7 +81,7 @@ test("HTTP: комментарии, авторство, повтор и отсу
   );
   const comments = (await app.inject(`${base}/comments?limit=1&actor=worker-api`)).json().data;
   assert.equal(comments.items.length, 1);
-  assert.equal(comments.items[0].id, saved.commentId);
+  assert.equal(comments.items[0].id, another.json().data.commentId);
   assert.deepEqual(comments.items[0].fields, []);
   assert.equal((await app.inject(`${base}/comments?actor=other`)).json().data.items.length, 0);
   assert.equal(
@@ -89,7 +90,7 @@ test("HTTP: комментарии, авторство, повтор и отсу
   );
 });
 
-test("Backend local/HTTP: комментарии сохраняют Markdown, курсор и квитанцию повтора", async (t) => {
+test("Backend local/HTTP: комментарии сохраняют Markdown и курсор; повтор публикует новое сообщение", async (t) => {
   const { app, tasks, root } = await fixture(t);
   const task = await tasks.create({ board: "product", requestId: "task" }, "human");
   await app.listen(0, "127.0.0.1");
@@ -109,7 +110,8 @@ test("Backend local/HTTP: комментарии сохраняют Markdown, к
     title: "Второй",
     requestId: "second",
   });
-  assert.deepEqual(await http.boardTasks.publishComment(task.id, command), first);
+  const repeated = await http.boardTasks.publishComment(task.id, command);
+  assert.notEqual(repeated.commentId, first.commentId);
   const page = await http.boardTasks.listComments(task.id, { limit: 1 });
   assert.equal(page.items.length, 1);
   assert.ok(page.nextCursor);

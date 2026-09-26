@@ -26,7 +26,6 @@ import {
 } from "./unified-adapter.js";
 import { storedProjectSettingsSchema } from "../domain/project-settings.js";
 import { storageManifestSchema } from "@relay/contracts/storage";
-import { entityRefSchema } from "@relay/contracts/entities/graph";
 import { HashIndex } from "./entity-store/hash-index.js";
 import { stateSchema, STATE_PATH } from "./entity-store/format.js";
 
@@ -103,7 +102,7 @@ export class Workspace {
     operation: (owned: () => void) => Promise<T>,
   ): Promise<T> {
     invariant(
-      (namespace === "graph" && this.recoveringDocumentLinks) || await this.hasUnifiedStorage(),
+      (namespace === "graph" && this.recoveringDocumentLinks) || (await this.hasUnifiedStorage()),
       "STORAGE_MIGRATION_REQUIRED",
       "Запись прежнего формата запрещена. Выполните relay-cli --local storage migrate",
       4,
@@ -111,42 +110,16 @@ export class Workspace {
     return this.locked(async (owned) => {
       const session = this.storageSession;
       // Завершение уже записанного намерения не является новой публичной legacy-командой.
-      if (!session && namespace === "graph" && this.recoveringDocumentLinks) return operation(owned);
+      if (!session && namespace === "graph" && this.recoveringDocumentLinks)
+        return operation(owned);
       this.assertWritableStorage();
       invariant(session, "STORAGE_MIGRATION_REQUIRED", "Для записи выполните storage migrate", 4);
       const request: Record<string, unknown> = { ...input, actor };
       if (request.includeTask === false) delete request.includeTask;
-      if (
-        (namespace === "board-task" || namespace === "task-comment") &&
-        typeof request.reference === "string"
-      ) {
-        request.reference = (await session.resolveReceiptTarget(request.reference, "task")).id;
-      }
-      const outer = !session.executingCommand;
       const result = await session.execute(
         { namespace, actor, requestId: input.requestId, request: json(request) },
         async () => {
           const value = await operation(owned);
-          if (outer && !session.hasCommandOwner && value && typeof value === "object") {
-            const result = value as { ref?: unknown; id?: unknown };
-            const explicit = entityRefSchema.safeParse(result.ref);
-            if (explicit.success && await session.indexGet("records", `${explicit.data.kind}:${explicit.data.id}`)) session.setCommandOwner(explicit.data);
-            else if (typeof result.id === "string") {
-              const productKind = input.fields && typeof input.fields === "object" && "kind" in input.fields ? input.fields.kind : undefined;
-              const kind = namespace === "board-task" || namespace === "task-comment" ? "task"
-                : namespace === "planning" ? "work-plan"
-                : namespace === "release" ? "release"
-                : namespace === "implementation" ? "implementation"
-                : namespace === "product" ? (productKind === "passport" ? "product" : productKind === "contract" ? "scope" : productKind)
-                : undefined;
-              const matches = (await session.indexEntries("records"))
-                .map(([, raw]) => raw as { ref: { kind: string; id: string } })
-                .filter(({ ref }) => ref.id === result.id && (kind === undefined || ref.kind === kind));
-              if (matches.length === 1) session.setCommandOwner(matches[0]!.ref);
-            }
-          }
-          if (outer && !session.hasCommandOwner && namespace === "reconcile-relations")
-            session.setCommandOwner({ kind: "project", id: this.config.projectId ?? "project" });
           return encodeCommandResult(namespace, value);
         },
       );
@@ -155,14 +128,20 @@ export class Workspace {
   }
   /** Публичные изменения допустимы только внутри общей сессии актуального формата. */
   assertWritableStorage(): void {
-    invariant(this.storageSession?.store.formatVersion === 3,
+    invariant(
+      this.storageSession?.store.formatVersion === 4,
       "STORAGE_MIGRATION_REQUIRED",
       "Запись прежнего формата запрещена. Выполните relay-cli --local storage migrate",
-      4);
+      4,
+    );
   }
   get recoveringDocumentLinks(): boolean {
     const context = lockContext.getStore();
-    return context?.active === true && context.root === this.root && context.recoveringDocumentLinks === true;
+    return (
+      context?.active === true &&
+      context.root === this.root &&
+      context.recoveringDocumentLinks === true
+    );
   }
   /** Формат привязывает блокировку к реальному каталогу данных, независимо от прежнего storageDir. */
   async withEntityStorage<T>(
@@ -229,7 +208,13 @@ export class Workspace {
       return operation(context.assertOwned);
     }
     return withStorageLock(this.root, async (assertOwned) => {
-      const owned = { root: this.root, runtime: this.runtime, assertOwned, active: true, recoveringDocumentLinks: false };
+      const owned = {
+        root: this.root,
+        runtime: this.runtime,
+        assertOwned,
+        active: true,
+        recoveringDocumentLinks: false,
+      };
       return lockContext.run(owned, async () => {
         try {
           if (await this.hasUnifiedStorage()) return this.locked(operation);

@@ -20,7 +20,7 @@ test("HTTP продукта: scoped-маршруты, прямой Markdown, п�
   const response = await app.inject({ method: "POST", url: `${prefix}/records`, payload });
   assert.equal(response.statusCode, 200, response.body);
   const repeated = await app.inject({ method: "POST", url: `${prefix}/records`, payload });
-  assert.deepEqual(repeated.json(), response.json());
+  assert.equal(repeated.statusCode, 409, repeated.body);
   const records = await app.inject(`${prefix}/records?kind=passport&limit=1`);
   assert.equal(records.statusCode, 200, records.body);
   assert.equal(records.json().data.items[0].fields.description, payload.fields.description);

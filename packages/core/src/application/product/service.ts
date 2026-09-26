@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { shortId } from "../../shared/ids.js";
 import { defaultBoardPrefix } from "../../domain/board.js";
 import { productMutationSchema, productRecordSchema } from "../../domain/product.js";
@@ -55,22 +54,6 @@ export class ProductService {
       const repository = new ProductRepository(this.workspace);
       const records = await repository.ensureKeys(assertOwned);
       validateProduct(records);
-      const key = createHash("sha256").update(`${actor}/${command.requestId}`).digest("hex");
-      const hash = createHash("sha256")
-        .update(JSON.stringify({ ...command, actor }))
-        .digest("hex");
-      const receipt = records
-        .flatMap((record) => Object.entries(record.requests))
-        .find(([requestKey]) => requestKey === key)?.[1];
-      if (receipt) {
-        invariant(
-          receipt.hash === hash,
-          "IDEMPOTENCY_CONFLICT",
-          "Ключ запроса уже использован с другим содержимым",
-          4,
-        );
-        return receipt.result;
-      }
       command = normalizeProductMutation(command, records);
       invariant(
         command.ifVersion === undefined || command.ifVersion === productVersion(records),
@@ -485,7 +468,7 @@ export class ProductService {
             ...(previous?.events ?? []),
             { revision: (previous?.revision ?? 0) + 1, actor, at: now },
           ],
-          requests: { ...previous?.requests, [key]: { hash, result } },
+          requests: {},
         },
         "запись продукта",
       );
@@ -494,7 +477,7 @@ export class ProductService {
       if (record.fields.kind === "application" && previous === undefined)
         await new BoardRepository(this.workspace).createApplication(record, assertOwned);
       else if (record.fields.kind === "document")
-        await saveDocumentWithLinks(this.workspace, record, actor, key, assertOwned);
+        await saveDocumentWithLinks(this.workspace, record, actor, command.requestId, assertOwned);
       else await repository.save(record, previous === undefined, assertOwned);
       // Новые реализации получают постоянные ключи до освобождения общей блокировки.
       if (record.fields.kind === "scope") await repository.ensureKeys(assertOwned);

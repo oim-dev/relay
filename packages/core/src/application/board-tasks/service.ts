@@ -31,7 +31,6 @@ import type {
   TaskCommentsQuery,
   TaskCommentsPage,
   TaskComment,
-  TaskCommentSaved,
 } from "../../domain/board-task.js";
 import { defaultBoardPrefix } from "../../domain/board.js";
 import type { Board } from "../../domain/board.js";
@@ -46,7 +45,6 @@ import { entityKeySchema } from "@relay/contracts/primitives";
 import { readEntityCatalog, resolveEntity, assertEntityKeyAvailable } from "../entities/catalog.js";
 import { TaskActivityRepository, activityHash } from "../../storage/task-activity.js";
 import type { ActivityFile } from "../../storage/task-activity.js";
-import { decodeCommandResult } from "../../storage/unified-adapter.js";
 import { productTaskTargets } from "../product/task-progress.js";
 import { syncTaskRelations } from "../entities/owned-relations.js";
 import { resolveAddress } from "../entities/resolver.js";
@@ -352,8 +350,7 @@ export class BoardTasksService {
     });
   }
 
-
-  /** Публикация независима от ревизии описания; квитанция и событие сохраняются вместе. */
+  /** Публикация независима от ревизии описания; каждый вызов создаёт отдельный комментарий. */
   async publishComment(reference: string, input: PublishTaskComment) {
     const command = parse(publishTaskCommentSchema, input, "сообщение обсуждения");
     return this.workspace.mutate(
@@ -364,28 +361,10 @@ export class BoardTasksService {
         const session = this.workspace.storageSession;
         invariant(session, "STORAGE_MIGRATION_REQUIRED", "Для записи выполните storage migrate", 4);
         const key = activityHash([command.actor, command.requestId]);
-        const receipt = await session.taskReceipt(key);
-        invariant(
-          receipt?.kind !== "task",
-          "IDEMPOTENCY_CONFLICT",
-          "Ключ запроса уже использован для изменения задачи",
-          4,
-        );
-        if (receipt) {
-          const target = await session.resolveReceiptTarget(reference, "task");
-          invariant(
-            receipt.hash === activityHash(["comment-publish", target.id, command]),
-            "IDEMPOTENCY_CONFLICT",
-            "Ключ запроса использован с другим содержимым",
-            4,
-          );
-          return decodeCommandResult<TaskCommentSaved>("task-comment", receipt.result);
-        }
         const repository = new BoardTaskRepository(this.workspace);
         const tasks = await repository.all();
         const task = resolveTask(tasks, reference);
         const activity = new TaskActivityRepository(this.workspace);
-        const requestHash = activityHash(["comment-publish", task.id, command]);
         const boards = await new BoardRepository(this.workspace).all();
         const at = new Date().toISOString();
         const sequence = (await activity.sequence(task)) + 1;
@@ -411,10 +390,6 @@ export class BoardTasksService {
             changes: [],
           },
         ]);
-        files.push(
-          { path: `receipts/${key}.json`, value: { hash: requestHash, result } },
-          { path: "signal.json", value: { operationId: key, at } },
-        );
         const board = resolveBoard(boards, task.boardId);
         await repository.save(
           task.version === 5 ? [] : [{ slug: board.slug, task: { ...task, version: 5 } }],
@@ -576,32 +551,11 @@ export class BoardTasksService {
       async (assertOwned) => {
         const session = this.workspace.storageSession;
         invariant(session, "STORAGE_MIGRATION_REQUIRED", "Для записи выполните storage migrate", 4);
-        const requestKey = hash([actor, input.requestId]);
-        const receipt = await session.taskReceipt(requestKey);
-        invariant(
-          receipt?.kind !== "comment",
-          "IDEMPOTENCY_CONFLICT",
-          "Ключ запроса уже использован для обсуждения",
-          4,
-        );
-        const normalizedInput: Record<string, unknown> = { ...input, actor };
-        if (normalizedInput.includeTask === false) delete normalizedInput.includeTask;
-        if (receipt) {
-          const targetId = reference ? (await session.resolveReceiptTarget(reference, "task")).id : undefined;
-          invariant(
-            receipt.hash === hash([action, targetId, normalizedInput]),
-            "IDEMPOTENCY_CONFLICT",
-            "Ключ запроса использован с другим содержимым",
-            4,
-          );
-          return decodeCommandResult<BoardTaskSaved>("board-task", receipt.result);
-        }
         const repository = new BoardTaskRepository(this.workspace);
         const tasks = await repository.all();
         validate(tasks, true);
         const boards = await new BoardRepository(this.workspace).all();
         const previous = reference ? resolveTask(tasks, reference) : undefined;
-        const requestHash = hash([action, previous?.id, normalizedInput]);
         invariant(
           !previous || previous.revision === input.ifRevision,
           "REVISION_CONFLICT",
@@ -655,7 +609,6 @@ export class BoardTasksService {
         }
         if (action === "create" && "includeTask" in input && input.includeTask === true)
           result.task = view(next, [...tasks, next], boards);
-        next.requests[requestKey] = { hash: requestHash, result };
         for (const task of tasks) {
           if (task.id !== next.id && before.get(task.id) !== JSON.stringify(task)) {
             task.version = 5;
@@ -667,11 +620,17 @@ export class BoardTasksService {
         validate(candidates, this.workspace.storageSession !== undefined);
         validateCompletionChanges(tasks, candidates);
         const activity: ActivityFile[] = [];
-        if (!this.workspace.storageSession) for (const candidate of candidates) {
-          if (before.get(candidate.id) === JSON.stringify(candidate)) continue;
-          const old = originalTasks.find((entry) => entry.id === candidate.id);
-          activity.push(...await new TaskActivityRepository(this.workspace).prepare(old ?? { ...candidate, version: 4, events: [] }, []));
-        }
+        if (!this.workspace.storageSession)
+          for (const candidate of candidates) {
+            if (before.get(candidate.id) === JSON.stringify(candidate)) continue;
+            const old = originalTasks.find((entry) => entry.id === candidate.id);
+            activity.push(
+              ...(await new TaskActivityRepository(this.workspace).prepare(
+                old ?? { ...candidate, version: 4, events: [] },
+                [],
+              )),
+            );
+          }
         const writes = candidates
           .filter((task) => before.get(task.id) !== JSON.stringify(task))
           .map((task) => ({ slug: resolveBoard(boards, task.boardId).slug, task }));

@@ -105,7 +105,7 @@ test("комментарийный Core API: изоляция от аудита,
     { board: "infrastructure", column: "inbox", ifRevision: 2, requestId: "move" },
     "worker",
   );
-  assert.deepEqual(await tasks.publishComment(task.key, message), first);
+  assert.notEqual((await tasks.publishComment(task.key, message)).commentId, first.commentId);
   assert.equal(
     (await tasks.getComment(task.key, first.commentId)).description,
     message.description,
@@ -122,12 +122,12 @@ test("комментарии: временная legacy-база, существ
   const reopened = await openWorkspace(root);
   const migrated = new BoardTasksService(reopened);
   assert.deepEqual(await migrated.getComment(task.id, saved.commentId), before);
-  assert.deepEqual(await migrated.publishComment(task.id, message), saved);
+  assert.notEqual((await migrated.publishComment(task.id, message)).commentId, saved.commentId);
   await new StorageService(reopened).reindex();
   assert.deepEqual(await migrated.getComment(task.id, saved.commentId), before);
-  // После перехода фиксируем и общий ключ повторяемой команды для удаления→повтора.
+  // После удаления публикация не возвращает прежний результат.
   const input = { ...message, requestId: "after-migration" };
-  const receipt = await migrated.publishComment(task.key, input);
+  await migrated.publishComment(task.key, input);
   const deletion = new EntityDeletionService(reopened);
   const preview = await deletion.preview({ ref: task.key, kind: "task" });
   await deletion.delete(
@@ -135,13 +135,11 @@ test("комментарии: временная legacy-база, существ
     "worker",
   );
   await new StorageService(reopened).reindex();
-  assert.deepEqual(await migrated.publishComment(task.key, input), receipt);
-  await assert.rejects(migrated.publishComment(task.key, { ...input, title: "Иное" }), {
-    code: "IDEMPOTENCY_CONFLICT",
-  });
+  await assert.rejects(migrated.publishComment(task.key, input));
+  await assert.rejects(migrated.publishComment(task.key, { ...input, title: "Иное" }));
 });
 
-test("комментарии: новая временная база, конкурентный точный повтор и конфликт с изменением задачи", async (t) => {
+test("комментарии: конкурентные публикации не дедуплицируются и не резервируют requestId", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-comments-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
@@ -152,15 +150,12 @@ test("комментарии: новая временная база, конку
     tasks.publishComment(task.id, message),
     reopened.publishComment(task.id, message),
   ]);
-  assert.deepEqual(first, second);
-  assert.equal((await tasks.listComments(task.id)).items.length, 1);
-  await assert.rejects(
-    tasks.update(
-      task.id,
-      { title: "Иное", ifRevision: 1, requestId: message.requestId },
-      message.actor,
-    ),
-    { code: "IDEMPOTENCY_CONFLICT" },
+  assert.notEqual(first.commentId, second.commentId);
+  assert.equal((await tasks.listComments(task.id)).items.length, 2);
+  await tasks.update(
+    task.id,
+    { title: "Иное", ifRevision: 1, requestId: message.requestId },
+    message.actor,
   );
   assert.equal(
     (await reopened.getComment(task.id, first.commentId)).description,

@@ -64,7 +64,7 @@ test("граф: произвольные пары и циклы, пути, па�
   assert.ok(incoming.nodes.some((node) => node.ref.kind === "task"));
 });
 
-test("граф: атомарность, CAS, повтор до проверки версии, Markdown и сохранённый отзыв", async (t) => {
+test("граф: атомарность, CAS при повторе, Markdown и сохранённый отзыв", async (t) => {
   const { workspace } = await graphFixture(t, nodes);
   const graph = new GraphService(workspace, async () => ({ nodes }));
   const version = (await graph.read()).version;
@@ -74,13 +74,15 @@ test("граф: атомарность, CAS, повтор до проверки 
     operations: [add(2, 3, "references", "## Пример\n\n  текст\n")],
   };
   const saved = await graph.mutate(command, "agent");
-  assert.deepEqual(await graph.mutate(command, "agent"), saved);
-  assert.deepEqual(await graph.mutate({ ...command, actor: "agent" }, "operator"), saved);
+  await assert.rejects(graph.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
+  await assert.rejects(graph.mutate({ ...command, actor: "agent" }, "operator"), {
+    code: "GRAPH_CHANGED",
+  });
   await assert.rejects(graph.mutate({ ...command, requestId: "stale" }, "agent"), {
     code: "GRAPH_CHANGED",
   });
   await assert.rejects(graph.mutate({ ...command, operations: [add(0, 1)] }, "agent"), {
-    code: "IDEMPOTENCY_CONFLICT",
+    code: "GRAPH_CHANGED",
   });
   const bad = {
     action: "add" as const,
@@ -96,10 +98,12 @@ test("граф: атомарность, CAS, повтор до проверки 
     { code: "INVALID_REFERENCE" },
   );
   assert.equal((await graph.read()).totalEdges, 1);
-  const disk = JSON.parse(
-    await readFile(join(workspace.root, "relations/tasks/T.json"), "utf8"),
+  const disk = JSON.parse(await readFile(join(workspace.root, "relations/tasks/T.json"), "utf8"));
+  assert.deepEqual(
+    disk.entries.find((entry: { edge: { id: string } }) => entry.edge.id === saved.ids[0])?.edge
+      .description,
+    ["## Пример", "", "  текст", ""],
   );
-  assert.deepEqual(disk.entries.find((entry: { edge: { id: string } }) => entry.edge.id === saved.ids[0])?.edge.description, ["## Пример", "", "  текст", ""]);
   await graph.mutate(
     {
       ifVersion: saved.version,
@@ -114,7 +118,7 @@ test("граф: атомарность, CAS, повтор до проверки 
   assert.equal(removed.edge.active, false);
   assert.equal(removed.edge.revision, 2);
   assert.equal(removed.edge.updatedBy, "operator");
-  assert.deepEqual(await graph.mutate(command, "agent"), saved);
+  await assert.rejects(graph.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
 });
 
 test("граф: конкуренция, политика приложения, изоляция и повреждение файла", async (t) => {
@@ -213,11 +217,20 @@ test("движок: сценарий документа пишет свои св
   assert.ok(before.nodes.some((node) => node.ref.kind === "project"));
   assert.ok(before.nodes.some((node) => node.ref.kind === "product"));
   assert.equal(before.totalEdges, 5);
-  const attachments = before.edges.filter((edge) => edge.type === "documents" && edge.from.id === document.ref.id && edge.to.id === feature.ref.id);
+  const attachments = before.edges.filter(
+    (edge) =>
+      edge.type === "documents" &&
+      edge.from.id === document.ref.id &&
+      edge.to.id === feature.ref.id,
+  );
   assert.equal(attachments.length, 1);
   assert.equal(attachments[0]!.source, "graph");
   const initialContext = await graph.context({ root: task.key });
-  assert(initialContext.edges.some((edge) => edge.from.id === task.ref.id && edge.to.id === feature.ref.id));
+  assert(
+    initialContext.edges.some(
+      (edge) => edge.from.id === task.ref.id && edge.to.id === feature.ref.id,
+    ),
+  );
 
   const command = {
     ifVersion: before.version,
@@ -233,7 +246,7 @@ test("движок: сценарий документа пишет свои св
     ],
   };
   const saved = await graph.mutate(command, "agent");
-  assert.deepEqual(await graph.mutate(command, "agent"), saved);
+  await assert.rejects(graph.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
   const id = saved.ids[0]!;
   const stored = await workspace.locked(() => readOwned(workspace.storageSession!, task.ref));
   assert.equal(stored.entries.find((entry) => entry.edge.id === id)?.edge.source, "graph");
@@ -267,7 +280,10 @@ test("движок: сценарий документа пишет свои св
     "agent",
   );
   assert(!(await fresh.read({ root: task.key })).edges.some((edge) => edge.id === id));
-  assert.deepEqual(new Set((await fresh.read()).edges.map((edge) => edge.id)), new Set(before.edges.filter((edge) => edge.type !== "documents").map((edge) => edge.id)));
+  assert.deepEqual(
+    new Set((await fresh.read()).edges.map((edge) => edge.id)),
+    new Set(before.edges.filter((edge) => edge.type !== "documents").map((edge) => edge.id)),
+  );
 
   // Возврат линка создаёт связь документа, но не воскрешает независимое отозванное ребро.
   await engine.update(
@@ -287,7 +303,7 @@ test("движок: сценарий документа пишет свои св
   assert(!(await fresh.read({ root: task.key })).edges.some((edge) => edge.id === id));
   const revoked = await workspace.locked(() => readOwned(workspace.storageSession!, task.ref));
   assert.equal(revoked.entries.find((entry) => entry.edge.id === id)?.edge.active, false);
-  assert.deepEqual(await fresh.mutate(command, "agent"), saved);
+  await assert.rejects(fresh.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
   const unchanged = await engine.get({ ref: document.key });
   assert.equal(unchanged.data.kind === "document" && unchanged.data.links.length, 1);
 });

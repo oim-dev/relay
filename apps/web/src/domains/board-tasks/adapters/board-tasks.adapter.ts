@@ -140,10 +140,10 @@ async function request<T>(
   } catch (error) {
     if (error instanceof ApiError) {
       const parsed = failure.safeParse(error.error);
-      if (parsed.success)
+      if (parsed.success && error.status < 500)
         throw new BoardTaskError(parsed.data.error.message, parsed.data.error.code);
       throw new BoardTaskError(
-        "Сервер не подтвердил действие. Проверьте соединение и повторите запрос.",
+        "Ответ сервера не получен. Если вы отправляли изменения, их исход неизвестен: перечитайте состояние перед новой отправкой, чтобы не создать дубликат.",
         "UNAVAILABLE",
       );
     }
@@ -152,7 +152,7 @@ async function request<T>(
       (error instanceof DOMException && error.name === "AbortError")
     )
       throw new BoardTaskError(
-        "Не удалось связаться с сервером. Ввод сохранён; повторите после восстановления соединения.",
+        "Нет ответа сервера. Если вы отправляли изменения, перечитайте состояние перед новой отправкой: действие могло выполниться.",
         "UNAVAILABLE",
       );
     throw error;

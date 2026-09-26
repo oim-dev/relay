@@ -103,7 +103,8 @@ class BoardTasksController {
   @HttpCode(200)
   @ApiEndpoint({
     id: "createBoardTask",
-    summary: "Создать задачу доски; повтор requestId возвращает первоначальную квитанцию",
+    summary:
+      "Создать задачу доски; requestId служит корреляции и не предотвращает повторное создание",
     response: "BoardTaskSaved",
     body: "CreateBoardTask",
   })
@@ -168,7 +169,7 @@ class BoardTasksController {
   @ApiEndpoint({
     id: "publishTaskComment",
     summary:
-      "Опубликовать сообщение с заданным автором; безопасный повтор, без конфликта ревизии задачи",
+      "Опубликовать сообщение с заданным автором без изменения ревизии задачи; повтор может создать новое сообщение",
     response: "TaskCommentSaved",
     body: "PublishTaskComment",
   })
@@ -201,8 +202,7 @@ class BoardTasksController {
   @ApiParam({ name: "reference", description: "ID или ключ задачи" })
   @ApiEndpoint({
     id: "changeTaskCriterion",
-    summary:
-      "Добавить, изменить, удалить или отметить критерий; проверка ревизии и безопасный повтор",
+    summary: "Добавить, изменить, удалить или отметить критерий с проверкой ревизии",
     response: "BoardTaskSaved",
     body: "ChangeCriterion",
   })

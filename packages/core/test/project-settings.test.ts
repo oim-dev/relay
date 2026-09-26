@@ -18,6 +18,7 @@ test("настройки: случайный адрес, атомарное со
   const input = { name: "  Мой проект  ", slug: "my-project", ifRevision: initial.revision };
   const saved = await saveProjectSettings(workspace, input);
   assert.equal(saved.name, "Мой проект");
+  // Совпадение текущих значений — предметный no-op, а не возврат квитанции.
   assert.deepEqual(await saveProjectSettings(workspace, input), saved);
   const reopened = await openWorkspace(root);
   assert.deepEqual(projectSettings(reopened.config, reopened.configPath), saved);

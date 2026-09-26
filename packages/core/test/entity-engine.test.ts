@@ -218,16 +218,13 @@ test("движок: все виды, вложенные ссылки ключ/ID
     code: "ENTITIES_CHANGED",
   });
   const disk = JSON.parse(
-    await readFile(
-      join(app.root, ".relay", "entities", "tasks", `${task.ref.id}.json`),
-      "utf8",
-    ),
+    await readFile(join(app.root, ".relay", "entities", "tasks", `${task.ref.id}.json`), "utf8"),
   );
   assert.deepEqual(disk.data.description, ["## Работа", "", "Сохранить Markdown  ", ""]);
-  assert.equal(disk.schemaVersion, 2);
+  assert.equal(disk.schemaVersion, 3);
 });
 
-test("движок: смена формата ключей всех видов, алиасы, точный повтор и сохранность ссылок", async (t) => {
+test("движок: смена формата ключей всех видов, алиасы, CAS и сохранность ссылок", async (t) => {
   const { engine, task, implementation } = await productFixture(t);
   const all = await engine.list();
   for (const kind of new Set(all.items.map((entry) => entry.ref.kind))) {
@@ -240,7 +237,7 @@ test("движок: смена формата ключей всех видов, 
     };
     const saved = await engine.rename(command, "agent");
     assert.equal(saved.ref.id, entry.ref.id);
-    assert.deepEqual(await engine.rename(command, "agent"), saved);
+    await assert.rejects(engine.rename(command, "agent"), { code: "REVISION_CONFLICT" });
     assert.equal((await engine.get({ ref: entry.key })).key, command.key);
     assert.equal((await engine.get({ ref: entry.ref.id })).key, command.key);
     assert.deepEqual(

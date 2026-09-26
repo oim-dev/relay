@@ -95,7 +95,10 @@ export class TaskActivityRepository {
   }
   async sequence(task: BoardTaskRecord): Promise<number> {
     if (this.workspace.storageSession) {
-      return (await this.workspace.storageSession.get({ kind: "task", id: task.id })).commentSequence ?? 0;
+      return (
+        (await this.workspace.storageSession.get({ kind: "task", id: task.id })).commentSequence ??
+        0
+      );
     }
     const path = join(this.root, task.id, "meta.json");
     if (await exists(path)) return parse(metaSchema, await readJson(path), path, true).sequence;
@@ -109,16 +112,12 @@ export class TaskActivityRepository {
     return (task.events ?? []).length;
   }
   async hasHistory(task: BoardTaskRecord) {
-    if (this.workspace.storageSession)
-      return true;
+    if (this.workspace.storageSession) return true;
     return exists(join(this.root, task.id, "meta.json"));
   }
   async receipt(key: string) {
     invariant(/^[a-f0-9]{64}$/.test(key), "INVALID_DATA", "Неверный ключ квитанции", 5);
-    if (this.workspace.storageSession) {
-      const value = await this.workspace.storageSession.compatibilityReceipt("task-comment-receipt", key);
-      return value === undefined ? undefined : receiptSchema.parse(value);
-    }
+    if (this.workspace.storageSession) return undefined;
     const path = join(this.root, "receipts", `${key}.json`);
     return (await exists(path))
       ? parse(receiptSchema, await readJson(path), path, true)
@@ -223,29 +222,54 @@ export class TaskActivityRepository {
     invariant(cursor.next <= cursor.snapshot, "VALIDATION_ERROR", "Неверная граница курсора", 2);
     if (this.workspace.storageSession) {
       const record = await this.workspace.storageSession.get({ kind: "task", id: task.id });
-      const matching = (record.comments ?? []).filter((entry) =>
-        entry.sequence <= cursor.next && entry.sequence > (query.after ?? 0) &&
-        (!query.actor || entry.actor === query.actor) && (!query.action || entry.action === query.action)
-      ).toReversed();
+      const matching = (record.comments ?? [])
+        .filter(
+          (entry) =>
+            entry.sequence <= cursor.next &&
+            entry.sequence > (query.after ?? 0) &&
+            (!query.actor || entry.actor === query.actor) &&
+            (!query.action || entry.action === query.action),
+        )
+        .toReversed();
       const selected = matching.slice(0, query.limit);
-      const items = selected.map(({ description: _description, changes: _changes, ...entry }) => entry);
+      const items = selected.map(
+        ({ description: _description, changes: _changes, ...entry }) => entry,
+      );
       const next = selected.at(-1)?.sequence;
-      return { items, snapshot: cursor.snapshot, nextCursor: matching.length > selected.length && next !== undefined
-        ? Buffer.from(JSON.stringify({ ...cursor, next: next - 1 })).toString("base64url") : null };
+      return {
+        items,
+        snapshot: cursor.snapshot,
+        nextCursor:
+          matching.length > selected.length && next !== undefined
+            ? Buffer.from(JSON.stringify({ ...cursor, next: next - 1 })).toString("base64url")
+            : null,
+      };
     }
     if (comments) {
       const available = (await jsonFiles(join(this.root, task.id, "events")))
-        .map((name) => Number(name.slice(0, -5))).filter((sequence) => sequence <= cursor.next && sequence > (query.after ?? 0))
+        .map((name) => Number(name.slice(0, -5)))
+        .filter((sequence) => sequence <= cursor.next && sequence > (query.after ?? 0))
         .sort((a, b) => b - a);
       const matching: TaskHistorySummary[] = [];
       for (const sequence of available) {
         const entry = await this.summary(task, sequence);
-        if (entry.action === "comment-publish" && (!query.actor || query.actor === entry.actor) && (!query.action || query.action === entry.action)) matching.push(entry);
+        if (
+          entry.action === "comment-publish" &&
+          (!query.actor || query.actor === entry.actor) &&
+          (!query.action || query.action === entry.action)
+        )
+          matching.push(entry);
       }
       const items = matching.slice(0, query.limit);
       const next = items.at(-1)?.sequence;
-      return { items, snapshot: cursor.snapshot, nextCursor: matching.length > items.length && next !== undefined
-        ? Buffer.from(JSON.stringify({ ...cursor, next: next - 1 })).toString("base64url") : null };
+      return {
+        items,
+        snapshot: cursor.snapshot,
+        nextCursor:
+          matching.length > items.length && next !== undefined
+            ? Buffer.from(JSON.stringify({ ...cursor, next: next - 1 })).toString("base64url")
+            : null,
+      };
     }
     const items: TaskHistorySummary[] = [];
     let next = cursor.next;
@@ -346,22 +370,29 @@ export class TaskActivityRepository {
           if (event.action === "comment-publish") {
             const comment = storedCommentSchema.parse(event);
             const previous = record.comments?.find((entry) => entry.id === comment.id);
-            invariant(!previous || activityHash(previous) === activityHash(comment), "STORAGE_MIGRATION_CONFLICT", "Номер комментария занят другим содержанием", 4);
-            if (!previous) record.comments = [...(record.comments ?? []), comment].sort((a, b) => a.sequence - b.sequence);
+            invariant(
+              !previous || activityHash(previous) === activityHash(comment),
+              "STORAGE_MIGRATION_CONFLICT",
+              "Номер комментария занят другим содержанием",
+              4,
+            );
+            if (!previous)
+              record.comments = [...(record.comments ?? []), comment].sort(
+                (a, b) => a.sequence - b.sequence,
+              );
           }
-          await session.writeFile(session.store.registry.path(ref), json(session.store.registry.validate(record)));
+          await session.writeFile(
+            session.store.registry.path(ref),
+            json(session.store.registry.validate(record)),
+          );
           session.touched.add(`task:${event.taskId}`);
-        } else if (file.path.startsWith("receipts/")) {
-          const receipt = receiptSchema.parse(file.value);
-          const owner = await session.indexGet("records", `task:${receipt.result.id}`)
-            ? { kind: "task", id: receipt.result.id }
-            : { kind: "project", id: this.workspace.config.projectId ?? "project" };
-          await session.saveCompatibilityReceipt(owner, "task-comment-receipt",
-            file.path.slice("receipts/".length, -5), json(receipt));
         } else if (file.path.endsWith("/meta.json")) {
           const ref = { kind: "task", id: file.path.split("/")[0]! };
           const record = session.store.registry.encode(await session.get(ref));
-          record.commentSequence = Math.max(record.commentSequence ?? 0, metaSchema.parse(file.value).sequence);
+          record.commentSequence = Math.max(
+            record.commentSequence ?? 0,
+            metaSchema.parse(file.value).sequence,
+          );
           await session.writeFile(session.store.registry.path(ref), json(record));
         }
       }

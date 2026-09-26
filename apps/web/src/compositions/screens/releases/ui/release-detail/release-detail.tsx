@@ -65,7 +65,7 @@ export const ReleaseDetail = (props: ReleaseDetailProps) => {
   }, [release.id, release.title]);
 
   /**
-   * Фиксирует подтверждённый состав с исходной ревизией; повтор сохраняет тот же запрос.
+   * Фиксирует выбранный состав с исходной ревизией без автоматического повтора.
    */
   const handleRelease = async () => {
     if (!isDefined(releaseDraft) || isReleasing) return;

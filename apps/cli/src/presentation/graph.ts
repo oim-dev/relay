@@ -140,7 +140,7 @@ export function graphText(page: GraphPage, query: GraphQuery, options: TextOptio
   ].join("\n\n");
 }
 
-/** Квитанция сохраняет идентификаторы и данные безопасного повтора. */
+/** Ответ текущей записи с идентификаторами и корреляцией запроса. */
 export function graphSavedText(saved: GraphSaved): string {
-  return `Связи сохранены: ${saved.ids.join(", ")}\nРевизия: ${saved.revision}\nВерсия: ${saved.version}\nКлюч повтора: ${safeText(saved.requestId)}`;
+  return `Связи сохранены: ${saved.ids.join(", ")}\nРевизия: ${saved.revision}\nВерсия: ${saved.version}\nИдентификатор запроса: ${safeText(saved.requestId)}`;
 }

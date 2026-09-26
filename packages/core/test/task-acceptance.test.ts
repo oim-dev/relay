@@ -49,14 +49,16 @@ test("критерии: готовность к работе, завершени
   assert.ok(completed.criterion.completedAt);
   assert.equal((await service.get(task.id)).canComplete, true);
   assert.equal((await service.get(task.id)).column, "ready");
-  assert.deepEqual(await service.changeCriterion(task.id, completion, "human"), saved);
+  await assert.rejects(service.changeCriterion(task.id, completion, "human"), {
+    code: "REVISION_CONFLICT",
+  });
   await assert.rejects(
     service.changeCriterion(task.id, { ...completion, requestId: "stale" }, "human"),
     { code: "REVISION_CONFLICT" },
   );
   await assert.rejects(
     service.changeCriterion(task.id, { ...completion, completed: false }, "human"),
-    { code: "IDEMPOTENCY_CONFLICT" },
+    { code: "REVISION_CONFLICT" },
   );
   await service.changeCriterion(
     task.id,
@@ -82,10 +84,10 @@ test("критерии: готовность к работе, завершени
     ),
     { code: "TASK_ACCEPTANCE_LOCKED" },
   );
-  assert.deepEqual(await service.create(command, "orchestrator"), task);
+  assert.notEqual((await service.create(command, "orchestrator")).id, task.id);
   const path = join(dirname(workspace.configPath), "entities/tasks", `${task.id}.json`);
   const stored = JSON.parse(await readFile(path, "utf8"));
-  assert.equal(stored.schemaVersion, 2);
+  assert.equal(stored.schemaVersion, 3);
   assert.deepEqual(
     stored.data.acceptanceCriteria[0].description,
     command.acceptanceCriteria[0]!.description.split("\n"),
@@ -156,7 +158,7 @@ test("критерии: страницы, границы, удаление и а
   );
 });
 
-test("критерии: v3 читается без записи, миграция сохраняет квитанции и восстанавливает pending", async (t) => {
+test("критерии: старые данные читаются без записи, миграция сохраняет содержание без квитанций", async (t) => {
   const { workspace } = await fixture(t);
   const service = new BoardTasksService(workspace);
   const command = {
@@ -193,9 +195,14 @@ test("критерии: v3 читается без записи, миграци�
     "agent",
   );
   assert.ok(added.criterionId);
-  assert.deepEqual(await service.create(command, "agent"), task);
+  assert.notEqual((await service.create(command, "agent")).id, task.id);
   assert.equal((await service.get(task.id)).description, command.description);
-  const current = JSON.parse(await readFile(join(dirname(workspace.configPath), "entities/tasks", `${task.id}.json`), "utf8"));
-  assert.equal(current.schemaVersion, 2);
+  const current = JSON.parse(
+    await readFile(
+      join(dirname(workspace.configPath), "entities/tasks", `${task.id}.json`),
+      "utf8",
+    ),
+  );
+  assert.equal(current.schemaVersion, 3);
   assert.deepEqual(current.data.acceptanceCriteria[0].description, ["", "  текст  ", ""]);
 });

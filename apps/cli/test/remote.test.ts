@@ -96,10 +96,11 @@ test("URL из окружения, приоритет флага и явный l
   failed(await invoke(empty, ["task", "get", id], { env }), "SERVER_UNAVAILABLE", 5);
 });
 
-test("потеря ответа записи повторяет ключ и не создаёт вторую задачу", async (t) => {
+test("потеря ответа записи не вызывает автоповтор: результат проверяется чтением", async (t) => {
   const app = await fixture(t);
   const server = await startServer({ cwd: app.root, actor: "server", port: 0 });
   let dropped = false;
+  let writes = 0;
   const proxy = createProxy(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -109,6 +110,7 @@ test("потеря ответа записи повторяет ключ и не
       ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
     });
     const body = await upstream.text();
+    if (request.method === "POST") writes++;
     if (request.method === "POST" && !dropped) {
       dropped = true;
       response.destroy();
@@ -124,20 +126,26 @@ test("потеря ответа записи повторяет ключ и не
   });
   const address = proxy.address();
   assert.ok(address && typeof address !== "string");
-  successful(
-    await invoke(app.root, [
-      "--server-url",
-      `http://127.0.0.1:${address.port}`,
-      "task",
-      "create",
-      "--board",
-      "product",
-      "--title",
-      "Один раз",
-      "--request-id",
-      "lost-response",
-    ]),
-  );
+  const url = `http://127.0.0.1:${address.port}`;
+  const result = await invoke(app.root, [
+    "--server-url",
+    url,
+    "task",
+    "create",
+    "--board",
+    "product",
+    "--title",
+    "Один раз",
+    "--request-id",
+    "lost-response",
+  ]);
+  failed(result, "SERVER_UNAVAILABLE", 5);
+  assert.match(result.stdout, /Перечитайте состояние/);
   assert.equal(dropped, true);
-  assert.equal(successful(await app.run<{ total: number }>(["task", "list"])).data.total, 1);
+  assert.equal(writes, 1, "CLI не должен повторять мутацию после потери ответа");
+  assert.equal(
+    successful(await app.run<{ total: number }>(["--server-url", url, "task", "list"])).data.total,
+    1,
+  );
+  assert.equal(writes, 1);
 });

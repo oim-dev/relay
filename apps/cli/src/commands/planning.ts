@@ -37,7 +37,7 @@ import {
 
 type Options = Record<string, unknown>;
 const details =
-  "Запись выполняется через общие правила Core, с автором, прочитанной ревизией и ключом повтора. После потери ответа повторите исходный запрос с тем же --request-id. Старый формат планов и релизов не поддерживается; автоматического переноса нет.";
+  "Запись выполняется с автором и прочитанной ревизией. request-id служит только корреляции, результат не сохраняется для повтора. После потери ответа перечитайте состояние; повтор может выполнить новое действие. Старый формат планов и релизов не поддерживается; автоматического переноса нет.";
 const refArgument = { reference: "Ключ или постоянный ID выбранной сущности" };
 const paging = (command: Command) =>
   command
@@ -45,7 +45,10 @@ const paging = (command: Command) =>
     .option("--limit <n>", "Размер страницы, максимум 100", integer(1, 100))
     .option("--snapshot-version <version>", "Версия первой страницы; обязательна при продолжении");
 const writing = (command: Command) =>
-  command.option("--request-id <id>", "Ключ повтора; по умолчанию создаётся автоматически");
+  command.option(
+    "--request-id <id>",
+    "Идентификатор корреляции, не дедупликации; по умолчанию UUID",
+  );
 const revision = (command: Command) =>
   writing(command).requiredOption(
     "--if-revision <n>",

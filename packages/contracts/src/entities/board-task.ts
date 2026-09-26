@@ -64,7 +64,7 @@ const productLinks = z
   .describe("Явные связи «Реализует», максимум 100; пустой массив удаляет все связи");
 const write = {
   requestId: requestIdSchema.describe(
-    "Ключ повтора: повтор с тем же содержимым возвращает первоначальную квитанцию",
+    "Идентификатор корреляции; повтор исполняется заново и не возвращает сохранённый результат",
   ),
   actor: actorSchema.optional().describe("Автор изменения; по умолчанию автор текущего интерфейса"),
 };
@@ -101,7 +101,7 @@ export const boardTaskSchema = z.strictObject({
 export const boardTaskViewSchema = boardTaskSchema.extend({
   acceptance: criteriaProgressSchema
     .optional()
-    .describe("Прогресс критериев приёмки; отсутствует в старых квитанциях"),
+    .describe("Прогресс критериев приёмки; может отсутствовать в совместимом ответе"),
   canComplete: z
     .boolean()
     .optional()
@@ -182,7 +182,7 @@ export const createBoardTaskSchema = z.strictObject({
     .boolean()
     .default(false)
     .describe(
-      "Вернуть первоначальную задачу в квитанции для открытия редактора без GET; по умолчанию компактная квитанция",
+      "Вернуть задачу в ответе для открытия редактора без GET; по умолчанию компактный результат. Ответ не сохраняется для повтора",
     ),
 });
 export const updateBoardTaskSchema = z.strictObject({

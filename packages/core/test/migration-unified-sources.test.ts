@@ -11,16 +11,43 @@ const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const stream = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const markdown = "# Полный текст\r\n\r\n  отступ  \r\nконец\n";
 const indexed = [
-  { kind: "indexed", index: "task-comment", key: "task:comment", value: { body: markdown }, groups: [{ index: "task-comments", key: "task", member: "comment" }] },
-  { kind: "indexed", index: "planning-receipts", key: "plan:request", value: { requirements: markdown, revision: 7 }, groups: [{ index: "planning", key: "plan", member: null }] },
+  {
+    kind: "indexed",
+    index: "task-comment",
+    key: "task:comment",
+    value: { body: markdown },
+    groups: [{ index: "task-comments", key: "task", member: "comment" }],
+  },
+  {
+    kind: "indexed",
+    index: "planning-receipts",
+    key: "plan:request",
+    value: { requirements: markdown, revision: 7 },
+    groups: [{ index: "planning", key: "plan", member: null }],
+  },
 ];
 const entry = {
-  at: "2026-09-26T00:00:00.000Z", actor: "agent:test", namespace: "task.comment.add",
-  requestId: "request-1", requestHash: "original-request-hash",
-  result: { id: "deleted-task", revision: 4, body: markdown, nullable: null, nested: [false, 0, ""] },
-  refs: [{ kind: "task", id: "task-id" }], events: indexed,
+  at: "2026-09-26T00:00:00.000Z",
+  actor: "agent:test",
+  namespace: "task.comment.add",
+  requestId: "request-1",
+  requestHash: "original-request-hash",
+  result: {
+    id: "deleted-task",
+    revision: 4,
+    body: markdown,
+    nullable: null,
+    nested: [false, 0, ""],
+  },
+  refs: [{ kind: "task", id: "task-id" }],
+  events: indexed,
 };
-const operation = { ...entry, schemaVersion: 1, id, changes: [{ path: "entities/tasks/task-id.json", before: null, after: { body: markdown } }] };
+const operation = {
+  ...entry,
+  schemaVersion: 1,
+  id,
+  changes: [{ path: "entities/tasks/task-id.json", before: null, after: { body: markdown } }],
+};
 const segment = (first = 1, entries = [entry]) => ({ schemaVersion: 1, first, entries });
 const path = (first = 1) => `history/${stream}/${String(first).padStart(16, "0")}.json`;
 const noLock = () => {};
@@ -36,37 +63,57 @@ async function fixture(version: number, sources: Record<string, JsonValue>) {
   const leaf = { schemaVersion: 1, type: "leaf", entries };
   const hash = digest(leaf);
   if (entries.length) await put(root, `.indexes/segments/${hash.slice(0, 2)}/${hash}.json`, leaf);
-  await put(root, ".indexes/state.json", { schemaVersion: 1, version: "snapshot", roots: { "file-hashes": entries.length ? hash : null } });
+  await put(root, ".indexes/state.json", {
+    schemaVersion: 1,
+    version: "snapshot",
+    roots: { "file-hashes": entries.length ? hash : null },
+  });
   for (const [path, value] of Object.entries(sources)) await put(root, path, value);
   return root;
 }
-const code = (expected: string) => (error: unknown) => !!error && typeof error === "object" && "code" in error && error.code === expected;
+const code = (expected: string) => (error: unknown) =>
+  !!error && typeof error === "object" && "code" in error && error.code === expected;
 
-for (const version of [1, 2] as const) test(`v${version}: квитанции, Markdown, comments/planning и группы без потерь`, async (t) => {
-  const sourcePath = version === 1 ? `operations/${id}.json` : path();
-  const raw = version === 1 ? operation : segment();
-  const root = await fixture(version, { [sourcePath]: raw });
-  t.after(() => rm(root, { recursive: true, force: true }));
-  await put(root, version === 1 ? "operations/user-notes.json" : `history/${stream}/user-notes.json`, { untouched: true });
-  const before = await readFile(join(root, sourcePath));
-  let checks = 0;
-  const result = await readUnifiedMigrationSources(root, () => { checks++; });
-  assert.equal(result.version, version);
-  assert.ok(checks > 2);
-  assert.equal(result.operations.length, 1);
-  const actual = result.operations[0]!;
-  for (const key of ["namespace", "actor", "requestId", "requestHash", "result", "refs", "events"] as const)
-    assert.deepEqual(actual[key], entry[key]);
-  assert.equal(actual.id, version === 1 ? id : `${stream}:1`);
-  assert.equal(actual.sourcePath, sourcePath);
-  assert.deepEqual(actual.indexed, indexed);
-  assert.deepEqual(result.sourceFiles, [{ path: sourcePath, hash: digest(raw) }]);
-  assert.ok(result.files.every((file) => !file.path.includes("user-notes")));
-  assert.deepEqual(await readUnifiedMigrationSources(root, noLock), result);
-  assert.deepEqual(await readFile(join(root, sourcePath)), before);
-  if (version === 1) assert.deepEqual(actual.changes, operation.changes);
-  else assert.deepEqual(result.segments, [{ path: sourcePath, segment: raw }]);
-});
+for (const version of [1, 2] as const)
+  test(`v${version}: квитанции, Markdown, comments/planning и группы без потерь`, async (t) => {
+    const sourcePath = version === 1 ? `operations/${id}.json` : path();
+    const raw = version === 1 ? operation : segment();
+    const root = await fixture(version, { [sourcePath]: raw });
+    t.after(() => rm(root, { recursive: true, force: true }));
+    await put(
+      root,
+      version === 1 ? "operations/user-notes.json" : `history/${stream}/user-notes.json`,
+      { untouched: true },
+    );
+    const before = await readFile(join(root, sourcePath));
+    let checks = 0;
+    const result = await readUnifiedMigrationSources(root, () => {
+      checks++;
+    });
+    assert.equal(result.version, version);
+    assert.ok(checks > 2);
+    assert.equal(result.operations.length, 1);
+    const actual = result.operations[0]!;
+    for (const key of [
+      "namespace",
+      "actor",
+      "requestId",
+      "requestHash",
+      "result",
+      "refs",
+      "events",
+    ] as const)
+      assert.deepEqual(actual[key], entry[key]);
+    assert.equal(actual.id, version === 1 ? id : `${stream}:1`);
+    assert.equal(actual.sourcePath, sourcePath);
+    assert.deepEqual(actual.indexed, indexed);
+    assert.deepEqual(result.sourceFiles, [{ path: sourcePath, hash: digest(raw) }]);
+    assert.ok(result.files.every((file) => !file.path.includes("user-notes")));
+    assert.deepEqual(await readUnifiedMigrationSources(root, noLock), result);
+    assert.deepEqual(await readFile(join(root, sourcePath)), before);
+    if (version === 1) assert.deepEqual(actual.changes, operation.changes);
+    else assert.deepEqual(result.segments, [{ path: sourcePath, segment: raw }]);
+  });
 
 test("v1: неиндексированные события не теряются и не принимаются за индекс", async (t) => {
   const events = [...indexed, { kind: "legacy-audit", text: markdown }];
@@ -77,16 +124,26 @@ test("v1: неиндексированные события не теряютс�
   assert.deepEqual(result.operations[0]!.indexed, indexed);
 });
 
-for (const version of [1, 2] as const) for (const failure of ["missing", "changed", "corrupt"] as const)
-  test(`v${version}: отказ при ${failure} source`, async (t) => {
-    const sourcePath = version === 1 ? `operations/${id}.json` : path();
-    const root = await fixture(version, { [sourcePath]: version === 1 ? operation : segment() });
-    t.after(() => rm(root, { recursive: true, force: true }));
-    if (failure === "missing") await rm(join(root, sourcePath));
-    else if (failure === "corrupt") await writeFile(join(root, sourcePath), "{broken");
-    else await put(root, sourcePath, { changed: true });
-    await assert.rejects(readUnifiedMigrationSources(root, noLock), code(failure === "missing" ? "STORAGE_INDEX_CORRUPT" : failure === "changed" ? "STORAGE_INDEX_STALE" : "INVALID_DATA"));
-  });
+for (const version of [1, 2] as const)
+  for (const failure of ["missing", "changed", "corrupt"] as const)
+    test(`v${version}: отказ при ${failure} source`, async (t) => {
+      const sourcePath = version === 1 ? `operations/${id}.json` : path();
+      const root = await fixture(version, { [sourcePath]: version === 1 ? operation : segment() });
+      t.after(() => rm(root, { recursive: true, force: true }));
+      if (failure === "missing") await rm(join(root, sourcePath));
+      else if (failure === "corrupt") await writeFile(join(root, sourcePath), "{broken");
+      else await put(root, sourcePath, { changed: true });
+      await assert.rejects(
+        readUnifiedMigrationSources(root, noLock),
+        code(
+          failure === "missing"
+            ? "STORAGE_INDEX_CORRUPT"
+            : failure === "changed"
+              ? "STORAGE_INDEX_STALE"
+              : "INVALID_DATA",
+        ),
+      );
+    });
 
 test("v2: пересечение диапазонов, неверный номер и переполнение запрещены", async (t) => {
   for (const sources of [
@@ -104,8 +161,14 @@ test("v2: пропуски между непересекающимися диа�
   const root = await fixture(2, { [path()]: segment(), [path(10)]: segment(10) });
   t.after(() => rm(root, { recursive: true, force: true }));
   const result = await readUnifiedMigrationSources(root, noLock);
-  assert.deepEqual(result.operations.map((operation) => operation.id), [`${stream}:1`, `${stream}:10`]);
-  assert.deepEqual(result.operations.map((operation) => operation.result), [entry.result, entry.result]);
+  assert.deepEqual(
+    result.operations.map((operation) => operation.id),
+    [`${stream}:1`, `${stream}:10`],
+  );
+  assert.deepEqual(
+    result.operations.map((operation) => operation.result),
+    [entry.result, entry.result],
+  );
 });
 
 test("Неизвестные версии, пути и ID отклоняются", async (t) => {
@@ -141,5 +204,10 @@ test("Утрата внешней блокировки немедленно пр
   const root = await fixture(2, {});
   t.after(() => rm(root, { recursive: true, force: true }));
   const lost = new Error("Блокировка потеряна");
-  await assert.rejects(readUnifiedMigrationSources(root, () => { throw lost; }), (error) => error === lost);
+  await assert.rejects(
+    readUnifiedMigrationSources(root, () => {
+      throw lost;
+    }),
+    (error) => error === lost,
+  );
 });

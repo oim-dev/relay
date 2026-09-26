@@ -39,6 +39,6 @@ export type ProductCommand = {
   ifRevision?: number;
   /** Отпечаток прочитанного графа. */
   ifVersion?: string;
-  /** Ключ безопасного повтора. */
+  /** Корреляция HTTP-запроса, не ключ дедупликации. */
   requestId: string;
 };

@@ -42,7 +42,7 @@ export const storedProjectSettingsSchema = projectSettingsSchema.extend({
   aliases: z.array(entityKeySchema).optional(),
 });
 
-/** Полная идемпотентная замена редактируемых настроек. */
+/** Полная замена редактируемых настроек с проверкой ревизии. */
 export const saveProjectSettingsSchema = projectSettingsSchema
   .omit({ revision: true, documentSections: true })
   .extend({

@@ -31,7 +31,7 @@ const SCENARIOS = {
  * Показывает предметный каскад и подтверждает удаление просмотренного состояния.
  *
  * Используется для:
- *  - удаления из страниц продукта и окна задачи с безопасным повтором
+ *  - удаления из страниц продукта и окна задачи с проверкой версии
  */
 export const EntityDelete = (props: EntityDeleteProps) => {
   const { entityId, kind, onDeleted, onOpenedChange } = props;
@@ -86,7 +86,7 @@ export const EntityDelete = (props: EntityDeleteProps) => {
   };
 
   /**
-   * Сетевой повтор отправляет прежнюю версию и requestId, а не новый каскад.
+   * Удаляет только просмотренный каскад; неизвестный исход требует нового предпросмотра.
    */
   const handleDelete = async (): Promise<void> => {
     if (preview === null || !canDelete) return;

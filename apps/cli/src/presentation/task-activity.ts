@@ -56,7 +56,7 @@ export function taskActivityEventText(event: TaskComment, options: TextOptions):
     .join("\n\n");
 }
 
-/** Первоначальная квитанция публикации; ревизия относится к ленте. */
+/** Ответ текущей публикации; ревизия относится к ленте. */
 export function taskCommentSavedText(saved: TaskCommentSaved): string {
-  return `Сообщение опубликовано.\nЗадача: ${saved.id}\nСообщение: ${saved.commentId}\nРевизия ленты: ${saved.revision}\nКлюч повтора: ${saved.requestId}`;
+  return `Сообщение опубликовано.\nЗадача: ${saved.id}\nСообщение: ${saved.commentId}\nРевизия ленты: ${saved.revision}\nИдентификатор запроса: ${saved.requestId}`;
 }

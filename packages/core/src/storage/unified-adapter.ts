@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { entityAddress } from "@relay/contracts/entities/graph";
-import type { EntityRef } from "@relay/contracts/entities/graph";
 import type { JsonValue } from "@relay/contracts/storage";
 import { createEntityStorageRegistry } from "./entity-store/codecs.js";
 import type { EntityRecord } from "./entity-store/registry.js";
@@ -21,7 +19,7 @@ import { storedProjectSettingsSchema } from "../domain/project-settings.js";
 import type { Config } from "../domain/config.js";
 import { productIdSchema } from "../domain/product.js";
 
-/** Состав сохраняет собственные ID, ревизию и историю, но не получает искусственный публичный ключ. */
+/** Состав сохраняет собственные ID и ревизию, но не получает искусственный публичный ключ. */
 export function workspaceStorageRegistry() {
   const definitions = createEntityStorageRegistry()
     .definitions()
@@ -75,23 +73,6 @@ export function session(workspace: Workspace): StorageSession {
   return workspace.storageSession;
 }
 
-/** Совместимые квитанции старых предметных команд; автоматический аудит не читается. */
-async function recordReceipts(workspace: Workspace, ref: EntityRef) {
-  const record = await session(workspace).get(ref);
-  const requests: Record<string, unknown> = {};
-  for (const receipt of record.receipts ?? []) {
-    if (receipt.namespace !== `legacy:record:${entityAddress(ref)}`) continue;
-    const result = z.object({ key: z.string(), value: z.json() }).parse(receipt.result);
-    requests[result.key] = result.value;
-  }
-  return { events: [], requests };
-}
-
-async function saveRecordReceipts(workspace: Workspace, ref: EntityRef, requests: Record<string, unknown>) {
-  for (const [key, receipt] of Object.entries(requests))
-    await session(workspace).saveCompatibilityReceipt(ref, `record:${entityAddress(ref)}`, key, json(receipt));
-}
-
 function metadata(
   record: {
     id: string;
@@ -138,9 +119,13 @@ async function publish(workspace: Workspace, record: EntityRecord, importing = f
         "Изменение данных требует новой ревизии",
         4,
       );
-      const next = tx.store.registry.encode({ ...old, ...record, receipts: old.receipts ?? [],
-        comments: old.comments, commentSequence: old.commentSequence, planningEvents: old.planningEvents,
-        reservedKeys: old.reservedKeys });
+      const next = tx.store.registry.encode({
+        ...old,
+        ...record,
+        comments: old.comments,
+        commentSequence: old.commentSequence,
+        reservedKeys: old.reservedKeys,
+      });
       await tx.writeFile(tx.store.registry.path(record), json(next));
       await tx.indexRecord(next);
       return;
@@ -161,7 +146,7 @@ export async function productRecords(
     for (const record of await tx.records(kind)) {
       if (kind === "product" && record.revision === 0) continue;
       const { data, ...meta } = record;
-      const audit = await recordReceipts(workspace, record);
+      const audit = { events: [], requests: {} };
       const fields =
         kind === "scope"
           ? {
@@ -217,7 +202,7 @@ export async function productRecords(
   }
   // Тот же порядок непрозрачных ID, что в legacy-репозитории: перенос не меняет
   // порядок снимка и его version из-за регистра букв или локали процесса.
-  return records.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  return records.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 export async function implementationRecords(
@@ -226,7 +211,7 @@ export async function implementationRecords(
 ): Promise<ProductImplementation[]> {
   const records = [];
   for (const record of await session(workspace).records("implementation")) {
-    const audit = await recordReceipts(workspace, record);
+    const audit = { events: [], requests: {} };
     records.push(
       productImplementationSchema.parse({
         version: 1,
@@ -254,11 +239,6 @@ export async function saveImplementation(
 ) {
   const { kind: _kind, ...data } = record.fields;
   await publish(workspace, metadata(record, "implementation", data), importing);
-  await saveRecordReceipts(
-    workspace,
-    { kind: "implementation", id: record.id },
-    record.requests,
-  );
 }
 
 export async function saveProduct(workspace: Workspace, record: ProductRecord, importing = false) {
@@ -324,7 +304,6 @@ export async function saveProduct(workspace: Workspace, record: ProductRecord, i
     if (record.fields.kind === "application") delete data.prefix;
   }
   await publish(workspace, metadata(record, kind, data), importing);
-  await saveRecordReceipts(workspace, { kind, id: record.id }, record.requests);
 }
 
 export async function boards(workspace: Workspace): Promise<Board[]> {
@@ -345,7 +324,8 @@ export async function boards(workspace: Workspace): Promise<Board[]> {
         revision: record.revision,
         createdAt: record.createdAt,
         createdBy: record.createdBy,
-        ...(await recordReceipts(workspace, record)),
+        events: [],
+        requests: {},
       }),
     );
   }
@@ -386,11 +366,6 @@ export async function saveBoard(workspace: Workspace, record: Board, importing =
         prefix: `${prefix}-${suffix.toUpperCase()}`,
         format: "{prefix}-{number}",
       });
-  await saveRecordReceipts(
-    workspace,
-    { kind: "board", id: record.id },
-    record.requests ?? {},
-  );
 }
 
 function taskRequests(requests: Record<string, unknown>, encode: boolean): Record<string, unknown> {
@@ -411,7 +386,7 @@ function taskRequests(requests: Record<string, unknown>, encode: boolean): Recor
 export async function tasks(workspace: Workspace): Promise<BoardTaskRecord[]> {
   const output: BoardTaskRecord[] = [];
   for (const record of await session(workspace).records("task")) {
-    const audit = await recordReceipts(workspace, record);
+    const audit = { events: [], requests: {} };
     output.push(
       boardTaskRecordSchema.parse({
         ...record.data,
@@ -465,7 +440,6 @@ export async function saveTask(workspace: Workspace, task: BoardTaskRecord, impo
     ),
     importing,
   );
-  await saveRecordReceipts(workspace, { kind: "task", id }, taskRequests(requests, true));
 }
 
 export async function settings(workspace: Workspace) {
@@ -479,7 +453,8 @@ export async function settings(workspace: Workspace) {
     revision: record.revision,
     entityKey: record.key,
     aliases: record.aliases,
-    ...(await recordReceipts(workspace, record)),
+    events: [],
+    requests: {},
   });
 }
 
@@ -516,8 +491,7 @@ export async function saveSettings(
     },
     importing,
   );
-  await saveRecordReceipts(workspace, { kind: "project", id }, value.requests ?? {});
-  workspace.config.projectSettings = value;
+  workspace.config.projectSettings = await settings(workspace);
 }
 
 /** Оболочка квитанции сохраняет Markdown результата задачи в дисковом представлении. */

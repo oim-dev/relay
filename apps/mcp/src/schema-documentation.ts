@@ -18,7 +18,7 @@ const descriptions: Record<string, string> = {
   ifRevision: "Ревизия из последнего чтения; защищает от перезаписи чужих изменений",
   ifVersion: "Версия продукта из overview/state; защищает состав от изменения требований",
   requestId:
-    "Стабильный ключ операции; после потери ответа повторите тот же ключ, автора и содержание",
+    "Идентификатор корреляции запроса, не ключ дедупликации. После потери ответа прочитайте текущее состояние; не повторяйте запись вслепую",
   featureId: "ID родительской фичи из текущего продукта",
   scenarioId: "ID сценария; null означает общий контракт фичи",
   applicationId: "ID приложения-реализатора в продукте, а не ключ проекта workspace",
@@ -51,6 +51,7 @@ export function documentToolSchema<T>(schema: T): T {
       for (const [name, field] of Object.entries(node.properties)) {
         if (!field || typeof field !== "object") continue;
         const property = field as Record<string, unknown>;
+        if (name === "requestId") property.description = descriptions.requestId;
         if (!property.description) {
           if (!descriptions[name])
             throw new Error(`Нарушение протокола MCP: нет русского описания аргумента ${name}`);

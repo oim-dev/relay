@@ -210,13 +210,14 @@ export class ProductRepository {
         ),
       };
     const records = await this.ensureKeys(assertOwned, persistKeys);
-    if (!persistKeys) for (const record of records) {
-      if (record.fields.kind !== "scope") continue;
-      for (const contract of record.fields.contracts) {
-        const implementation = this.decodedImplementations.get(contract.id);
-        if (implementation && contract.key) implementation.key = contract.key;
+    if (!persistKeys)
+      for (const record of records) {
+        if (record.fields.kind !== "scope") continue;
+        for (const contract of record.fields.contracts) {
+          const implementation = this.decodedImplementations.get(contract.id);
+          if (implementation && contract.key) implementation.key = contract.key;
+        }
       }
-    }
     return { records, implementations: new Map(this.decodedImplementations) };
   }
 
@@ -306,7 +307,9 @@ export class ProductRepository {
   }
 
   /** Пути уже декодированных источников для явного переноса; неизвестные файлы не удаляются. */
-  async migrationSources() { return this.sources(); }
+  async migrationSources() {
+    return this.sources();
+  }
 
   /** Явная миграция переносит также старые записи, которым ключи уже назначены. */
   async migrate(assertOwned: () => void): Promise<number> {

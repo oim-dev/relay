@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { workPlanDataSchema, planningMetadata } from "./planning.js";
+import { workPlanDataSchema } from "./planning.js";
 import { releaseDataSchema } from "./releases.js";
 import {
   actorSchema,
@@ -99,8 +99,8 @@ export const entityDataSchemas = {
   document,
 };
 export const entityDataSchema = z.discriminatedUnion("kind", [
-  workPlanDataSchema.extend({ planningEvents: planningMetadata.planningEvents }),
-  releaseDataSchema.extend({ planningEvents: planningMetadata.planningEvents }),
+  workPlanDataSchema,
+  releaseDataSchema,
   entityDataSchemas.project,
   entityDataSchemas.product,
   feature,

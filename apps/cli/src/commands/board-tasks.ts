@@ -91,7 +91,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     name: "criterion",
     description: "Критерии приёмки: условия завершения задачи",
     details:
-      "Критерии не мешают началу работы, но обязательны для done. Запись требует ревизии задачи; повторяйте тот же request-id после потери ответа.",
+      "Критерии не мешают началу работы, но обязательны для done. Запись требует ревизии задачи. После потери ответа перечитайте состояние; request-id не предотвращает повторную запись.",
     examples: [["relay-cli task criterion list PRODUCT-1", "Прочитать условия приёмки"]],
   });
   registerCommand<BoardTasksQuery>(criteria, runtime, {
@@ -139,7 +139,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
         ...(action === "add" ? {} : { criterionId: "Постоянный ID критерия" }),
       },
       details:
-        "Готовую задачу сначала верните из done. Повтор с прежним request-id возвращает первоначальную квитанцию.",
+        "Готовую задачу сначала верните из done. Результат для повтора не сохраняется. После потери ответа перечитайте состояние; request-id служит только корреляции.",
       examples: [
         [
           `relay-cli --actor human task criterion ${action} PRODUCT-1${action === "add" ? ' --title "Данные сохраняются"' : " Abc12345"} --if-revision 1`,
@@ -155,7 +155,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
           )
           .option(
             "--request-id <id>",
-            "Ключ безопасного повтора; по умолчанию создаётся автоматически",
+            "Идентификатор корреляции, не дедупликации; по умолчанию UUID",
           );
         if (action === "add")
           command.requiredOption("--title <title>", "Обязательный однострочный заголовок");
@@ -267,7 +267,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       configure: (command) => {
         command.option(
           "--request-id <id>",
-          "Ключ безопасного повтора; если не указан, создаётся автоматически",
+          "Идентификатор корреляции, не дедупликации; по умолчанию UUID",
         );
         if (action !== "create")
           command.requiredOption(

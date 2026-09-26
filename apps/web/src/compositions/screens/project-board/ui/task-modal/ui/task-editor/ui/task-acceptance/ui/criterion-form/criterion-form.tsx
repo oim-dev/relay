@@ -77,7 +77,7 @@ export const CriterionForm = (props: CriterionFormProps) => {
   const titleLabel =
     initialData.criterionId === null ? "Новый критерий" : "Редактирование критерия";
   /**
-   * Сохраняет один критерий, удерживая ключ повтора до подтверждения результата.
+   * Сохраняет один критерий с исходной ревизией и корреляцией запроса.
    */
   const handleSubmit = async (values: CriterionContent): Promise<void> => {
     setError("");

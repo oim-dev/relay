@@ -27,10 +27,16 @@ const intentSchema = z.strictObject({
 export type TransactionStage = "intent" | "file" | "published";
 export type TransactionProbe = (stage: TransactionStage, path?: string) => void | Promise<void>;
 
-/** Прежний бюджет предметной записи не ограничивает накопленные inline-квитанции и ленты. */
+/** Комментарии имеют отдельный предметный бюджет; автоматических лент здесь нет. */
 function budgetValue(path: string, value: ReturnType<typeof jsonValue>) {
-  if (path.startsWith("entities/") && value && typeof value === "object" && "schemaVersion" in value && value.schemaVersion === 2) {
-    const { receipts: _receipts, comments: _comments, planningEvents: _events, ...data } = value as Record<string, unknown>;
+  if (
+    path.startsWith("entities/") &&
+    value &&
+    typeof value === "object" &&
+    "schemaVersion" in value &&
+    value.schemaVersion === 3
+  ) {
+    const { comments: _comments, ...data } = value as Record<string, unknown>;
     return jsonValue(data);
   }
   return value;
@@ -99,7 +105,9 @@ export class StorageTransaction {
   }
 
   private async hash(path: string) {
-    return (await exists(path)) ? digest(jsonValue(await readJson(path, Number.POSITIVE_INFINITY))) : null;
+    return (await exists(path))
+      ? digest(jsonValue(await readJson(path, Number.POSITIVE_INFINITY)))
+      : null;
   }
 
   /** Подготовка производных неизменяемых страниц; видимость меняет только публикация корней. */
@@ -140,7 +148,12 @@ export class StorageTransaction {
         5,
       );
       paths.add(change.path);
-      if (change.after !== null) checkSize(budgetValue(change.path, change.after), RECORD_BYTES, "Предметные данные записи превышают 16 МиБ");
+      if (change.after !== null)
+        checkSize(
+          budgetValue(change.path, change.after),
+          RECORD_BYTES,
+          "Предметные данные записи превышают 16 МиБ",
+        );
     }
     const candidates = await parallel(changes, async (change) => {
       const before = await this.hash(join(this.root, change.path));
@@ -160,7 +173,17 @@ export class StorageTransaction {
     const prepared = candidates.filter((change) => change !== undefined);
     if (!prepared.length) return;
     const intent = intentSchema.parse({ schemaVersion: 1, changes: prepared });
-    checkSize({ ...intent, changes: intent.changes.map((change) => ({ ...change, after: budgetValue(change.path, change.after) })) }, WAL_BYTES, "Предметные данные пакета публикации превышают 128 МиБ");
+    checkSize(
+      {
+        ...intent,
+        changes: intent.changes.map((change) => ({
+          ...change,
+          after: budgetValue(change.path, change.after),
+        })),
+      },
+      WAL_BYTES,
+      "Предметные данные пакета публикации превышают 128 МиБ",
+    );
     owned();
     await this.ensureDirectory(dirname(this.pending));
     await atomicJson(this.pending, intent, this.runtime, true, owned);

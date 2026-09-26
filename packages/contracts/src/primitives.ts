@@ -30,7 +30,9 @@ export const requestIdSchema = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
-  .describe("Ключ безопасного повтора операции");
+  .describe(
+    "Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние",
+  );
 export const entityKeySchema = z
   .string()
   .min(1)

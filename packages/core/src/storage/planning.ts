@@ -42,9 +42,6 @@ export function decodePlanning(record: EntityRecord): PlanningRecord {
     updatedAt: record.updatedAt,
     createdBy: record.createdBy,
     updatedBy: record.updatedBy,
-    planningEvents: (record.planningEvents ?? []).map(({ description, ...event }) => ({
-      ...event, ...(description === undefined ? {} : { description: description.join("\n") }),
-    })),
   });
 }
 
@@ -71,8 +68,8 @@ export async function savePlanning(
   workspace: Workspace,
   value: PlanningRecord,
   actor: string,
-  action: string,
-  details?: {
+  _action: string,
+  _details?: {
     stageId?: string;
     taskId?: string;
     from?: string;
@@ -97,25 +94,6 @@ export async function savePlanning(
     updatedBy: actor,
   });
   await session.put(toRecord(next, prior.aliases), value.revision);
-  const description = [
-    ...(details?.stageId ? [`Внутренний ID этапа: ${details.stageId}`] : []),
-    ...(details?.taskId
-      ? [`Задача: task:${details.taskId}\n\nИз этапа: ${details.from}\n\nВ этап: ${details.to}`]
-      : []),
-    ...(details?.add?.length ? [`Добавлены задачи: ${details.add.join(", ")}`] : []),
-    ...(details?.remove?.length ? [`Исключены задачи: ${details.remove.join(", ")}`] : []),
-    ...(details?.reason ? [`## Причина\n\n${details.reason}`] : []),
-  ].join("\n\n");
-  await session.appendPlanningEvent(
-    { kind: next.kind, id: next.id },
-      {
-        revision: next.revision,
-        actor,
-        at: next.updatedAt,
-        action,
-        ...(description ? { description: description.split("\n") } : {}),
-      },
-  );
   return decodePlanning(await session.get({ kind: next.kind, id: next.id }));
 }
 
@@ -153,12 +131,11 @@ export async function createPlanning<K extends PlanningKind>(
     updatedBy: actor,
   });
   await session.put(toRecord(value), null);
-  await session.appendPlanningEvent({ kind, id }, { revision: 1, actor, at, action: "create" });
   return decodePlanning(await session.get({ kind, id })) as Extract<PlanningRecord, { kind: K }>;
 }
 
 function toRecord(value: PlanningRecord, aliases: string[] = []): EntityRecord {
-  const { id, kind, key, revision, createdAt, updatedAt, createdBy, updatedBy, planningEvents: _events, ...data } = value;
+  const { id, kind, key, revision, createdAt, updatedAt, createdBy, updatedBy, ...data } = value;
   return {
     schemaVersion: 1,
     dataVersion: 2,

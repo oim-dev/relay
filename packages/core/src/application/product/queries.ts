@@ -5,6 +5,7 @@ import type {
   ProductList,
   ProductListQuery,
   ProductOverview,
+  ProductSaved,
 } from "../../domain/product.js";
 import { parse } from "../../domain/validation.js";
 import { invariant, AppError } from "../../shared/errors.js";
@@ -22,7 +23,6 @@ import type {
   ProductEntity,
   UpdateImplementation,
 } from "../../domain/product-implementation.js";
-import { createHash } from "node:crypto";
 import { actorSchema } from "../../domain/validation.js";
 import { contractBasis } from "./model.js";
 import { readEntityCatalog, resolveEntity, assertEntityKeyAvailable } from "../entities/catalog.js";
@@ -131,7 +131,10 @@ export class ProductQueries extends ProductService {
   }
 
   /** Независимая ревизия реализации не конфликтует с правкой соседнего вклада. */
-  async updateImplementation(input: UpdateImplementation, defaultActor: string) {
+  async updateImplementation(
+    input: UpdateImplementation,
+    defaultActor: string,
+  ): Promise<ProductSaved> {
     const command = parse(updateImplementationSchema, input, "изменение реализации");
     invariant(
       command.title !== undefined ||
@@ -145,10 +148,6 @@ export class ProductQueries extends ProductService {
     return this.workspace.mutate("implementation", command, actor, async (owned) => {
       const repository = new ProductRepository(this.workspace);
       const records = await repository.ensureKeys(owned);
-      const receiptKey = createHash("sha256").update(`${actor}/${command.requestId}`).digest("hex");
-      const requestHash = createHash("sha256")
-        .update(JSON.stringify({ ...command, actor }))
-        .digest("hex");
       const reservations = new Map<string, string[]>();
       for (const scope of records) {
         if (scope.fields.kind !== "scope") continue;
@@ -159,15 +158,6 @@ export class ProductQueries extends ProductService {
             entry.scenarioId !== null,
           );
           reservations.set(stored.id, stored.reservedKeys ?? []);
-          const receipt = stored.requests[receiptKey];
-          if (!receipt) continue;
-          invariant(
-            receipt.hash === requestHash,
-            "IDEMPOTENCY_CONFLICT",
-            "Ключ запроса использован с другим содержимым",
-            4,
-          );
-          return receipt.result;
         }
       }
       const selected = resolveProductAddress(
@@ -237,7 +227,7 @@ export class ProductQueries extends ProductService {
             ]),
           ],
           events: [...record.events, { revision: result.revision, actor, at: now }],
-          requests: { ...record.requests, [receiptKey]: { hash: requestHash, result } },
+          requests: {},
         },
         owned,
       );

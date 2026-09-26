@@ -7,13 +7,7 @@ import {
   updateReleaseSchema,
 } from "@relay/contracts/releases";
 import { planningSavedSchema } from "@relay/contracts/planning";
-import {
-  getProjectApi,
-  ApiError,
-  readApiPages,
-  pendingApiRequest,
-  PendingRequestError,
-} from "infra/tasks-api";
+import { getProjectApi, ApiError, readApiPages } from "infra/tasks-api";
 import type { PlanningPage } from "domains/planning";
 import { releaseView, releaseCompositionView } from "../helpers/release-view";
 import type { Release, ReleaseComposition, ReleaseFilters } from "../types/release.type";
@@ -45,20 +39,18 @@ const request = async <Result>(
   } catch (error) {
     if (error instanceof ApiError) {
       const failure = FAILURE_SCHEMA.safeParse(error.error);
-      if (failure.success)
+      if (failure.success && error.status < 500)
         throw new ReleaseError(failure.data.error.message, failure.data.error.code);
     }
     if (
       error instanceof TypeError ||
-      error instanceof PendingRequestError ||
+      (error instanceof ApiError && error.status >= 500) ||
       (error instanceof DOMException && error.name === "AbortError")
     )
       throw new ReleaseError(
-        error instanceof PendingRequestError
-          ? error.message
-          : isWrite
-            ? "Сервер не подтвердил действие. Ввод сохранён; повторите после восстановления соединения."
-            : "Не удалось загрузить данные релизов. Проверьте соединение и повторите загрузку.",
+        isWrite
+          ? "Исход сохранения неизвестен. Ввод сохранён. Перечитайте состояние перед новой отправкой: повтор может создать дубликат."
+          : "Не удалось загрузить данные релизов. Проверьте соединение и повторите загрузку.",
         "UNAVAILABLE",
       );
     throw error;
@@ -150,21 +142,15 @@ export const saveRelease = async (project: string, release: Release): Promise<Re
   };
   return request(
     planningSavedSchema,
-    () =>
-      pendingApiRequest(
-        project,
-        `release-save:v2:${release.id}:${release.revision}`,
-        payload,
-        (requestId) => {
-          const command = saveReleaseSchema.parse({ ...payload, requestId });
-          return release.revision === 0
-            ? getProjectApi(project).releases.createRelease(command)
-            : getProjectApi(project).releases.updateRelease(
-                { reference: release.id },
-                updateReleaseSchema.parse(command),
-              );
-        },
-      ),
+    () => {
+      const command = saveReleaseSchema.parse({ ...payload, requestId: crypto.randomUUID() });
+      return release.revision === 0
+        ? getProjectApi(project).releases.createRelease(command)
+        : getProjectApi(project).releases.updateRelease(
+            { reference: release.id },
+            updateReleaseSchema.parse(command),
+          );
+    },
     true,
   );
 };

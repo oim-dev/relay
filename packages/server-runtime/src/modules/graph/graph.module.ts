@@ -50,7 +50,7 @@ class GraphController {
   @ApiEndpoint({
     id: "mutateGraph",
     summary:
-      "Атомарно установить, изменить или отозвать отношения; повтор requestId безопасен, устаревшая версия отклоняется",
+      "Атомарно установить, изменить или отозвать отношения; requestId служит корреляции, устаревшая версия отклоняется",
     response: "GraphSaved",
     body: "GraphMutation",
   })

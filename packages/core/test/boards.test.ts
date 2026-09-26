@@ -31,7 +31,10 @@ test("init создаёт две системные доски и повтор �
     (await new BoardsService(workspace).list()).items.map((board) => board.slug),
     ["product", "infrastructure"],
   );
-  const task = await new BoardTasksService(workspace).create({ board: "product", title: "Сохранить", requestId: "task" }, "tester");
+  const task = await new BoardTasksService(workspace).create(
+    { board: "product", title: "Сохранить", requestId: "task" },
+    "tester",
+  );
   const path = join(dirname(workspace.configPath), "entities/tasks", `${task.id}.json`);
   const before = await readFile(path, "utf8");
   await assert.rejects(initialize(root, "tasks"), { code: "ALREADY_INITIALIZED" });
@@ -44,11 +47,16 @@ test("создание приложения создаёт контейнер д
   const boards = new BoardsService(workspace);
   const command = application("web");
   const created = await products.mutate(command, "tester");
-  assert.deepEqual(await products.mutate(command, "tester"), created);
+  await assert.rejects(products.mutate(command, "tester"));
   const board = await boards.get("web");
   assert.equal(board.applicationId, created.id);
   assert.equal((await new BoardTasksService(workspace).list({ board: board.id })).total, 0);
-  const storedBoard = JSON.parse(await readFile(join(dirname(workspace.configPath), "entities/boards", `${board.id}.json`), "utf8"));
+  const storedBoard = JSON.parse(
+    await readFile(
+      join(dirname(workspace.configPath), "entities/boards", `${board.id}.json`),
+      "utf8",
+    ),
+  );
   assert.equal(storedBoard.data.applicationId, created.id);
   assert.deepEqual(
     (await boards.list()).items.map((entry) => entry.slug),
@@ -94,20 +102,20 @@ test("slug проверяется и уникален при конкуренц�
   assert.equal((await new BoardsService(second.workspace).list()).total, 3);
 });
 
-test("прерванное создание восстанавливается перед чтением и повтор возвращает прежнюю квитанцию", async (t) => {
+test("прерванное создание восстанавливается перед чтением; повтор отклоняется по занятому slug", async (t) => {
   const { workspace } = await fixture(t);
   const products = new ProductService(workspace);
   failWal(t, (stage, path) => {
-    if (stage === "file" && path?.startsWith("entities/boards/")) throw new Error("Имитированный сбой");
+    if (stage === "file" && path?.startsWith("entities/boards/"))
+      throw new Error("Имитированный сбой");
   });
   await assert.rejects(products.mutate(application("web"), "tester"), /Имитированный сбой/);
   t.mock.restoreAll();
   const pending = join(dirname(workspace.configPath), "transactions/pending.json");
   assert(await exists(pending));
   const board = await new BoardsService(workspace).get("web");
-  const replay = await products.mutate(application("web"), "tester");
-  assert.equal(replay.id, board.applicationId);
-  assert.equal(replay.revision, 1);
+  await assert.rejects(products.mutate(application("web"), "tester"));
+  assert(board.applicationId);
   assert.equal(await exists(pending), false);
   assert.equal((await new BoardsService(workspace).list()).total, 3);
 });

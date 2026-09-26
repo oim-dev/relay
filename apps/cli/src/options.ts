@@ -12,7 +12,7 @@ export interface RequestOptions {
 export function recordOptions(command: Command): Command {
   return command.option(
     "--request-id <id>",
-    "Ключ записи для безопасного повтора через HTTP или --local",
+    "Идентификатор корреляции запроса, не предотвращает повторную запись",
     (value) => parse(requestIdSchema, value, "идентификатор запроса"),
   );
 }

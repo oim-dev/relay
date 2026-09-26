@@ -70,7 +70,10 @@ test("ключи продукта: конкурентная выдача, раз
   const list = await service.entities({ q: "FEATURE-3", limit: 1 });
   assert.equal(list.items[0]?.id, second.id);
   assert.ok(!JSON.stringify(list).includes("## Правила"));
-  await writeFile(join(repository.root, "../.indexes", "product-catalog.json"), "{прерванный индекс");
+  await writeFile(
+    join(repository.root, "../.indexes", "product-catalog.json"),
+    "{прерванный индекс",
+  );
   assert.equal((await service.entity(first.id)).id, first.id);
 });
 
@@ -148,15 +151,19 @@ test("реализации: ID-пути, отдельное чтение и ре
   assert.ok(scenarioImpl.fields.kind === "implementation");
   const root = new ProductRepository(app.workspace).root;
   const directory = join(root, "../entities/implementations");
-  assert.deepEqual(new Set(await readdir(directory)), new Set([`${featureImpl.id}.json`, `${scenarioImpl.id}.json`]));
-  const stored = JSON.parse(
-    await readFile(join(directory, `${scenarioImpl.id}.json`), "utf8"),
+  assert.deepEqual(
+    new Set(await readdir(directory)),
+    new Set([`${featureImpl.id}.json`, `${scenarioImpl.id}.json`]),
   );
+  const stored = JSON.parse(await readFile(join(directory, `${scenarioImpl.id}.json`), "utf8"));
   assert.deepEqual(stored.data.description, ["## Поиск", "", "Текст  ", ""]);
   const scopes = await readdir(join(root, "../entities/scopes"));
   assert.equal(scopes.length, 1);
   const manifest = JSON.parse(await readFile(join(root, "../entities/scopes", scopes[0]!), "utf8"));
-  assert.deepEqual(new Set(manifest.data.implementations), new Set([featureImpl.id, scenarioImpl.id]));
+  assert.deepEqual(
+    new Set(manifest.data.implementations),
+    new Set([featureImpl.id, scenarioImpl.id]),
+  );
   assert(!JSON.stringify(manifest.data).includes("## Поиск"));
   const task = await new BoardTasksService(app.workspace).create(
     { board: "web", requestId: "task", productLinks: [{ kind: "implementation", id: "WEB-SI-1" }] },
@@ -180,7 +187,9 @@ test("реализации: ID-пути, отдельное чтение и ре
   const second = await service.updateImplementation(command, "agent");
   assert.equal(first.revision, featureImpl.revision + 1);
   assert.equal(second.revision, scenarioImpl.revision + 1);
-  assert.deepEqual(await service.updateImplementation(command, "agent"), second);
+  await assert.rejects(service.updateImplementation(command, "agent"), {
+    code: "INVALID_REFERENCE",
+  });
   const renamed = await service.entity("WEB-SI-99");
   assert.ok(renamed.fields.kind === "implementation");
   assert.equal(renamed.id, scenarioImpl.id);
@@ -215,16 +224,32 @@ test("прерванная составная запись восстанавл�
   );
   const record = await service.entity(saved.id);
   assert.ok(record.fields.kind === "feature");
-  const command = { action: "update" as const, id: saved.id, ifRevision: 1, requestId: "update", fields: { ...record.fields, name: "После" } };
-  failWal(t, (stage) => { if (stage === "intent") throw new Error("Прервано перед публикацией"); });
+  const command = {
+    action: "update" as const,
+    id: saved.id,
+    ifRevision: 1,
+    requestId: "update",
+    fields: { ...record.fields, name: "После" },
+  };
+  failWal(t, (stage) => {
+    if (stage === "intent") throw new Error("Прервано перед публикацией");
+  });
   await assert.rejects(service.mutate(command, "agent"), /Прервано/);
   assert(await exists(join(app.workspace.root, "transactions/pending.json")));
   t.mock.restoreAll();
   assert.equal((await service.entity(saved.id)).fields.kind, "feature");
   assert.equal((await service.entities({ refs: [saved.id] })).items[0]?.title, "После");
-  assert.equal((await service.mutate(command, "agent")).revision, 2);
-  failWal(t, (stage) => { if (stage === "intent") throw new Error("Прервано"); });
-  await assert.rejects(service.mutate({ ...command, fields: record.fields, ifRevision: 2, requestId: "second" }, "agent"), /Прервано/);
+  await assert.rejects(service.mutate(command, "agent"), { code: "REVISION_CONFLICT" });
+  failWal(t, (stage) => {
+    if (stage === "intent") throw new Error("Прервано");
+  });
+  await assert.rejects(
+    service.mutate(
+      { ...command, fields: record.fields, ifRevision: 2, requestId: "second" },
+      "agent",
+    ),
+    /Прервано/,
+  );
   t.mock.restoreAll();
   const path = join(app.workspace.root, "entities/features", `${saved.id}.json`);
   const external = JSON.parse(await readFile(path, "utf8"));

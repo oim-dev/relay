@@ -20,6 +20,6 @@ export type PublishCommentInput = {
   title: string;
   /** Полное сообщение в Markdown. */
   description: string;
-  /** Неизменный ключ повтора публикации. */
+  /** Корреляция HTTP-запроса, не ключ дедупликации. */
   requestId: string;
 };

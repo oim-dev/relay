@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import { stat } from "node:fs/promises";
+import { DocumentLinksRepository, advanceDocumentLinks } from "./document-links.js";
 import { graphEdgeSchema } from "../domain/entity-graph.js";
 import type { GraphEdge, GraphEvent, GraphSaved } from "../domain/entity-graph.js";
 import { invariant } from "../shared/errors.js";
@@ -23,11 +24,7 @@ import { readLegacyGraph, legacyRecords } from "./graph-migration.js";
 import { GraphTransaction } from "./graph-transaction.js";
 import type { GraphFileChange } from "./graph-transaction.js";
 import type { ActivityFile } from "./task-activity.js";
-import {
-  openUnifiedGraph,
-  unifiedGraphRecord,
-  commitUnifiedGraph,
-} from "./unified-graph.js";
+import { openUnifiedGraph, unifiedGraphRecord, commitUnifiedGraph } from "./unified-graph.js";
 
 export type GraphSnapshot = { meta: GraphMeta; index: GraphIndex; legacy?: LegacyGraph };
 
@@ -111,10 +108,7 @@ export class GraphRepository {
 
   async receipt(key: string): Promise<GraphReceipt | undefined> {
     invariant(/^[a-f0-9]{64}$/.test(key), "INVALID_DATA", "Некорректный адрес квитанции", 5);
-    if (this.workspace.storageSession) {
-      const value = await this.workspace.storageSession.compatibilityReceipt("graph-receipt", key);
-      return value === undefined ? undefined : graphReceiptSchema.parse(value);
-    }
+    if (this.workspace.storageSession) return undefined;
     if (await exists(this.legacyPath))
       return (await readLegacyGraph(this.legacyPath)).requests[key];
     const path = join(this.root, receiptPath(key));
@@ -174,8 +168,8 @@ export class GraphRepository {
     activity: ActivityFile[] = [],
   ): Promise<GraphSaved> {
     if (!this.workspace.storageSession && this.workspace.recoveringDocumentLinks) {
-      // Только recovery долговечного прикрепления: сохраняем текущее состояние и квитанцию,
-      // не возобновляя генерацию исторических событий и указателей на них.
+      // Только recovery прежнего прикрепления: состояние и его контрольная точка
+      // публикуются одним WAL, без новой постоянной квитанции.
       const revision = _snapshot.meta.revision + 1;
       const restored: GraphCurrent[] = [];
       const changes: GraphFileChange[] = [];
@@ -187,26 +181,37 @@ export class GraphRepository {
       }
       const index = _snapshot.index.prepare(restored, revision);
       const result = saved(index.fingerprint, revision);
-      changes.push(
-        { path: receiptPath(key), after: { hash: requestHash, result } },
-        ...index.changes,
-        { path: "meta.json", after: { ..._snapshot.meta, revision, indexFingerprint: index.fingerprint } },
+      changes.push(...index.changes, {
+        path: "meta.json",
+        after: { ..._snapshot.meta, revision, indexFingerprint: index.fingerprint },
+      });
+      const pending = await new DocumentLinksRepository(this.workspace).readPending();
+      invariant(
+        pending?.command && graphDigest([pending.actor, pending.command.requestId]) === key,
+        "DOCUMENT_LINK_RECOVERY_CONFLICT",
+        "Отсутствует соответствующее намерение прикрепления",
+        5,
       );
-      await new GraphTransaction(this.workspace).publish(changes, assertOwned);
+      const before = graphDigest(pending);
+      advanceDocumentLinks(pending, result.ids);
+      await new GraphTransaction(this.workspace).publish(changes, assertOwned, [], {
+        before,
+        after: pending,
+      });
       index.publish();
       return result;
     }
     this.workspace.assertWritableStorage();
     return commitUnifiedGraph(
-        this.workspace,
-        records,
-        events,
-        key,
-        requestHash,
-        saved,
-        assertOwned,
-        activity,
-      );
+      this.workspace,
+      records,
+      events,
+      key,
+      requestHash,
+      saved,
+      assertOwned,
+      activity,
+    );
   }
 
   /** Готовит граф для общей транзакции, не публикуя файлы или кеш индекса. */
@@ -218,7 +223,12 @@ export class GraphRepository {
     _requestHash: string,
     _saved: (fingerprint: string, revision: number) => GraphSaved,
   ): Promise<{ changes: GraphFileChange[]; result: GraphSaved; publish: () => void }> {
-    invariant(false, "STORAGE_MIGRATION_REQUIRED", "Прежняя запись графа отключена. Выполните storage migrate", 4);
+    invariant(
+      false,
+      "STORAGE_MIGRATION_REQUIRED",
+      "Прежняя запись графа отключена. Выполните storage migrate",
+      4,
+    );
   }
 
   async migrate(_assertOwned: () => void) {

@@ -15,11 +15,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Добавить, изменить, удалить или отметить критерий; проверка ревизии и безопасный повтор
+ * @description Добавить, изменить, удалить или отметить критерий с проверкой ревизии
  *
  * @tags kanban
  * @name ChangeTaskCriterionForProject
- * @summary Добавить, изменить, удалить или отметить критерий; проверка ревизии и безопасный повтор
+ * @summary Добавить, изменить, удалить или отметить критерий с проверкой ревизии
  * @request POST:/api/v1/projects/{project}/board-tasks/{reference}/criteria
  */
 export const changeTaskCriterionForProject = (

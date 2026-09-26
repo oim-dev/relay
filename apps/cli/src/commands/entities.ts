@@ -112,7 +112,7 @@ function fieldOptions(command: Command) {
       "--json <json>",
       "Дополнительные типизированные поля объекта; явные параметры имеют приоритет",
     )
-    .option("--request-id <id>", "Ключ безопасного повтора; по умолчанию генерируется");
+    .option("--request-id <id>", "Идентификатор корреляции, не дедупликации; по умолчанию UUID");
 }
 function fields(kind: EntityKind, options: Fields, creating: boolean) {
   let source: unknown = {};
@@ -386,7 +386,7 @@ export function registerEntities(program: Command, runtime: Runtime): void {
           "Прочитанная ревизия",
           integer(0, Number.MAX_SAFE_INTEGER),
         )
-        .option("--request-id <id>", "Ключ безопасного повтора"),
+        .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
     run: async (context, input) => {
       const data = await context.backend.entities.rename(
         {
@@ -428,7 +428,7 @@ export function registerEntities(program: Command, runtime: Runtime): void {
           "Прочитанная ревизия",
           integer(0, Number.MAX_SAFE_INTEGER),
         )
-        .option("--request-id <id>", "Ключ безопасного повтора"),
+        .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
     run: async (context, input) => {
       const { requestId, before, ...options } = input.options;
       const data = await context.backend.entities.moveTask(
@@ -469,7 +469,7 @@ export function registerEntities(program: Command, runtime: Runtime): void {
           "Прочитанная ревизия",
           integer(0, Number.MAX_SAFE_INTEGER),
         )
-        .option("--request-id <id>", "Ключ безопасного повтора"),
+        .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
     run: async (context, input) => {
       const { requestId, ...options } = input.options;
       const data = await context.backend.entities.linkTask(

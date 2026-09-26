@@ -110,7 +110,7 @@ export function planningListText(
           .join(" ")}`;
   return `${title}\n\n${body}\n\nПоказано ${rows.length} из ${page.total}.\n${next}`;
 }
-/** Первоначальная квитанция, пригодная для безопасного повтора. */
+/** Ответ текущей записи; результат не хранится для последующего повтора. */
 export function planningSavedText(saved: PlanningSaved): string {
   const labels: Record<string, string> = {
     create: "Запись создана",
@@ -128,5 +128,5 @@ export function planningSavedText(saved: PlanningSaved): string {
     "stage-move": "Порядок этапов изменён",
   };
   const action = labels[saved.action] ?? `Выполнено действие ${safeText(saved.action)}`;
-  return `${safeText(saved.key)}: ${action}.\nID владельца: ${saved.id}\nРевизия: ${saved.revision}${saved.stageId ? `\nЭтап: ${saved.stageId}` : ""}${saved.targetRevision ? `\nРевизия целевого плана: ${saved.targetRevision}` : ""}\nКлюч повтора: ${safeText(saved.requestId)}`;
+  return `${safeText(saved.key)}: ${action}.\nID владельца: ${saved.id}\nРевизия: ${saved.revision}${saved.stageId ? `\nЭтап: ${saved.stageId}` : ""}${saved.targetRevision ? `\nРевизия целевого плана: ${saved.targetRevision}` : ""}\nИдентификатор запроса: ${safeText(saved.requestId)}`;
 }

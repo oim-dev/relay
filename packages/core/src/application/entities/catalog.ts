@@ -119,13 +119,7 @@ export async function readEntityCatalog(
     options: Partial<
       Pick<
         EntityEntry,
-        | "aliases"
-        | "selectors"
-        | "filters"
-        | "status"
-        | "active"
-        | "document"
-        | "context"
+        "aliases" | "selectors" | "filters" | "status" | "active" | "document" | "context"
       >
     > = {},
   ) => {
