@@ -212,7 +212,7 @@ class ProjectEvents implements OnModuleInit, OnModuleDestroy {
             if (path === this.unifiedRoot && name !== undefined) {
               const relative = name.replaceAll("\\", "/");
               if (
-                /^(entities|relations|keyspaces|operations|history)\/.+\.json$/.test(relative) &&
+                /^(entities|relations|keyspaces)\/.+\.json$/.test(relative) &&
                 !relative.includes("/.indexes/")
               ) {
                 this.changedFiles.add(relative);

@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { workPlanSchema, planningPageQuerySchema } from "@relay/contracts/planning";
 import type { WorkPlan, PlanningPageQuery } from "@relay/contracts/planning";
 import { releaseSchema } from "@relay/contracts/releases";
@@ -8,8 +7,7 @@ import type { EntityRecord } from "./entity-store/registry.js";
 import { shortId } from "../shared/ids.js";
 import { invariant } from "../shared/errors.js";
 import { digest } from "./entity-store/format.js";
-import { saveAudit, readAudit, json } from "./unified-adapter.js";
-import { actorSchema, timestampSchema } from "@relay/contracts/primitives";
+import { json } from "./unified-adapter.js";
 
 export type PlanningRecord = WorkPlan | Release;
 export type PlanningKind = PlanningRecord["kind"];
@@ -70,8 +68,8 @@ export async function savePlanning(
   workspace: Workspace,
   value: PlanningRecord,
   actor: string,
-  action: string,
-  details?: {
+  _action: string,
+  _details?: {
     stageId?: string;
     taskId?: string;
     from?: string;
@@ -96,30 +94,7 @@ export async function savePlanning(
     updatedBy: actor,
   });
   await session.put(toRecord(next, prior.aliases), value.revision);
-  const description = [
-    ...(details?.stageId ? [`Внутренний ID этапа: ${details.stageId}`] : []),
-    ...(details?.taskId
-      ? [`Задача: task:${details.taskId}\n\nИз этапа: ${details.from}\n\nВ этап: ${details.to}`]
-      : []),
-    ...(details?.add?.length ? [`Добавлены задачи: ${details.add.join(", ")}`] : []),
-    ...(details?.remove?.length ? [`Исключены задачи: ${details.remove.join(", ")}`] : []),
-    ...(details?.reason ? [`## Причина\n\n${details.reason}`] : []),
-  ].join("\n\n");
-  await saveAudit(
-    workspace,
-    { kind: next.kind, id: next.id },
-    [
-      {
-        revision: next.revision,
-        actor,
-        at: next.updatedAt,
-        action,
-        ...(description ? { description: description.split("\n") } : {}),
-      },
-    ],
-    {},
-  );
-  return next;
+  return decodePlanning(await session.get({ kind: next.kind, id: next.id }));
 }
 
 export async function createPlanning<K extends PlanningKind>(
@@ -156,8 +131,7 @@ export async function createPlanning<K extends PlanningKind>(
     updatedBy: actor,
   });
   await session.put(toRecord(value), null);
-  await saveAudit(workspace, { kind, id }, [{ revision: 1, actor, at, action: "create" }], {});
-  return value as Extract<PlanningRecord, { kind: K }>;
+  return decodePlanning(await session.get({ kind, id })) as Extract<PlanningRecord, { kind: K }>;
 }
 
 function toRecord(value: PlanningRecord, aliases: string[] = []): EntityRecord {
@@ -225,21 +199,3 @@ export const planningSaved = (value: PlanningRecord, action: string, requestId: 
   action,
   requestId,
 });
-
-/** Дисковое пояснение истории декодируется, внутренние детали не протекают в общий DTO. */
-export async function planningHistory(workspace: Workspace, kind: PlanningKind, id: string) {
-  const schema = z.object({
-    revision: z.number(),
-    actor: actorSchema,
-    at: timestampSchema,
-    action: z.string(),
-    description: z.array(z.string()).optional(),
-  });
-  return (await readAudit(workspace, { kind, id })).events.map((raw) => {
-    const { description, ...event } = schema.parse(raw);
-    return {
-      ...event,
-      ...(description === undefined ? {} : { description: description.join("\n") }),
-    };
-  });
-}

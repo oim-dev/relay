@@ -170,7 +170,7 @@ Turbo-задачи генерации и проверки имеют `cache: fal
 Тесты расположены у владельцев: CLI — `apps/cli/test`, Core — `packages/core/test`,
 API/SSE — `packages/server-runtime/test`, standalone/dev — `apps/server/test`.
 MCP — `apps/mcp/test`, реестр и маршрутизация — `packages/project-runtime/test`.
-Contracts проверяет совместимость типов с Core. CI запускает проверки на Node.js 22 и 24.
+Contracts проверяет совместимость типов с Core. CI запускает проверки на Node.js 24.
 
 Для Web действуют знания [профиля frontend](../packages/dev-agents/src/frontend.md): Unit Architecture,
 React Reference, генерация новых TSX, lint/typecheck/build и сценарии через изолированный

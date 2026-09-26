@@ -18,7 +18,7 @@ import { BoardRepository } from "../../storage/boards.js";
 import { atomicJson, readJson } from "../../storage/files.js";
 import type { Workspace } from "../../storage/workspace.js";
 import { invariant } from "../../shared/errors.js";
-import { assertEntityKeyAvailable, entityDigest, resolveEntity } from "./catalog.js";
+import { assertEntityKeyAvailable, resolveEntity } from "./catalog.js";
 import type { EntityCatalog, EntityEntry } from "./catalog.js";
 import * as unified from "../../storage/unified-adapter.js";
 
@@ -272,8 +272,6 @@ async function saveMetadataRecord(
   revision: number,
   context: EntityOperationContext,
 ): Promise<Saved> {
-  const request = entityDigest([context.actor, context.requestId]);
-  const hash = entityDigest([entry.ref, input, revision, context.actor]);
   const at = new Date().toISOString();
   if (entry.ref.kind === "project") {
     const config = context.workspace.storageSession
@@ -285,16 +283,6 @@ async function saveMetadataRecord(
       name: entry.title,
       slug: entry.data.kind === "project" ? entry.data.slug : "project",
     };
-    const receipt = previous.requests?.[request];
-    if (receipt) {
-      invariant(
-        receipt.hash === hash,
-        "IDEMPOTENCY_CONFLICT",
-        "Ключ повтора использован для другого изменения",
-        4,
-      );
-      return receipt.result;
-    }
     invariant(
       previous.revision === revision,
       "REVISION_CONFLICT",
@@ -323,7 +311,6 @@ async function saveMetadataRecord(
           action: input.key ? "rename" : "update",
         },
       ],
-      requests: { ...previous.requests, [request]: { hash, result } },
     });
     if (context.workspace.storageSession)
       await unified.saveSettings(context.workspace, config.projectSettings);
@@ -342,16 +329,6 @@ async function saveMetadataRecord(
   const previous = (await new BoardRepository(context.workspace).all()).find(
     (board) => board.id === entry.ref.id,
   )!;
-  const receipt = previous.requests?.[request];
-  if (receipt) {
-    invariant(
-      receipt.hash === hash,
-      "IDEMPOTENCY_CONFLICT",
-      "Ключ повтора использован для другого изменения",
-      4,
-    );
-    return receipt.result;
-  }
   invariant(
     previous.revision === revision,
     "REVISION_CONFLICT",
@@ -367,7 +344,6 @@ async function saveMetadataRecord(
     key,
     revision: result.revision,
     aliases: [...new Set([...(previous.aliases ?? []), ...(key === entry.key ? [] : [entry.key])])],
-    requests: { ...previous.requests, [request]: { hash, result } },
     events: [
       ...(previous.events ?? []),
       { revision: result.revision, at, actor: context.actor, action: "rename" },

@@ -53,7 +53,7 @@ export const criterionViewSchema = z.strictObject({
 });
 const write = {
   ifRevision: z.number().int().positive().describe("Прочитанная ревизия задачи"),
-  requestId: requestIdSchema.describe("Ключ безопасного повтора операции"),
+  requestId: requestIdSchema,
   actor: actorSchema.optional().describe("Автор изменения; по умолчанию автор интерфейса"),
 };
 export const addCriterionSchema = criterionContentSchema.extend(write);

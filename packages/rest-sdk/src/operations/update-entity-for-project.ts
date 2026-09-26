@@ -15,11 +15,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Изменить содержание сущности по ключу или ID с проверкой ревизии и повтора
+ * @description Изменить содержание сущности по ключу или ID с проверкой ревизии
  *
  * @tags entities
  * @name UpdateEntityForProject
- * @summary Изменить содержание сущности по ключу или ID с проверкой ревизии и повтора
+ * @summary Изменить содержание сущности по ключу или ID с проверкой ревизии
  * @request POST:/api/v1/projects/{project}/entities/update
  */
 export const updateEntityForProject = (

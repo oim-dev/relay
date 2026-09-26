@@ -1,5 +1,6 @@
 import { dirname, join, relative } from "node:path";
-import { readdir, rmdir, unlink } from "node:fs/promises";
+import { readdir, rmdir, unlink, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import type { Workspace } from "../../storage/workspace.js";
 import { ProductRepository } from "../../storage/product.js";
 import { BoardRepository } from "../../storage/boards.js";
@@ -9,13 +10,18 @@ import type { ActivityFile } from "../../storage/task-activity.js";
 import { GraphRepository } from "../../storage/graph.js";
 import { DocumentLinksRepository } from "../../storage/document-links.js";
 import { EntityDeletionRepository } from "../../storage/entity-deletion.js";
-import { graphReceiptSchema } from "../../storage/graph-format.js";
+import {
+  graphReceiptSchema,
+  currentPath,
+  receiptPath,
+  eventPath,
+  graphStoredEventSchema,
+} from "../../storage/graph-format.js";
 import type { GraphCurrent, GraphReceipt } from "../../storage/graph-format.js";
-import type { GraphEvent } from "../../domain/entity-graph.js";
 import { readJson, exists } from "../../storage/files.js";
 import { projectSettings } from "../../storage/project-settings.js";
 import * as unified from "../../storage/unified-adapter.js";
-import { writeOwnedRelations, appendGraphEvent } from "../../storage/entity-store/relations.js";
+import { writeOwnedRelations } from "../../storage/entity-store/relations.js";
 import {
   syncBoardRelations,
   syncProductRelations,
@@ -32,6 +38,9 @@ import { validateProduct } from "../product/model.js";
 import { planningRecords } from "../../storage/planning.js";
 import { syncPlanRelations } from "../planning/relations.js";
 import { syncReleaseRelations } from "../releases/relations.js";
+import { storageMigrationOptionsSchema } from "../../storage/migration/options.js";
+import type { StorageMigrationOptions } from "../../storage/migration/options.js";
+export type { StorageMigrationOptions } from "../../storage/migration/options.js";
 
 /** Только явное обслуживание меняет физический формат существующего проекта. */
 export class StorageService {
@@ -88,7 +97,7 @@ export class StorageService {
             await refreshEntityCards(workspace, owned);
             await tx.writeFile("storage.json", {
               format: "relay-entities",
-              schemaVersion: 2,
+              schemaVersion: 4,
               productId: workspace.storageProductId!,
             });
           }),
@@ -187,10 +196,11 @@ export class StorageService {
     });
   }
 
-  async migrate() {
+  async migrate(input: StorageMigrationOptions = {}) {
+    const options = storageMigrationOptionsSchema.parse(input);
     if (await this.workspace.hasUnifiedStorage()) {
       return this.workspace.withEntityStorage(async (store, owned) => {
-        const result = await store.migrateHistory(owned);
+        const result = await store.migrateFormat(owned, options);
         await cleanupLegacyDirectories(dirname(this.workspace.configPath));
         return result;
       });
@@ -200,23 +210,35 @@ export class StorageService {
         return { migrated: false, format: "relay-entities", entities: 0 };
       const workspace = this.workspace,
         root = dirname(workspace.configPath);
+      const sourceHashes = new Map<string, string>();
+      const hashFile = async (path: string) =>
+        createHash("sha256")
+          .update(await readFile(path))
+          .digest("hex");
+      const initialPaths = [workspace.configPath];
+      for (const directory of [
+        "product",
+        "boards",
+        "task-activity",
+        "relations",
+        "entity-deletions",
+      ])
+        initialPaths.push(...(await jsonTree(join(root, directory))));
+      if (await exists(join(root, "relations.json")))
+        initialPaths.push(join(root, "relations.json"));
+      for (const path of initialPaths) sourceHashes.set(relative(root, path), await hashFile(path));
       const products = new ProductRepository(workspace);
-      const productSource = await products.snapshot(owned);
+      const productSource = await products.snapshot(owned, false);
       const boards = await new BoardRepository(workspace).all();
       const tasks = await new BoardTaskRepository(workspace).all();
       const graph = new GraphRepository(workspace);
-      let graphSource = await graph.open(owned);
-      if (graphSource.legacy) {
-        await graph.migrate(owned);
-        graphSource = await graph.open(owned);
-      }
+      const graphSource = await graph.open(owned);
       const edges: GraphCurrent[] = [];
       for (const id of graphSource.index.entries.keys())
         edges.push((await graph.get(id, graphSource))!);
-      const graphEvents: GraphEvent[] = [];
-      for (let offset = 0; offset < graphSource.meta.eventCount; offset += 100)
-        graphEvents.push(...(await graph.history({ offset, limit: 100 }, owned)).items);
       const graphReceipts: { key: string; value: GraphReceipt }[] = [];
+      for (const [key, value] of Object.entries(graphSource.legacy?.requests ?? {}))
+        graphReceipts.push({ key, value });
       for (const file of await jsonTree(join(root, "relations/requests")))
         graphReceipts.push({
           key: file.slice(file.lastIndexOf("/") + 1, -5),
@@ -250,17 +272,44 @@ export class StorageService {
           key: path.slice(path.lastIndexOf("/") + 1, -5),
           value: await readJson(path),
         });
-      // После переключения известные JSON-источники удаляются тем же WAL; их прежнее содержание остаётся в журнале переноса.
+      // Удаление адресно: посторонний JSON не становится источником только по расширению.
       const sources: string[] = [];
-      for (const path of [
-        products.root,
-        new BoardRepository(workspace).root,
-        activity.root,
-        join(root, "relations"),
-        join(root, "entity-deletions"),
-      ])
-        for (const file of await jsonTree(path))
-          if (!file.includes("/.indexes/")) sources.push(relative(root, file));
+      for (const path of await products.migrationSources()) sources.push(relative(root, path));
+      if (graphSource.legacy) sources.push("relations.json");
+      for (const record of productSource.records) {
+        if (await exists(join(products.root, products.path(record))))
+          sources.push(`product/${products.path(record)}`);
+        if (record.fields.kind === "document") {
+          const path = new DocumentLinksRepository(workspace).bindingPath(record.id);
+          if (await exists(path)) sources.push(relative(root, path));
+        }
+      }
+      for (const record of productSource.implementations.values())
+        sources.push(
+          `product/${products.implementationPath(record.fields.applicationId, { id: record.id, scenarioId: record.fields.scenarioId })}`,
+        );
+      for (const board of boards) sources.push(`boards/${board.slug}/board.json`);
+      for (const task of tasks) {
+        const board = boards.find((entry) => entry.id === task.boardId)!;
+        sources.push(`boards/${board.slug}/tasks/${task.id}.json`);
+      }
+      for (const file of activityFiles)
+        if (await exists(join(activity.root, file.path)))
+          sources.push(relative(root, join(activity.root, file.path)));
+      if (!graphSource.legacy) {
+        if (await exists(graph.path)) sources.push(relative(root, graph.path));
+        for (const edge of edges) sources.push(`relations/${currentPath(edge.edge.id)}`);
+        for (const receipt of graphReceipts) sources.push(`relations/${receiptPath(receipt.key)}`);
+        for (let sequence = 1; sequence <= graphSource.meta.eventCount; sequence++) {
+          const path = `relations/${eventPath(sequence)}`;
+          graphStoredEventSchema.parse(await readJson(join(root, path)));
+          sources.push(path);
+        }
+      }
+      for (const receipt of deletionReceipts)
+        sources.push(`entity-deletions/receipts/${receipt.key}.json`);
+      if (await exists(join(root, "entity-deletions/keys.json")))
+        sources.push("entity-deletions/keys.json");
       const config = unified.json(await readJson(workspace.configPath)) as Record<string, unknown>;
       const settings = workspace.config.projectSettings ?? {
         version: 1 as const,
@@ -273,6 +322,27 @@ export class StorageService {
             migrationOwned,
             (tx) =>
               workspace.inStorageSession(tx, migrationOwned, async () => {
+                // Фиксируем исходный снимок до подготовки целевых записей, не принимая внешнюю правку за базу WAL.
+                for (const path of new Set([...sources, relative(root, workspace.configPath)])) {
+                  const expected = sourceHashes.get(path);
+                  if (expected === undefined && !(await exists(join(root, path)))) continue;
+                  const bytes = await readFile(join(root, path));
+                  invariant(
+                    expected !== undefined &&
+                      expected === createHash("sha256").update(bytes).digest("hex"),
+                    "STORAGE_WRITE_CONFLICT",
+                    "Источник изменён во время извлечения legacy-базы",
+                    5,
+                    { path },
+                  );
+                  tx.originals.set(
+                    path,
+                    unified.json(
+                      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+                    ),
+                  );
+                }
+                tx.originals.set("storage.json", null);
                 await unified.saveSettings(workspace, settings, true);
                 if (!productSource.records.some((record) => record.fields.kind === "passport")) {
                   const at = new Date().toISOString();
@@ -305,13 +375,6 @@ export class StorageService {
                 for (const task of tasks) await unified.saveTask(workspace, task, true);
                 for (const key of reserved) await tx.reserveLegacyKey(key);
                 await new TaskActivityRepository(workspace).publish(activityFiles, owned);
-                for (const receipt of deletionReceipts)
-                  await tx.appendValue(
-                    "deletion-receipt",
-                    receipt.key,
-                    unified.json(receipt.value),
-                  );
-                await tx.appendValue("graph-baseline", "legacy", unified.json(graphSource.meta));
                 for (const record of edges) {
                   const binding = bindings.get(record.edge.id) ?? {
                     owner: record.edge.from,
@@ -331,10 +394,6 @@ export class StorageService {
                     },
                   ]);
                 }
-                for (const [index, event] of graphEvents.entries())
-                  await appendGraphEvent(tx, event, `legacy-${String(index).padStart(16, "0")}`);
-                for (const receipt of graphReceipts)
-                  await tx.appendValue("graph-receipt", receipt.key, unified.json(receipt.value));
                 for (const [kind, prefix] of [
                   ["feature", "FEATURE"],
                   ["scenario", "SCENARIO"],
@@ -355,12 +414,13 @@ export class StorageService {
                   await syncProductRelations(workspace, record, "relay");
                 await syncTaskRelations(workspace, tasks, "relay");
                 await refreshEntityCards(workspace, owned);
-                for (const path of sources) await tx.writeFile(path, null);
+                for (const path of new Set(sources))
+                  if (sourceHashes.has(path)) await tx.writeFile(path, null);
                 delete config.projectSettings;
                 await tx.writeFile(relative(root, workspace.configPath), unified.json(config));
                 await tx.writeFile("storage.json", {
                   format: "relay-entities",
-                  schemaVersion: 2,
+                  schemaVersion: 4,
                   productId: products.productId,
                 });
               }),
@@ -387,6 +447,9 @@ export class StorageService {
 
 /** Удаляются только известный производный кеш и пустые прежние каталоги. */
 async function cleanupLegacyDirectories(root: string) {
+  await unlink(join(root, "runtime/history-writer.json")).catch((error: unknown) => {
+    if (!isErrno(error, "ENOENT")) throw error;
+  });
   await unlink(join(root, "product/.indexes/catalog.json")).catch((error: unknown) => {
     if (!isErrno(error, "ENOENT")) throw error;
   });
@@ -398,7 +461,8 @@ async function cleanupLegacyDirectories(root: string) {
       if (!isErrno(error, "ENOTEMPTY") && !isErrno(error, "ENOENT")) throw error;
     });
   };
-  for (const name of ["boards", "tasks", "product", "operations"]) await prune(join(root, name));
+  for (const name of ["boards", "tasks", "product", "operations", "history"])
+    await prune(join(root, name));
 }
 
 async function jsonTree(root: string): Promise<string[]> {
@@ -409,14 +473,6 @@ async function jsonTree(root: string): Promise<string[]> {
     if (entry.isDirectory()) {
       if (entry.name !== ".indexes") files.push(...(await jsonTree(path)));
     } else if (entry.isFile() && entry.name.endsWith(".json")) files.push(path);
-    else
-      invariant(
-        entry.isFile() && entry.name === ".gitignore",
-        "STORAGE_MIGRATION_CONFLICT",
-        "В прежнем хранилище обнаружен неизвестный файл",
-        5,
-        { path },
-      );
   }
   return files.sort();
 }

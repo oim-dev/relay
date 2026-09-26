@@ -15,11 +15,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Опубликовать сообщение с заданным автором; безопасный повтор, без конфликта ревизии задачи
+ * @description Опубликовать сообщение с заданным автором без изменения ревизии задачи; повтор может создать новое сообщение
  *
  * @tags kanban
  * @name PublishTaskComment
- * @summary Опубликовать сообщение с заданным автором; безопасный повтор, без конфликта ревизии задачи
+ * @summary Опубликовать сообщение с заданным автором без изменения ревизии задачи; повтор может создать новое сообщение
  * @request POST:/api/v1/board-tasks/{reference}/comments
  */
 export const publishTaskComment = (

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { GraphPage, GraphSaved, FullContext } from "@relay/core/domain/entity-graph";
-import { fixture, successful, invokeRaw } from "./helpers/cli.js";
+import { fixture, successful, invokeRaw, failed } from "./helpers/cli.js";
 
-test("CLI графа: контекстный документ, путь, безопасный повтор и читаемое продолжение", async (t) => {
+test("CLI графа: контекстный документ, путь, конфликт повтора и читаемое продолжение", async (t) => {
   const app = await fixture(t);
   const task = successful(
     await app.run<{ id: string }>([
@@ -52,13 +52,13 @@ test("CLI графа: контекстный документ, путь, без�
     "--request-id",
     "attach-doc",
   ];
-  const receipt = successful(await app.run<GraphSaved>(link)).data;
-  assert.deepEqual(successful(await app.run<GraphSaved>(link)).data, receipt);
+  const saved = successful(await app.run<GraphSaved>(link)).data;
+  failed(await app.run(link), "GRAPH_CHANGED", 4);
   const context = successful(
     await app.run<FullContext>(["graph", "context", `task:${task.id}`]),
   ).data;
   assert.ok(context.nodes.some((node) => node.ref.id === doc.id));
-  assert.ok(context.edges.some((edge) => edge.to.id === doc.id && edge.id === receipt.ids[0]));
+  assert.ok(context.edges.some((edge) => edge.to.id === doc.id && edge.id === saved.ids[0]));
   const human = await invokeRaw(app.root, ["graph", "context", `task:${task.id}`]);
   assert.equal(human.code, 0, human.stderr);
   assert.match(human.stdout, /Полный контекст/);
@@ -105,9 +105,9 @@ test("CLI графа: контекстный документ, путь, без�
   ]);
   assert.equal(invalidJson.code, 2);
   assert.ok(!invalidJson.body.ok && invalidJson.body.error.code === "INVALID_JSON");
-  successful(await app.run(["graph", "unlink", receipt.ids[0]!, "--if-version", context.version]));
-  const history = successful(
-    await app.run<{ total: number }>(["graph", "history", "--id", receipt.ids[0]!]),
+  successful(await app.run(["graph", "unlink", saved.ids[0]!, "--if-version", context.version]));
+  const afterUnlink = successful(
+    await app.run<{ edges: { id: string }[] }>(["graph", "list"]),
   ).data;
-  assert.equal(history.total, 2);
+  assert.ok(!afterUnlink.edges.some((edge) => edge.id === saved.ids[0]));
 });

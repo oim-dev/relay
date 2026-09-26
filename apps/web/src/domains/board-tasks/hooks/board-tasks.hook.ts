@@ -10,8 +10,8 @@ import {
   createBoardTask,
   getTaskCriteria,
   getTaskCriterion,
-  getTaskActivity,
-  getTaskActivityEvent,
+  getTaskComments,
+  getTaskComment,
   getProductTaskProgress,
   getApplicationTaskProgress,
   getTaskExecutionProgress,
@@ -100,25 +100,14 @@ const useKanbanSync = (project: string, refresh: () => Promise<unknown>): void =
 /**
  * Сохраняет страницы прочитанного снимка; SSE обновляет только сигнал новых записей.
  */
-export const useTaskActivity = (
-  project: string,
-  reference: string,
-  comments: boolean,
-  enabled: boolean,
-) => {
+export const useTaskComments = (project: string, reference: string, enabled: boolean) => {
   const query = useSWRInfinite<ActivityPage, Error>(
     (index: number, previous: ActivityPage | null) => {
       if (!enabled || previous?.nextCursor === null) return null;
-      return [
-        "task-activity",
-        project,
-        reference,
-        comments,
-        index === 0 ? undefined : previous?.nextCursor,
-      ];
+      return ["task-comments", project, reference, index === 0 ? undefined : previous?.nextCursor];
     },
-    ([, scope, id, isDiscussion, cursor]: [string, string, string, boolean, string | undefined]) =>
-      getTaskActivity(scope, id, isDiscussion, cursor),
+    ([, scope, id, cursor]: [string, string, string, string | undefined]) =>
+      getTaskComments(scope, id, cursor),
     {
       revalidateFirstPage: false,
       revalidateOnFocus: false,
@@ -127,22 +116,22 @@ export const useTaskActivity = (
     },
   );
   const latest = useSWR<ActivityPage, Error>(
-    enabled ? ["task-activity-latest", project, reference, comments] : null,
-    () => getTaskActivity(project, reference, comments),
+    enabled ? ["task-comments-latest", project, reference] : null,
+    () => getTaskComments(project, reference),
   );
   useKanbanSync(project, latest.mutate);
   return { query, latest };
 };
 
 /**
- * Полные неизменяемые подробности загружаются при раскрытии записи.
+ * Полный комментарий загружается при открытии обсуждения.
  */
-export const useTaskActivityEvent = (project: string, reference: string, entryId: string | null) =>
+export const useTaskComment = (project: string, reference: string, entryId: string | null) =>
   useSWR<ActivityEvent, Error>(
-    entryId === null ? null : ["task-activity-event", project, reference, entryId],
+    entryId === null ? null : ["task-comment", project, reference, entryId],
     () => {
       if (entryId === null) throw new Error("Запись ленты не выбрана");
-      return getTaskActivityEvent(project, reference, entryId);
+      return getTaskComment(project, reference, entryId);
     },
     { revalidateOnFocus: false },
   );

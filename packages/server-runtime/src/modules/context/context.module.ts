@@ -38,7 +38,7 @@ class ContextController {
   @Put("settings")
   @ApiEndpoint({
     id: "saveProjectSettings",
-    summary: "Сохранить имя и slug проекта; повтор тех же значений идемпотентен",
+    summary: "Сохранить текущие имя и slug проекта",
     response: "ProjectSettings",
     body: "SaveProjectSettings",
   })

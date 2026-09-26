@@ -19,7 +19,7 @@ Swagger — `/api/docs`. Сервер вызывает Core, SDK генерир�
 | `GET /plans/:reference/stages`              | Страница вложенных этапов, показатели и `planRevision`     |
 | `GET /plans/:reference/stages/:stage/tasks` | Страница актуальных задач этапа                            |
 | `GET /plans/task-candidates`                | Серверный поиск задач по доске и доступности               |
-| `GET /plans/task-memberships/:reference`    | Текущее и историческое участие задачи                      |
+| `GET /plans/task-memberships/:reference`    | Участие задачи в текущем составе планов, без истории       |
 | `POST /plans`                               | Создать черновик                                           |
 | `POST /plans/:reference/update`             | Частично изменить реквизиты                                |
 | `POST /plans/:reference/stages`             | Создать/изменить/удалить/переместить этап                  |
@@ -87,24 +87,25 @@ Swagger выбирает проект для коротких маршрутов
 
 Пути ниже указаны относительно `/api/v1`. Детальные схемы и примеры принадлежат справочникам владельцев.
 
-| Область     | Маршруты                                                                                                                                                                                                                                                      | Контракт                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Сущности    | GET/POST `/entities`, GET `/entities/types`, `/entities/type`, `/entities/get`, `/entities/resolve`, `/entities/keys`, `/entities/key-spaces`, `/entities/history`; POST `/entities/update`, `/entities/rename`, `/entities/move-task`, `/entities/link-task` | [Движок](ENTITIES.md)                                         |
-| Продукт     | `/product/state`, `/product/overview`, `/product/records`, `/product/context`, `/product/entities`, `/product/entity`, `/product/implementations`                                                                                                             | [Продукт](PRODUCT.md#rest)                                    |
-| Доски       | GET `/boards`, `/boards/:slug`                                                                                                                                                                                                                                | [Доски](BOARDS.md)                                            |
-| Задачи      | GET/POST `/board-tasks`, GET `/board-tasks/:reference`, GET/POST `/board-tasks/:reference/links`, POST `/board-tasks/:reference/update`, `/board-tasks/:reference/move`                                                                                       | [Канбан](KANBAN.md)                                           |
-| Связи       | GET/POST `/graph`, GET `/graph/history`                                                                                                                                                                                                                       | [Граф](GRAPH.md)                                              |
-| Удаление    | GET `/entities/deletion-preview`, POST `/entities/delete`                                                                                                                                                                                                     | [Сценарии и подтверждение](#предпросмотр-и-удаление-сущности) |
-| Целостность | GET `/validation` → `{valid,entities,boards,tasks}`                                                                                                                                                                                                           | Каталог, продукт, задачи и граф под общей блокировкой         |
-| События     | GET `/events`                                                                                                                                                                                                                                                 | SSE                                                           |
-| Доступность | GET `/health`                                                                                                                                                                                                                                                 | Состояние процесса; не подтверждает качество данных           |
+| Область     | Маршруты                                                                                                                                                                                                                                 | Контракт                                                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Сущности    | GET/POST `/entities`, GET `/entities/types`, `/entities/type`, `/entities/get`, `/entities/resolve`, `/entities/keys`, `/entities/key-spaces`; POST `/entities/update`, `/entities/rename`, `/entities/move-task`, `/entities/link-task` | [Движок](ENTITIES.md)                                         |
+| Продукт     | `/product/state`, `/product/overview`, `/product/records`, `/product/context`, `/product/entities`, `/product/entity`, `/product/implementations`                                                                                        | [Продукт](PRODUCT.md#rest)                                    |
+| Доски       | GET `/boards`, `/boards/:slug`                                                                                                                                                                                                           | [Доски](BOARDS.md)                                            |
+| Задачи      | GET/POST `/board-tasks`, GET `/board-tasks/:reference`, GET/POST `/board-tasks/:reference/links`, POST `/board-tasks/:reference/update`, `/board-tasks/:reference/move`                                                                  | [Канбан](KANBAN.md)                                           |
+| Связи       | GET/POST `/graph`                                                                                                                                                                                                                        | [Граф](GRAPH.md)                                              |
+| Удаление    | GET `/entities/deletion-preview`, POST `/entities/delete`                                                                                                                                                                                | [Сценарии и подтверждение](#предпросмотр-и-удаление-сущности) |
+| Целостность | GET `/validation` → `{valid,entities,boards,tasks}`                                                                                                                                                                                      | Каталог, продукт, задачи и граф под общей блокировкой         |
+| События     | GET `/events`                                                                                                                                                                                                                            | SSE                                                           |
+| Доступность | GET `/health`                                                                                                                                                                                                                            | Состояние процесса; не подтверждает качество данных           |
 
 Критерии приёмки: GET/POST `/board-tasks/:reference/criteria`,
 GET `/board-tasks/:reference/criteria/:criterionId`. Список ограничен,
 полное описание читается адресно. [Схемы и действия](KANBAN.md#критерии-приёмки).
 
 Обсуждения: GET/POST `/board-tasks/:reference/comments`, GET полного сообщения по
-`/comments/:entryId`. История: GET `/board-tasks/:reference/history` и `/history/:entryId`.
+`/comments/:entryId`. Общие entity/graph/task history-маршруты удалены из контракта;
+URL комментариев не меняются.
 [Контракт ленты](TASK-ACTIVITY.md) определяет автора, Markdown, последовательность и повтор.
 
 Прежние `/board`, `/tasks`, `/task-list`, `/groups`, `/overview` и `/project/*`
@@ -125,12 +126,13 @@ GET `/board-tasks/:reference/criteria/:criterionId`. Список огранич
 `POST /entities/delete` принимает `{kind,ref,ifVersion,requestId,actor?}`.
 `ifVersion` берётся из предпросмотра и привязан к выбранной сущности, каталогу,
 состоянию графа и сигналу обсуждений. `REVISION_CONFLICT` требует нового предпросмотра.
-После неопределённого ответа повторяется прежнее тело с тем же requestId.
-Квитанция `{action:"delete",ref,requestId,deleted,detached,relations}` сохраняется
-отдельно от удаляемой записи; изменение тела при повторе — `IDEMPOTENCY_CONFLICT`.
+После неопределённого ответа сначала перечитайте текущее состояние и, если запись ещё
+существует, получите новый предпросмотр. `requestId` — корреляция, не гарантия дедупликации.
+Ответ `{action:"delete",ref,requestId,deleted,detached,relations}` не сохраняется
+ни в файле владельца, ни в надгробии, ни в отдельном журнале.
 Все маршруты имеют проектные варианты. Правила каскада: [удаление](../product/ENTITY-DELETION.md).
 
-Legacy-граф v1 требует явной миграции до удаления (`GRAPH_MIGRATION_REQUIRED`).
+Прежняя база требует явного перехода через `storage migrate`, а не миграции при чтении.
 Постоянные ключи и алиасы удалённых сущностей резервируются; старый адрес не начнёт
 открывать новую запись. Повторное использование зарезервированного ключа — `ENTITY_KEY_CONFLICT`.
 
@@ -140,7 +142,7 @@ Legacy-граф v1 требует явной миграции до удален�
 Ленты задачи используют cursor/nextCursor, snapshot и after; новая запись не сдвигает старые страницы.
 Фильтры применяются до подсчёта и продолжения; при изменении снимка начните заново.
 Полные Markdown-тексты читаются адресно, они не подменяются краткой карточкой.
-Ошибки ревизии и повтор requestId определяются контрактом владельца.
+Ошибки ревизии определяются контрактом владельца; requestId не гарантирует повтор исходного ответа.
 
 ## Полный контекст
 

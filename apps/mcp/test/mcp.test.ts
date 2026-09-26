@@ -92,7 +92,8 @@ test("MCP планирования: discovery, запись состава, по
     requestId: "plan",
   };
   const plan = planningSavedSchema.parse((await call(client, "plan_create", input)).data);
-  assert.deepEqual((await call(client, "plan_create", input)).data, plan);
+  const duplicatePlan = planningSavedSchema.parse((await call(client, "plan_create", input)).data);
+  assert.notEqual(duplicatePlan.id, plan.id);
   const stage = planningSavedSchema.parse(
     (
       await call(client, "plan_stage_create", {
@@ -200,7 +201,10 @@ test("MCP планирования: discovery, запись состава, по
     "VALIDATION_ERROR",
   );
   saved = planningSavedSchema.parse((await call(client, "plan_task_transfer", transfer)).data);
-  assert.deepEqual((await call(client, "plan_task_transfer", transfer)).data, saved);
+  assert.equal(
+    (await call(client, "plan_task_transfer", transfer)).error?.code,
+    "REVISION_CONFLICT",
+  );
   assert.equal(saved.targetRevision, saved.revision);
   assert.equal(
     (await call(client, "plan_tasks_list", { ref: plan.id, stage: stage.stageId })).data?.total,
@@ -221,7 +225,10 @@ test("MCP планирования: discovery, запись состава, по
     requestId: "stage-update",
   };
   saved = planningSavedSchema.parse((await call(client, "plan_stage_update", stageUpdate)).data);
-  assert.deepEqual((await call(client, "plan_stage_update", stageUpdate)).data, saved);
+  assert.equal(
+    (await call(client, "plan_stage_update", stageUpdate)).error?.code,
+    "REVISION_CONFLICT",
+  );
   const currentStages = stagesPageSchema.parse(
     (await call(client, "plan_stages_list", { ref: plan.id })).data,
   );
@@ -312,7 +319,7 @@ test("MCP планирования: discovery, запись состава, по
   assert.match(read.text, /Состояние: Выпущен/);
   assert.match(read.text, /Текущая готовность: 0\/1 планов/);
   assert(read.text.includes(published.releasedAt!));
-  assert.deepEqual((await call(client, "release_publish", publish)).data, publishedReceipt.data);
+  assert.equal((await call(client, "release_publish", publish)).error?.code, "REVISION_CONFLICT");
   const currentComposition = releaseCompositionSchema.parse(
     (await call(client, "release_plans_list", { ref: release.id })).data,
   );
@@ -411,9 +418,9 @@ test("MCP частичного изменения этапа: необязате
     ).data,
   );
   const replay = await call(client, "plan_stage_update", titleInput);
-  assert.deepEqual(replay.data, title);
-  assert.match(replay.text, /Этап изменён/);
-  assert(replay.text.includes(`Ревизия: ${title.revision}`));
+  assert.equal(replay.error?.code, "REVISION_CONFLICT");
+  assert.equal(replay.isError, true);
+  assert.equal(replay.data, undefined);
   const read = async () =>
     stagesPageSchema.parse((await call(client, "plan_stages_list", { ref: plan.id })).data);
   const afterReplay = await read();
@@ -435,7 +442,10 @@ test("MCP частичного изменения этапа: необязате
   const cleared = planningSavedSchema.parse(
     (await call(client, "plan_stage_update", clearInput)).data,
   );
-  assert.deepEqual((await call(client, "plan_stage_update", clearInput)).data, cleared);
+  assert.equal(
+    (await call(client, "plan_stage_update", clearInput)).error?.code,
+    "REVISION_CONFLICT",
+  );
   const empty = await call(client, "plan_stage_update", {
     ref: plan.id,
     stage: stage.stageId,
@@ -558,7 +568,7 @@ test("MCP: предметные линковки и снятие сразу ви
   };
   const saved = await call(client, "entity_task_update", update);
   assert.equal(saved.ok, true);
-  assert.deepEqual((await call(client, "entity_task_update", update)).data, saved.data);
+  assert.equal((await call(client, "entity_task_update", update)).error?.code, "REVISION_CONFLICT");
   assert.equal(
     (await call(client, "entity_task_update", { ...update, requestId: "stale" })).error?.code,
     "REVISION_CONFLICT",
@@ -641,7 +651,7 @@ async function call(client: Client, name: string, args: Record<string, unknown> 
     assert.match(content, /Ревизия/);
   } else if (body.ok && /^(plan_|release_)/.test(name) && typeof body.data?.action === "string") {
     assert.match(content, /Ревизия:/);
-    assert.match(content, /Ключ повтора:/);
+    assert.match(content, /requestId:/);
     if (body.data?.targetRevision !== undefined)
       assert(content.includes(`Ревизия целевого плана: ${body.data.targetRevision}`));
   } else if (body.ok && (name === "plan_get" || name === "release_get")) {
@@ -652,12 +662,23 @@ async function call(client: Client, name: string, args: Record<string, unknown> 
   return { ...body, isError: result.isError, text: content };
 }
 
-test("MCP обсуждений: discovery, имена агентов, повтор, история, бюджет и изоляция", async (t) => {
+test("MCP обсуждений: discovery без аудита, имена агентов, повтор, бюджет и изоляция", async (t) => {
   const app = await setup(t);
   const server = await app.start(join(app.root, "a/.relay/config.json"));
   const client = await app.connect(server.url);
   const tools = (await client.listTools()).tools;
   const publish = tools.find((tool) => tool.name === "task_comment_publish");
+  assert.deepEqual(
+    tools.filter((tool) => /history|audit/i.test(tool.name)),
+    [],
+  );
+  for (const name of ["task_comment_publish", "task_comments_list", "task_comment_get"])
+    assert.ok(
+      tools.some((tool) => tool.name === name),
+      name,
+    );
+  for (const name of ["entity_history", "task_history_list", "task_history_get"])
+    await assert.rejects(client.callTool({ name, arguments: {} }), { code: -32602 });
   assert.ok(publish?.inputSchema.required?.includes("actor"));
   assert.ok(publish?.inputSchema.required?.includes("actorRole"));
   const created = await call(client, "board_task_create", {
@@ -676,7 +697,10 @@ test("MCP обсуждений: discovery, имена агентов, повто
   };
   const saved = await call(client, "task_comment_publish", input);
   assert.equal(saved.ok, true);
-  assert.deepEqual((await call(client, "task_comment_publish", input)).data, saved.data);
+  const duplicate = await call(client, "task_comment_publish", input);
+  assert.equal(duplicate.ok, true);
+  assert.notEqual(duplicate.data?.commentId, saved.data?.commentId);
+  assert.equal((await call(client, "board_task_get", { reference })).data?.revision, 1);
   const read = await call(client, "task_comment_get", {
     reference,
     entryId: saved.data?.commentId,
@@ -695,7 +719,7 @@ test("MCP обсуждений: discovery, имена агентов, повто
   );
   const page = await call(client, "task_comments_list", { reference, limit: 1 });
   assert.equal(page.ok, true);
-  assert.equal((await call(client, "task_history_list", { reference, after: 0 })).ok, true);
+  assert.equal((await call(client, "task_comments_list", { reference, after: 0 })).ok, true);
   const otherServer = await app.start(join(app.root, "b/.relay/config.json"));
   const other = await app.connect(otherServer.url);
   assert.equal(
@@ -736,7 +760,8 @@ test("MCP движка: discovery из контрактов, публичные 
     requestId: "entity-create",
   };
   const created = entitySavedSchema.parse((await call(client, "entity_task_create", args)).data);
-  assert.deepEqual((await call(client, "entity_task_create", args)).data, created);
+  const duplicate = entitySavedSchema.parse((await call(client, "entity_task_create", args)).data);
+  assert.notEqual(duplicate.ref.id, created.ref.id);
   const renamed = entitySavedSchema.parse(
     (
       await call(client, "entity_rename_key", {
@@ -758,7 +783,7 @@ test("MCP движка: discovery из контрактов, публичные 
   assert.equal(byKey.key, renamed.key);
   assert.equal(
     (await call(client, "entities_list", { kind: "task", board: "BOARD-PRODUCT" })).data?.total,
-    1,
+    2,
   );
   assert.equal((await call(client, "entity_keys", { ref: renamed.key })).data?.total, 2);
   const contextDefinition = tools.find((tool) => tool.name === "entity_context")!;
@@ -769,8 +794,8 @@ test("MCP движка: discovery из контрактов, публичные 
   assert.equal(context.ok, true);
   const graph = fullContextSchema.parse(context.data);
   assert.equal(graph.complete, true);
-  assert.equal(graph.nodes.length, 2);
-  assert.equal(graph.edges.length, 1);
+  assert.equal(graph.nodes.length, 3);
+  assert.equal(graph.edges.length, 2);
   assert.equal(graph.edges[0]?.type, "part-of");
   const limited = await call(client, "entity_context", { ref: created.key, maxBytes: 1024 });
   assert.equal(limited.ok, false);
@@ -809,7 +834,9 @@ test("MCP канбана: предметные аргументы, блокер�
   const saved = await call(client, "board_task_create", create);
   assert.equal(saved.ok, true);
   assert.match(String(saved.data?.id), /^[A-Za-z0-9]{8}$/);
-  assert.deepEqual((await call(client, "board_task_create", create)).data, saved.data);
+  const duplicate = await call(client, "board_task_create", create);
+  assert.equal(duplicate.ok, true);
+  assert.notEqual(duplicate.data?.id, saved.data?.id);
   const dep = await call(client, "board_task_create", {
     ...create,
     board: "infrastructure",
@@ -890,7 +917,10 @@ test("MCP критериев: discovery, атомарное создание, в
   };
   const complete = await call(client, "task_criterion_complete", command);
   assert.equal(complete.ok, true);
-  assert.deepEqual((await call(client, "task_criterion_complete", command)).data, complete.data);
+  assert.equal(
+    (await call(client, "task_criterion_complete", command)).error?.code,
+    "REVISION_CONFLICT",
+  );
   assert.equal(
     (await call(client, "task_criterion_complete", { ...command, requestId: "stale" })).error?.code,
     "REVISION_CONFLICT",
@@ -920,7 +950,7 @@ test("продукт доступен агенту через API и изоли�
   };
   const saved = await call(client, "product_save", args);
   assert.equal(saved.ok, true);
-  assert.deepEqual((await call(client, "product_save", args)).data, saved.data);
+  assert.equal((await call(client, "product_save", args)).ok, false);
   const list = await call(client, "product_list", { project: "a", kind: "passport" });
   assert.equal(list.ok, true);
   assert.equal(list.data?.total, 1);
@@ -956,7 +986,11 @@ test("продукт доступен агенту через API и изоли�
   const repeated = CallToolResultSchema.parse(
     await client.callTool({ name: "product_feature_save", arguments: featureArgs }),
   );
-  assert.deepEqual(result.structuredContent, repeated.structuredContent);
+  assert.notEqual(repeated.isError, true);
+  assert.notEqual(
+    z.object({ data: z.object({ id: z.string() }) }).parse(repeated.structuredContent).data.id,
+    receipt.data.id,
+  );
   const wrongRevision = CallToolResultSchema.parse(
     await client.callTool({
       name: "product_feature_save",
@@ -1022,9 +1056,9 @@ test("продукт доступен агенту через API и изоли�
   const changed = await call(client, "product_implementation_update", change);
   assert.equal(changed.ok, true);
   assert.equal(changed.data?.id, implementation.data?.id);
-  assert.deepEqual(
-    (await call(client, "product_implementation_update", change)).data,
-    changed.data,
+  assert.equal(
+    (await call(client, "product_implementation_update", change)).error?.code,
+    "REVISION_CONFLICT",
   );
   assert.equal((await call(client, "product_lint", { project: "a" })).ok, true);
   assert.equal((await call(client, "product_list", { project: "b" })).data?.total, 0);
@@ -1058,6 +1092,10 @@ test("несколько MCP-клиентов, общий Relay Server, горя
     "utf8",
   );
   for (const tool of toolsBefore.tools) {
+    assert.equal(tool.annotations?.idempotentHint, tool.annotations?.readOnlyHint);
+    if (!tool.annotations?.readOnlyHint) {
+      assert.match(tool.description ?? "", /не повторяйте запись вслепую/);
+    }
     assert(documentation.includes(`\`${tool.name}\``), `Нет справки инструмента ${tool.name}`);
     assert.match(tool.description ?? "", /[А-Яа-яЁё]/);
     const inspect = (value: unknown): void => {
@@ -1068,12 +1106,18 @@ test("несколько MCP-клиентов, общий Relay Server, горя
       if (!value || typeof value !== "object") return;
       const node = value as Record<string, unknown>;
       if (node.properties && typeof node.properties === "object")
-        for (const [name, field] of Object.entries(node.properties))
+        for (const [name, field] of Object.entries(node.properties)) {
+          if (name === "requestId")
+            assert.match(
+              (field as { description?: string }).description ?? "",
+              /не ключ дедупликации/,
+            );
           assert.match(
             (field as { description?: string }).description ?? "",
             /[А-Яа-яЁё]/,
             `${tool.name}.${name}`,
           );
+        }
       Object.values(node).forEach(inspect);
     };
     inspect(tool.inputSchema);
@@ -1121,13 +1165,23 @@ test("несколько MCP-клиентов, общий Relay Server, горя
     ifRevision: 1,
     requestId: "step-1",
   };
-  assert.deepEqual(
-    await call(first, "board_task_update", update),
-    await call(second, "board_task_update", update),
-  );
+  assert.equal((await call(first, "board_task_update", update)).ok, true);
+  assert.equal((await call(second, "board_task_update", update)).error?.code, "REVISION_CONFLICT");
   assert.equal(
     (await call(first, "board_task_update", { ...update, description: "Другое" })).error?.code,
-    "IDEMPOTENCY_CONFLICT",
+    "REVISION_CONFLICT",
+  );
+  const current = await call(second, "board_task_get", { project: "b", reference: "PRODUCT-1" });
+  assert.equal(current.data?.description, update.description);
+  assert.equal(
+    (
+      await call(second, "board_task_update", {
+        ...update,
+        ifRevision: current.data?.revision,
+        description: "Согласованная правка после чтения",
+      })
+    ).ok,
+    true,
   );
   assert.equal(
     (

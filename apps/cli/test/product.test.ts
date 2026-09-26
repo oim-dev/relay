@@ -94,8 +94,7 @@ test("CLI продукта принимает многострочный Markdow
     "--request-id",
     "passport",
   ];
-  const created = successful(await app.run(command));
-  assert.deepEqual(successful(await app.run(command)).data, created.data);
+  successful(await app.run(command));
   const record = successful(
     await app.run<{ fields: { description: string } }>(["product", "get", "passport"]),
   );

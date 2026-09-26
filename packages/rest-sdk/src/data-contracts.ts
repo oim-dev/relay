@@ -165,7 +165,7 @@ export interface PlanningCandidatesPage {
      * @maxLength 128
      */
     updatedBy: string;
-    /** Прогресс критериев приёмки; отсутствует в старых квитанциях */
+    /** Прогресс критериев приёмки; может отсутствовать в совместимом ответе */
     acceptance?: {
       /**
        * Общее число критериев
@@ -794,7 +794,7 @@ export interface PlanningTasksPage {
      * @maxLength 128
      */
     updatedBy: string;
-    /** Прогресс критериев приёмки; отсутствует в старых квитанциях */
+    /** Прогресс критериев приёмки; может отсутствовать в совместимом ответе */
     acceptance?: {
       /**
        * Общее число критериев
@@ -921,7 +921,7 @@ export interface CreatePlan {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -933,7 +933,7 @@ export interface UpdatePlan {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -981,7 +981,7 @@ export interface TransitionPlan {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -1006,7 +1006,7 @@ export interface ChangePlanStage {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -1046,7 +1046,7 @@ export interface ChangePlanTasks {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -1081,7 +1081,7 @@ export interface TransferPlanTask {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -1142,7 +1142,7 @@ export interface PlanningSaved {
   /** Выполненное предметное действие */
   action: string;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -1454,7 +1454,7 @@ export interface SaveRelease {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -1502,7 +1502,7 @@ export interface UpdateRelease {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -1522,7 +1522,7 @@ export interface ReleaseAction {
   /** Автор действия; по умолчанию автор интерфейса */
   actor?: string;
   /**
-   * Ключ повтора; тот же запрос возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -3115,7 +3115,7 @@ export interface DeleteEntity {
    */
   ifVersion: string;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -3142,7 +3142,7 @@ export interface EntityDeleted {
     id: string;
   };
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -3168,54 +3168,49 @@ export interface EntityDeleted {
   relations: number;
 }
 
-export interface TaskActivityQuery {
+export interface TaskCommentsQuery {
   /**
-   * Размер страницы, по умолчанию 20, максимум 100
+   * Размер страницы комментариев, по умолчанию 20, максимум 100
    * @min 1
    * @max 100
    * @default 20
    */
-  limit: number;
+  limit?: number;
   /**
    * Непрозрачный курсор следующей страницы; сохраняйте фильтры
    * @maxLength 2048
    */
   cursor?: string;
   /**
-   * Только события после известного последовательного номера
+   * Только комментарии после известного последовательного номера
    * @min 0
    * @max 9007199254740991
    */
   after?: number;
-  /**
-   * Точное имя автора для фильтрации
-   * @maxLength 128
-   */
+  /** Точное имя автора для фильтрации */
   actor?: string;
-  /**
-   * Тип действия, например update или comment-publish
-   * @minLength 1
-   */
-  action?: string;
+  /** Совместимый фильтр; допустима только публикация комментария */
+  action?: "comment-publish";
 }
 
-export interface TaskActivityPage {
+export interface TaskCommentsPage {
+  /** Краткие комментарии без полного Markdown */
   items: {
     /**
-     * Постоянный номер записи в ленте задачи
+     * Постоянный номер комментария; прежние номера сохраняются, пропуски допустимы
      * @pattern ^[1-9]\d{0,14}$
      */
     id: string;
     /** Постоянный ID задачи */
     taskId: string;
     /**
-     * Последовательный номер в ленте задачи
+     * Последовательный номер комментария; возможны пропуски
      * @exclusiveMin 0
      * @max 9007199254740991
      */
     sequence: number;
     /**
-     * Момент времени в UTC
+     * Время публикации комментария
      * @format date-time
      * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
      */
@@ -3225,51 +3220,54 @@ export interface TaskActivityPage {
      * @maxLength 128
      */
     actor: string;
-    /** Роль автора: оператор, оркестратор или воркер */
-    actorRole?: TaskActivityPageActorRoleEnum;
-    /** Сохранённое действие */
-    action: string;
-    /** Читаемое название события или заголовок сообщения */
+    /** Роль автора, если сохранена в исходном сообщении */
+    actorRole?: TaskCommentsPageActorRoleEnum;
+    /** Комментарий опубликован */
+    action: "comment-publish";
+    /** Заголовок сообщения */
     title: string;
-    /** Общий идентификатор составной операции */
+    /** Сохранённый идентификатор операции публикации */
     operationId: string;
     /**
-     * Ревизия содержания задачи на момент события
+     * Ревизия содержания задачи на момент публикации
      * @exclusiveMin 0
      * @max 9007199254740991
      */
     revision: number;
-    /** У старой записи отсутствуют подробности изменений */
+    /** Сохранённый признак прежней записи; у новых комментариев false */
     legacy: boolean;
-    /** Названия изменённых полей без полных значений */
-    fields: string[];
+    /**
+     * Совместимое пустое поле; комментарий не изменяет поля задачи
+     * @maxItems 0
+     */
+    fields: never[];
   }[];
-  /** Курсор продолжения или null */
+  /** Курсор продолжения того же снимка или null */
   nextCursor: string | null;
   /**
-   * Верхняя граница снимка; новые события читаются через after
+   * Верхний последовательный номер снимка; новые комментарии читаются через after
    * @min 0
    * @max 9007199254740991
    */
   snapshot: number;
 }
 
-export interface TaskHistoryEvent {
+export interface TaskComment {
   /**
-   * Постоянный номер записи в ленте задачи
+   * Постоянный номер комментария; прежние номера сохраняются, пропуски допустимы
    * @pattern ^[1-9]\d{0,14}$
    */
   id: string;
   /** Постоянный ID задачи */
   taskId: string;
   /**
-   * Последовательный номер в ленте задачи
+   * Последовательный номер комментария; возможны пропуски
    * @exclusiveMin 0
    * @max 9007199254740991
    */
   sequence: number;
   /**
-   * Момент времени в UTC
+   * Время публикации комментария
    * @format date-time
    * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
    */
@@ -3279,61 +3277,102 @@ export interface TaskHistoryEvent {
    * @maxLength 128
    */
   actor: string;
-  /** Роль автора: оператор, оркестратор или воркер */
-  actorRole?: TaskHistoryEventActorRoleEnum;
-  /** Сохранённое действие */
-  action: string;
-  /** Читаемое название события или заголовок сообщения */
+  /** Роль автора, если сохранена в исходном сообщении */
+  actorRole?: TaskCommentActorRoleEnum;
+  /** Комментарий опубликован */
+  action: "comment-publish";
+  /** Заголовок сообщения */
   title: string;
-  /** Общий идентификатор составной операции */
+  /** Сохранённый идентификатор операции публикации */
   operationId: string;
   /**
-   * Ревизия содержания задачи на момент события
+   * Ревизия содержания задачи на момент публикации
    * @exclusiveMin 0
    * @max 9007199254740991
    */
   revision: number;
-  /** У старой записи отсутствуют подробности изменений */
+  /** Сохранённый признак прежней записи; у новых комментариев false */
   legacy: boolean;
-  /** Названия изменённых полей без полных значений */
-  fields: string[];
-  /** Изменения полей; Markdown отмечается фактом изменения без копий текста */
-  changes: {
-    /** Постоянный адрес изменённого поля */
-    field: string;
-    /** Русское название изменения */
-    label: string;
-    /** Обычный текст или Markdown */
-    format: TaskHistoryEventFormatEnum;
-    /** Прежнее значение; null при добавлении или сокращённом содержании */
-    before: string | null;
-    /** Новое значение; null при удалении или сокращённом содержании */
-    after: string | null;
-    /** Сохранён факт изменения текста; прежняя и новая редакции не записываются в историю */
-    contentOmitted?: true;
-  }[];
-  /** Полный Markdown опубликованного сообщения */
-  description?: string;
+  /**
+   * Совместимое пустое поле; комментарий не изменяет поля задачи
+   * @maxItems 0
+   */
+  fields: never[];
+  /**
+   * Совместимое пустое поле; комментарий не содержит аудит изменений
+   * @maxItems 0
+   */
+  changes: never[];
+  /** Полный Markdown сообщения без нормализации содержания */
+  description: string;
+}
+
+export interface TaskCommentSummary {
+  /**
+   * Постоянный номер комментария; прежние номера сохраняются, пропуски допустимы
+   * @pattern ^[1-9]\d{0,14}$
+   */
+  id: string;
+  /** Постоянный ID задачи */
+  taskId: string;
+  /**
+   * Последовательный номер комментария; возможны пропуски
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  sequence: number;
+  /**
+   * Время публикации комментария
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  at: string;
+  /**
+   * Автор операции
+   * @maxLength 128
+   */
+  actor: string;
+  /** Роль автора, если сохранена в исходном сообщении */
+  actorRole?: TaskCommentSummaryActorRoleEnum;
+  /** Комментарий опубликован */
+  action: "comment-publish";
+  /** Заголовок сообщения */
+  title: string;
+  /** Сохранённый идентификатор операции публикации */
+  operationId: string;
+  /**
+   * Ревизия содержания задачи на момент публикации
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  revision: number;
+  /** Сохранённый признак прежней записи; у новых комментариев false */
+  legacy: boolean;
+  /**
+   * Совместимое пустое поле; комментарий не изменяет поля задачи
+   * @maxItems 0
+   */
+  fields: never[];
 }
 
 export interface TaskCommentSaved {
   /** Постоянный ID задачи */
   id: string;
   /**
-   * Постоянный номер записи в ленте задачи
+   * Постоянный номер комментария; прежние номера сохраняются, пропуски допустимы
    * @pattern ^[1-9]\d{0,14}$
    */
   commentId: string;
   /** Сообщение опубликовано */
   action: "comment-publish";
   /**
-   * Ревизия ленты, не содержания задачи
+   * Последовательный номер комментария, не ревизия содержания задачи
    * @exclusiveMin 0
    * @max 9007199254740991
    */
   revision: number;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -3342,22 +3381,16 @@ export interface TaskCommentSaved {
 }
 
 export interface PublishTaskComment {
-  /**
-   * Обязательный однострочный заголовок сообщения
-   * @minLength 1
-   */
+  /** Обязательный однострочный заголовок сообщения */
   title: string;
   /** Полное сообщение в Markdown, до 256 КиБ */
   description: string;
-  /**
-   * Имя автора; Web передаёт Оператор, агент задаёт своё имя
-   * @maxLength 128
-   */
+  /** Имя автора: Web передаёт Оператор, агент задаёт своё имя */
   actor: string;
   /** Роль автора: оператор, оркестратор или воркер */
   actorRole: PublishTaskCommentActorRoleEnum;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -4333,43 +4366,6 @@ export interface EntityKeySpaces {
   version: string;
 }
 
-export interface EntityHistory {
-  /** События записи, доступные у её владельца */
-  items: {
-    /**
-     * Ревизия записи
-     * @exclusiveMin 0
-     * @max 9007199254740991
-     */
-    revision: number;
-    /**
-     * Автор операции
-     * @maxLength 128
-     */
-    actor: string;
-    /**
-     * Момент времени в UTC
-     * @format date-time
-     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
-     */
-    at: string;
-    /** Действие, создавшее ревизию */
-    action: string;
-    /** Пояснение предметного действия в Markdown, если сохранено владельцем */
-    description?: string;
-  }[];
-  /**
-   * Полное число результатов выбранной области
-   * @min 0
-   * @max 9007199254740991
-   */
-  total: number;
-  /** Смещение продолжения; null в конце */
-  nextOffset: number | null;
-  /** Версия согласованного снимка */
-  version: string;
-}
-
 export interface CreateEntity {
   /** Типизированные данные создаваемой сущности */
   data:
@@ -4567,7 +4563,7 @@ export interface CreateEntity {
         targets?: string[];
       };
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -4592,7 +4588,7 @@ export interface UpdateEntity {
    */
   ifRevision: number;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -4744,7 +4740,7 @@ export interface RenameEntity {
    */
   ifRevision: number;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -4776,7 +4772,7 @@ export interface MoveEntityTask {
    */
   ifRevision: number;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -4815,7 +4811,7 @@ export interface LinkEntityTask {
    */
   ifRevision: number;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -4859,7 +4855,7 @@ export interface EntitySaved {
    */
   revision: number;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -5185,7 +5181,7 @@ export interface GraphMutation {
    */
   ifVersion: string;
   /**
-   * Ключ безопасного повтора всего пакета
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -5206,131 +5202,8 @@ export interface GraphSaved {
   revision: number;
   /** Версия графа после записи */
   version: string;
-  /** Ключ повтора; повтор возвращает первоначальную квитанцию */
+  /** Идентификатор корреляции исходного запроса; результат не сохраняется для повтора */
   requestId: string;
-}
-
-export interface GraphHistory {
-  items: {
-    /** Выполненное действие */
-    action: GraphHistoryActionEnum;
-    /** Состояние связи после действия; для отзыва последнее сохранённое состояние */
-    edge: {
-      /**
-       * Постоянный ID отношения
-       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-       */
-      id: string;
-      /**
-       * Расширяемый тип отношения, например references или contains
-       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-       */
-      type: string;
-      /** Начало отношения */
-      from: {
-        /**
-         * Расширяемый вид сущности
-         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-         */
-        kind: string;
-        /**
-         * Постоянный ID сущности в выбранном проекте
-         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-         */
-        id: string;
-      };
-      /** Конец отношения */
-      to: {
-        /**
-         * Расширяемый вид сущности
-         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-         */
-        kind: string;
-        /**
-         * Постоянный ID сущности в выбранном проекте
-         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-         */
-        id: string;
-      };
-      /** Пояснение назначения связи в Markdown */
-      description: string;
-      /**
-       * Ревизия отношения
-       * @exclusiveMin 0
-       * @max 9007199254740991
-       */
-      revision: number;
-      /** Единственный источник — явно сохранённая связь движка Core */
-      source: "graph";
-      /**
-       * Автор установки связи
-       * @maxLength 128
-       */
-      createdBy: string;
-      /**
-       * Время установки связи
-       * @format date-time
-       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
-       */
-      createdAt: string;
-    };
-    /**
-     * Автор события
-     * @maxLength 128
-     */
-    actor: string;
-    /**
-     * Время события
-     * @format date-time
-     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
-     */
-    at: string;
-    /**
-     * Ревизия пакета
-     * @exclusiveMin 0
-     * @max 9007199254740991
-     */
-    revision: number;
-  }[];
-  /**
-   * @min 0
-   * @max 9007199254740991
-   */
-  total: number;
-  nextOffset: number | null;
-  /**
-   * @min 0
-   * @max 9007199254740991
-   */
-  revision: number;
-}
-
-export interface GraphHistoryQuery {
-  /**
-   * История одного отношения; без ID весь журнал графа
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-   */
-  id?: string;
-  /**
-   * Смещение событий
-   * @min 0
-   * @max 9007199254740991
-   * @default 0
-   */
-  offset?: number;
-  /**
-   * Размер страницы событий
-   * @min 1
-   * @max 100
-   * @default 40
-   */
-  limit?: number;
-  /**
-   * Ревизия журнала первой страницы
-   * @min 0
-   * @max 9007199254740991
-   */
-  revision?: number;
 }
 
 export interface FullContext {
@@ -5579,7 +5452,7 @@ export interface BoardTaskView {
    * @maxLength 128
    */
   updatedBy: string;
-  /** Прогресс критериев приёмки; отсутствует в старых квитанциях */
+  /** Прогресс критериев приёмки; может отсутствовать в совместимом ответе */
   acceptance?: {
     /**
      * Общее число критериев
@@ -5723,7 +5596,7 @@ export type ChangeCriterion =
        */
       ifRevision: number;
       /**
-       * Ключ безопасного повтора операции
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
        * @minLength 1
        * @maxLength 128
        * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -5742,7 +5615,7 @@ export type ChangeCriterion =
        */
       ifRevision: number;
       /**
-       * Ключ безопасного повтора операции
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
        * @minLength 1
        * @maxLength 128
        * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -5772,7 +5645,7 @@ export type ChangeCriterion =
        */
       ifRevision: number;
       /**
-       * Ключ безопасного повтора операции
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
        * @minLength 1
        * @maxLength 128
        * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -5798,7 +5671,7 @@ export type ChangeCriterion =
        */
       ifRevision: number;
       /**
-       * Ключ безопасного повтора операции
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
        * @minLength 1
        * @maxLength 128
        * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -5844,7 +5717,7 @@ export interface BoardTaskSaved {
    */
   criterionId?: string;
   /**
-   * Ключ повтора: повтор с тем же содержимым возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново и не возвращает сохранённый результат
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -5932,7 +5805,7 @@ export interface BoardTaskSaved {
      * @maxLength 128
      */
     updatedBy: string;
-    /** Прогресс критериев приёмки; отсутствует в старых квитанциях */
+    /** Прогресс критериев приёмки; может отсутствовать в совместимом ответе */
     acceptance?: {
       /**
        * Общее число критериев
@@ -6040,7 +5913,7 @@ export interface BoardTasksPage {
      * @maxLength 128
      */
     updatedBy: string;
-    /** Прогресс критериев приёмки; отсутствует в старых квитанциях */
+    /** Прогресс критериев приёмки; может отсутствовать в совместимом ответе */
     acceptance?: {
       /**
        * Общее число критериев
@@ -6154,7 +6027,7 @@ export interface BoardTaskLinksPage {
        * @maxLength 128
        */
       updatedBy: string;
-      /** Прогресс критериев приёмки; отсутствует в старых квитанциях */
+      /** Прогресс критериев приёмки; может отсутствовать в совместимом ответе */
       acceptance?: {
         /**
          * Общее число критериев
@@ -6239,7 +6112,7 @@ export interface BoardTasksQuery {
 
 export interface CreateBoardTask {
   /**
-   * Ключ повтора: повтор с тем же содержимым возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново и не возвращает сохранённый результат
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -6318,7 +6191,7 @@ export interface CreateBoardTask {
    */
   column?: CreateBoardTaskColumnEnum;
   /**
-   * Вернуть первоначальную задачу в квитанции для открытия редактора без GET; по умолчанию компактная квитанция
+   * Вернуть задачу в ответе для открытия редактора без GET; по умолчанию компактный результат. Ответ не сохраняется для повтора
    * @default false
    */
   includeTask?: boolean;
@@ -6326,7 +6199,7 @@ export interface CreateBoardTask {
 
 export interface UpdateBoardTask {
   /**
-   * Ключ повтора: повтор с тем же содержимым возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново и не возвращает сохранённый результат
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -6362,7 +6235,7 @@ export interface UpdateBoardTask {
 
 export interface MoveBoardTask {
   /**
-   * Ключ повтора: повтор с тем же содержимым возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново и не возвращает сохранённый результат
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -6395,7 +6268,7 @@ export interface MoveBoardTask {
 
 export interface LinkBoardTask {
   /**
-   * Ключ повтора: повтор с тем же содержимым возвращает первоначальную квитанцию
+   * Идентификатор корреляции; повтор исполняется заново и не возвращает сохранённый результат
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -7110,7 +6983,7 @@ export interface UpdateImplementation {
    */
   key?: string;
   /**
-   * Ключ повтора записи
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -7401,7 +7274,7 @@ export interface ProductMutation {
   ifRevision?: number;
   ifVersion?: string;
   /**
-   * Ключ безопасного повтора операции
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
    * @minLength 1
    * @maxLength 128
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
@@ -8086,6 +7959,25 @@ export interface ContextResponse {
        */
       entityKey?: string;
       aliases?: string[];
+      events?: {
+        /**
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        revision: number;
+        /**
+         * Автор операции
+         * @maxLength 128
+         */
+        actor: string;
+        /**
+         * Момент времени в UTC
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        action: string;
+      }[];
       requests?: Partial<
         Record<
           string,
@@ -8103,27 +7995,6 @@ export interface ContextResponse {
           }
         >
       >;
-      events?: {
-        /**
-         * Ревизия записи
-         * @exclusiveMin 0
-         * @max 9007199254740991
-         */
-        revision: number;
-        /**
-         * Автор операции
-         * @maxLength 128
-         */
-        actor: string;
-        /**
-         * Момент времени в UTC
-         * @format date-time
-         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
-         */
-        at: string;
-        /** Действие над записью */
-        action: string;
-      }[];
     };
     /** @minLength 1 */
     storageDir: string;
@@ -9147,20 +9018,20 @@ export type EntityDeletedKindEnum =
   | "work-plan"
   | "release";
 
-/** Роль автора: оператор, оркестратор или воркер */
-export type TaskActivityPageActorRoleEnum =
+/** Роль автора, если сохранена в исходном сообщении */
+export type TaskCommentsPageActorRoleEnum =
   | "operator"
   | "orchestrator"
   | "worker";
 
-/** Роль автора: оператор, оркестратор или воркер */
-export type TaskHistoryEventActorRoleEnum =
+/** Роль автора, если сохранена в исходном сообщении */
+export type TaskCommentActorRoleEnum = "operator" | "orchestrator" | "worker";
+
+/** Роль автора, если сохранена в исходном сообщении */
+export type TaskCommentSummaryActorRoleEnum =
   | "operator"
   | "orchestrator"
   | "worker";
-
-/** Обычный текст или Markdown */
-export type TaskHistoryEventFormatEnum = "text" | "markdown";
 
 /** Роль автора: оператор, оркестратор или воркер */
 export type PublishTaskCommentActorRoleEnum =
@@ -9631,9 +9502,6 @@ export type GraphQueryDirectionEnum = "both" | "outgoing" | "incoming";
  * @default "all"
  */
 export type GraphQueryProfileEnum = "all" | "context";
-
-/** Выполненное действие */
-export type GraphHistoryActionEnum = "add" | "update" | "remove";
 
 /** Цель реализации: общая фича, сценарий или контракт приложения */
 export type BoardTaskViewKindEnum = "feature" | "scenario" | "implementation";
@@ -10994,7 +10862,7 @@ export type GetTaskCommentsOkEnum = true;
 
 export interface GetTaskCommentsParams {
   /**
-   * Размер страницы, по умолчанию 20, максимум 100
+   * Размер страницы комментариев, по умолчанию 20, максимум 100
    * @min 1
    * @max 100
    * @default 20
@@ -11006,15 +10874,15 @@ export interface GetTaskCommentsParams {
    */
   cursor?: string;
   /**
-   * Только события после известного последовательного номера
+   * Только комментарии после известного последовательного номера
    * @min 0
    * @max 9007199254740991
    */
   after?: number;
   /** Точное имя автора для фильтрации */
   actor?: string;
-  /** Тип действия, например update или comment-publish */
-  action?: string;
+  /** Совместимый фильтр; допустима только публикация комментария */
+  action?: "comment-publish";
   /** ID или ключ задачи */
   reference: any;
 }
@@ -11030,44 +10898,6 @@ export type GetTaskCommentOkEnum = true;
 
 export interface GetTaskCommentParams {
   /** Постоянный номер сообщения в ленте задачи */
-  entryId: any;
-  /** ID или ключ задачи */
-  reference: any;
-}
-
-export type GetTaskHistoryOkEnum = true;
-
-export interface GetTaskHistoryParams {
-  /**
-   * Размер страницы, по умолчанию 20, максимум 100
-   * @min 1
-   * @max 100
-   * @default 20
-   */
-  limit?: number;
-  /**
-   * Непрозрачный курсор следующей страницы; сохраняйте фильтры
-   * @maxLength 2048
-   */
-  cursor?: string;
-  /**
-   * Только события после известного последовательного номера
-   * @min 0
-   * @max 9007199254740991
-   */
-  after?: number;
-  /** Точное имя автора для фильтрации */
-  actor?: string;
-  /** Тип действия, например update или comment-publish */
-  action?: string;
-  /** ID или ключ задачи */
-  reference: any;
-}
-
-export type GetTaskHistoryEventOkEnum = true;
-
-export interface GetTaskHistoryEventParams {
-  /** Постоянный номер события в ленте задачи */
   entryId: any;
   /** ID или ключ задачи */
   reference: any;
@@ -11188,36 +11018,6 @@ export interface GetFullContextParams {
    * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
    */
   root: string;
-}
-
-export type GetGraphHistoryOkEnum = true;
-
-export interface GetGraphHistoryParams {
-  /**
-   * История одного отношения; без ID весь журнал графа
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-   */
-  id?: string;
-  /**
-   * Смещение событий
-   * @min 0
-   * @max 9007199254740991
-   * @default 0
-   */
-  offset?: number;
-  /**
-   * Размер страницы событий
-   * @min 1
-   * @max 100
-   * @default 40
-   */
-  limit?: number;
-  /**
-   * Ревизия журнала первой страницы
-   * @min 0
-   * @max 9007199254740991
-   */
-  revision?: number;
 }
 
 export type ListEntityTypesOkEnum = true;
@@ -11693,67 +11493,6 @@ export type GetEntityKeySpacesParams1KindEnum =
   | "work-plan"
   | "release";
 
-export type GetEntityHistoryOkEnum = true;
-
-export interface GetEntityHistoryParams {
-  /**
-   * Смещение страницы
-   * @min 0
-   * @max 9007199254740991
-   * @default 0
-   */
-  offset?: number;
-  /**
-   * Размер страницы от 1 до 100
-   * @min 1
-   * @max 100
-   * @default 40
-   */
-  limit?: number;
-  /**
-   * Версия первой страницы; изменение требует начать чтение заново
-   * @maxLength 128
-   */
-  version?: string;
-  /**
-   * Ключ или постоянный ID сущности; для уточнения вида допустим kind:ID
-   * @minLength 1
-   * @maxLength 257
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
-   */
-  ref: string;
-  /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum9;
-}
-
-/** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum9 =
-  | "project"
-  | "product"
-  | "feature"
-  | "scenario"
-  | "application"
-  | "implementation"
-  | "board"
-  | "task"
-  | "document"
-  | "work-plan"
-  | "release";
-
-/** Уточнение ожидаемого вида при разрешении адреса */
-export type GetEntityHistoryParams1KindEnum =
-  | "project"
-  | "product"
-  | "feature"
-  | "scenario"
-  | "application"
-  | "implementation"
-  | "board"
-  | "task"
-  | "document"
-  | "work-plan"
-  | "release";
-
 export type UpdateEntityOkEnum = true;
 
 export type RenameEntityKeyOkEnum = true;
@@ -11799,7 +11538,7 @@ export interface GetProductEntitiesForProjectParams {
    */
   q?: string;
   /** Тип цели */
-  kind?: KindEnum10;
+  kind?: KindEnum9;
   /**
    * ID или ключ приложения
    * @minLength 1
@@ -11835,7 +11574,7 @@ export interface GetProductEntitiesForProjectParams {
 }
 
 /** Тип цели */
-export type KindEnum10 =
+export type KindEnum9 =
   | "passport"
   | "feature"
   | "scenario"
@@ -11904,7 +11643,7 @@ export interface GetProductOverviewForProjectParams {
 export type GetProductRecordsForProjectOkEnum = true;
 
 export interface GetProductRecordsForProjectParams {
-  kind?: KindEnum11;
+  kind?: KindEnum10;
   /** @maxLength 4096 */
   q?: string;
   /**
@@ -11930,7 +11669,7 @@ export interface GetProductRecordsForProjectParams {
   project: string;
 }
 
-export type KindEnum11 =
+export type KindEnum10 =
   | "passport"
   | "feature"
   | "scenario"
@@ -12866,7 +12605,7 @@ export type GetTaskCommentsForProjectOkEnum = true;
 
 export interface GetTaskCommentsForProjectParams {
   /**
-   * Размер страницы, по умолчанию 20, максимум 100
+   * Размер страницы комментариев, по умолчанию 20, максимум 100
    * @min 1
    * @max 100
    * @default 20
@@ -12878,15 +12617,15 @@ export interface GetTaskCommentsForProjectParams {
    */
   cursor?: string;
   /**
-   * Только события после известного последовательного номера
+   * Только комментарии после известного последовательного номера
    * @min 0
    * @max 9007199254740991
    */
   after?: number;
   /** Точное имя автора для фильтрации */
   actor?: string;
-  /** Тип действия, например update или comment-publish */
-  action?: string;
+  /** Совместимый фильтр; допустима только публикация комментария */
+  action?: "comment-publish";
   /** ID или ключ задачи */
   reference: any;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
@@ -12906,48 +12645,6 @@ export type GetTaskCommentForProjectOkEnum = true;
 
 export interface GetTaskCommentForProjectParams {
   /** Постоянный номер сообщения в ленте задачи */
-  entryId: any;
-  /** ID или ключ задачи */
-  reference: any;
-  /** Slug, имя из реестра или постоянный идентификатор проекта */
-  project: string;
-}
-
-export type GetTaskHistoryForProjectOkEnum = true;
-
-export interface GetTaskHistoryForProjectParams {
-  /**
-   * Размер страницы, по умолчанию 20, максимум 100
-   * @min 1
-   * @max 100
-   * @default 20
-   */
-  limit?: number;
-  /**
-   * Непрозрачный курсор следующей страницы; сохраняйте фильтры
-   * @maxLength 2048
-   */
-  cursor?: string;
-  /**
-   * Только события после известного последовательного номера
-   * @min 0
-   * @max 9007199254740991
-   */
-  after?: number;
-  /** Точное имя автора для фильтрации */
-  actor?: string;
-  /** Тип действия, например update или comment-publish */
-  action?: string;
-  /** ID или ключ задачи */
-  reference: any;
-  /** Slug, имя из реестра или постоянный идентификатор проекта */
-  project: string;
-}
-
-export type GetTaskHistoryEventForProjectOkEnum = true;
-
-export interface GetTaskHistoryEventForProjectParams {
-  /** Постоянный номер события в ленте задачи */
   entryId: any;
   /** ID или ключ задачи */
   reference: any;
@@ -13090,38 +12787,6 @@ export interface GetFullContextForProjectParams {
   project: string;
 }
 
-export type GetGraphHistoryForProjectOkEnum = true;
-
-export interface GetGraphHistoryForProjectParams {
-  /**
-   * История одного отношения; без ID весь журнал графа
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
-   */
-  id?: string;
-  /**
-   * Смещение событий
-   * @min 0
-   * @max 9007199254740991
-   * @default 0
-   */
-  offset?: number;
-  /**
-   * Размер страницы событий
-   * @min 1
-   * @max 100
-   * @default 40
-   */
-  limit?: number;
-  /**
-   * Ревизия журнала первой страницы
-   * @min 0
-   * @max 9007199254740991
-   */
-  revision?: number;
-  /** Slug, имя из реестра или постоянный идентификатор проекта */
-  project: string;
-}
-
 export type ListEntityTypesForProjectOkEnum = true;
 
 export interface ListEntityTypesForProjectParams {
@@ -13159,13 +12824,13 @@ export interface PreviewEntityDeletionForProjectParams {
    */
   ref: string;
   /** Вид удаляемой сущности; проект, паспорт и системные доски не удаляются */
-  kind: KindEnum12;
+  kind: KindEnum11;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Вид удаляемой сущности; проект, паспорт и системные доски не удаляются */
-export type KindEnum12 =
+export type KindEnum11 =
   | "feature"
   | "scenario"
   | "application"
@@ -13193,13 +12858,13 @@ export type DescribeEntityTypeForProjectOkEnum = true;
 
 export interface DescribeEntityTypeForProjectParams {
   /** Вид основной сущности */
-  kind: KindEnum13;
+  kind: KindEnum12;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Вид основной сущности */
-export type KindEnum13 =
+export type KindEnum12 =
   | "project"
   | "product"
   | "feature"
@@ -13249,7 +12914,7 @@ export interface ListEntitiesForProjectParams {
    */
   version?: string;
   /** Вид основной сущности */
-  kind?: KindEnum14;
+  kind?: KindEnum13;
   /**
    * Поиск по ключам, ID, названию и краткому описанию
    * @maxLength 4096
@@ -13330,7 +12995,7 @@ export interface ListEntitiesForProjectParams {
 }
 
 /** Вид основной сущности */
-export type KindEnum14 =
+export type KindEnum13 =
   | "project"
   | "product"
   | "feature"
@@ -13425,13 +13090,13 @@ export interface GetEntityForProjectParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum15;
+  kind?: KindEnum14;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum15 =
+export type KindEnum14 =
   | "project"
   | "product"
   | "feature"
@@ -13469,13 +13134,13 @@ export interface ResolveEntityForProjectParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum16;
+  kind?: KindEnum15;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum16 =
+export type KindEnum15 =
   | "project"
   | "product"
   | "feature"
@@ -13532,13 +13197,13 @@ export interface GetEntityKeysForProjectParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum17;
+  kind?: KindEnum16;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum17 =
+export type KindEnum16 =
   | "project"
   | "product"
   | "feature"
@@ -13588,13 +13253,13 @@ export interface GetEntityKeySpacesForProjectParams {
    */
   version?: string;
   /** Вид основной сущности */
-  kind: KindEnum18;
+  kind: KindEnum17;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Вид основной сущности */
-export type KindEnum18 =
+export type KindEnum17 =
   | "project"
   | "product"
   | "feature"
@@ -13609,69 +13274,6 @@ export type KindEnum18 =
 
 /** Вид основной сущности */
 export type GetEntityKeySpacesForProjectParams1KindEnum =
-  | "project"
-  | "product"
-  | "feature"
-  | "scenario"
-  | "application"
-  | "implementation"
-  | "board"
-  | "task"
-  | "document"
-  | "work-plan"
-  | "release";
-
-export type GetEntityHistoryForProjectOkEnum = true;
-
-export interface GetEntityHistoryForProjectParams {
-  /**
-   * Смещение страницы
-   * @min 0
-   * @max 9007199254740991
-   * @default 0
-   */
-  offset?: number;
-  /**
-   * Размер страницы от 1 до 100
-   * @min 1
-   * @max 100
-   * @default 40
-   */
-  limit?: number;
-  /**
-   * Версия первой страницы; изменение требует начать чтение заново
-   * @maxLength 128
-   */
-  version?: string;
-  /**
-   * Ключ или постоянный ID сущности; для уточнения вида допустим kind:ID
-   * @minLength 1
-   * @maxLength 257
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
-   */
-  ref: string;
-  /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum19;
-  /** Slug, имя из реестра или постоянный идентификатор проекта */
-  project: string;
-}
-
-/** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum19 =
-  | "project"
-  | "product"
-  | "feature"
-  | "scenario"
-  | "application"
-  | "implementation"
-  | "board"
-  | "task"
-  | "document"
-  | "work-plan"
-  | "release";
-
-/** Уточнение ожидаемого вида при разрешении адреса */
-export type GetEntityHistoryForProjectParams1KindEnum =
   | "project"
   | "product"
   | "feature"

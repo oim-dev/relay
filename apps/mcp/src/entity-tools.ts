@@ -29,7 +29,7 @@ type EntityTool = {
 };
 const saved = (data: EntitySaved): Result => ({
   data,
-  text: `${data.key}: ${data.action}. Вид: ${data.ref.kind}. ID: ${data.ref.id}. Ревизия: ${data.revision}. Ключ повтора: ${data.requestId}.`,
+  text: `${data.key}: ${data.action}. Вид: ${data.ref.kind}. ID: ${data.ref.id}. Ревизия: ${data.revision}. requestId: ${data.requestId}.`,
 });
 const write = { actor: actorSchema, requestId: requestIdSchema };
 
@@ -106,15 +106,6 @@ export const entityTools: EntityTool[] = [
     }),
   },
   {
-    name: "entity_history",
-    description: "Прочитать фактически сохранённые события ревизий сущности по ключу или ID",
-    schema: entityKeysQuerySchema,
-    readOnly: true,
-    run: async (backend, input) => ({
-      data: await backend.entities.history(entityKeysQuerySchema.parse(input)),
-    }),
-  },
-  {
     name: "entity_context",
     description:
       "Получить полный контекст сущности одним вызовом: все узлы и сохранённые рёбра достижимой компоненты в обоих направлениях, включая циклы. Успех всегда complete=true; при превышении maxBytes возвращается ошибка, усечённого графа нет",
@@ -165,7 +156,7 @@ for (const [kind, schema] of Object.entries(entityCreateDataSchemas)) {
   const { kind: _kind, ...shape } = schema.shape;
   entityTools.push({
     name: `entity_${kind}_create`,
-    description: `Создать сущность ${kind} с продуктовыми линками. В едином хранилище бекенд сохраняет соответствующие связи Core в той же операции; старую базу предварительно переносят через storage migrate. Полные описания — Markdown; ссылки принимают ключи или ID. Повторять с тем же requestId.`,
+    description: `Создать сущность ${kind} с продуктовыми линками. В едином хранилище бекенд сохраняет соответствующие связи Core в той же операции; старую базу предварительно переносят через storage migrate. Полные описания — Markdown; ссылки принимают ключи или ID.`,
     schema: z.strictObject({ ...shape, ...write }),
     readOnly: false,
     run: async (backend, input) => {
@@ -179,7 +170,7 @@ for (const [kind, schema] of Object.entries(entityUpdateDataSchemas)) {
   const { kind: _kind, ...shape } = schema.shape;
   entityTools.push({
     name: `entity_${kind}_update`,
-    description: `Изменить содержание и продуктовые линки сущности ${kind} по ключу или ID. Бекенд согласует соответствующие связи Core в едином хранилище. Отсутствующие поля сохраняются, пустой массив снимает линки; требуются прочитанная ревизия и ключ повтора.`,
+    description: `Изменить содержание и продуктовые линки сущности ${kind} по ключу или ID. Бекенд согласует соответствующие связи Core в едином хранилище. Отсутствующие поля сохраняются, пустой массив снимает линки; требуются прочитанная ревизия и requestId для корреляции.`,
     schema: z.strictObject({
       ...shape,
       ...write,

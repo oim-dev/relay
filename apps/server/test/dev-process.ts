@@ -53,6 +53,7 @@ export function observeDevProcess(child: ChildProcess) {
       description: string,
       timeout = 12000,
       allowExit = false,
+      failureReason?: () => string | undefined,
     ) {
       const waiting = performance.now();
       while (true) {
@@ -60,7 +61,7 @@ export function observeDevProcess(child: ChildProcess) {
           ? "ошибка запуска дочернего процесса"
           : !allowExit && (exited || closed)
             ? "дочерний процесс завершился до готовности"
-            : undefined;
+            : failureReason?.();
         if (!failure && condition()) return;
         if (failure || performance.now() - waiting >= timeout) {
           throw new Error(
@@ -71,6 +72,18 @@ export function observeDevProcess(child: ChildProcess) {
         }
         await delay(25);
       }
+    },
+    async waitForTypecheck(timeout: number) {
+      await this.waitFor(
+        () => /Found 0 errors\./.test(output),
+        "initial/typecheck: ожидается успешная компиляция",
+        timeout,
+        false,
+        () => {
+          const result = /Found ([1-9]\d*) errors?\./.exec(output);
+          return result ? `компиляция завершилась с ошибками: ${result[1]}` : undefined;
+        },
+      );
     },
   };
 }

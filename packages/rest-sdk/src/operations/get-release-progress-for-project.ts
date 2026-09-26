@@ -13,11 +13,11 @@ import type {
 import type { ApiRequestClient, RequestParams } from "../http-client.js";
 
 /**
- * @description Прочитать готовность релиза либо исторический результат его снимка
+ * @description Прочитать текущую готовность релиза
  *
  * @tags progress
  * @name GetReleaseProgressForProject
- * @summary Прочитать готовность релиза либо исторический результат его снимка
+ * @summary Прочитать текущую готовность релиза
  * @request GET:/api/v1/projects/{project}/progress/release
  */
 export const getReleaseProgressForProject = (

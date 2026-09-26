@@ -290,11 +290,6 @@ export const appRouter = createBrowserRouter([
             ),
           },
           {
-            path: "history",
-            lazy: () => import("compositions/screens/history/lazy"),
-            handle: breadcrumbHandle({ label: "История" }),
-          },
-          {
             path: "*",
             handle: breadcrumbHandle({ label: "Страница не найдена" }),
             element: (

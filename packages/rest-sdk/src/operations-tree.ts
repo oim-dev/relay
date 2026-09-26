@@ -37,8 +37,6 @@ import { getBoards } from "./operations/get-boards.js";
 import { getContextForProject } from "./operations/get-context-for-project.js";
 import { getContext } from "./operations/get-context.js";
 import { getEntityForProject } from "./operations/get-entity-for-project.js";
-import { getEntityHistoryForProject } from "./operations/get-entity-history-for-project.js";
-import { getEntityHistory } from "./operations/get-entity-history.js";
 import { getEntityKeySpacesForProject } from "./operations/get-entity-key-spaces-for-project.js";
 import { getEntityKeySpaces } from "./operations/get-entity-key-spaces.js";
 import { getEntityKeysForProject } from "./operations/get-entity-keys-for-project.js";
@@ -49,8 +47,6 @@ import { getFeatureProgress } from "./operations/get-feature-progress.js";
 import { getFullContextForProject } from "./operations/get-full-context-for-project.js";
 import { getFullContext } from "./operations/get-full-context.js";
 import { getGraphForProject } from "./operations/get-graph-for-project.js";
-import { getGraphHistoryForProject } from "./operations/get-graph-history-for-project.js";
-import { getGraphHistory } from "./operations/get-graph-history.js";
 import { getGraph } from "./operations/get-graph.js";
 import { getHealth } from "./operations/get-health.js";
 import { getImplementationProgressForProject } from "./operations/get-implementation-progress-for-project.js";
@@ -101,10 +97,6 @@ import { getTaskCriteriaForProject } from "./operations/get-task-criteria-for-pr
 import { getTaskCriteria } from "./operations/get-task-criteria.js";
 import { getTaskCriterionForProject } from "./operations/get-task-criterion-for-project.js";
 import { getTaskCriterion } from "./operations/get-task-criterion.js";
-import { getTaskHistoryEventForProject } from "./operations/get-task-history-event-for-project.js";
-import { getTaskHistoryEvent } from "./operations/get-task-history-event.js";
-import { getTaskHistoryForProject } from "./operations/get-task-history-for-project.js";
-import { getTaskHistory } from "./operations/get-task-history.js";
 import { getTaskPlanMembershipsForProject } from "./operations/get-task-plan-memberships-for-project.js";
 import { getTaskPlanMemberships } from "./operations/get-task-plan-memberships.js";
 import { getTaskProgressForProject } from "./operations/get-task-progress-for-project.js";
@@ -282,8 +274,6 @@ export const operationsTree = {
     getTaskComments: getTaskComments,
     publishTaskComment: publishTaskComment,
     getTaskComment: getTaskComment,
-    getTaskHistory: getTaskHistory,
-    getTaskHistoryEvent: getTaskHistoryEvent,
     getTaskCriterion: getTaskCriterion,
     updateBoardTask: updateBoardTask,
     moveBoardTask: moveBoardTask,
@@ -297,8 +287,6 @@ export const operationsTree = {
     getTaskCommentsForProject: getTaskCommentsForProject,
     publishTaskCommentForProject: publishTaskCommentForProject,
     getTaskCommentForProject: getTaskCommentForProject,
-    getTaskHistoryForProject: getTaskHistoryForProject,
-    getTaskHistoryEventForProject: getTaskHistoryEventForProject,
     getTaskCriterionForProject: getTaskCriterionForProject,
     updateBoardTaskForProject: updateBoardTaskForProject,
     moveBoardTaskForProject: moveBoardTaskForProject,
@@ -307,11 +295,9 @@ export const operationsTree = {
     getGraph: getGraph,
     mutateGraph: mutateGraph,
     getFullContext: getFullContext,
-    getGraphHistory: getGraphHistory,
     getGraphForProject: getGraphForProject,
     mutateGraphForProject: mutateGraphForProject,
     getFullContextForProject: getFullContextForProject,
-    getGraphHistoryForProject: getGraphHistoryForProject,
   },
   entities: {
     listEntityTypes: listEntityTypes,
@@ -324,7 +310,6 @@ export const operationsTree = {
     resolveEntity: resolveEntity,
     getEntityKeys: getEntityKeys,
     getEntityKeySpaces: getEntityKeySpaces,
-    getEntityHistory: getEntityHistory,
     updateEntity: updateEntity,
     renameEntityKey: renameEntityKey,
     moveEntityTask: moveEntityTask,
@@ -339,7 +324,6 @@ export const operationsTree = {
     resolveEntityForProject: resolveEntityForProject,
     getEntityKeysForProject: getEntityKeysForProject,
     getEntityKeySpacesForProject: getEntityKeySpacesForProject,
-    getEntityHistoryForProject: getEntityHistoryForProject,
     updateEntityForProject: updateEntityForProject,
     renameEntityKeyForProject: renameEntityKeyForProject,
     moveEntityTaskForProject: moveEntityTaskForProject,

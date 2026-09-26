@@ -7,11 +7,9 @@ import {
   getEntities,
   getEntitySummary,
   getEntityContent,
-  getEntityHistory,
   EntityAccessError,
 } from "../adapters/entities.adapter";
 import type { EntityContent } from "../types/entity-content.type";
-import type { EntityHistoryPage } from "../types/entity-history.type";
 
 /**
  * Перечитывает проекции каскада во всех доменах только выбранного проекта.
@@ -82,20 +80,4 @@ export const useEntityContent = (
   if (response.error !== undefined && !(response.error instanceof EntityAccessError))
     throw response.error;
   return response;
-};
-
-/**
- * Читает раскрытую историю и обновляет её после предметных действий.
- */
-export const useEntityHistory = (
-  projectId: string,
-  reference: string,
-  count: number,
-  isEnabled: boolean,
-): SWRResponse<EntityHistoryPage, Error> => {
-  const query = useSWR(isEnabled ? ["entity-history", projectId, reference, count] : null, () =>
-    getEntityHistory(projectId, reference, count),
-  );
-  useEntityRefresh(projectId, query.mutate);
-  return query;
 };

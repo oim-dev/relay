@@ -4,8 +4,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { configSchema, defaultConfig } from "../domain/config.js";
 import type { Config } from "../domain/config.js";
 import { parse } from "../domain/validation.js";
-import { AppError, invariant, isErrno } from "../shared/errors.js";
-import { atomicJson, exists, readJson } from "./files.js";
+import { AppError, invariant } from "../shared/errors.js";
+import { exists, readJson } from "./files.js";
 import { prepareRuntime, runtimeDirectory, withStorageLock } from "./lock.js";
 import { BoardRepository } from "./boards.js";
 import { BoardTaskRepository } from "./board-tasks.js";
@@ -26,7 +26,6 @@ import {
 } from "./unified-adapter.js";
 import { storedProjectSettingsSchema } from "../domain/project-settings.js";
 import { storageManifestSchema } from "@relay/contracts/storage";
-import { entityRefSchema } from "@relay/contracts/entities/graph";
 import { HashIndex } from "./entity-store/hash-index.js";
 import { stateSchema, STATE_PATH } from "./entity-store/format.js";
 
@@ -35,6 +34,7 @@ const lockContext = new AsyncLocalStorage<{
   runtime: string;
   assertOwned: () => void;
   active: boolean;
+  recoveringDocumentLinks?: boolean;
   session?: StorageSession;
 }>();
 
@@ -95,35 +95,53 @@ export class Workspace {
       }
     });
   }
-  mutate<T>(
+  async mutate<T>(
     namespace: string,
     input: { requestId: string; [key: string]: unknown },
     actor: string,
     operation: (owned: () => void) => Promise<T>,
   ): Promise<T> {
+    invariant(
+      (namespace === "graph" && this.recoveringDocumentLinks) || (await this.hasUnifiedStorage()),
+      "STORAGE_MIGRATION_REQUIRED",
+      "Запись прежнего формата запрещена. Выполните relay-cli --local storage migrate",
+      4,
+    );
     return this.locked(async (owned) => {
       const session = this.storageSession;
-      if (!session) return operation(owned);
+      // Завершение уже записанного намерения не является новой публичной legacy-командой.
+      if (!session && namespace === "graph" && this.recoveringDocumentLinks)
+        return operation(owned);
+      this.assertWritableStorage();
+      invariant(session, "STORAGE_MIGRATION_REQUIRED", "Для записи выполните storage migrate", 4);
       const request: Record<string, unknown> = { ...input, actor };
       if (request.includeTask === false) delete request.includeTask;
-      if (
-        (namespace === "board-task" || namespace === "task-comment") &&
-        typeof request.reference === "string"
-      ) {
-        try {
-          request.reference = (await session.resolve(request.reference, "task")).ref.id;
-        } catch (error) {
-          if (!(error instanceof AppError) || error.code !== "ENTITY_DELETED") throw error;
-          const details = error.details as { ref: unknown };
-          request.reference = entityRefSchema.parse(details.ref).id;
-        }
-      }
       const result = await session.execute(
         { namespace, actor, requestId: input.requestId, request: json(request) },
-        async () => encodeCommandResult(namespace, await operation(owned)),
+        async () => {
+          const value = await operation(owned);
+          return encodeCommandResult(namespace, value);
+        },
       );
       return decodeCommandResult<T>(namespace, result);
     });
+  }
+  /** Публичные изменения допустимы только внутри общей сессии актуального формата. */
+  assertWritableStorage(): void {
+    invariant(
+      this.storageSession?.store.formatVersion === 4,
+      "STORAGE_MIGRATION_REQUIRED",
+      "Запись прежнего формата запрещена. Выполните relay-cli --local storage migrate",
+      4,
+    );
+  }
+  get recoveringDocumentLinks(): boolean {
+    const context = lockContext.getStore();
+    return (
+      context?.active === true &&
+      context.root === this.root &&
+      context.recoveringDocumentLinks === true
+    );
   }
   /** Формат привязывает блокировку к реальному каталогу данных, независимо от прежнего storageDir. */
   async withEntityStorage<T>(
@@ -190,7 +208,13 @@ export class Workspace {
       return operation(context.assertOwned);
     }
     return withStorageLock(this.root, async (assertOwned) => {
-      const owned = { root: this.root, runtime: this.runtime, assertOwned, active: true };
+      const owned = {
+        root: this.root,
+        runtime: this.runtime,
+        assertOwned,
+        active: true,
+        recoveringDocumentLinks: false,
+      };
       return lockContext.run(owned, async () => {
         try {
           if (await this.hasUnifiedStorage()) return this.locked(operation);
@@ -203,7 +227,12 @@ export class Workspace {
           if (await new DocumentLinksRepository(this).readPending()) {
             const { recoverDocumentLinks } =
               await import("../application/documents/link-workflow.js");
-            await recoverDocumentLinks(this, assertOwned);
+            owned.recoveringDocumentLinks = true;
+            try {
+              await recoverDocumentLinks(this, assertOwned);
+            } finally {
+              owned.recoveringDocumentLinks = false;
+            }
           }
           return await operation(assertOwned);
         } finally {
@@ -316,7 +345,6 @@ export async function initialize(
   cwd: string,
   storageDir: string,
   explicit?: string,
-  options: { legacy?: boolean } = {},
 ): Promise<Workspace> {
   const configPath = resolve(cwd, explicit ?? CONFIG_NAME);
   invariant(!(await exists(configPath)), "ALREADY_INITIALIZED", "Конфигурация уже существует", 4);
@@ -342,27 +370,10 @@ export async function initialize(
     },
     "конфигурация",
   );
-  const root = resolve(dirname(configPath), storageDir);
   await mkdir(dirname(configPath), { recursive: true });
-  if (!options.legacy) {
-    const directory = await realpath(dirname(configPath));
-    const workspace = new Workspace(join(directory, basename(configPath)), directory, config);
-    const { StorageService } = await import("../application/storage/service.js");
-    await new StorageService(workspace).initialize();
-    return workspace;
-  }
-  await mkdir(root, { recursive: true });
-  await prepareRuntime(await realpath(root));
-  const workspace = new Workspace(configPath, await realpath(root), config);
-  try {
-    await workspace.locked(async (assertOwned) => {
-      await new BoardRepository(workspace).initialize(assertOwned);
-      await atomicJson(configPath, config, dirname(configPath), true, assertOwned);
-    });
-  } catch (error) {
-    if (isErrno(error, "EEXIST"))
-      throw new AppError("ALREADY_INITIALIZED", "Конфигурация уже создана другим процессом", 4);
-    throw error;
-  }
+  const directory = await realpath(dirname(configPath));
+  const workspace = new Workspace(join(directory, basename(configPath)), directory, config);
+  const { StorageService } = await import("../application/storage/service.js");
+  await new StorageService(workspace).initialize();
   return workspace;
 }

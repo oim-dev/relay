@@ -1,10 +1,7 @@
-import { dirname } from "node:path";
 import { projectSettingsSchema, saveProjectSettingsSchema } from "../../domain/project-settings.js";
 import type { ProjectSettings, SaveProjectSettings } from "../../domain/project-settings.js";
 import { parse } from "../../domain/validation.js";
 import { invariant } from "../../shared/errors.js";
-import { atomicJson } from "../../storage/files.js";
-import { readWorkspaceConfig } from "../../storage/workspace.js";
 import type { Workspace } from "../../storage/workspace.js";
 import { projectSettings } from "../../storage/project-settings.js";
 import * as unified from "../../storage/unified-adapter.js";
@@ -20,9 +17,8 @@ export async function saveProjectSettings(
 ): Promise<ProjectSettings> {
   const command = parse(saveProjectSettingsSchema, input, "настройки проекта");
   return workspace.locked(async (assertOwned) => {
-    const { config } = workspace.storageSession
-      ? { config: { ...workspace.config, projectSettings: await unified.settings(workspace) } }
-      : await readWorkspaceConfig(dirname(workspace.configPath), workspace.configPath);
+    workspace.assertWritableStorage();
+    const config = { ...workspace.config, projectSettings: await unified.settings(workspace) };
     const previous = projectSettings(config, workspace.configPath);
     if (previous.name === command.name && previous.slug === command.slug) return previous;
     invariant(
@@ -59,29 +55,6 @@ export async function saveProjectSettings(
       });
       return saved;
     }
-    await atomicJson(
-      workspace.configPath,
-      {
-        ...config,
-        projectSettings: {
-          ...config.projectSettings,
-          version: config.projectSettings?.version === 3 ? 3 : 2,
-          ...saved,
-          events: [
-            ...(config.projectSettings?.events ?? []),
-            {
-              revision: saved.revision,
-              actor: "relay",
-              at: new Date().toISOString(),
-              action: "settings",
-            },
-          ],
-        },
-      },
-      dirname(workspace.configPath),
-      false,
-      assertAllOwned,
-    );
     return saved;
   });
 }

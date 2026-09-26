@@ -29,7 +29,7 @@ test("HTTP графа: новые связи, контекст, CAS, повто�
   };
   const saved = await app.inject({ method: "POST", url, payload });
   assert.equal(saved.statusCode, 200, saved.body);
-  assert.deepEqual((await app.inject({ method: "POST", url, payload })).json(), saved.json());
+  assert.equal((await app.inject({ method: "POST", url, payload })).statusCode, 409);
   assert.equal(
     (await app.inject({ method: "POST", url, payload: { ...payload, requestId: "stale" } }))
       .statusCode,
@@ -45,7 +45,7 @@ test("HTTP графа: новые связи, контекст, CAS, повто�
     read,
   );
   assert.ok(read.paths.some((path: { edges: string[] }) => path.edges.length === 1));
-  assert.equal((await app.inject(`${url}/history`)).json().data.total, 2);
+  assert.equal((await app.inject(`${url}/history`)).statusCode, 404);
   assert.equal((await app.inject("/api/v1/projects/missing/graph")).statusCode, 404);
   const schema = (await app.inject("/api/openapi.json")).json();
   assert.ok(schema.paths["/api/v1/graph"].post);

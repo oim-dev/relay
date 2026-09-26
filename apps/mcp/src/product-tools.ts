@@ -50,7 +50,7 @@ export const scopeRevision = z
   .nonnegative()
   .describe("Ревизия состава; 0 при первом сохранении, иначе значение из прочитанного состава");
 
-/** Квитанция описывает именно запрос, включая безопасный повтор первоначальной записи. */
+/** Результат текущего запроса без хранения для последующего повтора. */
 export async function saveProduct(
   backend: Backend,
   command: ProductMutation,
@@ -77,6 +77,6 @@ export async function saveProduct(
       ...(name ? { name } : {}),
       requestId: command.requestId,
     },
-    text: `${command.action === "create" ? "Создана запись" : "Сохранена запись"}: ${labels[fields.kind]}${name ? ` «${name.replace(/[\u0000-\u001f\u007f]/g, " ")}»` : ""}\nID: ${saved.id}\nРевизия: ${saved.revision}\nКлюч повтора: ${command.requestId}`,
+    text: `${command.action === "create" ? "Создана запись" : "Сохранена запись"}: ${labels[fields.kind]}${name ? ` «${name.replace(/[\u0000-\u001f\u007f]/g, " ")}»` : ""}\nID: ${saved.id}\nРевизия: ${saved.revision}\nrequestId: ${command.requestId}`,
   };
 }

@@ -8,7 +8,18 @@ import type { SchemaName } from "./schemas.js";
 export const ref = (name: SchemaName) => ({ $ref: `#/components/schemas/${name}` });
 
 export function jsonSchema(schema: z.ZodType, io: "input" | "output" = "output"): SchemaObject {
-  const { $schema, ...result } = z.toJSONSchema(schema, { target: "draft-7", io });
+  const { $schema, ...result } = z.toJSONSchema(schema, {
+    target: "draft-7",
+    io,
+    override: ({ jsonSchema }) => {
+      // Пустой tuple Zod выдаёт items: [], недопустимый в draft-7.
+      // Запрет элементов сохраняет контракт пустого массива и в OpenAPI 3.1.
+      if (Array.isArray(jsonSchema.items) && jsonSchema.items.length === 0) {
+        jsonSchema.items = false;
+        jsonSchema.maxItems = 0;
+      }
+    },
+  });
   return result as SchemaObject;
 }
 

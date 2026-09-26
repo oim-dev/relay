@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { test } from "node:test";
@@ -27,8 +28,8 @@ const execute = promisify(execFile);
 for (const configuration of ["default", "relative"] as const)
   test(
     `root dev-сервер (${configuration}) переживает очистку dist и изменения сервера и Core`,
-    // Две фазы reload по 60 с, cold-start 45 с, typecheck 30 с и запас на проверки/остановку.
-    { timeout: 240000 },
+    // Общий cold-start 120 с, две фазы reload по 60 с и 60 с на копию, проверки и остановку.
+    { timeout: 300000 },
     async (t) => {
       const project = fileURLToPath(new URL("../../../", import.meta.url));
       const root = await realpath(await mkdtemp(join(tmpdir(), "tasks-dev-server-")));
@@ -138,6 +139,8 @@ for (const configuration of ["default", "relative"] as const)
       delete env.RELAY_CONFIG;
       if (configuration === "relative") env.RELAY_CONFIG = `${workspace}/.relay/config.json`;
       const grouped = process.platform !== "win32";
+      const startupStarted = performance.now();
+      const startupBudget = 120000;
       // В Actions Turbo буферизует grouped-логи до завершения задачи; ждём URL из живого потока.
       const child = spawn(process.execPath, [pnpmCli, "run", "dev:server", "--log-order=stream"], {
         cwd: root,
@@ -195,17 +198,18 @@ for (const configuration of ["default", "relative"] as const)
         }
       };
 
-      // Hosted CI: первый URL на 26-й секунде, typecheck на 49-й; reload превысил прежние 12 с.
-      let url = await nextServer("initial", 0, 45000);
+      // HTTP и tsc работают параллельно: быстрый HTTP не сокращает бюджет компилятора.
+      // На hosted CI прежних 30 с после HTTP не хватало даже живому tsc без ошибок.
+      // Ограничиваем весь старт от spawn: до 60 с на HTTP, до 120 с на обе готовности.
+      let url = await nextServer("initial", 0, 60000);
       const context = (await json(`${url}${apiPrefix}/context`)).data;
       assert.equal(context.actor, "dev-human");
       assert.equal(context.configPath, join(root, workspace, ".relay/config.json"));
       // Первая компиляция может завершиться позже HTTP-запуска на загруженном CI-runner.
-      await waitFor(
-        () => monitor.output.includes("Found 0 errors"),
-        "initial/typecheck: проверка типов не завершилась успешно после HTTP-запуска",
-        30000,
+      await monitor.waitForTypecheck(
+        Math.max(0, Math.ceil(startupBudget - (performance.now() - startupStarted))),
       );
+      t.diagnostic(`initial/typecheck: успешная компиляция подтверждена; ${monitor.status()}`);
       const outputs = workspaces
         .filter((path) => path !== "packages/typescript-config")
         .map((path) => join(root, path, "dist"));

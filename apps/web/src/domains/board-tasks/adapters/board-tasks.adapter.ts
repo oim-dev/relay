@@ -53,30 +53,26 @@ export class BoardTaskError extends Error {
 }
 const failure = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 /**
- * Читает страницу стабильной ленты задачи.
+ * Читает страницу стабильного снимка обсуждения задачи.
  */
-export const getTaskActivity = (
+export const getTaskComments = (
   project: string,
   reference: string,
-  comments: boolean,
   cursor?: string,
 ): Promise<ActivityPage> => {
   const api = getProjectApi(project).kanban;
-  return request(
-    () => (comments ? api.getTaskComments : api.getTaskHistory)({ reference, cursor, limit: 20 }),
-    ACTIVITY_PAGE_SCHEMA,
-  );
+  return request(() => api.getTaskComments({ reference, cursor, limit: 20 }), ACTIVITY_PAGE_SCHEMA);
 };
 /**
- * Читает подробности одного события, не загружая всю историю.
+ * Читает полный Markdown одного комментария.
  */
-export const getTaskActivityEvent = (
+export const getTaskComment = (
   project: string,
   reference: string,
   entryId: string,
 ): Promise<ActivityEvent> =>
   request(
-    () => getProjectApi(project).kanban.getTaskHistoryEvent({ reference, entryId }),
+    () => getProjectApi(project).kanban.getTaskComment({ reference, entryId }),
     ACTIVITY_EVENT_SCHEMA,
   );
 /**
@@ -144,10 +140,10 @@ async function request<T>(
   } catch (error) {
     if (error instanceof ApiError) {
       const parsed = failure.safeParse(error.error);
-      if (parsed.success)
+      if (parsed.success && error.status < 500)
         throw new BoardTaskError(parsed.data.error.message, parsed.data.error.code);
       throw new BoardTaskError(
-        "Сервер не подтвердил действие. Проверьте соединение и повторите запрос.",
+        "Ответ сервера не получен. Если вы отправляли изменения, их исход неизвестен: перечитайте состояние перед новой отправкой, чтобы не создать дубликат.",
         "UNAVAILABLE",
       );
     }
@@ -156,7 +152,7 @@ async function request<T>(
       (error instanceof DOMException && error.name === "AbortError")
     )
       throw new BoardTaskError(
-        "Не удалось связаться с сервером. Ввод сохранён; повторите после восстановления соединения.",
+        "Нет ответа сервера. Если вы отправляли изменения, перечитайте состояние перед новой отправкой: действие могло выполниться.",
         "UNAVAILABLE",
       );
     throw error;

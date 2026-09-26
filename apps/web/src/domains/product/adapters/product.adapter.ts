@@ -28,7 +28,7 @@ export const saveProduct = async (
 export const productError = (error: unknown): string => {
   if (error instanceof ApiError) {
     const parsed = z.object({ error: z.object({ message: z.string() }) }).safeParse(error.error);
-    if (parsed.success) return parsed.data.error.message;
+    if (parsed.success && error.status < 500) return parsed.data.error.message;
   }
-  return "Не удалось подтвердить сохранение. Ввод сохранён; проверьте соединение и повторите запрос.";
+  return "Исход сохранения неизвестен. Ввод сохранён. Перечитайте состояние перед новой отправкой: повтор может создать дубликат.";
 };

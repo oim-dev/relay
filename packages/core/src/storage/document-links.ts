@@ -47,6 +47,26 @@ export type DocumentLinksPending = z.infer<typeof documentLinksPendingSchema>;
 /** Один элемент разницы продуктовых прикреплений. */
 export type DocumentLinkStep = z.infer<typeof stepSchema>;
 
+/** Контрольная точка только незавершённого прежнего workflow, не квитанция команды. */
+export function advanceDocumentLinks(pending: DocumentLinksPending, ids: readonly string[]) {
+  const steps = pending.steps.slice(pending.cursor, pending.cursor + 100);
+  for (const [index, step] of steps.entries()) {
+    if (step.operation.action === "remove") delete pending.bindings[step.key];
+    if (step.operation.action === "add") {
+      const { from, to, type } = step.operation;
+      invariant(
+        typeof from === "object" && typeof to === "object" && ids[index],
+        "INVALID_DATA",
+        "Не получен адрес сохранённого прикрепления",
+        5,
+      );
+      pending.bindings[step.key] = { id: ids[index]!, from, to, type };
+    }
+  }
+  pending.cursor += steps.length;
+  pending.command = null;
+}
+
 /** Хранит только журнал координации и соответствие линков рёбрам, не копию графа. */
 export class DocumentLinksRepository {
   readonly root: string;

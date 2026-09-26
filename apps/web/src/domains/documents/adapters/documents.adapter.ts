@@ -24,16 +24,22 @@ const throwDocumentFailure = (failure: unknown): never => {
   if (failure instanceof ApiError) {
     const parsed = FAILURE_SCHEMA.safeParse(failure.error);
     throw new DocumentAccessError(
-      parsed.success
+      parsed.success && failure.status < 500
         ? parsed.data.error.message
-        : "Не удалось подтвердить операцию. Повторите запрос.",
+        : "Ответ сервера не получен. Перед новой записью перечитайте состояние: операция могла выполниться.",
       { cause: failure },
     );
   }
-  if (failure instanceof TypeError)
-    throw new DocumentAccessError("Нет связи с сервером. Ваш ввод сохранён; повторите запрос.", {
-      cause: failure,
-    });
+  if (
+    failure instanceof TypeError ||
+    (failure instanceof DOMException && failure.name === "AbortError")
+  )
+    throw new DocumentAccessError(
+      "Нет ответа сервера. Перед новой записью перечитайте состояние: повтор может создать дубликат.",
+      {
+        cause: failure,
+      },
+    );
   throw failure;
 };
 
@@ -71,7 +77,7 @@ export const getDocument = async (projectId: string, ref: string): Promise<Knowl
   }
 };
 
-/** Атомарно сохраняет содержание, свойства и отношения документа с безопасным повтором. */
+/** Атомарно сохраняет содержание, свойства и отношения документа без автоматического повтора. */
 export const saveDocument = async (
   projectId: string,
   input: DocumentInput,

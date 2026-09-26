@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { useHotkeys } from "@mantine/hooks";
 import { MessageSquarePlus } from "lucide-react";
 import { useForm } from "@mantine/form";
-import { Alert, Button, Group, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Checkbox, Group, Stack, Text, TextInput } from "@mantine/core";
 import { z } from "zod";
 import { publishTaskComment, BoardTaskError } from "domains/board-tasks";
 import { readSessionStored, writeSessionStored, removeSessionStored } from "infra/browser-storage";
@@ -12,7 +12,7 @@ import type { CommentFormProps } from "./types/comment-form-props.type";
 import styles from "./styles/comment-form.module.css";
 
 /**
- * Публикует сообщение оператора с устойчивым черновиком и ключом повтора.
+ * Публикует сообщение оператора с устойчивым черновиком без автоматического повтора.
  *
  * Используется для:
  *  - ввода заголовка и полного Markdown без потери при ошибке или закрытии
@@ -28,6 +28,10 @@ export const CommentForm = (props: CommentFormProps) => {
   const [defect, setDefect] = useState<unknown>();
   const [canPersist, setCanPersist] = useState(true);
   const requestRef = useRef(draft.success ? draft.data.requestId : undefined);
+  const [hasUnknownOutcome, setUnknownOutcome] = useState(
+    draft.success && draft.data.requestId !== undefined,
+  );
+  const [hasCheckedDiscussion, setCheckedDiscussion] = useState(false);
   const form = useForm({
     mode: "uncontrolled",
     initialValues: draft.success ? draft.data.values : { title: "", description: "" },
@@ -48,13 +52,13 @@ export const CommentForm = (props: CommentFormProps) => {
             : null,
     },
     onValuesChange: (values) => {
-      requestRef.current = undefined;
-      setCanPersist(writeSessionStored(draftKey, { values }));
+      setCanPersist(writeSessionStored(draftKey, { values, requestId: requestRef.current }));
       setNotice("");
     },
   });
   const hasError = error !== "";
   const hasNotice = notice !== "";
+  const canPublish = !hasUnknownOutcome || hasCheckedDiscussion;
   useHotkeys(
     [
       [
@@ -68,15 +72,18 @@ export const CommentForm = (props: CommentFormProps) => {
     [],
   );
   /**
-   * Повторяет неопределённый результат с прежним ключом; очищает ввод только после квитанции.
+   * Новая отправка требует проверки обсуждения при неизвестном исходе предыдущей.
    */
   const handleSubmit = async (values: typeof form.values): Promise<void> => {
+    if (!canPublish || form.submitting) return;
     setError("");
-    requestRef.current ??= crypto.randomUUID();
+    requestRef.current = crypto.randomUUID();
+    setCheckedDiscussion(false);
     setCanPersist(writeSessionStored(draftKey, { values, requestId: requestRef.current }));
     try {
       await publishTaskComment(projectId, taskId, { ...values, requestId: requestRef.current });
     } catch (failure) {
+      setUnknownOutcome(true);
       if (failure instanceof BoardTaskError) setError(failure.message);
       else setDefect(failure);
       return;
@@ -85,6 +92,7 @@ export const CommentForm = (props: CommentFormProps) => {
     form.resetDirty();
     removeSessionStored(draftKey);
     requestRef.current = undefined;
+    setUnknownOutcome(false);
     setNotice("Сообщение опубликовано");
     setOpen(false);
     await onPublished();
@@ -154,6 +162,20 @@ export const CommentForm = (props: CommentFormProps) => {
             {error}
           </Alert>
         )}
+        {hasUnknownOutcome && (
+          <Alert color="yellow" title="Проверьте обсуждение перед новой публикацией" role="alert">
+            Предыдущая отправка могла создать сообщение. Обновите ленту и проверьте новые записи,
+            включая следующие страницы. Черновик сохранён. Повторная отправка может создать
+            дубликат: сервер не устраняет повторные публикации автоматически.
+            <Checkbox
+              mt="sm"
+              label="Я перечитал обсуждение и хочу отправить сообщение заново"
+              checked={hasCheckedDiscussion}
+              onChange={(event) => setCheckedDiscussion(event.currentTarget.checked)}
+              disabled={form.submitting}
+            />
+          </Alert>
+        )}
         {hasNotice && (
           <Text role="status" c="green">
             {notice}
@@ -169,7 +191,7 @@ export const CommentForm = (props: CommentFormProps) => {
             >
               Свернуть
             </Button>
-            <Button type="submit" loading={form.submitting}>
+            <Button type="submit" loading={form.submitting} disabled={!canPublish}>
               Опубликовать
             </Button>
           </Group>

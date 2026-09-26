@@ -31,7 +31,7 @@ import {
   editCriterionSchema,
   completeCriterionSchema,
   removeCriterionSchema,
-  taskActivityQuerySchema,
+  taskCommentsQuerySchema,
   taskActivityIdSchema,
   publishTaskCommentSchema,
 } from "@relay/core/domain/board-task";
@@ -72,12 +72,12 @@ const selector = {
 };
 const boardTask = { reference: boardTaskReferenceSchema };
 
-/** Квитанция нового канбана сохраняет первоначальный ключ даже после следующего переноса. */
+/** Результат текущего вызова без сохранения для повторных запросов. */
 async function changedBoardTask(operation: Promise<BoardTaskSaved>): Promise<Result> {
   const data = await operation;
   return {
     data,
-    text: `Задача ${data.key}: ${data.action}. ID: ${data.id}. Ревизия: ${data.revision}. Ключ повтора: ${data.requestId}.`,
+    text: `Задача ${data.key}: ${data.action}. ID: ${data.id}. Ревизия: ${data.revision}. requestId: ${data.requestId}.`,
   };
 }
 function defined<T extends object>(value: T): { [K in keyof T]: Exclude<T[K], undefined> } {
@@ -92,7 +92,7 @@ export function createTools(projects: Projects): Server {
     {
       capabilities: { tools: {} },
       instructions:
-        "projects_list показывает режим Relay Server и доступные проекты. В workspace передавайте project в каждом проектном вызове; в local проект можно опустить. Заголовки — однострочные, краткие описания — многострочный обычный текст. Полные описания, требования и инструкции — структурированный Markdown: цель, правила, шаги, ошибки и проверяемый результат по смыслу. Не пишите сложные требования слитным абзацем и не выдумывайте сведения ради разделов. Предпочитайте предметные product_*_save вместо универсального product_save. Перед серией записей объясните цель, после перечитайте записи и проверьте product_lint. actor передаётся в каждой записи. После потери ответа повторяйте тот же requestId. Реестр читается с сервера без перезапуска MCP.",
+        "projects_list показывает режим Relay Server и доступные проекты. В workspace передавайте project в каждом проектном вызове; в local проект можно опустить. Заголовки — однострочные, краткие описания — многострочный обычный текст. Полные описания, требования и инструкции — структурированный Markdown: цель, правила, шаги, ошибки и проверяемый результат по смыслу. Не пишите сложные требования слитным абзацем и не выдумывайте сведения ради разделов. Предпочитайте предметные product_*_save вместо универсального product_save. Перед серией записей объясните цель, после перечитайте записи и проверьте product_lint. actor передаётся в каждой записи. requestId служит только корреляции: дедупликации и сохранённых результатов нет. После потери ответа прочитайте текущее состояние и согласуйте дальнейшее действие; не повторяйте запись вслепую и не подставляйте свежую ревизию в старое тело. Реестр читается с сервера без перезапуска MCP.",
     },
   );
   const tools = new Map<
@@ -111,7 +111,9 @@ export function createTools(projects: Projects): Server {
     tools.set(name, {
       definition: {
         name,
-        description,
+        description: readOnly
+          ? description
+          : `${description} requestId служит только корреляции, не дедупликации. После потери ответа прочитайте текущее состояние и согласуйте дальнейшее действие; не повторяйте запись вслепую.`,
         inputSchema: ToolSchema.shape.inputSchema.parse(
           documentToolSchema(z.toJSONSchema(schema, { io: "input" })),
         ),
@@ -250,7 +252,7 @@ export function createTools(projects: Projects): Server {
   );
   projectTool(
     "board_task_create",
-    "Создать задачу на выбранной доске: заголовок и Markdown. Ключ выдаётся автоматически; requestId позволяет безопасный повтор",
+    "Создать задачу на выбранной доске: заголовок и Markdown. Ключ выдаётся автоматически",
     {
       ...selector,
       ...createBoardTaskSchema.shape,
@@ -264,7 +266,7 @@ export function createTools(projects: Projects): Server {
   );
   projectTool(
     "task_comment_publish",
-    "Опубликовать сообщение обсуждения: обязательные заголовок и Markdown, своё имя и роль. Не меняет ревизию задачи; повтор requestId безопасен",
+    "Опубликовать сообщение обсуждения: обязательные заголовок и Markdown, своё имя и роль. Не меняет ревизию задачи; повторная публикация создаёт новое сообщение",
     { ...selector, ...boardTask, ...publishTaskCommentSchema.shape },
     false,
     async (backend, input) => {
@@ -274,38 +276,31 @@ export function createTools(projects: Projects): Server {
       );
       return {
         data,
-        text: `Сообщение ${data.commentId} опубликовано в задаче ${data.id}. Ревизия ленты: ${data.revision}. Ключ повтора: ${data.requestId}.`,
+        text: `Сообщение ${data.commentId} опубликовано в задаче ${data.id}. Ревизия ленты: ${data.revision}. requestId: ${data.requestId}.`,
       };
     },
   );
-  for (const comments of [true, false]) {
-    projectTool(
-      comments ? "task_comments_list" : "task_history_list",
-      comments
-        ? "Сообщения задачи без полного Markdown: по 20, продолжение nextCursor; after читает новые записи"
-        : "Хронология всех изменений задачи: автор, время и поля; по 20, продолжение nextCursor, фильтры автора и действия",
-      { ...selector, ...boardTask, ...taskActivityQuerySchema.shape },
-      true,
-      async (backend, input) => ({
-        data: await backend.boardTasks.listActivity(
-          input.reference,
-          taskActivityQuerySchema.strip().parse(input),
-          comments,
-        ),
-      }),
-    );
-    projectTool(
-      comments ? "task_comment_get" : "task_history_get",
-      comments
-        ? "Прочитать полный Markdown сообщения с автором и временем публикации"
-        : "Прочитать событие: изменения статусов и связей, факт изменения Markdown и адрес общей операции; опубликованные сообщения доступны полностью",
-      { ...selector, ...boardTask, entryId: taskActivityIdSchema },
-      true,
-      async (backend, input) => ({
-        data: await backend.boardTasks.getActivity(input.reference, input.entryId, comments),
-      }),
-    );
-  }
+  projectTool(
+    "task_comments_list",
+    "Сообщения задачи без полного Markdown: по 20, продолжение nextCursor; after читает новые записи",
+    { ...selector, ...boardTask, ...taskCommentsQuerySchema.shape },
+    true,
+    async (backend, input) => ({
+      data: await backend.boardTasks.listComments(
+        input.reference,
+        taskCommentsQuerySchema.strip().parse(input),
+      ),
+    }),
+  );
+  projectTool(
+    "task_comment_get",
+    "Прочитать полный Markdown сообщения с автором и временем публикации",
+    { ...selector, ...boardTask, entryId: taskActivityIdSchema },
+    true,
+    async (backend, input) => ({
+      data: await backend.boardTasks.getComment(input.reference, input.entryId),
+    }),
+  );
   projectTool(
     "task_criteria_list",
     "Список критериев приёмки задачи: заголовки, краткие описания и выполнение; по 20 с продолжением",
@@ -486,7 +481,7 @@ export function createTools(projects: Projects): Server {
   );
   projectTool(
     "product_implementation_update",
-    "Изменить реализацию фичи или сценария по её собственной ревизии. При повторе передавайте тот же requestId; key меняет адрес, сохраняя ID и связи.",
+    "Изменить реализацию фичи или сценария по её собственной ревизии. key меняет адрес, сохраняя ID и связи.",
     {
       ...selector,
       ...updateImplementationSchema.shape,
@@ -500,7 +495,7 @@ export function createTools(projects: Projects): Server {
       );
       return {
         data: { ...result, requestId: input.requestId },
-        text: `Реализация сохранена: ${result.key ?? result.id}\nID: ${result.id}\nРевизия: ${result.revision}\nКлюч повтора: ${input.requestId}`,
+        text: `Реализация сохранена: ${result.key ?? result.id}\nID: ${result.id}\nРевизия: ${result.revision}\nrequestId: ${input.requestId}`,
       };
     },
   );
@@ -530,7 +525,7 @@ export function createTools(projects: Projects): Server {
   );
   projectTool(
     "product_save",
-    "Совместимый универсальный ввод записи. Предпочитайте предметные product_feature_save, product_scenario_save и другие product_*_save: в них цель видна в аргументах. Полные описания — структурированный Markdown. update требует ifRevision, scope также ifVersion; повторяйте тот же requestId после потери ответа.",
+    "Совместимый универсальный ввод записи. Предпочитайте предметные product_feature_save, product_scenario_save и другие product_*_save: в них цель видна в аргументах. Полные описания — структурированный Markdown. update требует ifRevision, scope также ifVersion.",
     { ...selector, command: productMutationSchema, actor: actorSchema },
     false,
     async (backend, input) => ({ data: await backend.product.mutate(input.command, input.actor) }),
@@ -538,7 +533,7 @@ export function createTools(projects: Projects): Server {
   for (const tool of productWriteTools)
     projectTool(
       tool.name,
-      `Создать или изменить ${tool.title}. Передавайте полное содержание: обновление заменяет поля. Полное описание — структурированный Markdown, краткое — обычный многострочный текст. action=update требует id и ifRevision. После потери ответа повторите тот же requestId.`,
+      `Создать или изменить ${tool.title}. Передавайте полное содержание: обновление заменяет поля. Полное описание — структурированный Markdown, краткое — обычный многострочный текст. action=update требует id и ifRevision.`,
       { ...selector, ...productWriteArguments, ...tool.schema.shape, actor: actorSchema },
       false,
       async (backend, input) => {

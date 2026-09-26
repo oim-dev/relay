@@ -15,11 +15,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Сохранить имя и slug проекта; повтор тех же значений идемпотентен
+ * @description Сохранить текущие имя и slug проекта
  *
  * @tags context
  * @name SaveProjectSettingsForProject
- * @summary Сохранить имя и slug проекта; повтор тех же значений идемпотентен
+ * @summary Сохранить текущие имя и slug проекта
  * @request PUT:/api/v1/projects/{project}/context/settings
  */
 export const saveProjectSettingsForProject = (

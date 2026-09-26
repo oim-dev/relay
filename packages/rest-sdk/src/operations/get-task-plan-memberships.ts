@@ -13,11 +13,11 @@ import type {
 import type { ApiRequestClient, RequestParams } from "../http-client.js";
 
 /**
- * @description Текущее и историческое участие задачи в планах
+ * @description Текущее участие задачи в планах
  *
  * @tags plans
  * @name GetTaskPlanMemberships
- * @summary Текущее и историческое участие задачи в планах
+ * @summary Текущее участие задачи в планах
  * @request GET:/api/v1/plans/task-memberships/{reference}
  */
 export const getTaskPlanMemberships = (

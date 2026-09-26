@@ -385,17 +385,6 @@ export class EntityEngine {
       return this.page(items, page, entityDigest(items));
     });
   }
-  async history(input: z.input<typeof entityKeysQuerySchema>) {
-    const { ref, kind, ...page } = parse(entityKeysQuerySchema, input, "история сущности");
-    return this.read((catalog) => {
-      const entry = resolveEntity(catalog, ref, kind);
-      return this.page(
-        entry.events,
-        page,
-        entityDigest([this.workspace.config.projectId, entry.ref, page.limit ?? 40, entry.events]),
-      );
-    });
-  }
   async create(input: CreateEntity, actor: string) {
     const command = parse(entityCreateSchema, input, "создание сущности");
     return this.write(command, actor, async (context) => {

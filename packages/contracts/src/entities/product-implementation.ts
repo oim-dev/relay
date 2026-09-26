@@ -24,12 +24,8 @@ export const storedImplementationSchema = productImplementationSchema.extend({
 });
 export type ProductImplementation = z.infer<typeof productImplementationSchema>;
 export const productEntitySchema = z.union([
-  productRecordSchema
-    .omit({ events: true, requests: true })
-    .extend({ canonicalRef: productRefSchema.optional() }),
-  productImplementationSchema
-    .omit({ events: true, requests: true })
-    .extend({ canonicalRef: productRefSchema.optional() }),
+  productRecordSchema.extend({ canonicalRef: productRefSchema.optional() }),
+  productImplementationSchema.extend({ canonicalRef: productRefSchema.optional() }),
 ]);
 export const productEntityQuerySchema = z.strictObject({ ref: productRefSchema });
 export const productEntitySummarySchema = z.strictObject({
@@ -103,7 +99,7 @@ export const updateImplementationSchema = z.strictObject({
   key: productKeySchema
     .optional()
     .describe("Свободный ключ для разрешения коллизии; ID сохраняется"),
-  requestId: requestIdSchema.describe("Ключ повтора записи"),
+  requestId: requestIdSchema,
   actor: actorSchema.optional().describe("Автор изменения"),
 });
 export type ProductEntity = z.infer<typeof productEntitySchema>;

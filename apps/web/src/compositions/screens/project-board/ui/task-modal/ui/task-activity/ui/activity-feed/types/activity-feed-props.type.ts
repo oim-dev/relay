@@ -9,8 +9,6 @@ export type ActivityFeedParams = {
   taskId: string;
   /** Загруженные записи в порядке от новых к старым. */
   entries: ActivitySummary[];
-  /** Показывать обсуждение вместо хронологии. */
-  comments: boolean;
   /** Открыт ли таб. */
   active: boolean;
 };

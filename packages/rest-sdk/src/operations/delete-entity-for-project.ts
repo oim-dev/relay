@@ -15,11 +15,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Удалить подтверждённый каскад и снять внешние связи; проверка версии и безопасный повтор по requestId
+ * @description Удалить подтверждённый каскад и снять внешние связи с проверкой версии; requestId служит корреляции
  *
  * @tags entities
  * @name DeleteEntityForProject
- * @summary Удалить подтверждённый каскад и снять внешние связи; проверка версии и безопасный повтор по requestId
+ * @summary Удалить подтверждённый каскад и снять внешние связи с проверкой версии; requestId служит корреляции
  * @request POST:/api/v1/projects/{project}/entities/delete
  */
 export const deleteEntityForProject = (

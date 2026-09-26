@@ -39,7 +39,7 @@ for (const scoped of [false, true])
           );
       }
     }
-    assert.equal(operations.size, 157);
+    assert.equal(operations.size, 149);
     for (const path of [
       "/api/v1/tasks",
       "/api/v1/board",
@@ -117,7 +117,6 @@ for (const scoped of [false, true])
         },
       ],
     });
-    await request("GET", "/api/v1/graph/history");
     const settings = await request("GET", "/api/v1/context/settings");
     await request("PUT", "/api/v1/context/settings", undefined, {
       name: "Проверка настроек",
@@ -155,12 +154,6 @@ for (const scoped of [false, true])
       "GET",
       "/api/v1/board-tasks/{reference}/comments/{entryId}",
       `${cardBase}/comments/${message.data.commentId}`,
-    );
-    await request("GET", "/api/v1/board-tasks/{reference}/history", `${cardBase}/history`);
-    await request(
-      "GET",
-      "/api/v1/board-tasks/{reference}/history/{entryId}",
-      `${cardBase}/history/1`,
     );
     await request("GET", "/api/v1/board-tasks");
     await request("GET", "/api/v1/board-tasks/{reference}", cardBase);
@@ -283,7 +276,6 @@ for (const scoped of [false, true])
     );
     await request("GET", "/api/v1/entities/keys", `/api/v1/entities/keys?ref=${entityKey}`);
     await request("GET", "/api/v1/entities/key-spaces", "/api/v1/entities/key-spaces?kind=task");
-    await request("GET", "/api/v1/entities/history", `/api/v1/entities/history?ref=${entityKey}`);
     await request("POST", "/api/v1/entities/update", undefined, {
       ref: entityKey,
       ifRevision: 1,
@@ -344,18 +336,34 @@ for (const scoped of [false, true])
       409,
     );
     const deleted = await request("POST", "/api/v1/entities/delete", undefined, deleteCommand);
-    assert.deepEqual(
-      await request("POST", "/api/v1/entities/delete", undefined, deleteCommand),
-      deleted,
-    );
-    await request(
+    assert.equal(deleted.ok, true);
+    const missing = await request(
       "GET",
       "/api/v1/entities/get",
       `/api/v1/entities/get?ref=${entityKey}`,
       undefined,
       404,
     );
-    assert.equal(visited.size, 56);
+    assert.equal(missing.error.code, "ENTITY_NOT_FOUND");
+    const repeated = await request(
+      "POST",
+      "/api/v1/entities/delete",
+      undefined,
+      deleteCommand,
+      404,
+    );
+    assert.equal(repeated.error.code, "ENTITY_NOT_FOUND");
+    assert.deepEqual(
+      await request(
+        "GET",
+        "/api/v1/entities/get",
+        `/api/v1/entities/get?ref=${entityKey}`,
+        undefined,
+        404,
+      ),
+      missing,
+    );
+    assert.equal(visited.size, 52);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
     assert(!("$ref" in sse) && sse.content?.["text/event-stream"]);
     const updateSchema = document.components!.schemas!.UpdateBoardTask as SchemaObject;

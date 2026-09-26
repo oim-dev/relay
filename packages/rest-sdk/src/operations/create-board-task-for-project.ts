@@ -15,11 +15,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Создать задачу доски; повтор requestId возвращает первоначальную квитанцию
+ * @description Создать задачу доски; requestId служит корреляции и не предотвращает повторное создание
  *
  * @tags kanban
  * @name CreateBoardTaskForProject
- * @summary Создать задачу доски; повтор requestId возвращает первоначальную квитанцию
+ * @summary Создать задачу доски; requestId служит корреляции и не предотвращает повторное создание
  * @request POST:/api/v1/projects/{project}/board-tasks
  */
 export const createBoardTaskForProject = (

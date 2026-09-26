@@ -34,9 +34,9 @@ test("HTTP движка: ключи/ID, вложенные ссылки, гра�
   const command = { ref: task.key, key: "TASK-WEB-23", ifRevision: 1, requestId: "rename" };
   const renamed = await app.inject({ method: "POST", url: `${prefix}/rename`, payload: command });
   assert.equal(renamed.statusCode, 200, renamed.body);
-  assert.deepEqual(
-    (await app.inject({ method: "POST", url: `${prefix}/rename`, payload: command })).json(),
-    renamed.json(),
+  assert.equal(
+    (await app.inject({ method: "POST", url: `${prefix}/rename`, payload: command })).statusCode,
+    409,
   );
   const context = await app.inject(`/api/v1/graph?root=${task.key}&depth=3&profile=context`);
   assert.equal(context.statusCode, 200, context.body);
@@ -173,7 +173,7 @@ test("HTTP предметных операций: product, entities и канб�
     changes: { kind: "document" as const, relations: [] },
   };
   const detached = await backend.entities.update(update, "agent");
-  assert.deepEqual(await backend.entities.update(update, "agent"), detached);
+  await assert.rejects(backend.entities.update(update, "agent"), { code: "REVISION_CONFLICT" });
   assert.equal((await backend.graph.context({ root: document.key })).edges.length, 0);
   const clearTask = { requestId: "clear-http", ifRevision: task.revision, productLinks: [] };
   await backend.boardTasks.update(task.key, clearTask, "agent");

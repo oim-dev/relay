@@ -142,7 +142,6 @@ export const TaskModal = (props: TaskModalProps) => {
                 <Tabs.Tab value="task">Задача</Tabs.Tab>
                 <Tabs.Tab value="comments">Обсуждения</Tabs.Tab>
                 <Tabs.Tab value="documents">Документы</Tabs.Tab>
-                <Tabs.Tab value="history">История</Tabs.Tab>
               </Tabs.List>
               <Tabs.Panel value="task" className={styles.tabPanel}>
                 <TaskEditor
@@ -155,12 +154,7 @@ export const TaskModal = (props: TaskModalProps) => {
                 />
               </Tabs.Panel>
               <Tabs.Panel value="comments" className={styles.tabPanel}>
-                <TaskActivity
-                  projectId={projectId}
-                  taskId={task.id}
-                  comments
-                  active={tab === "comments"}
-                />
+                <TaskActivity projectId={projectId} taskId={task.id} active={tab === "comments"} />
               </Tabs.Panel>
               <Tabs.Panel value="documents" className={styles.tabPanel}>
                 {tab === "documents" && (
@@ -169,14 +163,6 @@ export const TaskModal = (props: TaskModalProps) => {
                     onOpenedChange={setDeleteOpened}
                   />
                 )}
-              </Tabs.Panel>
-              <Tabs.Panel value="history" className={styles.tabPanel}>
-                <TaskActivity
-                  projectId={projectId}
-                  taskId={task.id}
-                  comments={false}
-                  active={tab === "history"}
-                />
               </Tabs.Panel>
             </Tabs>
           )}

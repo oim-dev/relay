@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { writeLegacyMigrationFixture } from "./helpers/legacy-migration-fixture.js";
+import { StorageService } from "../src/application/storage/service.js";
+import { exists } from "../src/storage/files.js";
 import { test } from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -46,14 +49,16 @@ test("критерии: готовность к работе, завершени
   assert.ok(completed.criterion.completedAt);
   assert.equal((await service.get(task.id)).canComplete, true);
   assert.equal((await service.get(task.id)).column, "ready");
-  assert.deepEqual(await service.changeCriterion(task.id, completion, "human"), saved);
+  await assert.rejects(service.changeCriterion(task.id, completion, "human"), {
+    code: "REVISION_CONFLICT",
+  });
   await assert.rejects(
     service.changeCriterion(task.id, { ...completion, requestId: "stale" }, "human"),
     { code: "REVISION_CONFLICT" },
   );
   await assert.rejects(
     service.changeCriterion(task.id, { ...completion, completed: false }, "human"),
-    { code: "IDEMPOTENCY_CONFLICT" },
+    { code: "REVISION_CONFLICT" },
   );
   await service.changeCriterion(
     task.id,
@@ -79,12 +84,12 @@ test("критерии: готовность к работе, завершени
     ),
     { code: "TASK_ACCEPTANCE_LOCKED" },
   );
-  assert.deepEqual(await service.create(command, "orchestrator"), task);
-  const path = join(dirname(workspace.configPath), "boards/product/tasks", `${task.id}.json`);
+  assert.notEqual((await service.create(command, "orchestrator")).id, task.id);
+  const path = join(dirname(workspace.configPath), "entities/tasks", `${task.id}.json`);
   const stored = JSON.parse(await readFile(path, "utf8"));
-  assert.equal(stored.version, 5);
+  assert.equal(stored.schemaVersion, 3);
   assert.deepEqual(
-    stored.acceptanceCriteria[0].description,
+    stored.data.acceptanceCriteria[0].description,
     command.acceptanceCriteria[0]!.description.split("\n"),
   );
 });
@@ -153,7 +158,7 @@ test("критерии: страницы, границы, удаление и а
   );
 });
 
-test("критерии: v3 читается без записи, миграция сохраняет квитанции и восстанавливает pending", async (t) => {
+test("критерии: старые данные читаются без записи, миграция сохраняет содержание без квитанций", async (t) => {
   const { workspace } = await fixture(t);
   const service = new BoardTasksService(workspace);
   const command = {
@@ -163,6 +168,7 @@ test("критерии: v3 читается без записи, миграци�
     includeTask: true,
   };
   const task = await service.create(command, "agent");
+  await writeLegacyMigrationFixture(workspace);
   const path = join(dirname(workspace.configPath), "boards/product/tasks", `${task.id}.json`);
   const stored = JSON.parse(await readFile(path, "utf8"));
   stored.version = 3;
@@ -175,6 +181,8 @@ test("критерии: v3 читается без записи, миграци�
     join(dirname(workspace.configPath), "kanban-pending.json"),
     JSON.stringify({ version: 1, writes: [{ slug: "product", task: stored }], removes: [] }),
   );
+  assert.equal((await new StorageService(workspace).migrate()).migrated, true);
+  assert.equal(await exists(join(dirname(workspace.configPath), "kanban-pending.json")), false);
   const added = await service.changeCriterion(
     task.id,
     {
@@ -187,7 +195,14 @@ test("критерии: v3 читается без записи, миграци�
     "agent",
   );
   assert.ok(added.criterionId);
-  assert.deepEqual(await service.create(command, "agent"), task);
+  assert.notEqual((await service.create(command, "agent")).id, task.id);
   assert.equal((await service.get(task.id)).description, command.description);
-  assert.equal(JSON.parse(await readFile(path, "utf8")).version, 5);
+  const current = JSON.parse(
+    await readFile(
+      join(dirname(workspace.configPath), "entities/tasks", `${task.id}.json`),
+      "utf8",
+    ),
+  );
+  assert.equal(current.schemaVersion, 3);
+  assert.deepEqual(current.data.acceptanceCriteria[0].description, ["", "  текст  ", ""]);
 });

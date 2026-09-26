@@ -14,11 +14,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Атомарно установить, изменить или отозвать отношения; повтор requestId безопасен, устаревшая версия отклоняется
+ * @description Атомарно установить, изменить или отозвать отношения; requestId служит корреляции, устаревшая версия отклоняется
  *
  * @tags graph
  * @name MutateGraph
- * @summary Атомарно установить, изменить или отозвать отношения; повтор requestId безопасен, устаревшая версия отклоняется
+ * @summary Атомарно установить, изменить или отозвать отношения; requestId служит корреляции, устаревшая версия отклоняется
  * @request POST:/api/v1/graph
  */
 export const mutateGraph = (
