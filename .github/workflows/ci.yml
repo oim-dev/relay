@@ -53,7 +53,10 @@ jobs:
         run: pnpm run check 2>&1 | tee "$RUNNER_TEMP/tasks-check.log"
       - name: Проверить совместимость runtime с Node.js 22
         if: matrix.node == 22
-        run: pnpm run release:test && pnpm exec turbo run test --filter='!@relay/dev-agents' --filter='!@relay/relay-skill'
+        shell: bash
+        run: |
+          set -o pipefail
+          { pnpm run release:test && pnpm exec turbo run test --filter='!@relay/dev-agents' --filter='!@relay/relay-skill'; } 2>&1 | tee "$RUNNER_TEMP/tasks-check.log"
       - name: Показать причины падения проверок
         if: failure()
         run: |

@@ -27,7 +27,8 @@ const execute = promisify(execFile);
 for (const configuration of ["default", "relative"] as const)
   test(
     `root dev-сервер (${configuration}) переживает очистку dist и изменения сервера и Core`,
-    { timeout: 90000 },
+    // Две фазы reload по 60 с, cold-start 45 с, typecheck 30 с и запас на проверки/остановку.
+    { timeout: 240000 },
     async (t) => {
       const project = fileURLToPath(new URL("../../../", import.meta.url));
       const root = await realpath(await mkdtemp(join(tmpdir(), "tasks-dev-server-")));
@@ -167,28 +168,42 @@ for (const configuration of ["default", "relative"] as const)
         t.diagnostic(monitor.status());
       };
       const waitFor = monitor.waitFor;
-      let starts = 0;
-      const nextServer = async (timeout = 12000) => {
-        const urls = () => [...monitor.output.matchAll(/Relay: (http:\/\/127\.0\.0\.1:\d+)/g)];
-        await waitFor(() => urls().length > starts, "Dev-сервер не запустился", timeout);
-        starts = urls().length;
+      let phase = "initial";
+      const nextServer = async (name: string, outputOffset: number, timeout: number) => {
+        phase = name;
+        // Старый URL, даже от лишнего предыдущего рестарта, не подтверждает текущую мутацию.
+        const urls = () => [
+          ...monitor.output.slice(outputOffset).matchAll(/Relay: (http:\/\/127\.0\.0\.1:\d+)/g),
+        ];
+        await waitFor(
+          () => urls().length > 0,
+          `${phase}: новый URL не опубликован; запуск или перезапуск не подтверждён`,
+          timeout,
+        );
+        t.diagnostic(`${phase}: новый URL опубликован; ${monitor.status()}`);
         return urls().at(-1)![1]!;
       };
       const json = async (url: string) => {
-        const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
-        assert.equal(response.status, 200);
-        return response.json();
+        try {
+          const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
+          assert.equal(response.status, 200);
+          return await response.json();
+        } catch (cause) {
+          throw new Error(`${phase}: URL опубликован, но REST-проверка ${url} не прошла`, {
+            cause,
+          });
+        }
       };
 
-      // Холодный запуск на общем CI-runner конкурирует с компиляцией и другими тестами.
-      let url = await nextServer(30000);
+      // Hosted CI: первый URL на 26-й секунде, typecheck на 49-й; reload превысил прежние 12 с.
+      let url = await nextServer("initial", 0, 45000);
       const context = (await json(`${url}${apiPrefix}/context`)).data;
       assert.equal(context.actor, "dev-human");
       assert.equal(context.configPath, join(root, workspace, ".relay/config.json"));
       // Первая компиляция может завершиться позже HTTP-запуска на загруженном CI-runner.
       await waitFor(
         () => monitor.output.includes("Found 0 errors"),
-        "Проверка типов не завершилась успешно",
+        "initial/typecheck: проверка типов не завершилась успешно после HTTP-запуска",
         30000,
       );
       const outputs = workspaces
@@ -208,9 +223,14 @@ for (const configuration of ["default", "relative"] as const)
       const healthPath = join(root, "packages/server-runtime/src/modules/health/health.module.ts");
       const health = await readFile(healthPath, "utf8");
       assert(health.includes('stage: "ready"'));
+      const serverReloadOffset = monitor.output.length;
       await writeFile(healthPath, health.replace('stage: "ready"', 'stage: "scaffold"'));
-      url = await nextServer();
-      assert.equal((await json(`${url}/api/v1/health`)).data.stage, "scaffold");
+      url = await nextServer("Server reload", serverReloadOffset, 60000);
+      assert.equal(
+        (await json(`${url}/api/v1/health`)).data.stage,
+        "scaffold",
+        "Server reload: новый сервер должен исполнять изменённый health",
+      );
 
       // Статика разрешается от package.json также при запуске исходников через tsx.
       await mkdir(join(root, "apps/server/dist/web"), { recursive: true });
@@ -220,6 +240,7 @@ for (const configuration of ["default", "relative"] as const)
       const core = await readFile(corePath, "utf8");
       const createInput = 'parse(createBoardTaskSchema, input, "создание задачи")';
       assert.equal(core.split(createInput).length, 2, "Ожидается одна точка создания задачи");
+      const coreReloadOffset = monitor.output.length;
       await writeFile(
         corePath,
         core.replace(
@@ -227,7 +248,7 @@ for (const configuration of ["default", "relative"] as const)
           'parse(createBoardTaskSchema, { ...input, title: "core reload" }, "создание задачи")',
         ),
       );
-      url = await nextServer();
+      url = await nextServer("Core reload", coreReloadOffset, 60000);
       const created = await fetch(`${url}${apiPrefix}/board-tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -239,6 +260,7 @@ for (const configuration of ["default", "relative"] as const)
       assert.equal(
         (await json(`${url}${apiPrefix}/board-tasks/${taskId}`)).data.title,
         "core reload",
+        "Core reload: новый сервер должен исполнять изменённый Core",
       );
       assert.equal(await (await fetch(url, { signal: AbortSignal.timeout(3000) })).text(), html);
       assert.equal((await json(`${url}/api/openapi.json`)).openapi, "3.1.0");
