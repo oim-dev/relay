@@ -106,10 +106,14 @@ OpenAPI/SDK и общие подключения — с `relay-backend`. Пер�
   Общий `package:check` дополнительно независимо устанавливает три архива и проверяет
   версии, исполняемые команды, local/HTTP, Web/Swagger/API, workspace A/B, MCP и отказ Server.
 - `.github/workflows/ci.yml` проверяет Node.js 22/24; упаковка использует Node.js 24 и
-  закреплённый npm. Контракт `.github/workflows/release.yml` после переноса — только
-  `metadata` → `ci`: метаданные, сборка, проверки и артефакт `npm-packages` с тремя архивами.
-  Заданий npm publish и GitHub Release нет; права — `contents: read`, без
-  `id-token: write` и `contents: write`. Готовый артефакт не подтверждает публикацию.
+  закреплённый npm. Push/PR выполняют только проверки, без npm publish и OIDC.
+  `.github/workflows/release.yml` по `release.published` выполняет `metadata` → `ci` →
+  `publish` через OIDC. Publishing job находится непосредственно в `release.yml`,
+  использует environment `npm` и проверенный bundle `npm-packages` по точному `artifact_id`
+  (три архива и ведомость), без повторной сборки или упаковки. Права workflow —
+  `contents: read`; `id-token: write` получает только publisher, `contents: write`
+  не требуется. npm-токены не нужны; GitHub Release создаётся отдельно сопровождающим.
+  Готовый артефакт не подтверждает публикацию; полный контракт — `docs/development/RELEASING.md`.
 - Публикация npm не атомарна. Повтор использует те же архивы; существующая версия
   пропускается только при совпадении integrity. Проверка всех архивов и registry
   предшествует новой публикации. Обычные версии идут в `latest`, prerelease — в `next`;

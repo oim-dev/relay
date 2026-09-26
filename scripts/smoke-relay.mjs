@@ -20,6 +20,8 @@ const exec = promisify(execFile);
 const processes = [];
 let client;
 try {
+  const npmVersion = (await runNpm(["--version"], root)).stdout.trim();
+  console.log(`Независимые установки: Node.js ${process.version}, npm ${npmVersion}`);
   const installations = Object.fromEntries(
     await Promise.all(
       ["cli", "server", "mcp"].map(async (component) => {

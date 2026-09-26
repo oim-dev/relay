@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { publishPackages } from "./publish.mjs";
+import { bundleContext, verifyBundle } from "./bundle.mjs";
 import { readManifests, setWorkspaceVersion, workspaceRelease } from "./workspace.mjs";
 
 const [action, argument, ...extra] = process.argv.slice(2);
@@ -38,5 +39,12 @@ if (action === "version" || action === "check") {
   );
   console.log(notes.join("\n\n"));
 } else {
+  if (process.env.GITHUB_ACTIONS === "true") {
+    assert(
+      process.env.RELAY_RELEASE_BUNDLE,
+      "В CI требуется проверенный комплект RELAY_RELEASE_BUNDLE",
+    );
+    await verifyBundle(root, process.env.RELAY_RELEASE_BUNDLE, await bundleContext(root), true);
+  }
   await publishPackages(root, release.packages);
 }

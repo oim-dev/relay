@@ -1,20 +1,16 @@
-name: Проверка выпуска
+name: Выпуск npm
 
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
-# Только проверки и архивы. Публикация выполняется вручную отдельным поручением.
-concurrency:
-  group: release-check-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   metadata:
-    name: Проверить общий тег, версии и описания пакетов
+    name: Проверить событие, тег, коммит и версии
+    if: github.event_name == 'release' && github.event.action == 'published' && !github.event.release.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -22,20 +18,73 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Версия 7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Подготовить Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # Версия 7.0.0
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Сверить тег со всеми манифестами и проверить описания выпуска
-        shell: bash
+      - name: Проверить метаданные до сборки
         run: |
+          node scripts/release/event.mjs
           node scripts/release/relay.mjs check
-          node scripts/release/relay.mjs notes > "$RUNNER_TEMP/relay-release-notes.md"
+          node scripts/release/relay.mjs notes
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
 
   ci:
     name: Проверить и упаковать релиз
     needs: metadata
     uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Опубликовать только проверенный комплект
+    needs: [metadata, ci]
+    if: github.event_name == 'release' && github.event.action == 'published' && !github.event.release.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: relay-npm-publish
+      cancel-in-progress: false
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      RELAY_RELEASE_BUNDLE: ${{ github.workspace }}/.artifacts/npm-packages
+    steps:
+      - name: Получить тот же коммит без сохранения авторизации
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Версия 7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Подготовить Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # Версия 7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Зафиксировать настоящий npm с поддержкой OIDC
+        run: npm install --global npm@11.16.0
+      - name: Подготовить pnpm из packageManager без установки монорепозитория
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # Версия 4
+        with:
+          run_install: false
+      - name: Запретить загрузку всех артефактов при отсутствии ID
+        shell: bash
+        run: '[[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]'
+        env:
+          ARTIFACT_ID: ${{ needs.ci.outputs.artifact_id }}
+      - name: Получить точный артефакт вызванного CI
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # Версия 8.0.1
+        with:
+          artifact-ids: ${{ needs.ci.outputs.artifact_id }}
+          digest-mismatch: error
+          path: ${{ env.RELAY_RELEASE_BUNDLE }}
+          merge-multiple: true
+      - name: Повторно проверить событие и комплект перед OIDC-публикацией
+        run: |
+          node scripts/release/event.mjs
+          node scripts/release/bundle.mjs verify "$RELAY_RELEASE_BUNDLE"
+          test "$(pnpm exec npm --version)" = "11.16.0"
+          pnpm run release:publish "$RELEASE_TAG"
