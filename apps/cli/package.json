@@ -1,6 +1,6 @@
 {
   "name": "@oim-dev/relay-cli",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Relay CLI: продукт, задачи досок и связи для людей и AI-агентов",
   "repository": {
     "type": "git",

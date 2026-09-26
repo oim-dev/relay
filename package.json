@@ -58,6 +58,7 @@
     "check": "pnpm run release:check && pnpm run release:test && pnpm run format:check && pnpm run agents:check && pnpm run skills:check && pnpm run docs:check && turbo run lint typecheck test",
     "clean": "turbo run clean",
     "package:check": "pnpm run release:check && turbo run package:check --filter=@oim-dev/relay-cli --filter=@oim-dev/relay-server --filter=@oim-dev/relay-mcp && node scripts/smoke-relay.mjs",
+    "package:smoke": "node scripts/smoke-relay.mjs",
     "package:check:cli": "turbo run package:check --filter=@oim-dev/relay-cli",
     "package:check:server": "turbo run package:check --filter=@oim-dev/relay-server",
     "package:check:mcp": "turbo run package:check --filter=@oim-dev/relay-mcp",

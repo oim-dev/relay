@@ -16,11 +16,11 @@ import {
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { initialize } from "@relay/core/storage/workspace";
+import { observeDevProcess } from "./dev-process.js";
 
 const execute = promisify(execFile);
 
@@ -144,23 +144,7 @@ for (const configuration of ["default", "relative"] as const)
         detached: grouped,
         stdio: ["ignore", "pipe", "pipe"],
       });
-      let output = "";
-      let closed = false;
-      const exit = new Promise<void>((resolve) =>
-        child.once("close", () => {
-          closed = true;
-          resolve();
-        }),
-      );
-      child.stdout.setEncoding("utf8").on("data", (text: string) => {
-        output += text;
-      });
-      child.stderr.setEncoding("utf8").on("data", (text: string) => {
-        output += text;
-      });
-      child.on("error", (error) => {
-        output += error.message;
-      });
+      const monitor = observeDevProcess(child);
       const signal = (name: NodeJS.Signals) => {
         try {
           if (grouped && child.pid) process.kill(-child.pid, name);
@@ -171,26 +155,21 @@ for (const configuration of ["default", "relative"] as const)
         }
       };
       stop = async () => {
-        if (!closed) {
+        if (!monitor.closed) {
           signal("SIGTERM");
           const timer = setTimeout(() => signal("SIGKILL"), 5000);
           try {
-            await exit;
+            await monitor.completion;
           } finally {
             clearTimeout(timer);
           }
         }
+        t.diagnostic(monitor.status());
       };
-      const waitFor = async (condition: () => boolean, description: string, timeout = 12000) => {
-        const deadline = Date.now() + timeout;
-        while (!condition()) {
-          assert(!closed && Date.now() < deadline, `${description}\n${output}`);
-          await delay(25);
-        }
-      };
+      const waitFor = monitor.waitFor;
       let starts = 0;
       const nextServer = async (timeout = 12000) => {
-        const urls = () => [...output.matchAll(/Relay: (http:\/\/127\.0\.0\.1:\d+)/g)];
+        const urls = () => [...monitor.output.matchAll(/Relay: (http:\/\/127\.0\.0\.1:\d+)/g)];
         await waitFor(() => urls().length > starts, "Dev-сервер не запустился", timeout);
         starts = urls().length;
         return urls().at(-1)![1]!;
@@ -208,7 +187,7 @@ for (const configuration of ["default", "relative"] as const)
       assert.equal(context.configPath, join(root, workspace, ".relay/config.json"));
       // Первая компиляция может завершиться позже HTTP-запуска на загруженном CI-runner.
       await waitFor(
-        () => output.includes("Found 0 errors"),
+        () => monitor.output.includes("Found 0 errors"),
         "Проверка типов не завершилась успешно",
         30000,
       );
@@ -264,6 +243,6 @@ for (const configuration of ["default", "relative"] as const)
       assert.equal(await (await fetch(url, { signal: AbortSignal.timeout(3000) })).text(), html);
       assert.equal((await json(`${url}/api/openapi.json`)).openapi, "3.1.0");
       signal("SIGTERM");
-      await waitFor(() => closed, "Dev-сервер не завершился по SIGTERM");
+      await waitFor(() => monitor.closed, "Dev-сервер не завершился по SIGTERM", 12000, true);
     },
   );

@@ -50,9 +50,18 @@ async function fixture(t, version = "0.6.0") {
   const archives = new Map();
   for (const metadata of release.packages) {
     const path = join(root, "apps", metadata.component, ".artifacts/npm", metadata.archiveName);
-    const content = Buffer.from(`Проверенный архив ${metadata.name}@${version}`);
+    const staging = join(root, "staging", metadata.component);
+    await mkdir(join(staging, "package"), { recursive: true });
+    await writeFile(
+      join(staging, "package/package.json"),
+      JSON.stringify({
+        ...manifests.find((entry) => entry.manifest.name === metadata.name).manifest,
+        dependencies: {},
+      }),
+    );
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content);
+    await promisify(execFile)("tar", ["-czf", path, "-C", staging, "package"]);
+    const content = await readFile(path);
     archives.set(metadata.name, {
       path,
       integrity: `sha512-${createHash("sha512").update(content).digest("base64")}`,
@@ -153,12 +162,15 @@ test("notes описывает согласованный комплект, не
 test("каждый выпуск публикует все три архива после общей предварительной проверки", async (t) => {
   const { root, release, archives } = await fixture(t, "0.7.0-rc.1");
   const events = [];
+  const published = new Set();
   await publishPackages(root, release.packages, {
     getIntegrity: async (name, version) => {
       assert.equal(version, release.version);
+      if (published.has(name)) return archives.get(name).integrity;
       events.push(`check ${name}`);
       return null;
     },
+    getTag: async (name) => (published.has(name) ? release.version : null),
     executeNpm: async (args, cwd) => {
       assert.equal(cwd, root);
       const metadata = release.packages.find(({ name }) => archives.get(name).path === args[1]);
@@ -175,6 +187,7 @@ test("каждый выпуск публикует все три архива п
         "next",
       ]);
       events.push(`publish ${metadata.name}`);
+      published.add(metadata.name);
       return { stdout: "", stderr: "" };
     },
   });
@@ -191,6 +204,7 @@ test("повтор после сбоя допубликовывает компл
   let fail = true;
   const options = {
     getIntegrity: async (name) => published.get(name) ?? null,
+    getTag: async (name) => (published.has(name) ? release.version : null),
     executeNpm: async (args) => {
       const { name } = release.packages.find(({ name }) => archives.get(name).path === args[1]);
       attempts.push(name);
@@ -223,6 +237,7 @@ test("ошибка любого архива или registry останавли�
       let publications = 0;
       await assert.rejects(() =>
         publishPackages(root, release.packages, {
+          getTag: async () => release.version,
           getIntegrity: async (name) => {
             if (name !== "@oim-dev/relay-mcp") return null;
             if (failure === "registry") throw new Error("Ошибка доступа к npm");
@@ -239,22 +254,43 @@ test("ошибка любого архива или registry останавли�
   }
 });
 
-test("CI проверяет выпуск без автопубликации, ручная команда выпуска сохранена", async () => {
+test("CI не публикует; release.published публикует с минимальными правами и точным artifact ID", async () => {
   const root = new URL("../../", import.meta.url);
   const release = await readFile(new URL(".github/workflows/release.yml", root), "utf8");
   const ci = await readFile(new URL(".github/workflows/ci.yml", root), "utf8");
-  for (const workflow of [release, ci]) {
-    assert.doesNotMatch(workflow, /^\s*(?:contents|id-token):\s*write\b/m);
-    assert.doesNotMatch(
-      workflow,
-      /\brelease:publish\b|\b(?:npm|pnpm|yarn)\s+publish\b|\brelay\.mjs\s+publish\b|\bgh\s+release\s+create\b/,
-    );
-  }
+  assert.doesNotMatch(ci, /id-token:|release:publish|npm publish/);
+  assert.doesNotMatch(
+    release,
+    /contents: write|NPM_TOKEN|NODE_AUTH_TOKEN|secrets\.|workflow_dispatch:|\n  push:|\n  pull_request:/,
+  );
+  assert.match(release, /types: \[published\]/);
+  assert.match(release, /environment: npm/);
+  assert.equal((release.match(/id-token: write/g) ?? []).length, 1);
+  assert.match(release, /artifact-ids: \$\{\{ needs.ci.outputs.artifact_id \}\}/);
+  assert.match(ci, /artifact-ids: \$\{\{ needs.package.outputs.artifact_id \}\}/);
+  assert.match(ci, /pnpm run package:smoke/);
+  assert.match(release, /node scripts\/release\/event.mjs/);
+  assert.match(release, /!github.event.release.draft/);
+  assert.match(release, /group: relay-npm-publish\n      cancel-in-progress: false/);
+  const publisher = release.split(/^  publish:\s*$/m)[1];
+  assert.match(publisher, /needs: \[metadata, ci\]/);
+  assert.match(publisher, /id-token: write/);
+  assert.doesNotMatch(publisher, /pnpm (?:install|run build|run package:check)/);
+  assert.match(publisher, /npm@11\.16\.0/);
+  assert.match(publisher, /bundle\.mjs verify/);
+  assert.match(publisher, /\[\[ "\$ARTIFACT_ID" =~ \^\[1-9\]\[0-9\]\*\$ \]\]/);
+  const installed = ci.split(/^  installed-node22:\s*$/m)[1];
+  assert.match(installed, /needs: package/);
+  assert.match(installed, /bundle\.mjs restore/);
+  assert.doesNotMatch(installed, /pnpm (?:install|run build|run package:check)/);
+  assert.match(ci, /if: matrix.node == 24/);
+  assert.match(ci, /if: matrix.node == 22/);
+  assert.match(ci, /pnpm run release:test && pnpm exec turbo run test/);
   const jobs = release.split(/^jobs:\s*$/m)[1];
   assert(jobs, "В workflow выпуска отсутствуют задания");
   assert.deepEqual(
     [...jobs.matchAll(/^ {2}([\w-]+):\s*$/gm)].map((match) => match[1]),
-    ["metadata", "ci"],
+    ["metadata", "ci", "publish"],
   );
   assert.match(jobs, /^ {4}needs: metadata$/m);
   assert.match(jobs, /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m);

@@ -1,6 +1,6 @@
 {
   "name": "@oim-dev/relay-server",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Relay Server: проектный контекст, планы, задачи, REST API и веб-приложение для людей и AI-агентов",
   "bin": {
     "relay-server": "dist/main.js"
