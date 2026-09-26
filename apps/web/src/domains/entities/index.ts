@@ -1,9 +1,4 @@
-export {
-  useEntities,
-  useEntitySummary,
-  useEntityContent,
-  useEntityHistory,
-} from "./hooks/use-entities.hook";
+export { useEntities, useEntitySummary, useEntityContent } from "./hooks/use-entities.hook";
 export { entityKindLabel } from "./adapters/entities.adapter";
 export { getEntityPresentation, ENTITY_PRESENTATION } from "./helpers/get-entity-presentation";
 export { getEntityStatusLabel } from "./helpers/get-entity-status-label";

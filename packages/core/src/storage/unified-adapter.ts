@@ -64,12 +64,6 @@ export function workspaceStorageRegistry() {
 }
 
 export const json = (value: unknown): JsonValue => jsonValue(JSON.parse(JSON.stringify(value)));
-const auditSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("event"), value: z.json() }),
-  z.object({ type: z.literal("receipt"), key: z.string(), value: z.json() }),
-]);
-type Audit = { events: unknown[]; requests: Record<string, unknown> };
-const audits = new WeakMap<StorageSession, Map<string, Audit>>();
 
 export function session(workspace: Workspace): StorageSession {
   invariant(
@@ -81,55 +75,21 @@ export function session(workspace: Workspace): StorageSession {
   return workspace.storageSession;
 }
 
-/** Совместимое предметное представление истории; текущий файл сущности не содержит растущих массивов. */
-export async function readAudit(workspace: Workspace, ref: EntityRef): Promise<Audit> {
-  const tx = session(workspace),
-    address = entityAddress(ref);
-  let cache = audits.get(tx);
-  if (!cache) audits.set(tx, (cache = new Map()));
-  const cached = cache.get(address);
-  if (cached) return structuredClone(cached);
-  const result: Audit = { events: [], requests: {} };
-  for (const key of await tx.postings("record-audit-keys", address)) {
-    const value = auditSchema.parse(await tx.value("record-audit", key));
-    if (value.type === "event") result.events.push(value.value);
-    else result.requests[value.key] = value.value;
+/** Совместимые квитанции старых предметных команд; автоматический аудит не читается. */
+async function recordReceipts(workspace: Workspace, ref: EntityRef) {
+  const record = await session(workspace).get(ref);
+  const requests: Record<string, unknown> = {};
+  for (const receipt of record.receipts ?? []) {
+    if (receipt.namespace !== `legacy:record:${entityAddress(ref)}`) continue;
+    const result = z.object({ key: z.string(), value: z.json() }).parse(receipt.result);
+    requests[result.key] = result.value;
   }
-  result.events.sort((left, right) => {
-    const a = left as { revision: number; at: string },
-      b = right as { revision: number; at: string };
-    return a.revision - b.revision || a.at.localeCompare(b.at);
-  });
-  cache.set(address, result);
-  return structuredClone(result);
+  return { events: [], requests };
 }
 
-export async function saveAudit(
-  workspace: Workspace,
-  ref: EntityRef,
-  events: readonly unknown[],
-  requests: Record<string, unknown>,
-) {
-  const tx = session(workspace),
-    address = entityAddress(ref);
-  const groups = [{ index: "record-audit-keys", key: address }];
-  for (const event of events) {
-    const value = json(event);
-    await tx.appendValue(
-      "record-audit",
-      `${address}:event:${digest(value)}`,
-      { type: "event", value },
-      groups,
-    );
-  }
+async function saveRecordReceipts(workspace: Workspace, ref: EntityRef, requests: Record<string, unknown>) {
   for (const [key, receipt] of Object.entries(requests))
-    await tx.appendValue(
-      "record-audit",
-      `${address}:receipt:${key}`,
-      { type: "receipt", key, value: json(receipt) },
-      groups,
-    );
-  audits.get(tx)?.delete(address);
+    await session(workspace).saveCompatibilityReceipt(ref, `record:${entityAddress(ref)}`, key, json(receipt));
 }
 
 function metadata(
@@ -178,8 +138,11 @@ async function publish(workspace: Workspace, record: EntityRecord, importing = f
         "Изменение данных требует новой ревизии",
         4,
       );
-      await tx.writeFile(tx.store.registry.path(record), tx.store.registry.encode(record));
-      await tx.indexRecord(tx.store.registry.encode(record));
+      const next = tx.store.registry.encode({ ...old, ...record, receipts: old.receipts ?? [],
+        comments: old.comments, commentSequence: old.commentSequence, planningEvents: old.planningEvents,
+        reservedKeys: old.reservedKeys });
+      await tx.writeFile(tx.store.registry.path(record), json(next));
+      await tx.indexRecord(next);
       return;
     }
     await tx.put(record, old.revision);
@@ -198,7 +161,7 @@ export async function productRecords(
     for (const record of await tx.records(kind)) {
       if (kind === "product" && record.revision === 0) continue;
       const { data, ...meta } = record;
-      const audit = await readAudit(workspace, record);
+      const audit = await recordReceipts(workspace, record);
       const fields =
         kind === "scope"
           ? {
@@ -252,7 +215,9 @@ export async function productRecords(
       );
     }
   }
-  return records.sort((a, b) => a.id.localeCompare(b.id));
+  // Тот же порядок непрозрачных ID, что в legacy-репозитории: перенос не меняет
+  // порядок снимка и его version из-за регистра букв или локали процесса.
+  return records.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 export async function implementationRecords(
@@ -261,7 +226,7 @@ export async function implementationRecords(
 ): Promise<ProductImplementation[]> {
   const records = [];
   for (const record of await session(workspace).records("implementation")) {
-    const audit = await readAudit(workspace, record);
+    const audit = await recordReceipts(workspace, record);
     records.push(
       productImplementationSchema.parse({
         version: 1,
@@ -289,10 +254,9 @@ export async function saveImplementation(
 ) {
   const { kind: _kind, ...data } = record.fields;
   await publish(workspace, metadata(record, "implementation", data), importing);
-  await saveAudit(
+  await saveRecordReceipts(
     workspace,
     { kind: "implementation", id: record.id },
-    record.events,
     record.requests,
   );
 }
@@ -360,7 +324,7 @@ export async function saveProduct(workspace: Workspace, record: ProductRecord, i
     if (record.fields.kind === "application") delete data.prefix;
   }
   await publish(workspace, metadata(record, kind, data), importing);
-  await saveAudit(workspace, { kind, id: record.id }, record.events, record.requests);
+  await saveRecordReceipts(workspace, { kind, id: record.id }, record.requests);
 }
 
 export async function boards(workspace: Workspace): Promise<Board[]> {
@@ -381,7 +345,7 @@ export async function boards(workspace: Workspace): Promise<Board[]> {
         revision: record.revision,
         createdAt: record.createdAt,
         createdBy: record.createdBy,
-        ...(await readAudit(workspace, record)),
+        ...(await recordReceipts(workspace, record)),
       }),
     );
   }
@@ -422,10 +386,9 @@ export async function saveBoard(workspace: Workspace, record: Board, importing =
         prefix: `${prefix}-${suffix.toUpperCase()}`,
         format: "{prefix}-{number}",
       });
-  await saveAudit(
+  await saveRecordReceipts(
     workspace,
     { kind: "board", id: record.id },
-    record.events ?? [],
     record.requests ?? {},
   );
 }
@@ -448,7 +411,7 @@ function taskRequests(requests: Record<string, unknown>, encode: boolean): Recor
 export async function tasks(workspace: Workspace): Promise<BoardTaskRecord[]> {
   const output: BoardTaskRecord[] = [];
   for (const record of await session(workspace).records("task")) {
-    const audit = await readAudit(workspace, record);
+    const audit = await recordReceipts(workspace, record);
     output.push(
       boardTaskRecordSchema.parse({
         ...record.data,
@@ -502,7 +465,7 @@ export async function saveTask(workspace: Workspace, task: BoardTaskRecord, impo
     ),
     importing,
   );
-  await saveAudit(workspace, { kind: "task", id }, events ?? [], taskRequests(requests, true));
+  await saveRecordReceipts(workspace, { kind: "task", id }, taskRequests(requests, true));
 }
 
 export async function settings(workspace: Workspace) {
@@ -516,7 +479,7 @@ export async function settings(workspace: Workspace) {
     revision: record.revision,
     entityKey: record.key,
     aliases: record.aliases,
-    ...(await readAudit(workspace, record)),
+    ...(await recordReceipts(workspace, record)),
   });
 }
 
@@ -553,7 +516,7 @@ export async function saveSettings(
     },
     importing,
   );
-  await saveAudit(workspace, { kind: "project", id }, value.events ?? [], value.requests ?? {});
+  await saveRecordReceipts(workspace, { kind: "project", id }, value.requests ?? {});
   workspace.config.projectSettings = value;
 }
 

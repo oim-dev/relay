@@ -6,7 +6,6 @@ import type {
   GraphSaved,
   FullContext,
 } from "@relay/core/domain/entity-graph";
-import type { GraphService } from "@relay/core/application/graph/service";
 import { safeText } from "./text.js";
 import { renderMarkdown } from "./markdown.js";
 import { wrap } from "./layout.js";
@@ -144,27 +143,4 @@ export function graphText(page: GraphPage, query: GraphQuery, options: TextOptio
 /** Квитанция сохраняет идентификаторы и данные безопасного повтора. */
 export function graphSavedText(saved: GraphSaved): string {
   return `Связи сохранены: ${saved.ids.join(", ")}\nРевизия: ${saved.revision}\nВерсия: ${saved.version}\nКлюч повтора: ${safeText(saved.requestId)}`;
-}
-
-/** История явно установленных связей, включая последнее содержание отозванной связи. */
-export function graphHistoryText(
-  page: Awaited<ReturnType<GraphService["history"]>>,
-  id: string | undefined,
-  options: TextOptions,
-): string {
-  const lines = page.items.map((event) =>
-    wrap(
-      `${event.at} · ${safeText(event.actor)} · ${event.action} · ${event.edge.id}\n${entityAddress(event.edge.from)} ── ${event.edge.type} → ${entityAddress(event.edge.to)}`,
-      options.width,
-    ),
-  );
-  const next =
-    page.nextOffset === null
-      ? "Конец журнала."
-      : `relay-cli graph history --offset ${page.nextOffset} --revision ${page.revision}${id ? ` --id ${quote(id)}` : ""}`;
-  return [
-    ...(lines.length ? lines : ["История связей пуста."]),
-    `Всего событий: ${page.total}`,
-    next,
-  ].join("\n\n");
 }

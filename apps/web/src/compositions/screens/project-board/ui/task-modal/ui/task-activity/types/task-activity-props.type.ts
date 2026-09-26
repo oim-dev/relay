@@ -6,8 +6,6 @@ export type TaskActivityParams = {
   projectId: string;
   /** Постоянный ID задачи. */
   taskId: string;
-  /** Обсуждения вместо полной хронологии. */
-  comments: boolean;
   /** Загружать данные только открытого таба. */
   active: boolean;
 };

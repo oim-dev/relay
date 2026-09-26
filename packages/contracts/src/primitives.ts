@@ -43,22 +43,3 @@ export const entityReferenceSchema = z
   .max(257)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
   .describe("Ключ или постоянный ID сущности; для уточнения вида допустим kind:ID");
-
-/** Метаданные ревизии без копирования полного содержания записи. */
-export const recordEventSchema = z.strictObject({
-  revision: z.number().int().positive().describe("Ревизия записи"),
-  actor: actorSchema,
-  at: timestampSchema,
-  action: z.string().describe("Действие над записью"),
-});
-export const recordRequestsSchema = z.record(
-  z.string(),
-  z.strictObject({
-    hash: z.string(),
-    result: z.strictObject({
-      id: z.string(),
-      key: z.string(),
-      revision: z.number().int().nonnegative(),
-    }),
-  }),
-);

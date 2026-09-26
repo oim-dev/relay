@@ -219,12 +219,12 @@ test("движок: все виды, вложенные ссылки ключ/ID
   });
   const disk = JSON.parse(
     await readFile(
-      join(app.root, ".relay", "boards", "web", "tasks", `${task.ref.id}.json`),
+      join(app.root, ".relay", "entities", "tasks", `${task.ref.id}.json`),
       "utf8",
     ),
   );
-  assert.deepEqual(disk.description, ["## Работа", "", "Сохранить Markdown  ", ""]);
-  assert.equal(disk.version, 5);
+  assert.deepEqual(disk.data.description, ["## Работа", "", "Сохранить Markdown  ", ""]);
+  assert.equal(disk.schemaVersion, 2);
 });
 
 test("движок: смена формата ключей всех видов, алиасы, точный повтор и сохранность ссылок", async (t) => {

@@ -5,15 +5,9 @@ import { GraphService } from "@relay/core/application/graph/service";
 import {
   graphQuerySchema,
   graphMutationSchema,
-  graphHistoryQuerySchema,
   fullContextQuerySchema,
 } from "@relay/core/domain/entity-graph";
-import type {
-  GraphQuery,
-  GraphMutation,
-  GraphHistoryQuery,
-  FullContextQuery,
-} from "@relay/core/domain/entity-graph";
+import type { GraphQuery, GraphMutation, FullContextQuery } from "@relay/core/domain/entity-graph";
 import { ApiEndpoint } from "../../openapi/endpoint.js";
 import { ZodValidationPipe } from "../../common/validation.js";
 import { WorkspaceService } from "../workspace/workspace.module.js";
@@ -65,17 +59,6 @@ class GraphController {
     const saved = await new GraphService(workspace).mutate(input, this.workspace.actor());
     await this.events.apiChanged(workspace.config.projectId).catch(() => {});
     return success(saved);
-  }
-
-  @Get("history")
-  @ApiEndpoint({
-    id: "getGraphHistory",
-    summary: "История явно установленных отношений, включая отозванные",
-    response: "GraphHistory",
-    query: "GraphHistoryQuery",
-  })
-  async history(@Query(new ZodValidationPipe(graphHistoryQuerySchema)) query: GraphHistoryQuery) {
-    return success(await new GraphService(await this.workspace.open()).history(query));
   }
 }
 

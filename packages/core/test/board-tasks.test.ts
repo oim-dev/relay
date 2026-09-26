@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { writeLegacyMigrationFixture } from "./helpers/legacy-migration-fixture.js";
+import { StorageService } from "../src/application/storage/service.js";
+import { failWal } from "./helpers/wal.js";
+import { exists } from "../src/storage/files.js";
 import { test } from "node:test";
 import { readFile, access, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import { ProductService } from "@relay/core/application/product/service";
 import { BoardsService } from "@relay/core/application/boards/service";
-import { BoardTaskRepository } from "@relay/core/storage/board-tasks";
 import { fixture } from "./helpers/workspace.js";
 
 test("подзадачи блокируют завершение родителя, отмена не готовность, повторное открытие пересчитывает блокеры", async (t) => {
@@ -206,6 +209,7 @@ test("старый смешанный цикл читается и исправ�
     { board: "product", parentId: parent.id, requestId: "child" },
     "agent",
   );
+  await writeLegacyMigrationFixture(workspace);
   const path = join(dirname(workspace.configPath), "boards/product/tasks", `${child.id}.json`);
   const stored = JSON.parse(await readFile(path, "utf8"));
   stored.dependencies = [parent.id];
@@ -214,6 +218,7 @@ test("старый смешанный цикл читается и исправ�
   assert.equal((await service.get(parent.id)).blocked, true);
   assert.equal((await service.get(child.id)).blocked, true);
   assert.equal(await readFile(path, "utf8"), before);
+  await new StorageService(workspace).migrate();
   await service.link(
     child.id,
     { target: parent.id, relation: "depends-on", remove: true, ifRevision: 1, requestId: "repair" },
@@ -347,11 +352,12 @@ test("продуктовые связи: постоянные цели, обра
   );
 });
 
-test("версия 1 читается без записи и обновляется до 5 с сохранением Markdown и квитанций", async (t) => {
+test("legacy v1 читается без записи; storage migrate сохраняет Markdown и квитанции", async (t) => {
   const { workspace } = await fixture(t);
   const service = new BoardTasksService(workspace);
   const command = { board: "product", description: "## Текст\n\n  код  \n", requestId: "old" };
   const created = await service.create(command, "agent");
+  await writeLegacyMigrationFixture(workspace);
   const path = join(dirname(workspace.configPath), "boards/product/tasks", `${created.id}.json`);
   const legacy = JSON.parse(await readFile(path, "utf8"));
   legacy.version = 1;
@@ -363,17 +369,19 @@ test("версия 1 читается без записи и обновляет�
   assert.equal("kind" in task, false);
   assert.deepEqual(task.productLinks, []);
   assert.equal(await readFile(path, "utf8"), before);
+  await assert.rejects(service.create(command, "agent"), { code: "STORAGE_MIGRATION_REQUIRED" });
+  await new StorageService(workspace).migrate();
   assert.deepEqual(await service.create(command, "agent"), created);
   await service.update(
     created.id,
     { title: "Новый заголовок", ifRevision: 1, requestId: "upgrade" },
     "agent",
   );
-  const stored = JSON.parse(await readFile(path, "utf8"));
-  assert.equal(stored.version, 5);
+  const stored = JSON.parse(await readFile(join(dirname(workspace.configPath), "entities/tasks", `${created.id}.json`), "utf8"));
+  assert.equal(stored.schemaVersion, 2);
   assert.equal((await service.get(created.id)).description, command.description);
   for (const [key, receipt] of Object.entries(legacy.requests))
-    assert.deepEqual(stored.requests[key], receipt);
+    assert(stored.receipts.some((entry: { result: unknown }) => JSON.stringify(entry.result) === JSON.stringify({ key, value: receipt })));
 });
 
 test("канбан: короткие ID, конкурентные номера, Markdown и повтор после переноса", async (t) => {
@@ -412,11 +420,12 @@ test("канбан: короткие ID, конкурентные номера, 
   assert.equal(next.key, "PRODUCT-8");
   const path = join(
     dirname(workspace.configPath),
-    "boards/infrastructure/tasks",
+    "entities/tasks",
     `${first.id}.json`,
   );
   const stored = JSON.parse(await readFile(path, "utf8"));
-  assert.deepEqual(stored.description, description.split("\n"));
+  assert.deepEqual(stored.data.description, description.split("\n"));
+  assert(stored.aliases.includes("PRODUCT-1"));
   assert.equal((await service.get(first.id)).description, description);
   await assert.rejects(
     access(join(dirname(workspace.configPath), "boards/product/tasks", `${first.id}.json`)),
@@ -555,18 +564,12 @@ test("прерванный перенос восстанавливается п�
     ifRevision: 1,
     requestId: "move",
   } as const;
-  const original = BoardTaskRepository.prototype.recover;
-  let calls = 0;
-  BoardTaskRepository.prototype.recover = async function (owned) {
-    if (++calls === 2) throw new Error("Имитация остановки после долговечного намерения");
-    return original.call(this, owned);
-  };
-  try {
-    await assert.rejects(service.move(task.id, command, "agent"));
-  } finally {
-    BoardTaskRepository.prototype.recover = original;
-  }
+  failWal(t, (stage) => { if (stage === "intent") throw new Error("Имитация остановки после долговечного намерения"); });
+  await assert.rejects(service.move(task.id, command, "agent"), /долговечного намерения/);
+  assert(await exists(join(dirname(workspace.configPath), "transactions/pending.json")));
+  t.mock.restoreAll();
   assert.equal((await service.get(task.id)).key, "INFRA-1");
   assert.equal((await service.move(task.id, command, "agent")).key, "INFRA-1");
   assert.equal((await service.list()).total, 1);
+  assert.equal(await exists(join(dirname(workspace.configPath), "transactions/pending.json")), false);
 });

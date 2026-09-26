@@ -153,26 +153,3 @@ export async function recoverGraphMigration(
   await unlink(pending);
   await syncDirectory(dirname(pending));
 }
-
-/** Явное начало миграции. Продолжение автоматически завершается перед операциями Core. */
-export async function migrateGraph(workspace: Workspace, assertOwned: () => void) {
-  const root = new GraphTransaction(workspace).root;
-  const original = join(dirname(workspace.configPath), "relations.json");
-  if (!(await exists(original))) return { migrated: false };
-  invariant(
-    !(await exists(join(root, "meta.json"))),
-    "GRAPH_RECOVERY_CONFLICT",
-    "Одновременно обнаружены v1 и v2; нельзя выбрать источник автоматически",
-    5,
-  );
-  const legacy = await readLegacyGraph(original);
-  await atomicJson(
-    join(root, "transactions", "migration.json"),
-    { schemaVersion: 1, sourceHash: graphDigest(legacy) },
-    workspace.runtime,
-    true,
-    assertOwned,
-  );
-  await recoverGraphMigration(workspace, assertOwned);
-  return { migrated: true };
-}

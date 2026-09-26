@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
+import { graphFixture } from "./helpers/graph-workspace.js";
+import { readOwned } from "../src/storage/entity-store/relations.js";
 import { test } from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { GraphService } from "../src/application/graph/service.js";
-import { GraphRepository } from "../src/storage/graph.js";
-import { currentPath } from "../src/storage/graph-format.js";
 import { join } from "node:path";
 import { entityAddress } from "../src/domain/entity-graph.js";
 import type { GraphNode } from "../src/domain/entity-graph.js";
@@ -31,7 +31,7 @@ const add = (from: number, to: number, type = "references", description = "") =>
 });
 
 test("граф: произвольные пары и циклы, пути, пагинация и изолированные сущности", async (t) => {
-  const { workspace } = await fixture(t);
+  const { workspace } = await graphFixture(t, nodes);
   const graph = new GraphService(workspace, async () => ({ nodes }));
   const before = await graph.read();
   assert.equal(before.totalNodes, 6);
@@ -64,8 +64,8 @@ test("граф: произвольные пары и циклы, пути, па�
   assert.ok(incoming.nodes.some((node) => node.ref.kind === "task"));
 });
 
-test("граф: атомарность, CAS, повтор до проверки версии, Markdown и история отзыва", async (t) => {
-  const { workspace } = await fixture(t);
+test("граф: атомарность, CAS, повтор до проверки версии, Markdown и сохранённый отзыв", async (t) => {
+  const { workspace } = await graphFixture(t, nodes);
   const graph = new GraphService(workspace, async () => ({ nodes }));
   const version = (await graph.read()).version;
   const command = {
@@ -97,9 +97,9 @@ test("граф: атомарность, CAS, повтор до проверки 
   );
   assert.equal((await graph.read()).totalEdges, 1);
   const disk = JSON.parse(
-    await readFile(join(new GraphRepository(workspace).root, currentPath(saved.ids[0]!)), "utf8"),
+    await readFile(join(workspace.root, "relations/tasks/T.json"), "utf8"),
   );
-  assert.deepEqual(disk.edge.description, ["## Пример", "", "  текст", ""]);
+  assert.deepEqual(disk.entries.find((entry: { edge: { id: string } }) => entry.edge.id === saved.ids[0])?.edge.description, ["## Пример", "", "  текст", ""]);
   await graph.mutate(
     {
       ifVersion: saved.version,
@@ -109,17 +109,16 @@ test("граф: атомарность, CAS, повтор до проверки 
     "operator",
   );
   assert.equal((await graph.read()).totalEdges, 0);
-  const history = await graph.history({ id: saved.ids[0] });
-  assert.deepEqual(
-    history.items.map((event) => event.action),
-    ["add", "remove"],
-  );
-  assert.equal(history.items[1]!.actor, "operator");
+  const stored = await workspace.locked(() => readOwned(workspace.storageSession!, ref(2)));
+  const removed = stored.entries.find((entry) => entry.edge.id === saved.ids[0])!;
+  assert.equal(removed.edge.active, false);
+  assert.equal(removed.edge.revision, 2);
+  assert.equal(removed.edge.updatedBy, "operator");
   assert.deepEqual(await graph.mutate(command, "agent"), saved);
 });
 
 test("граф: конкуренция, политика приложения, изоляция и повреждение файла", async (t) => {
-  const { workspace } = await fixture(t);
+  const { workspace } = await graphFixture(t, nodes);
   const catalog = async () => ({ nodes });
   const graph = new GraphService(workspace, catalog);
   const version = (await graph.read()).version;
@@ -132,7 +131,7 @@ test("граф: конкуренция, политика приложения, �
     ),
   );
   assert.equal(attempts.filter((result) => result.status === "fulfilled").length, 1);
-  const other = await fixture(t);
+  const other = await graphFixture(t, nodes);
   assert.equal((await new GraphService(other.workspace, catalog).read()).totalEdges, 0);
   const restricted = new GraphService(workspace, catalog, () => {
     throw new Error("Политика приложения");
@@ -145,12 +144,12 @@ test("граф: конкуренция, политика приложения, �
     /Политика/,
   );
   assert.equal((await graph.read()).totalEdges, 1);
-  await writeFile(new GraphRepository(workspace).path, "{}");
+  await writeFile(join(workspace.root, "relations/scenarios/S.json"), "{}");
   await assert.rejects(graph.read());
 });
 
 test("контекст: сохранённая цепочка проходит через документ и приложение без скрытого отсечения", async (t) => {
-  const { workspace } = await fixture(t);
+  const { workspace } = await graphFixture(t, nodes);
   const graph = new GraphService(workspace, async () => ({ nodes }));
   await graph.mutate(
     {
@@ -213,13 +212,12 @@ test("движок: сценарий документа пишет свои св
   assert.ok(before.nodes.some((node) => node.ref.id === document.ref.id));
   assert.ok(before.nodes.some((node) => node.ref.kind === "project"));
   assert.ok(before.nodes.some((node) => node.ref.kind === "product"));
-  assert.equal(before.totalEdges, 1);
-  assert.equal(before.edges[0]?.type, "documents");
-  assert.equal(before.edges[0]?.source, "graph");
-  assert.equal((await graph.history()).total, 1);
-  const emptyContext = await graph.read({ root: task.key });
-  assert.equal(emptyContext.totalNodes, 1);
-  assert.equal(emptyContext.totalEdges, 0);
+  assert.equal(before.totalEdges, 5);
+  const attachments = before.edges.filter((edge) => edge.type === "documents" && edge.from.id === document.ref.id && edge.to.id === feature.ref.id);
+  assert.equal(attachments.length, 1);
+  assert.equal(attachments[0]!.source, "graph");
+  const initialContext = await graph.context({ root: task.key });
+  assert(initialContext.edges.some((edge) => edge.from.id === task.ref.id && edge.to.id === feature.ref.id));
 
   const command = {
     ifVersion: before.version,
@@ -237,14 +235,13 @@ test("движок: сценарий документа пишет свои св
   const saved = await graph.mutate(command, "agent");
   assert.deepEqual(await graph.mutate(command, "agent"), saved);
   const id = saved.ids[0]!;
-  const stored = JSON.parse(await readFile(join(graph.repository.root, currentPath(id)), "utf8"));
-  assert.equal(stored.edge.id, id);
-  assert.equal(stored.edge.source, "graph");
+  const stored = await workspace.locked(() => readOwned(workspace.storageSession!, task.ref));
+  assert.equal(stored.entries.find((entry) => entry.edge.id === id)?.edge.source, "graph");
   const fresh = new GraphService(workspace);
   const outgoing = await fresh.read({ root: task.key, depth: 1, direction: "outgoing" });
   const incoming = await fresh.read({ root: document.key, depth: 1, direction: "incoming" });
-  assert.equal(outgoing.edges[0]?.id, id);
-  assert.equal(incoming.edges[0]?.id, id);
+  assert(outgoing.edges.some((edge) => edge.id === id));
+  assert(incoming.edges.some((edge) => edge.id === id));
 
   // Сценарий снимает своё прикрепление, но сохраняет независимое ребро задачи.
   const detached = await engine.update(
@@ -256,7 +253,7 @@ test("движок: сценарий документа пишет свои св
     },
     "agent",
   );
-  assert.equal((await fresh.read({ root: task.key })).edges[0]?.id, id);
+  assert((await fresh.read({ root: task.key })).edges.some((edge) => edge.id === id));
   assert.equal(
     (await fresh.read()).edges.some((edge) => edge.type === "documents"),
     false,
@@ -269,7 +266,8 @@ test("движок: сценарий документа пишет свои св
     },
     "agent",
   );
-  assert.equal((await fresh.read({ root: task.key })).totalEdges, 0);
+  assert(!(await fresh.read({ root: task.key })).edges.some((edge) => edge.id === id));
+  assert.deepEqual(new Set((await fresh.read()).edges.map((edge) => edge.id)), new Set(before.edges.filter((edge) => edge.type !== "documents").map((edge) => edge.id)));
 
   // Возврат линка создаёт связь документа, но не воскрешает независимое отозванное ребро.
   await engine.update(
@@ -285,12 +283,10 @@ test("движок: сценарий документа пишет свои св
     "agent",
   );
   await fresh.reindex();
-  assert.equal((await fresh.read()).totalEdges, 1);
-  assert.equal((await fresh.read({ root: task.key })).totalEdges, 0);
-  assert.deepEqual(
-    (await fresh.history({ id })).items.map((event) => event.action),
-    ["add", "remove"],
-  );
+  assert.equal((await fresh.read()).totalEdges, before.totalEdges);
+  assert(!(await fresh.read({ root: task.key })).edges.some((edge) => edge.id === id));
+  const revoked = await workspace.locked(() => readOwned(workspace.storageSession!, task.ref));
+  assert.equal(revoked.entries.find((entry) => entry.edge.id === id)?.edge.active, false);
   assert.deepEqual(await fresh.mutate(command, "agent"), saved);
   const unchanged = await engine.get({ ref: document.key });
   assert.equal(unchanged.data.kind === "document" && unchanged.data.links.length, 1);

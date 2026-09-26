@@ -25,10 +25,8 @@ export const storedImplementationSchema = productImplementationSchema.extend({
 export type ProductImplementation = z.infer<typeof productImplementationSchema>;
 export const productEntitySchema = z.union([
   productRecordSchema
-    .omit({ events: true, requests: true })
     .extend({ canonicalRef: productRefSchema.optional() }),
   productImplementationSchema
-    .omit({ events: true, requests: true })
     .extend({ canonicalRef: productRefSchema.optional() }),
 ]);
 export const productEntityQuerySchema = z.strictObject({ ref: productRefSchema });

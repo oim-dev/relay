@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fixture, successful, invokeRaw } from "./helpers/cli.js";
 
-test("CLI обсуждений: публикация, повтор, Markdown, страницы и история для человека и JSON", async (t) => {
+test("CLI обсуждений: публикация, повтор, Markdown и страницы для человека и JSON", async (t) => {
   const app = await fixture(t);
   const task = successful(
     await app.run<{ id: string }>(["task", "create", "--board", "product"]),
@@ -36,47 +36,52 @@ test("CLI обсуждений: публикация, повтор, Markdown, с
     await app.run<{ description: string }>(["task", "comment", "get", task.id, saved.commentId]),
   ).data;
   assert.equal(json.description, "## Результат\n\n**Проверено**\n");
-  const history = await invokeRaw(app.root, ["task", "history", "list", task.id, "--limit", "1"]);
-  assert.equal(history.code, 0, history.stderr);
-  assert.match(history.stdout, /--cursor/);
-  successful(
-    await app.run([
-      "task",
-      "update",
-      task.id,
-      "--description",
-      "## Изменённое описание",
-      "--if-revision",
-      "1",
-    ]),
-  );
+  const second = [...command];
+  second[second.indexOf("comment", 2)] = "comment-2";
+  successful(await app.run(second));
   const page = successful(
-    await app.run<{ items: { id: string }[] }>([
+    await app.run<{ items: { id: string }[]; nextCursor: string | null }>([
       "task",
-      "history",
+      "comment",
       "list",
       task.id,
       "--limit",
       "1",
     ]),
   ).data;
-  const address = ["task", "history", "get", task.id, page.items[0]!.id];
-  const compact = await invokeRaw(app.root, address);
-  assert.equal(compact.code, 0, compact.stderr);
-  assert.match(compact.stdout, /Содержимое изменено/);
-  assert.doesNotMatch(compact.stdout, /До:|После:|Изменённое описание/);
-  const event = successful(
-    await app.run<{
-      changes: {
-        field: string;
-        contentOmitted?: boolean;
-        before: string | null;
-        after: string | null;
-      }[];
-    }>(address),
+  assert.equal(page.items.length, 1);
+  assert.ok(page.nextCursor);
+  const next = successful(
+    await app.run<{ items: { id: string }[]; nextCursor: string | null }>([
+      "task",
+      "comment",
+      "list",
+      task.id,
+      "--limit",
+      "1",
+      "--cursor",
+      page.nextCursor,
+    ]),
   ).data;
-  assert.equal(
-    event.changes.find((change) => change.field === "description")?.contentOmitted,
-    true,
-  );
+  assert.equal(next.items.length, 1);
+  assert.notEqual(next.items[0]!.id, page.items[0]!.id);
+  if (next.nextCursor) {
+    const end = successful(
+      await app.run<{ items: unknown[]; nextCursor: string | null }>([
+        "task",
+        "comment",
+        "list",
+        task.id,
+        "--limit",
+        "1",
+        "--cursor",
+        next.nextCursor,
+      ]),
+    ).data;
+    assert.deepEqual(end.items, []);
+    assert.equal(end.nextCursor, null);
+  }
+  const human = await invokeRaw(app.root, ["task", "comment", "list", task.id, "--limit", "1"]);
+  assert.equal(human.code, 0, human.stderr);
+  assert.match(human.stdout, /task comment list.*--cursor/);
 });

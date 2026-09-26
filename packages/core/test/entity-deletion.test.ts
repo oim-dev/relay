@@ -4,9 +4,9 @@ import type { TestContext } from "node:test";
 import { join } from "node:path";
 import { EntityEngine } from "@relay/core/application/entities/service";
 import { EntityDeletionService } from "@relay/core/application/entities/deletion";
-import { EntityDeletionRepository } from "@relay/core/storage/entity-deletion";
 import { GraphService } from "@relay/core/application/graph/service";
-import { readJson, atomicJson } from "@relay/core/storage/files";
+import { readJson, atomicJson, exists } from "@relay/core/storage/files";
+import { failWal } from "./helpers/wal.js";
 import { fixture } from "./helpers/workspace.js";
 
 /** Связанный продукт с внешними задачами и документом для проверки границ каскада. */
@@ -155,6 +155,10 @@ for (const kind of [
       ifVersion: preview.version,
       requestId: `delete-${kind}`,
     };
+    const beforeGraph = await state.graph.read({ limit: 100 });
+    assert.equal(beforeGraph.edges.length, beforeGraph.totalEdges);
+    const removed = new Set(preview.deleted.map((entry) => `${entry.ref.kind}:${entry.ref.id}`));
+    const removedEdges = beforeGraph.edges.filter((edge) => removed.has(`${edge.from.kind}:${edge.from.id}`) || removed.has(`${edge.to.kind}:${edge.to.id}`));
     const result = await state.deletion.delete(command, "tester");
     assert.equal(result.deleted, expected[kind].length);
     assert.deepEqual(await state.deletion.delete(command, "tester"), result);
@@ -179,10 +183,9 @@ for (const kind of [
         assert.deepEqual(external.data.dependencies, []);
       }
     }
-    await state.graph.read({});
-    if (kind === "document") assert.equal(result.relations, 3);
-    if (kind === "application") assert.equal(result.relations, 2);
-    if (kind === "task") assert.equal(result.relations, 1);
+    const afterGraph = await state.graph.read({ limit: 100 });
+    assert.equal(result.relations, removedEdges.length);
+    assert.deepEqual(new Set(afterGraph.edges.map((edge) => edge.id)), new Set(beforeGraph.edges.filter((edge) => !removedEdges.includes(edge)).map((edge) => edge.id)));
   });
 }
 
@@ -207,51 +210,43 @@ test("удаление: конкурентное изменение требуе
 
 test("удаление: WAL восстанавливается до чтения после прерванной публикации", async (t) => {
   const { workspace } = await fixture(t);
-  const repository = new EntityDeletionRepository(workspace);
-  let writes = 0;
-  await assert.rejects(
-    workspace.locked(async () => {
-      await repository.publish(
-        [{ path: "entity-deletions/test.json", after: { preserved: true } }],
-        [],
-        () => {
-          if (++writes === 2) throw new Error("Прерывание");
-        },
-      );
-    }),
-    /Прерывание/,
-  );
-  await workspace.locked(async () => {
-    assert.deepEqual(await readJson(join(repository.root, "entity-deletions/test.json")), {
-      preserved: true,
-    });
-  });
+  const engine = new EntityEngine(workspace);
+  const task = await engine.create({ data: { kind: "task", board: "BOARD-PRODUCT" }, requestId: "task" }, "tester");
+  const deletion = new EntityDeletionService(workspace);
+  const preview = await deletion.preview({ ref: task.key, kind: "task" });
+  const command = { ref: task.key, kind: "task" as const, ifVersion: preview.version, requestId: "delete" };
+  failWal(t, (stage) => { if (stage === "intent") throw new Error("Прерывание"); });
+  await assert.rejects(deletion.delete(command, "tester"), /Прерывание/);
+  t.mock.restoreAll();
+  const pending = join(workspace.root, "transactions/pending.json");
+  assert(await exists(pending));
+  await assert.rejects(engine.get({ ref: task.key }), { code: "ENTITY_NOT_FOUND" });
+  assert.equal(await exists(pending), false);
+  const record = await readJson(join(workspace.root, "entities/tasks", `${task.ref.id}.json`)) as { deleted: unknown; revision: number };
+  assert(record.deleted);
+  assert.equal(record.revision, 2);
+  assert.equal((await deletion.delete(command, "tester")).ref.id, task.ref.id);
 });
 
 test("удаление: внешнее изменение файла блокирует восстановление", async (t) => {
   const { workspace } = await fixture(t);
-  const repository = new EntityDeletionRepository(workspace);
-  let writes = 0;
-  await assert.rejects(
-    workspace.locked(() =>
-      repository.publish(
-        [{ path: "entity-deletions/test.json", after: { expected: true } }],
-        [],
-        () => {
-          if (++writes === 2) throw new Error("Прерывание");
-        },
-      ),
-    ),
-  );
-  await atomicJson(
-    join(repository.root, "entity-deletions/test.json"),
-    { external: true },
-    workspace.runtime,
-  );
+  const engine = new EntityEngine(workspace);
+  const task = await engine.create({ data: { kind: "task", board: "BOARD-PRODUCT" }, requestId: "task" }, "tester");
+  const deletion = new EntityDeletionService(workspace);
+  const preview = await deletion.preview({ ref: task.key, kind: "task" });
+  failWal(t, (stage) => { if (stage === "intent") throw new Error("Прерывание"); });
+  await assert.rejects(deletion.delete({ ref: task.key, kind: "task", ifVersion: preview.version, requestId: "delete" }, "tester"), /Прерывание/);
+  t.mock.restoreAll();
+  const path = join(workspace.root, "entities/tasks", `${task.ref.id}.json`);
+  const record = await readJson(path) as { data: { title: string } };
+  record.data.title = "Внешняя правка";
+  await atomicJson(path, record, workspace.runtime);
   await assert.rejects(
     workspace.locked(async () => undefined),
-    { code: "DELETION_RECOVERY_CONFLICT" },
+    { code: "STORAGE_RECOVERY_CONFLICT" },
   );
+  assert.deepEqual(await readJson(path), record);
+  assert(await exists(join(workspace.root, "transactions/pending.json")));
 });
 
 test("удаление: прерванный каскад приложения завершается перед повтором, ключи не переиспользуются", async (t) => {
@@ -263,19 +258,10 @@ test("удаление: прерванный каскад приложения �
     ifVersion: preview.version,
     requestId: "interrupted-cascade",
   };
-  const original = EntityDeletionRepository.prototype.recover;
-  let calls = 0;
-  EntityDeletionRepository.prototype.recover = async function (owned) {
-    return original.call(this, () => {
-      owned();
-      if (++calls === 4) throw new Error("Прерван каскад");
-    });
-  };
-  try {
-    await assert.rejects(state.deletion.delete(command, "tester"), /Прерван каскад/);
-  } finally {
-    EntityDeletionRepository.prototype.recover = original;
-  }
+  failWal(t, (stage, path) => { if (stage === "file" && path?.startsWith("entities/")) throw new Error("Прерван каскад"); });
+  await assert.rejects(state.deletion.delete(command, "tester"), /Прерван каскад/);
+  assert(await exists(join(state.workspace.root, "transactions/pending.json")));
+  t.mock.restoreAll();
   const result = await state.deletion.delete(command, "tester");
   assert.equal(result.deleted, 5);
   await assert.rejects(state.engine.get({ ref: state.task.id }), { code: "ENTITY_NOT_FOUND" });

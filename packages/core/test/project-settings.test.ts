@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { legacyWorkspace } from "./helpers/workspace.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +7,7 @@ import { test } from "node:test";
 import { initialize, openWorkspace } from "../src/storage/workspace.js";
 import { projectSettings } from "../src/storage/project-settings.js";
 import { saveProjectSettings } from "../src/application/project-settings/service.js";
+import { StorageService } from "../src/application/storage/service.js";
 
 test("настройки: случайный адрес, атомарное сохранение, повтор и конкуренция", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-settings-"));
@@ -41,7 +43,7 @@ test("настройки: случайный адрес, атомарное со
 test("старый конфиг читается без записи; первое сохранение не меняет ID и остальные параметры", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-old-settings-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const workspace = await initialize(root, "tasks", undefined, { legacy: true });
+  const workspace = await legacyWorkspace(root);
   const { projectSettings: omitted, ...oldConfig } = workspace.config;
   await writeFile(workspace.configPath, JSON.stringify(oldConfig));
   const before = await readFile(workspace.configPath, "utf8");
@@ -50,9 +52,14 @@ test("старый конфиг читается без записи; перво
   assert.equal(settings.revision, 0);
   assert.deepEqual(projectSettings(legacy.config, legacy.configPath), settings);
   assert.equal(await readFile(workspace.configPath, "utf8"), before);
-  await saveProjectSettings(legacy, { name: "Прежний проект", slug: "legacy", ifRevision: 0 });
+  const input = { name: "Прежний проект", slug: "legacy", ifRevision: 0 };
+  await assert.rejects(saveProjectSettings(legacy, input), { code: "STORAGE_MIGRATION_REQUIRED" });
+  assert.equal(await readFile(workspace.configPath, "utf8"), before);
+  await new StorageService(legacy).migrate();
+  await saveProjectSettings(legacy, input);
   const { projectSettings: stored, ...unchanged } = (await openWorkspace(root)).config;
   assert.deepEqual(unchanged, oldConfig);
-  assert.equal(stored?.version, 2);
-  assert.equal(stored?.events?.[0]?.revision, 1);
+  assert.equal(stored?.version, 3);
+  assert.equal(stored?.revision, 1);
+  assert.equal(stored?.events, undefined);
 });

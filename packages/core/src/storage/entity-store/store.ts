@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readdir, realpath, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
@@ -6,6 +6,9 @@ import {
   storageManifestSchema,
   storedKeySpaceSchema,
   storageCardSchema,
+  storedReceiptSchema,
+  storedCommentSchema,
+  storedPlanningEventSchema,
 } from "@relay/contracts/storage";
 import type {
   JsonValue,
@@ -26,13 +29,10 @@ import { EntityStorageRegistry } from "./registry.js";
 import type { EntityRecord } from "./registry.js";
 import { STATE_PATH, EMPTY_STATE, stateSchema, RECORD_BYTES, digest, jsonValue } from "./format.js";
 import type { StoreState, FileChange } from "./format.js";
-import {
-  Journal,
-  indexedEventSchema,
-  receiptKey,
-  historyBucket,
-  compactHistoryValue,
-} from "./journal.js";
+import { storageMigrationOptionsSchema, verifyAppliedOrphanPlanningApproval } from "../migration/orphan-planning-approval.js";
+import type { StorageMigrationOptions } from "../migration/orphan-planning-approval.js";
+const receiptKey = (command: Pick<StorageCommand, "namespace" | "actor" | "requestId">) =>
+  JSON.stringify([command.namespace, command.actor, command.requestId]);
 
 const candidateSchema = z.strictObject({
   ref: entityRefSchema,
@@ -44,10 +44,36 @@ const candidatesSchema = z.array(candidateSchema);
 const postingIdsSchema = z.array(z.string());
 const postingPointerSchema = z.strictObject({ root: z.string() });
 const postingValueSchema = z.union([postingIdsSchema, postingPointerSchema]);
-const eventPointerSchema = z.strictObject({
-  operationId: z.string(),
-  offset: z.number().int().nonnegative(),
+const taskReceiptPointerSchema = z.strictObject({
+  owner: entityRefSchema,
+  identity: z.string(),
+  kind: z.enum(["task", "comment"]),
+  form: z.enum(["native", "compatible"]),
 });
+type TaskReceiptPointer = z.infer<typeof taskReceiptPointerSchema>;
+const taskRequestKey = (actor: string, requestId: string) =>
+  createHash("sha256").update(JSON.stringify([actor, requestId])).digest("hex");
+
+function taskReceiptScope(owner: EntityRef, receipt: z.output<typeof storedReceiptSchema>): { key: string; pointer: TaskReceiptPointer } | undefined {
+  if (receipt.namespace === "board-task" || receipt.namespace === "task-comment")
+    return { key: taskRequestKey(receipt.actor, receipt.requestId), pointer: {
+      owner, identity: receiptKey(receipt), kind: receipt.namespace === "board-task" ? "task" as const : "comment" as const,
+      form: "native" as const,
+    } };
+  const kind = receipt.namespace.startsWith("legacy:record:task:") ? "task"
+    : receipt.namespace === "legacy:task-comment-receipt" ? "comment" : undefined;
+  if (!kind) return undefined;
+  const value = z.object({ key: z.string(), value: z.json() }).parse(receipt.result);
+  return { key: value.key, pointer: { owner, identity: receiptKey(receipt), kind, form: "compatible" as const } };
+}
+
+function mergeTaskReceipt(before: TaskReceiptPointer | undefined, after: TaskReceiptPointer) {
+  invariant(!before || (sameRef(before.owner, after.owner) && before.kind === after.kind),
+    "IDEMPOTENCY_CONFLICT", "Ключ запроса уже занят в общей области задач и комментариев", 4);
+  invariant(!before || before.form !== after.form || before.identity === after.identity,
+    "IDEMPOTENCY_CONFLICT", "Один ключ области задач указывает на разные квитанции", 4);
+  return before?.form === "compatible" ? before : after;
+}
 const commandSchema = z.strictObject({
   namespace: z.string().min(1).max(128),
   actor: actorSchema,
@@ -55,27 +81,12 @@ const commandSchema = z.strictObject({
   request: z.json(),
 });
 export type StorageCommand = z.infer<typeof commandSchema>;
-const operationSchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  id: z.uuid(),
-  at: z.iso.datetime(),
-  actor: actorSchema,
-  namespace: z.string(),
-  requestId: requestIdSchema,
-  requestHash: z.string(),
-  result: z.json(),
-  refs: z.array(entityRefSchema),
-  changes: z.array(
-    z.strictObject({ path: z.string(), before: z.json().nullable(), after: z.json().nullable() }),
-  ),
-  events: z.array(z.json()),
-});
 const sameRef = (a: EntityRef, b: EntityRef) => a.kind === b.kind && a.id === b.id;
 const refOf = (record: StoredRecord) => ({ kind: record.kind, id: record.id });
 
 /** Низкоуровневый владелец одной базы. Предметные сценарии вызывают run после своих проверок. */
 export class EntityStore {
-  formatVersion: 1 | 2 = 2;
+  formatVersion: 1 | 2 | 3 = 3;
   readonly metrics = {
     entityReads: 0,
     operationReads: 0,
@@ -125,7 +136,7 @@ export class EntityStore {
         await transaction.publish(
           [
             { path: STATE_PATH, after: { ...EMPTY_STATE, version: randomUUID() } },
-            { path: "storage.json", after: { format: "relay-entities", schemaVersion: 2 } },
+            { path: "storage.json", after: { format: "relay-entities", schemaVersion: 3 } },
           ],
           owned,
         );
@@ -196,6 +207,7 @@ export class EntityStore {
   /** Короткое чтение под общей блокировкой исключает наблюдение частичной публикации. */
   async read<T>(fn: (snapshot: StorageSession) => Promise<T>): Promise<T> {
     return this.locked(async () => {
+      this.requireCurrentFormat();
       const snapshot = new StorageSession(this, await this.state(), false);
       try {
         return await fn(snapshot);
@@ -219,10 +231,10 @@ export class EntityStore {
   ): Promise<T> {
     const command = commandSchema.parse(input);
     return this.locked(async (owned) => {
+      this.requireCurrentFormat();
       const session = new StorageSession(this, await this.state(), true);
       const prior = await this.savedCommand(session, command);
       if (prior) return structuredClone(prior.result) as T;
-      await session.prepareJournal(owned);
       const result = jsonValue(await fn(session)) as T;
       await this.commitSession(session, command, result, owned);
       return structuredClone(result);
@@ -255,17 +267,16 @@ export class EntityStore {
     initialize = false,
   ): Promise<T> {
     owned();
+    this.requireCurrentFormat();
     const state =
       initialize && !(await exists(join(this.root, STATE_PATH)))
         ? structuredClone(EMPTY_STATE)
         : await this.state();
     const session = new StorageSession(this, state, true);
-    if (this.formatVersion === 2) await session.prepareJournal(owned);
     const result = await fn(session);
     if (session.changed) {
       if (
         session.files.size === 0 &&
-        session.events.length === 0 &&
         session.command === undefined
       ) {
         await new StorageTransaction(this.root, this.probe).publish(
@@ -275,16 +286,13 @@ export class EntityStore {
         session.index.published();
         return result;
       }
-      const command = session.command ?? {
-        input: {
-          namespace: "storage-maintenance",
-          actor: "relay",
-          requestId: randomUUID(),
-          request: null,
-        },
-        result: null,
-      };
-      await this.commitSession(session, command.input, command.result, owned);
+      if (session.command) {
+        await this.commitSession(session, session.command.input, session.command.result, owned);
+      } else {
+        // Обслуживание без пользовательской команды не порождает искусственных квитанций.
+        await new StorageTransaction(this.root, this.probe).publish(await session.prepare(randomUUID()), owned);
+        session.index.published();
+      }
     }
     owned();
     return result;
@@ -298,25 +306,33 @@ export class EntityStore {
     const key = receiptKey(command);
     const prior = await session.indexGet("receipts", key);
     if (prior === undefined) return undefined;
-    const ids = postingIdsSchema.parse(prior);
+    const owners = z.array(entityRefSchema).parse(prior);
     invariant(
-      ids.length === 1,
+      owners.length === 1,
       "IDEMPOTENCY_CONFLICT",
       "Обнаружены разные квитанции одного запроса",
       4,
     );
-    const operation =
-      this.formatVersion === 2
-        ? await session.journal.operation(ids[0]!)
-        : await this.operation(ids[0]!);
+    const raw = await session.readFile(this.registry.path(owners[0]!));
+    invariant(raw, "STORAGE_INDEX_CORRUPT", "Потерян владелец квитанции", 5);
+    const record = this.registry.validate(raw);
+    invariant(sameRef(record, owners[0]!), "STORAGE_INDEX_CORRUPT", "Индекс квитанции указывает на чужую сущность", 5);
+    const matches = record.receipts.filter((receipt) => receiptKey(receipt) === key);
+    invariant(matches.length === 1, "STORAGE_INDEX_CORRUPT", "Индекс указывает на отсутствующую или повторную квитанцию", 5);
+    const operation = matches[0]!;
     invariant(
-      operation.id === ids[0] &&
-        receiptKey(operation) === key &&
+      receiptKey(operation) === key &&
         operation.requestHash === digest(command.request),
       "IDEMPOTENCY_CONFLICT",
       "Ключ запроса уже использован с другим содержимым",
       4,
     );
+    if (command.namespace === "board-task" || command.namespace === "task-comment") {
+      const scoped = await session.taskReceipt(taskRequestKey(command.actor, command.requestId));
+      invariant(scoped, "STORAGE_INDEX_CORRUPT", "Потерян индекс общей области задач и комментариев", 5);
+      invariant(scoped.kind === (command.namespace === "board-task" ? "task" : "comment"),
+        "IDEMPOTENCY_CONFLICT", "Ключ запроса занят в общей области задач и комментариев", 4);
+    }
     return { result: operation.result };
   }
 
@@ -326,85 +342,21 @@ export class EntityStore {
     result: JsonValue,
     owned: () => void,
   ) {
-    invariant(
-      this.formatVersion === 2,
-      "STORAGE_MIGRATION_REQUIRED",
-      "Для записи выполните storage migrate: требуется компактный формат истории",
-      4,
-    );
-    await session.journal.append({
-      at: new Date().toISOString(),
+    this.requireCurrentFormat();
+    await session.saveReceipt({
       actor: command.actor,
       namespace: command.namespace,
       requestId: command.requestId,
       requestHash: digest(command.request),
       result,
-      events: session.events,
-      refs: [...session.touched].sort().map((address) => {
-        const [kind, id] = address.split(":");
-        return entityRefSchema.parse({ kind, id });
-      }),
     });
     const prepared = await session.prepare(randomUUID());
     await new StorageTransaction(this.root, this.probe).publish(prepared, owned);
     session.index.published();
   }
 
-  async operation(id: string) {
-    if (id.includes(":")) return this.read((session) => session.journal.operation(id));
-    z.uuid().parse(id);
-    this.metrics.operationReads++;
-    return operationSchema.parse(
-      await readJson(join(this.root, `operations/${id}.json`), RECORD_BYTES),
-    );
-  }
-
-  /** Список истории адресный; большие поля читаются только для выбранных операций. */
-  async history(ref: EntityRef, offset = 0, limit = 40, version?: string) {
-    invariant(
-      Number.isSafeInteger(offset) &&
-        offset >= 0 &&
-        Number.isSafeInteger(limit) &&
-        limit > 0 &&
-        limit <= 100,
-      "INVALID_ARGUMENT",
-      "Ожидается неотрицательное смещение и размер страницы 1–100",
-      2,
-    );
-    return this.read(async (snapshot) => {
-      invariant(
-        await snapshot.readFile(this.registry.path(ref)),
-        "ENTITY_NOT_FOUND",
-        "Сущность не найдена",
-        3,
-      );
-      invariant(
-        version === undefined || version === snapshot.state.version,
-        "STORAGE_CHANGED",
-        "История изменилась. Начните чтение заново",
-        4,
-      );
-      if (this.formatVersion === 1) {
-        const ids = await snapshot.postings("history", entityAddress(ref));
-        return {
-          items: await Promise.all(
-            ids
-              .slice(offset, offset + limit)
-              .map((pointer) => this.operation(pointer.split("/").at(-1)!)),
-          ),
-          total: ids.length,
-          nextOffset: offset + limit < ids.length ? offset + limit : null,
-          version: snapshot.state.version,
-        };
-      }
-      const all = await snapshot.journal.history(entityAddress(ref));
-      return {
-        items: all.slice(offset, offset + limit),
-        total: all.length,
-        nextOffset: offset + limit < all.length ? offset + limit : null,
-        version: snapshot.state.version,
-      };
-    });
+  private requireCurrentFormat() {
+    invariant(this.formatVersion === 3, "STORAGE_MIGRATION_REQUIRED", "Для работы с базой выполните storage migrate: требуется формат 3", 4);
   }
 
   /** Явное обслуживание сканирует постоянные файлы. Обычные резолвы сюда не попадают. */
@@ -416,7 +368,18 @@ export class EntityStore {
   }> {
     const rebuild = async (owned: () => void) => {
       owned();
+      this.requireCurrentFormat();
       forgetStorageSegments(this.root);
+      let expectedPaths: string[] = [];
+      try {
+        const prior = new StorageSession(this, await this.state(), false);
+        expectedPaths = (await prior.indexEntries("file-hashes")).map(([path]) => path);
+      } catch (error) {
+        // Отсутствующий/испорченный производный индекс можно восстановить по файлам.
+        if (!(error instanceof AppError) || error.code !== "STORAGE_INDEX_CORRUPT") throw error;
+      }
+      for (const path of expectedPaths.filter((path) => /^(entities|relations|keyspaces)\//.test(path)))
+        invariant(await exists(join(this.root, path)), "STORAGE_INDEX_CORRUPT", "Потерян ожидаемый постоянный файл; reindex не может принять его за удаление", 5, { path });
       const snapshot = new StorageSession(this, structuredClone(EMPTY_STATE), true);
       let entities = 0,
         tombstones = 0,
@@ -439,7 +402,7 @@ export class EntityStore {
         )) {
           const path = `entities/${definition.collection}/${filename}`;
           this.metrics.entityReads++;
-          const raw = jsonValue(await readJson(join(this.root, path), RECORD_BYTES));
+          const raw = jsonValue(await readJson(join(this.root, path), Number.POSITIVE_INFINITY));
           const record = this.registry.validate(raw);
           snapshot.indexSet("file-hashes", path, digest(raw));
           invariant(
@@ -460,77 +423,6 @@ export class EntityStore {
         storedKeySpaceSchema.parse(raw);
         snapshot.indexSet("file-hashes", path, digest(raw));
       }
-      if (this.formatVersion === 2) {
-        for (const stream of await directories(join(this.root, "history"))) {
-          z.uuid().parse(stream);
-          let end = 0;
-          for (const filename of (await jsonFiles(join(this.root, "history", stream))).sort()) {
-            const path = `history/${stream}/${filename}`;
-            const segment = await snapshot.journal.segment(path);
-            invariant(
-              segment.first > end,
-              "STORAGE_INDEX_CONFLICT",
-              "Пересекаются диапазоны сегментов истории",
-              4,
-            );
-            end = segment.first + segment.entries.length - 1;
-            snapshot.indexSet("file-hashes", path, digest(segment));
-            for (const [offset, entry] of segment.entries.entries()) {
-              await snapshot.journal.indexEntry(path, segment.first + offset, entry);
-              operations++;
-            }
-          }
-        }
-      } else
-        for (const filename of await jsonFiles(join(this.root, "operations"))) {
-          this.metrics.operationReads++;
-          const operation = operationSchema.parse(
-            await readJson(join(this.root, "operations", filename), RECORD_BYTES),
-          );
-          snapshot.indexSet("file-hashes", `operations/${filename}`, digest(operation));
-          invariant(
-            filename === `${operation.id}.json`,
-            "INVALID_DATA",
-            "Неверный ID журнала операции",
-            5,
-          );
-          const key = receiptKey(operation);
-          const receipts = z
-            .array(z.string())
-            .parse((await snapshot.indexGet("receipts", key)) ?? []);
-          snapshot.indexSet("receipts", key, [...receipts, operation.id]);
-          for (const ref of operation.refs)
-            await snapshot.addPosting(
-              "history",
-              entityAddress(ref),
-              `${operation.at}/${operation.id}`,
-            );
-          for (const [offset, event] of operation.events.entries()) {
-            if (
-              event === null ||
-              typeof event !== "object" ||
-              Array.isArray(event) ||
-              event.kind !== "indexed"
-            )
-              continue;
-            const indexed = indexedEventSchema.parse(event);
-            const prior = await snapshot.indexGet(indexed.index, indexed.key);
-            if (prior !== undefined) {
-              const old = await snapshot.value(indexed.index, indexed.key);
-              invariant(
-                digest(old!) === digest(indexed.value),
-                "STORAGE_INDEX_CONFLICT",
-                "После слияния обнаружены разные значения одной исторической записи",
-                4,
-              );
-            } else
-              snapshot.indexSet(indexed.index, indexed.key, { operationId: operation.id, offset });
-            for (const group of indexed.groups)
-              await snapshot.addPosting(group.index, group.key, group.member ?? indexed.key);
-            if (indexed.index === "reserved-key") await snapshot.indexNumber(indexed.key);
-          }
-          operations++;
-        }
       await snapshot.rebuildRelations();
       const version = randomUUID();
       const changes = await snapshot.prepare(version);
@@ -555,107 +447,42 @@ export class EntityStore {
     return externalOwned ? rebuild(externalOwned) : this.locked(rebuild);
   }
 
-  /** Явный атомарный переход: технические снимки не переносятся в постоянную историю. */
-  async migrateHistory(owned: () => void) {
+  /** Единственный прямой переход физического формата, без промежуточного журнала. */
+  async migrateFormat(owned: () => void, input: StorageMigrationOptions = {}) {
+    owned();
+    const options = storageMigrationOptionsSchema.parse(input);
     const manifest = storageManifestSchema.parse(await readJson(join(this.root, "storage.json")));
-    if (manifest.schemaVersion === 2)
-      return {
-        migrated: false,
-        format: "relay-entities",
-        schemaVersion: 2,
-        entities: 0,
-        operations: 0,
-      };
-    const state = await this.state();
-    const oldIndex = new StorageSession(this, state, false);
-    const expected = new Map(
-      (await oldIndex.indexEntries("file-hashes")).filter(([path]) =>
-        path.startsWith("operations/"),
-      ),
-    );
-    const sources = [];
-    const removedIndexes = new Set(["history", "receipts"]);
-    for (const filename of await jsonFiles(join(this.root, "operations"))) {
-      const path = `operations/${filename}`;
-      const operation = operationSchema.parse(await readJson(join(this.root, path), RECORD_BYTES));
-      invariant(
-        expected.get(path) === digest(operation),
-        "STORAGE_INDEX_STALE",
-        "Прежний журнал изменён вне Core. Выполните storage reindex перед переносом",
-        4,
-        { path },
-      );
-      invariant(
-        filename === `${operation.id}.json`,
-        "INVALID_DATA",
-        "Неверный ID прежней операции",
-        5,
-      );
-      for (const raw of operation.events) {
-        const event = indexedEventSchema.parse(raw);
-        removedIndexes.add(event.index);
-        for (const group of event.groups) removedIndexes.add(group.index);
-      }
-      sources.push({ path, operation });
+    if (manifest.schemaVersion !== 3) {
+      const { migrateUnifiedStorage } = await import("../migration/unified.js");
+      return migrateUnifiedStorage(this, owned, options);
     }
-    invariant(
-      expected.size === sources.length,
-      "STORAGE_INDEX_CORRUPT",
-      "Потеряны записи прежней истории; восстановите файлы до переноса",
-      5,
-    );
-    invariant(
-      (await directories(join(this.root, "history"))).length === 0,
-      "STORAGE_MIGRATION_CONFLICT",
-      "В прежней базе уже есть неизвестные сегменты истории",
-      4,
-    );
-    this.formatVersion = 2;
-    const snapshot = new StorageSession(
-      this,
-      {
-        ...state,
-        roots: Object.fromEntries(
-          Object.entries(state.roots).filter(([name]) => !removedIndexes.has(name)),
-        ),
-      },
-      true,
-    );
-    await snapshot.prepareJournal(owned);
-    for (const source of sources.sort(
-      (a, b) =>
-        a.operation.at.localeCompare(b.operation.at) ||
-        a.operation.id.localeCompare(b.operation.id),
-    )) {
-      const { id: _id, schemaVersion: _version, changes: _changes, ...entry } = source.operation;
-      await snapshot.journal.append(entry);
-      await snapshot.writeFile(source.path, null);
-    }
-    await snapshot.writeFile("storage.json", jsonValue({ ...manifest, schemaVersion: 2 }));
-    const changes = await snapshot.prepare(randomUUID());
-    // Удалённые корни не должны вернуться из прежнего снимка.
-    await new StorageTransaction(this.root, this.probe).publish(changes, owned);
-    snapshot.index.published();
+    const orphanPlanning = options.orphanPlanning
+      ? await verifyAppliedOrphanPlanningApproval(new StorageSession(this, await this.state(), false), options.orphanPlanning)
+      : undefined;
     return {
-      migrated: true,
+      migrated: false,
       format: "relay-entities",
-      schemaVersion: 2,
-      entities: (await snapshot.indexEntries("records")).length,
-      operations: sources.length,
+      schemaVersion: 3,
+      entities: 0,
+      operations: 0,
+      ...(orphanPlanning ? { orphanPlanning } : {}),
     };
   }
 }
 
 /** Рабочий пакет. Непубликуемые предметные записи доступны следующим явным шагам сценария. */
 export class StorageSession {
-  operationId = "";
-  readonly journal = new Journal(this);
+  operationId: string = randomUUID();
   readonly index: HashIndex;
   readonly files = new Map<string, JsonValue | null>();
   readonly originals = new Map<string, JsonValue | null>();
-  readonly events: JsonValue[] = [];
   readonly touched = new Set<string>();
   command: { input: StorageCommand; result: JsonValue } | undefined;
+  private commandOwner: EntityRef | undefined;
+  private replayOwner: EntityRef | undefined;
+  get executingCommand() { return this.executing; }
+  get hasCommandOwner() { return this.commandOwner !== undefined; }
+  commandNamespace: string | undefined;
   private executing = false;
   private readonly updates = new Map<string, Map<string, JsonValue | undefined>>();
   constructor(
@@ -666,75 +493,161 @@ export class StorageSession {
     this.index = new HashIndex(store.root);
   }
 
-  async prepareJournal(owned: () => void) {
-    invariant(
-      this.store.formatVersion === 2,
-      "STORAGE_MIGRATION_REQUIRED",
-      "Для записи выполните storage migrate",
-      4,
-    );
-    this.operationId = await this.journal.prepare(owned);
+  /** В составной команде владелец задаётся прикладным сценарием, а не порядком записи. */
+  setCommandOwner(ref: EntityRef) {
+    invariant(this.writable, "READ_ONLY_SNAPSHOT", "Снимок доступен только для чтения", 5);
+    const owner = entityRefSchema.parse(ref);
+    invariant(!this.commandOwner || sameRef(this.commandOwner, owner), "STORAGE_COMMAND_OWNER_CONFLICT", "Команда уже имеет другого основного владельца", 5);
+    this.commandOwner = owner;
+  }
+
+  async saveReceipt(input: z.input<typeof storedReceiptSchema>) {
+    const receipt = storedReceiptSchema.parse(input);
+    // Единственная изменённая сущность однозначна; для составных действий нужен явный владелец.
+    const address = this.touched.size === 1 ? [...this.touched][0] : undefined;
+    const owner = this.commandOwner ?? this.replayOwner ?? (address ? entityRefSchema.parse({ kind: address.split(":")[0], id: address.split(":")[1] }) : undefined);
+    invariant(owner, "STORAGE_COMMAND_OWNER_REQUIRED", "Составная команда должна указать основного владельца квитанции", 5);
+    await this.putReceipt(owner, receipt);
+  }
+
+  /** Импорт и совместимые предметные повторы не меняют основного владельца текущей команды. */
+  async putReceipt(owner: EntityRef, input: z.input<typeof storedReceiptSchema>) {
+    const receipt = storedReceiptSchema.parse(input);
+    const path = this.store.registry.path(owner);
+    const raw = await this.readFile(path);
+    invariant(raw, "ENTITY_NOT_FOUND", "Владелец квитанции не найден", 3);
+    const record = this.store.registry.validate(raw);
+    const key = receiptKey(receipt);
+    const previous = record.receipts.find((entry) => receiptKey(entry) === key);
+    invariant(!previous || digest(previous) === digest(receipt), "IDEMPOTENCY_CONFLICT", "Квитанция запроса уже имеет другое содержание", 4);
+    if (!previous) record.receipts.push(receipt);
+    await this.writeFile(path, jsonValue(record));
+    await this.indexReceipt(owner, receipt);
+  }
+
+  async saveCompatibilityReceipt(owner: EntityRef, namespace: string, key: string, value: JsonValue) {
+    await this.putReceipt(owner, {
+      namespace: `legacy:${namespace}`, actor: "relay", requestId: digest(key),
+      requestHash: digest(value), result: { key, value },
+    });
+  }
+
+  async compatibilityReceipt(namespace: string, key: string): Promise<JsonValue | undefined> {
+    const identity = { namespace: `legacy:${namespace}`, actor: "relay", requestId: digest(key) };
+    const owners = z.array(entityRefSchema).parse((await this.indexGet("receipts", receiptKey(identity))) ?? []);
+    if (!owners.length) return undefined;
+    invariant(owners.length === 1, "IDEMPOTENCY_CONFLICT", "Разные владельцы прежней квитанции", 4);
+    const raw = await this.readFile(this.store.registry.path(owners[0]!));
+    invariant(raw, "STORAGE_INDEX_CORRUPT", "Потерян владелец прежней квитанции", 5);
+    const stored = this.store.registry.validate(raw);
+    const receipt = stored.receipts.find((entry) => receiptKey(entry) === receiptKey(identity));
+    invariant(receipt, "STORAGE_INDEX_CORRUPT", "Потеряна прежняя квитанция", 5);
+    const result = z.object({ key: z.literal(key), value: z.json() }).parse(receipt.result);
+    invariant(receipt.requestHash === digest(result.value), "STORAGE_INDEX_CORRUPT", "Повреждена прежняя квитанция", 5);
+    this.replayOwner = owners[0];
+    return structuredClone(result.value);
+  }
+
+  /** Общая предметная область task/comment включает живых владельцев и tombstones. */
+  async taskReceipt(key: string): Promise<{ kind: "task" | "comment"; hash: string; result: JsonValue } | undefined> {
+    let pointer = await this.indexGetParsed("task-request-receipts", key, taskReceiptPointerSchema);
+    if (await this.indexGet("receipt-index-meta", "task-request-receipts") !== 1) {
+      // Старые v3-индексы ещё не содержат этой производной выборки. Читаем исходный
+      // receipt→owner индекс без скрытой записи; явный reindex строит полную выборку.
+      for (const [identity, rawOwners] of await this.indexEntries("receipts")) {
+        const [namespace, actor, requestId] = z.tuple([z.string(), z.string(), z.string()]).parse(JSON.parse(identity));
+        const relevant = namespace === "board-task" || namespace === "task-comment"
+          ? taskRequestKey(actor, requestId) === key
+          : (namespace.startsWith("legacy:record:task:") || namespace === "legacy:task-comment-receipt") && requestId === digest(key);
+        if (!relevant) continue;
+        for (const owner of z.array(entityRefSchema).parse(rawOwners)) {
+          const raw = await this.readFile(this.store.registry.path(owner));
+          invariant(raw, "STORAGE_INDEX_CORRUPT", "Потерян владелец квитанции задачи", 5);
+          const record = this.store.registry.validate(raw);
+          invariant(sameRef(record, owner), "STORAGE_INDEX_CORRUPT", "Неверный владелец квитанции задачи", 5);
+          const matches = record.receipts.filter((entry) => receiptKey(entry) === identity);
+          invariant(matches.length === 1, "STORAGE_INDEX_CORRUPT", "Квитанция задачи потеряна или дублирована", 5);
+          const receipt = matches[0]!;
+          const scoped = taskReceiptScope(owner, receipt);
+          invariant(scoped?.key === key, "STORAGE_INDEX_CORRUPT", "Индекс ведёт к чужому ключу запроса", 5);
+          pointer = mergeTaskReceipt(pointer, scoped.pointer);
+        }
+      }
+    }
+    if (!pointer) return undefined;
+    const raw = await this.readFile(this.store.registry.path(pointer.owner));
+    invariant(raw, "STORAGE_INDEX_CORRUPT", "Потерян владелец квитанции задачи", 5);
+    const record = this.store.registry.validate(raw);
+    invariant(sameRef(record, pointer.owner), "STORAGE_INDEX_CORRUPT", "Неверный владелец квитанции задачи", 5);
+    const matches = record.receipts.filter((entry) => receiptKey(entry) === pointer.identity);
+    invariant(matches.length === 1, "STORAGE_INDEX_CORRUPT", "Квитанция задачи потеряна или дублирована", 5);
+    const receipt = matches[0]!;
+    const scoped = taskReceiptScope(pointer.owner, receipt);
+    invariant(scoped?.key === key && scoped.pointer.kind === pointer.kind && scoped.pointer.form === pointer.form, "STORAGE_INDEX_CORRUPT", "Неверная область квитанции задачи", 5);
+    this.replayOwner = pointer.owner;
+    if (pointer.form === "native") return { kind: pointer.kind, hash: receipt.requestHash, result: receipt.result };
+    const value = z.object({ key: z.literal(key), value: z.json() }).parse(receipt.result);
+    invariant(digest(value.value) === receipt.requestHash, "STORAGE_INDEX_CORRUPT", "Повреждена прежняя квитанция задачи", 5);
+    const saved = z.object({ hash: z.string(), result: z.json() }).parse(value.value);
+    return { kind: pointer.kind, ...saved };
+  }
+
+  /** Разрешение для проверки повтора допускает tombstone, но не возвращает живую сущность. */
+  async resolveReceiptTarget(reference: string, kind: string): Promise<EntityRef> {
+    try {
+      return (await this.resolve(reference, kind)).ref;
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== "ENTITY_DELETED") throw error;
+      const { ref } = z.object({ ref: entityRefSchema }).parse(error.details);
+      invariant(ref.kind === kind, "ENTITY_KIND_MISMATCH", "Другой вид владельца квитанции", 4);
+      return ref;
+    }
+  }
+
+  private async indexReceipt(owner: EntityRef, receipt: z.output<typeof storedReceiptSchema>) {
+    const key = receiptKey(receipt);
+    const owners = z.array(entityRefSchema).parse((await this.indexGet("receipts", key)) ?? []);
+    if (!owners.some((ref) => sameRef(ref, owner))) owners.push(owner);
+    invariant(owners.length === 1, "IDEMPOTENCY_CONFLICT", "Квитанция одного запроса обнаружена у разных владельцев", 4);
+    this.indexSet("receipts", key, owners);
+    if (this.state.roots.receipts == null) this.indexSet("receipt-index-meta", "task-request-receipts", 1);
+    const scoped = taskReceiptScope(owner, receipt);
+    if (scoped) {
+      const before = await this.indexGetParsed("task-request-receipts", scoped.key, taskReceiptPointerSchema);
+      this.indexSet("task-request-receipts", scoped.key, mergeTaskReceipt(before, scoped.pointer));
+    }
+  }
+
+  /** Комментарий меняет только собственную ленту, не содержание и ревизию задачи. */
+  async appendComment(ref: EntityRef, input: z.input<typeof storedCommentSchema>) {
+    const comment = storedCommentSchema.parse(input);
+    invariant(ref.kind === "task" && comment.taskId === ref.id, "ENTITY_KIND_MISMATCH", "Комментарий должен принадлежать указанной задаче", 4);
+    const record = this.store.registry.encode(await this.get(ref));
+    invariant(comment.revision === record.revision, "REVISION_CONFLICT", "Ревизия содержания задачи изменилась", 4);
+    invariant(comment.id === String(comment.sequence) && comment.sequence === (record.commentSequence ?? 0) + 1, "INVALID_DATA", "Номер нового комментария должен продолжать последовательность задачи", 5);
+    record.comments = [...(record.comments ?? []), comment];
+    record.commentSequence = comment.sequence;
+    await this.writeFile(this.store.registry.path(ref), jsonValue(record));
+    this.touched.add(entityAddress(ref));
+  }
+
+  /** Только предметные события планирования; универсальные снимки сюда не принимаются. */
+  async appendPlanningEvent(ref: EntityRef, input: z.input<typeof storedPlanningEventSchema>) {
+    invariant(ref.kind === "work-plan" || ref.kind === "release", "ENTITY_KIND_MISMATCH", "Событие принадлежит плану или релизу", 4);
+    const event = storedPlanningEventSchema.parse(input);
+    const record = this.store.registry.encode(await this.get(ref));
+    invariant(event.revision === record.revision, "REVISION_CONFLICT", "Ревизия события не совпадает с планом или релизом", 4);
+    record.planningEvents = [...(record.planningEvents ?? []), event];
+    await this.writeFile(this.store.registry.path(ref), jsonValue(record));
+    this.touched.add(entityAddress(ref));
   }
 
   get changed() {
     return (
       this.files.size > 0 ||
-      this.events.length > 0 ||
       this.updates.size > 0 ||
       this.command !== undefined
     );
-  }
-
-  /** Постоянные события и квитанции; исторические значения индексируются группами сегментов. */
-  async appendValue(
-    index: string,
-    key: string,
-    value: JsonValue,
-    groups: { index: string; key: string; member?: string }[] = [],
-  ): Promise<void> {
-    invariant(this.writable, "READ_ONLY_SNAPSHOT", "Снимок доступен только для чтения", 5);
-    if (this.store.formatVersion === 2) value = compactHistoryValue(index, value);
-    const prior = await this.value(index, key);
-    if (prior !== undefined) {
-      invariant(
-        digest(prior) === digest(value),
-        "STORAGE_INDEX_CONFLICT",
-        "Историческая запись уже имеет другое содержание",
-        4,
-      );
-      return;
-    }
-    const offset = this.events.length;
-    this.events.push(indexedEventSchema.parse({ kind: "indexed", index, key, value, groups }));
-    if (this.store.formatVersion === 1 || historyBucket(index, key) === undefined)
-      this.indexSet(index, key, { operationId: this.operationId, offset });
-    if (this.store.formatVersion === 1)
-      for (const group of groups)
-        await this.addPosting(group.index, group.key, group.member ?? key);
-  }
-
-  async value(index: string, key: string): Promise<JsonValue | undefined> {
-    for (const raw of this.events) {
-      const event = indexedEventSchema.parse(raw);
-      if (event.index === index && event.key === key) return structuredClone(event.value);
-    }
-    if (this.store.formatVersion === 2 && historyBucket(index, key) !== undefined)
-      return this.journal.value(index, key);
-    const pointer = await this.indexGet(index, key);
-    if (pointer === undefined) return undefined;
-    const { operationId, offset } = eventPointerSchema.parse(pointer);
-    const events =
-      this.store.formatVersion === 2
-        ? (await this.journal.operation(operationId)).events
-        : (await this.store.operation(operationId)).events;
-    const event = indexedEventSchema.parse(events[offset]);
-    invariant(
-      event.index === index && event.key === key,
-      "STORAGE_INDEX_CORRUPT",
-      "Указатель истории ведёт на чужую запись",
-      5,
-    );
-    return structuredClone(event.value);
   }
 
   async execute<T extends JsonValue>(
@@ -752,12 +665,14 @@ export class StorageSession {
       5,
     );
     this.executing = true;
+    this.commandNamespace = command.namespace;
     try {
       const result = jsonValue(await operation()) as T;
       this.command = { input: command, result };
       return result;
     } finally {
       this.executing = false;
+      this.commandNamespace = undefined;
     }
   }
 
@@ -783,18 +698,23 @@ export class StorageSession {
     const path = this.store.registry.path(record);
     const previous = await this.readFile(path);
     invariant(
-      previous === null || digest(previous) === digest(record),
+      previous === null || digest(previous) === digest(jsonValue(record)),
       "STORAGE_MIGRATION_CONFLICT",
       "Целевая запись уже отличается от переносимой",
       5,
     );
-    await this.writeFile(path, record);
+    await this.writeFile(path, jsonValue(record));
     await this.indexRecord(record);
     this.touched.add(entityAddress(record));
   }
 
   async reserveLegacyKey(key: string) {
-    await this.appendValue("reserved-key", key, { key });
+    const projects = await this.records("project");
+    invariant(projects.length === 1, "INVALID_DATA", "Для переноса резервов требуется проект", 5);
+    const project = this.store.registry.encode(projects[0]!);
+    project.reservedKeys = [...new Set([...(project.reservedKeys ?? []), key])];
+    await this.writeFile(this.store.registry.path(project), jsonValue(project));
+    this.indexSet("reserved-key", key, true);
     await this.indexNumber(key);
   }
 
@@ -831,13 +751,14 @@ export class StorageSession {
       if (await exists(full)) {
         if (path.startsWith("entities/")) this.store.metrics.entityReads++;
         if (path.startsWith("relations/")) this.store.metrics.relationReads++;
-        this.originals.set(path, jsonValue(await readJson(full, RECORD_BYTES)));
+        this.originals.set(path, jsonValue(await readJson(full, path.startsWith("entities/") ? Number.POSITIVE_INFINITY : RECORD_BYTES)));
       } else this.originals.set(path, null);
     }
     return structuredClone(this.originals.get(path)!);
   }
   async writeFile(path: string, value: JsonValue | null): Promise<void> {
     invariant(this.writable, "READ_ONLY_SNAPSHOT", "Снимок доступен только для чтения", 5);
+    invariant(value === null || !/^(history|operations|audit|receipts)\//.test(path), "STORAGE_LEGACY_WRITER", "Общие журналы больше не записываются", 5, { path });
     const before = await this.readFile(path);
     if (digest(before) !== digest(value)) this.files.set(path, structuredClone(value));
     if (/^(entities|relations|keyspaces|operations|history)\//.test(path))
@@ -882,7 +803,9 @@ export class StorageSession {
           3,
           { ref: refOf(record) },
         );
-        return this.store.registry.card(record);
+        const card = await this.indexGet("cards", entityAddress(refOf(record)));
+        invariant(card, "STORAGE_INDEX_CORRUPT", "Карточка разрешённого адреса потеряна", 5);
+        return storageCardSchema.parse(card);
       }
     }
     const all = candidatesSchema
@@ -924,6 +847,14 @@ export class StorageSession {
     const path = this.store.registry.path(ref);
     const raw = await this.readFile(path);
     const previous = raw ? this.store.registry.validate(raw) : undefined;
+    if (previous) {
+      // Предметные адаптеры не вправе стирать технические квитанции или собственные ленты.
+      stored.receipts = previous.receipts;
+      if (previous.comments !== undefined) stored.comments = previous.comments;
+      if (previous.commentSequence !== undefined) stored.commentSequence = previous.commentSequence;
+      if (previous.planningEvents !== undefined) stored.planningEvents = previous.planningEvents;
+      if (previous.reservedKeys !== undefined) stored.reservedKeys = previous.reservedKeys;
+    }
     invariant(
       !previous || sameRef(previous, ref),
       "INVALID_DATA",
@@ -976,7 +907,7 @@ export class StorageSession {
         4,
       );
     }
-    await this.writeFile(path, stored);
+    await this.writeFile(path, jsonValue(stored));
     await this.indexRecord(stored);
     this.touched.add(entityAddress(ref));
   }
@@ -998,12 +929,13 @@ export class StorageSession {
       updatedBy: _updatedBy,
       ...identity
     } = record;
-    const tombstone = {
+    const tombstone = this.store.registry.validate({
       ...identity,
       revision: record.revision + 1,
       deleted: { actor: actorSchema.parse(actor), at: new Date().toISOString() },
-    };
-    await this.writeFile(this.store.registry.path(ref), tombstone);
+      schemaVersion: 2,
+    });
+    await this.writeFile(this.store.registry.path(ref), jsonValue(tombstone));
     await this.indexRecord(tombstone);
     this.touched.add(entityAddress(ref));
   }
@@ -1012,6 +944,17 @@ export class StorageSession {
     const ref = refOf(record);
     const address = entityAddress(ref);
     this.indexSet("records", address, { ref, deleted: "deleted" in record });
+    for (const key of record.reservedKeys ?? []) {
+      this.indexSet("reserved-key", key, true);
+      await this.indexNumber(key);
+    }
+    const receiptKeys = new Set<string>();
+    for (const receipt of record.receipts) {
+      const key = receiptKey(receipt);
+      invariant(!receiptKeys.has(key), "IDEMPOTENCY_CONFLICT", "Повторный ключ квитанции внутри владельца", 4);
+      receiptKeys.add(key);
+      await this.indexReceipt(ref, receipt);
+    }
     if (!("deleted" in record))
       for (const item of this.store.registry
         .definition(record.kind)
@@ -1101,10 +1044,6 @@ export class StorageSession {
 
   /** Короткие списки размещаются вместе в сегменте; длинные получают делимое дерево. */
   async postings(name: string, key: string): Promise<string[]> {
-    if (this.store.formatVersion === 2) {
-      const history = await this.journal.postings(name, key);
-      if (history !== undefined) return history;
-    }
     return this.indexPostings(name, key);
   }
   async indexPostings(name: string, key: string): Promise<string[]> {

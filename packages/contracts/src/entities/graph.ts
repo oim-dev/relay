@@ -147,32 +147,6 @@ export const graphSavedSchema = z.strictObject({
   version: z.string().describe("Версия графа после записи"),
   requestId: z.string().describe("Ключ повтора; повтор возвращает первоначальную квитанцию"),
 });
-export const graphHistoryQuerySchema = z.strictObject({
-  id: token.optional().describe("История одного отношения; без ID весь журнал графа"),
-  offset: z.coerce.number().int().nonnegative().default(0).describe("Смещение событий"),
-  limit: z.coerce.number().int().min(1).max(100).default(40).describe("Размер страницы событий"),
-  revision: z.coerce
-    .number()
-    .int()
-    .nonnegative()
-    .optional()
-    .describe("Ревизия журнала первой страницы"),
-});
-export const graphEventSchema = z.strictObject({
-  action: z.enum(["add", "update", "remove"]).describe("Выполненное действие"),
-  edge: graphEdgeSchema.describe(
-    "Состояние связи после действия; для отзыва последнее сохранённое состояние",
-  ),
-  actor: actorSchema.describe("Автор события"),
-  at: timestampSchema.describe("Время события"),
-  revision: z.number().int().positive().describe("Ревизия пакета"),
-});
-export const graphHistorySchema = z.strictObject({
-  items: z.array(graphEventSchema),
-  total: z.number().int().nonnegative(),
-  nextOffset: z.number().nullable(),
-  revision: z.number().int().nonnegative(),
-});
 export type EntityRef = z.infer<typeof entityRefSchema>;
 export type GraphNode = z.infer<typeof graphNodeSchema>;
 export type GraphEdge = z.infer<typeof graphEdgeSchema>;
@@ -180,8 +154,6 @@ export type GraphPage = z.infer<typeof graphPageSchema>;
 export type GraphQuery = z.input<typeof graphQuerySchema>;
 export type GraphMutation = z.input<typeof graphMutationSchema>;
 export type GraphSaved = z.infer<typeof graphSavedSchema>;
-export type GraphEvent = z.infer<typeof graphEventSchema>;
-export type GraphHistoryQuery = z.input<typeof graphHistoryQuerySchema>;
 
 /** Полный контекст — отдельный контракт; параметры страниц графа его не ограничивают. */
 export const fullContextQuerySchema = z.strictObject({

@@ -53,7 +53,6 @@ import {
   entitySummarySchema,
   entityKeysPageSchema,
   entityKeySpacesSchema,
-  entityHistorySchema,
   entitySavedSchema,
   entityCreateSchema,
   entityUpdateSchema,
@@ -66,8 +65,6 @@ import {
   graphQuerySchema,
   graphMutationSchema,
   graphSavedSchema,
-  graphHistorySchema,
-  graphHistoryQuerySchema,
   fullContextSchema,
   fullContextQuerySchema,
 } from "@relay/core/domain/entity-graph";
@@ -87,9 +84,9 @@ import {
   criteriaQuerySchema,
   criterionViewSchema,
   createBoardTaskSchema,
-  taskActivityQuerySchema,
-  taskActivityPageSchema,
-  taskHistoryEventSchema,
+  taskCommentsQuerySchema,
+  taskCommentsPageSchema,
+  taskCommentSchema,
   taskCommentSavedSchema,
   publishTaskCommentSchema,
 } from "@relay/core/domain/board-task";
@@ -483,13 +480,6 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             api.entities.getEntityKeySpaces(defined(entityKeySpacesQuerySchema.parse(input))),
           ),
         ),
-      history: async (input) =>
-        decode(
-          entityHistorySchema,
-          await call(() =>
-            api.entities.getEntityHistory(defined(entityKeysQuerySchema.parse(input))),
-          ),
-        ),
       create: async (input, actor) => {
         const command = entityCreateSchema.parse(input);
         return decode(
@@ -590,13 +580,6 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             input.requestId,
           ),
         ),
-      history: async (input = {}) =>
-        decode(
-          graphHistorySchema,
-          await call(() =>
-            api.graph.getGraphHistory(defined(graphHistoryQuerySchema.parse(input))),
-          ),
-        ),
     },
     boards: {
       list: async (input = {}) =>
@@ -608,21 +591,21 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         decode(boardViewSchema, await call(() => api.boards.getBoardBySlug({ slug }))),
     },
     boardTasks: {
-      listActivity: async (reference, input = {}, comments = false) =>
+      listComments: async (reference, input = {}) =>
         decode(
-          taskActivityPageSchema,
+          taskCommentsPageSchema,
           await call(() =>
-            (comments ? api.kanban.getTaskComments : api.kanban.getTaskHistory)({
+            api.kanban.getTaskComments({
               reference,
-              ...defined(taskActivityQuerySchema.parse(input)),
+              ...defined(taskCommentsQuerySchema.parse(input)),
             }),
           ),
         ),
-      getActivity: async (reference, entryId, comments = false) =>
+      getComment: async (reference, entryId) =>
         decode(
-          taskHistoryEventSchema,
+          taskCommentSchema,
           await call(() =>
-            (comments ? api.kanban.getTaskComment : api.kanban.getTaskHistoryEvent)({
+            api.kanban.getTaskComment({
               reference,
               entryId,
             }),

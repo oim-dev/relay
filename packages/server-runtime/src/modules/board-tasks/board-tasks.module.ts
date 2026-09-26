@@ -22,7 +22,7 @@ import {
   criteriaQuerySchema,
   criterionIdSchema,
   changeCriterionSchema,
-  taskActivityQuerySchema,
+  taskCommentsQuerySchema,
   taskActivityIdSchema,
   publishTaskCommentSchema,
 } from "@relay/core/domain/board-task";
@@ -34,7 +34,7 @@ import type {
   LinkBoardTask,
   CriteriaQuery,
   ChangeCriterion,
-  TaskActivityQuery,
+  TaskCommentsQuery,
   PublishTaskComment,
 } from "@relay/core/domain/board-task";
 import { ApiEndpoint } from "../../openapi/endpoint.js";
@@ -133,15 +133,15 @@ class BoardTasksController {
   @ApiEndpoint({
     id: "getTaskComments",
     summary: "Сообщения обсуждения без полного Markdown, по 20 с курсором",
-    response: "TaskActivityPage",
-    query: "TaskActivityQuery",
+    response: "TaskCommentsPage",
+    query: "TaskCommentsQuery",
   })
   async comments(
     @Param("reference", new ZodValidationPipe(boardTaskReferenceSchema)) reference: string,
-    @Query(new ZodValidationPipe(taskActivityQuerySchema)) query: TaskActivityQuery,
+    @Query(new ZodValidationPipe(taskCommentsQuerySchema)) query: TaskCommentsQuery,
   ) {
     return success(
-      await new BoardTasksService(await this.workspace.open()).listActivity(reference, query, true),
+      await new BoardTasksService(await this.workspace.open()).listComments(reference, query),
     );
   }
 
@@ -151,18 +151,14 @@ class BoardTasksController {
   @ApiEndpoint({
     id: "getTaskComment",
     summary: "Полный Markdown сообщения с автором и временем",
-    response: "TaskHistoryEvent",
+    response: "TaskComment",
   })
   async comment(
     @Param("reference", new ZodValidationPipe(boardTaskReferenceSchema)) reference: string,
     @Param("entryId", new ZodValidationPipe(taskActivityIdSchema)) entryId: string,
   ) {
     return success(
-      await new BoardTasksService(await this.workspace.open()).getActivity(
-        reference,
-        entryId,
-        true,
-      ),
+      await new BoardTasksService(await this.workspace.open()).getComment(reference, entryId),
     );
   }
 
@@ -181,40 +177,6 @@ class BoardTasksController {
     @Body(new ZodValidationPipe(publishTaskCommentSchema)) input: PublishTaskComment,
   ) {
     return this.write((service) => service.publishComment(reference, input));
-  }
-
-  @Get(":reference/history")
-  @ApiParam({ name: "reference", description: "ID или ключ задачи" })
-  @ApiEndpoint({
-    id: "getTaskHistory",
-    summary: "Хронология сохранённых действий с фильтрами и курсором",
-    response: "TaskActivityPage",
-    query: "TaskActivityQuery",
-  })
-  async history(
-    @Param("reference", new ZodValidationPipe(boardTaskReferenceSchema)) reference: string,
-    @Query(new ZodValidationPipe(taskActivityQuerySchema)) query: TaskActivityQuery,
-  ) {
-    return success(
-      await new BoardTasksService(await this.workspace.open()).listActivity(reference, query),
-    );
-  }
-
-  @Get(":reference/history/:entryId")
-  @ApiParam({ name: "reference", description: "ID или ключ задачи" })
-  @ApiParam({ name: "entryId", description: "Постоянный номер события в ленте задачи" })
-  @ApiEndpoint({
-    id: "getTaskHistoryEvent",
-    summary: "Полные значения до и после сохранённого изменения",
-    response: "TaskHistoryEvent",
-  })
-  async historyEvent(
-    @Param("reference", new ZodValidationPipe(boardTaskReferenceSchema)) reference: string,
-    @Param("entryId", new ZodValidationPipe(taskActivityIdSchema)) entryId: string,
-  ) {
-    return success(
-      await new BoardTasksService(await this.workspace.open()).getActivity(reference, entryId),
-    );
   }
 
   @Get(":reference/criteria/:criterionId")

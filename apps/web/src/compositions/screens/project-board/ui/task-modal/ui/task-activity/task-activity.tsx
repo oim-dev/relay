@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { useState } from "react";
 import { ActionIcon, Alert, Button, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
 import { RefreshCw } from "lucide-react";
-import { useTaskActivity } from "domains/board-tasks";
+import { useTaskComments } from "domains/board-tasks";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
 import { CommentForm } from "./ui/comment-form/comment-form";
 import { ActivityFeed } from "./ui/activity-feed/activity-feed";
@@ -10,15 +10,15 @@ import type { TaskActivityProps } from "./types/task-activity-props.type";
 import styles from "./styles/task-activity.module.css";
 
 /**
- * Читает обсуждения либо историю, сохраняя текущий снимок при внешних изменениях.
+ * Читает обсуждения, сохраняя текущий снимок при внешних изменениях.
  *
  * Используется для:
- *  - публикации сообщений и адресного чтения подробностей событий
+ *  - публикации сообщений и чтения полного Markdown комментариев
  *  - подгрузки прежних записей без потери позиции чтения
  */
 export const TaskActivity = (props: TaskActivityProps) => {
-  const { projectId, taskId, comments, active, className, ...rootAttrs } = props;
-  const { query, latest } = useTaskActivity(projectId, taskId, comments, active);
+  const { projectId, taskId, active, className, ...rootAttrs } = props;
+  const { query, latest } = useTaskComments(projectId, taskId, active);
   const [actionError, setActionError] = useState("");
   const activityItems = query.data?.flatMap((page) => page.items) ?? [];
   const hasMore = isDefined(query.data?.at(-1)?.nextCursor);
@@ -27,9 +27,7 @@ export const TaskActivity = (props: TaskActivityProps) => {
   const hasError = isDefined(query.error) || actionError !== "";
   const errorMessage = query.error?.message ?? actionError;
   const isEmpty = !query.isLoading && !hasError && isEmptyArray(activityItems);
-  const emptyMessage = comments
-    ? "Обсуждение ещё не началось. Опубликуйте первое сообщение."
-    : "Сохранённых событий пока нет.";
+  const emptyMessage = "Обсуждение ещё не началось. Опубликуйте первое сообщение.";
   const canContinue = hasMore && !query.isValidating;
   /**
    * Загружает свежую первую страницу по явному действию, не затрагивая черновик.
@@ -58,9 +56,7 @@ export const TaskActivity = (props: TaskActivityProps) => {
   return (
     <div {...rootAttrs} className={clsx(styles.root, className)}>
       <Stack gap="lg" className={styles.content}>
-        {comments && (
-          <CommentForm projectId={projectId} taskId={taskId} onPublished={handleRefresh} />
-        )}
+        <CommentForm projectId={projectId} taskId={taskId} onPublished={handleRefresh} />
         {hasNew && (
           <Button variant="light" onClick={() => void handleRefresh()}>
             Показать новые записи
@@ -77,7 +73,6 @@ export const TaskActivity = (props: TaskActivityProps) => {
           entries={activityItems}
           projectId={projectId}
           taskId={taskId}
-          comments={comments}
           active={active}
         />
         <Group justify="space-between">

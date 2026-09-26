@@ -53,30 +53,26 @@ export class BoardTaskError extends Error {
 }
 const failure = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 /**
- * Читает страницу стабильной ленты задачи.
+ * Читает страницу стабильного снимка обсуждения задачи.
  */
-export const getTaskActivity = (
+export const getTaskComments = (
   project: string,
   reference: string,
-  comments: boolean,
   cursor?: string,
 ): Promise<ActivityPage> => {
   const api = getProjectApi(project).kanban;
-  return request(
-    () => (comments ? api.getTaskComments : api.getTaskHistory)({ reference, cursor, limit: 20 }),
-    ACTIVITY_PAGE_SCHEMA,
-  );
+  return request(() => api.getTaskComments({ reference, cursor, limit: 20 }), ACTIVITY_PAGE_SCHEMA);
 };
 /**
- * Читает подробности одного события, не загружая всю историю.
+ * Читает полный Markdown одного комментария.
  */
-export const getTaskActivityEvent = (
+export const getTaskComment = (
   project: string,
   reference: string,
   entryId: string,
 ): Promise<ActivityEvent> =>
   request(
-    () => getProjectApi(project).kanban.getTaskHistoryEvent({ reference, entryId }),
+    () => getProjectApi(project).kanban.getTaskComment({ reference, entryId }),
     ACTIVITY_EVENT_SCHEMA,
   );
 /**

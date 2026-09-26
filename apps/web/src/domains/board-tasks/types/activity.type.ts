@@ -1,7 +1,6 @@
 import type { z } from "zod";
 import type {
   ACTIVITY_SUMMARY_SCHEMA,
-  ACTIVITY_CHANGE_SCHEMA,
   ACTIVITY_EVENT_SCHEMA,
   ACTIVITY_PAGE_SCHEMA,
   COMMENT_SAVED_SCHEMA,
@@ -9,11 +8,9 @@ import type {
 
 /** Запись ленты без полного содержания. */
 export type ActivitySummary = z.infer<typeof ACTIVITY_SUMMARY_SCHEMA>;
-/** Изменение поля с прежним и новым значением. */
-export type ActivityChange = z.infer<typeof ACTIVITY_CHANGE_SCHEMA>;
-/** Полное событие или сообщение. */
+/** Полное сообщение обсуждения. */
 export type ActivityEvent = z.infer<typeof ACTIVITY_EVENT_SCHEMA>;
-/** Страница хронологии или обсуждений. */
+/** Страница обсуждения. */
 export type ActivityPage = z.infer<typeof ACTIVITY_PAGE_SCHEMA>;
 /** Первоначальная квитанция публикации. */
 export type CommentSaved = z.infer<typeof COMMENT_SAVED_SCHEMA>;

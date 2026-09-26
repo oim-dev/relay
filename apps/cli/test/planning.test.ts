@@ -204,6 +204,9 @@ test("CLI планирования: предметные аргументы, Mar
 });
 
 test("CLI stage update: этап за пределами 100 записей, сохранность полей, повтор и ревизия плана в local/HTTP", async (t) => {
+  let server: Awaited<ReturnType<typeof startServer>> | undefined;
+  // Сервер останавливается до удаления временной базы обработчиком fixture.
+  t.after(() => server?.close());
   const { root } = await fixture(t);
   const workspace = await openWorkspace(root);
   assert(workspace.config.projectId);
@@ -251,8 +254,7 @@ test("CLI stage update: этап за пределами 100 записей, с�
       "human",
     )
   ).revision;
-  const server = await startServer({ cwd: root, actor: "server", port: 0 });
-  t.after(() => server.close());
+  server = await startServer({ cwd: root, actor: "server", port: 0 });
   for (const [mode, transport] of [
     ["local", ["--local"]],
     ["HTTP", ["--server-url", server.url, "--project", workspace.config.projectId]],

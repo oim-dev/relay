@@ -82,7 +82,6 @@ implementation, board, task, document, work-plan, release. Ключ — осно
 | `entity_resolve`    | Постоянный адрес и текущий ключ; ref, kind?                                                                                  |
 | `entity_keys`       | Текущий ключ и алиасы; ref, kind?, offset/limit/version                                                                      |
 | `entity_key_spaces` | Владельцы нумерации и форматы; kind, offset/limit/version                                                                    |
-| `entity_history`    | Сохранённые события; ref, kind?, offset/limit/version                                                                        |
 | `entity_context`    | Полный граф достижимой компоненты одним вызовом; ref, общие project?/maxBytes?                                               |
 | `entity_rename_key` | Смена публичного ключа; ref, key, ifRevision, actor, requestId                                                               |
 | `entity_task_move`  | ref, board?, column, before?, ifRevision, actor, requestId                                                                   |
@@ -135,14 +134,15 @@ entity_context({project: "app", ref: "WEB-24", maxBytes: 1048576})
 
 ### Обсуждения и история
 
-| Инструмент             | Аргументы и назначение                                                                              |
-| ---------------------- | --------------------------------------------------------------------------------------------------- |
-| `task_comment_publish` | reference, title, description (Markdown), actor, actorRole, requestId: опубликовать сообщение       |
-| `task_comments_list`   | reference, limit?, cursor?, after?, actor?, action?: компактные сообщения                           |
-| `task_comment_get`     | reference, entryId: полный Markdown одного сообщения                                                |
-| `task_history_list`    | reference, limit?, cursor?, after?, actor?, action?: хронология изменений                           |
-| `task_history_get`     | reference, entryId: предметные изменения; Markdown-правки отмечены contentOmitted, сообщения полные |
+| Инструмент             | Аргументы и назначение                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `task_comment_publish` | reference, title, description (Markdown), actor, actorRole, requestId: опубликовать сообщение |
+| `task_comments_list`   | reference, limit?, cursor?, after?, actor?, action?: компактные сообщения                     |
+| `task_comment_get`     | reference, entryId: полный Markdown одного сообщения                                          |
 
+Общий автоматический audit не ведётся; `entity_history`, `task_history_list` и
+`task_history_get` удалены. Имена инструментов комментариев сохраняются;
+совместимый фильтр action принимает только `comment-publish`.
 Общие project/maxBytes сохраняются. Actor — собственное имя агента, actorRole —
 operator/orchestrator/worker. Web подписывается «Оператор». Публикация не требует
 ifRevision и не меняет ревизию содержания. Повторяйте тот же requestId после потери ответа.
@@ -368,7 +368,7 @@ JSON-текстом в `content` для совместимости MCP-клие�
 по умолчанию `output.maxBytes` проекта, для списка проектов — 16384. Бюджет учитывает
 MCP-результат с текстовой и структурированной копиями; страница сокращается до бюджета.
 Неделимый большой ответ даёт `RESPONSE_TOO_LARGE`. Сузьте выборку или увеличьте бюджет,
-историю читайте отдельно. Курсор реестра привязан к проекту, подключению,
+полные комментарии читайте адресно. Курсор реестра привязан к проекту, подключению,
 хранилищу, инструменту и фильтрам; данные между страницами могут изменяться.
 
 Ошибки операций: `isError: true` и `{ ok: false, error: { code, message, details? } }`.

@@ -652,12 +652,17 @@ async function call(client: Client, name: string, args: Record<string, unknown> 
   return { ...body, isError: result.isError, text: content };
 }
 
-test("MCP обсуждений: discovery, имена агентов, повтор, история, бюджет и изоляция", async (t) => {
+test("MCP обсуждений: discovery без аудита, имена агентов, повтор, бюджет и изоляция", async (t) => {
   const app = await setup(t);
   const server = await app.start(join(app.root, "a/.relay/config.json"));
   const client = await app.connect(server.url);
   const tools = (await client.listTools()).tools;
   const publish = tools.find((tool) => tool.name === "task_comment_publish");
+  assert.deepEqual(tools.filter((tool) => /history|audit/i.test(tool.name)), []);
+  for (const name of ["task_comment_publish", "task_comments_list", "task_comment_get"])
+    assert.ok(tools.some((tool) => tool.name === name), name);
+  for (const name of ["entity_history", "task_history_list", "task_history_get"])
+    await assert.rejects(client.callTool({ name, arguments: {} }), { code: -32602 });
   assert.ok(publish?.inputSchema.required?.includes("actor"));
   assert.ok(publish?.inputSchema.required?.includes("actorRole"));
   const created = await call(client, "board_task_create", {
@@ -695,7 +700,7 @@ test("MCP обсуждений: discovery, имена агентов, повто
   );
   const page = await call(client, "task_comments_list", { reference, limit: 1 });
   assert.equal(page.ok, true);
-  assert.equal((await call(client, "task_history_list", { reference, after: 0 })).ok, true);
+  assert.equal((await call(client, "task_comments_list", { reference, after: 0 })).ok, true);
   const otherServer = await app.start(join(app.root, "b/.relay/config.json"));
   const other = await app.connect(otherServer.url);
   assert.equal(

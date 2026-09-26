@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dirname, join } from "node:path";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { fixture } from "./helpers/workspace.js";
+import { fixture, legacyFixture } from "./helpers/workspace.js";
+import { deleteEntitySchema } from "@relay/contracts/entities";
+import { entityDigest } from "../src/application/entities/catalog.js";
+import { writeLegacyMigrationFixture } from "./helpers/legacy-migration-fixture.js";
 import { StorageService } from "@relay/core/application/storage/service";
 import { EntityEngine } from "@relay/core/application/entities/service";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
@@ -92,6 +95,24 @@ test("первоначальные квитанции предметных оп�
     await new BoardTasksService(workspace).update(task.key, direct, "agent"),
     directSaved,
   );
+});
+
+test("legacy: квитанция удаления без сохранившейся сущности повторяется после миграции и reindex", async (t) => {
+  const { workspace } = await legacyFixture(t);
+  const command = { ref: "PRODUCT-1", kind: "task" as const, ifVersion: "0".repeat(64), requestId: "delete" };
+  const saved = { action: "delete", ref: { kind: "task", id: "Deleted1" }, requestId: "delete", deleted: 1, detached: 0, relations: 0 };
+  const directory = join(dirname(workspace.configPath), "entity-deletions/receipts");
+  await mkdir(directory, { recursive: true });
+  await writeFile(join(directory, `${entityDigest(["agent", command.requestId])}.json`), JSON.stringify({
+    hash: entityDigest({ ...deleteEntitySchema.parse(command), actor: "agent" }), result: saved,
+  }));
+  await writeFile(join(directory, "../keys.json"), JSON.stringify([command.ref]));
+  const deletion = new EntityDeletionService(workspace);
+  await new StorageService(workspace).migrate();
+  assert.deepEqual(await deletion.delete(command, "agent"), saved);
+  await new StorageService(workspace).reindex();
+  assert.deepEqual(await deletion.delete(command, "agent"), saved);
+  await assert.rejects(deletion.delete({ ...command, ref: "OTHER" }, "agent"), { code: "IDEMPOTENCY_CONFLICT" });
 });
 
 test("единая база: явный перенос сохраняет продукт, задачи, прикрепления, обсуждения и повтор", async (t) => {
@@ -197,10 +218,16 @@ test("единая база: явный перенос сохраняет про
     "agent",
   );
   const previous = await engine.get({ ref: document.key });
-  const oldEdge = (await new GraphService(workspace).read({ root: document.key })).edges[0]!;
-  const oldHistory = await taskService.listActivity(task.ref.id);
-  assert.equal((await new StorageService(workspace).migrate()).migrated, true);
-  assert.equal((await new StorageService(workspace).migrate()).migrated, false);
+  const oldEdge = (await new GraphService(workspace).read({ root: document.key })).edges.find(
+    (edge) => edge.type === "references" && edge.from.id === task.ref.id && edge.to.id === document.ref.id,
+  );
+  assert(oldEdge, "В исходной фикстуре должно существовать прикрепление документа");
+  const oldHistory = await taskService.listComments(task.ref.id);
+  await writeLegacyMigrationFixture(workspace);
+  const legacy = await openWorkspace(root);
+  assert.equal(await legacy.hasUnifiedStorage(), false);
+  assert.equal((await new StorageService(legacy).migrate()).migrated, true);
+  assert.equal((await new StorageService(legacy).migrate()).migrated, false);
   const reopened = await openWorkspace(root);
   const current = new EntityEngine(reopened);
   assert.deepEqual(await current.get({ ref: document.key }), previous);
@@ -210,11 +237,11 @@ test("единая база: явный перенос сохраняет про
     comment,
   );
   assert.equal(
-    (await new BoardTasksService(reopened).getActivity(task.ref.id, comment.commentId, true))
+    (await new BoardTasksService(reopened).getComment(task.ref.id, comment.commentId))
       .description,
     commentInput.description,
   );
-  assert.deepEqual(await new BoardTasksService(reopened).listActivity(task.ref.id), oldHistory);
+  assert.deepEqual(await new BoardTasksService(reopened).listComments(task.ref.id), oldHistory);
   const graph = await new GraphService(reopened).read({ root: task.key, depth: 10, limit: 100 });
   const full = await new GraphService(reopened).context({ root: task.key });
   assert.equal(full.complete, true);

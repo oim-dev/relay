@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { writeLegacyMigrationFixture } from "./helpers/legacy-migration-fixture.js";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { fixture } from "./helpers/workspace.js";
@@ -194,6 +195,7 @@ test("явная миграция старой фичи без заполнен�
     "agent",
   );
   const before = await engine.get({ ref: feature.key });
+  await writeLegacyMigrationFixture(workspace);
   assert.equal((await new GraphService(workspace).context({ root: feature.key })).edges.length, 0);
   await new StorageService(workspace).migrate();
   assert.deepEqual(await engine.get({ ref: feature.key }), before);

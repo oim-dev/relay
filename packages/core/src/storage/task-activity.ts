@@ -20,6 +20,7 @@ import { invariant } from "../shared/errors.js";
 import { atomicJson, exists, jsonFiles, readJson, syncDirectory } from "./files.js";
 import type { Workspace } from "./workspace.js";
 import { json } from "./unified-adapter.js";
+import { storedCommentSchema } from "@relay/contracts/storage";
 
 const MAX_BYTES = 16 * 1024 * 1024;
 const legacyActionLabels: Record<string, string> = {
@@ -94,8 +95,7 @@ export class TaskActivityRepository {
   }
   async sequence(task: BoardTaskRecord): Promise<number> {
     if (this.workspace.storageSession) {
-      const keys = await this.workspace.storageSession.postings("task-activity", task.id);
-      return keys.length ? Number(keys.at(-1)!.split(":").at(-1)) : 0;
+      return (await this.workspace.storageSession.get({ kind: "task", id: task.id })).commentSequence ?? 0;
     }
     const path = join(this.root, task.id, "meta.json");
     if (await exists(path)) return parse(metaSchema, await readJson(path), path, true).sequence;
@@ -110,13 +110,13 @@ export class TaskActivityRepository {
   }
   async hasHistory(task: BoardTaskRecord) {
     if (this.workspace.storageSession)
-      return (await this.workspace.storageSession.postings("task-activity", task.id)).length > 0;
+      return true;
     return exists(join(this.root, task.id, "meta.json"));
   }
   async receipt(key: string) {
     invariant(/^[a-f0-9]{64}$/.test(key), "INVALID_DATA", "Неверный ключ квитанции", 5);
     if (this.workspace.storageSession) {
-      const value = await this.workspace.storageSession.value("task-comment-receipt", key);
+      const value = await this.workspace.storageSession.compatibilityReceipt("task-comment-receipt", key);
       return value === undefined ? undefined : receiptSchema.parse(value);
     }
     const path = join(this.root, "receipts", `${key}.json`);
@@ -126,18 +126,19 @@ export class TaskActivityRepository {
   }
   async event(task: BoardTaskRecord, id: string): Promise<TaskHistoryEvent> {
     parse(taskActivityIdSchema, id, "номер события");
+    if (this.workspace.storageSession) {
+      const record = await this.workspace.storageSession.get({ kind: "task", id: task.id });
+      const comment = record.comments?.find((entry) => entry.id === id);
+      invariant(comment, "NOT_FOUND", "Комментарий не найден", 3);
+      return { ...comment, description: comment.description.join("\n") };
+    }
     if (!(await this.hasHistory(task))) {
       const event = legacyTaskEvents(task).find((entry) => entry.id === id);
       invariant(event, "NOT_FOUND", "Событие не найдено", 3);
       return event;
     }
     const path = join(this.root, task.id, "events", `${id}.json`);
-    const raw = this.workspace.storageSession
-      ? await this.workspace.storageSession.value(
-          "task-activity-event",
-          `${task.id}:${id.padStart(16, "0")}`,
-        )
-      : await readJson(path, MAX_BYTES);
+    const raw = await readJson(path, MAX_BYTES);
     invariant(raw !== undefined, "NOT_FOUND", "Событие не найдено", 3);
     const stored = parse(storedEventSchema, raw, path, true);
     const event = parse(
@@ -220,6 +221,32 @@ export class TaskActivityRepository {
       }
     }
     invariant(cursor.next <= cursor.snapshot, "VALIDATION_ERROR", "Неверная граница курсора", 2);
+    if (this.workspace.storageSession) {
+      const record = await this.workspace.storageSession.get({ kind: "task", id: task.id });
+      const matching = (record.comments ?? []).filter((entry) =>
+        entry.sequence <= cursor.next && entry.sequence > (query.after ?? 0) &&
+        (!query.actor || entry.actor === query.actor) && (!query.action || entry.action === query.action)
+      ).toReversed();
+      const selected = matching.slice(0, query.limit);
+      const items = selected.map(({ description: _description, changes: _changes, ...entry }) => entry);
+      const next = selected.at(-1)?.sequence;
+      return { items, snapshot: cursor.snapshot, nextCursor: matching.length > selected.length && next !== undefined
+        ? Buffer.from(JSON.stringify({ ...cursor, next: next - 1 })).toString("base64url") : null };
+    }
+    if (comments) {
+      const available = (await jsonFiles(join(this.root, task.id, "events")))
+        .map((name) => Number(name.slice(0, -5))).filter((sequence) => sequence <= cursor.next && sequence > (query.after ?? 0))
+        .sort((a, b) => b - a);
+      const matching: TaskHistorySummary[] = [];
+      for (const sequence of available) {
+        const entry = await this.summary(task, sequence);
+        if (entry.action === "comment-publish" && (!query.actor || query.actor === entry.actor) && (!query.action || query.action === entry.action)) matching.push(entry);
+      }
+      const items = matching.slice(0, query.limit);
+      const next = items.at(-1)?.sequence;
+      return { items, snapshot: cursor.snapshot, nextCursor: matching.length > items.length && next !== undefined
+        ? Buffer.from(JSON.stringify({ ...cursor, next: next - 1 })).toString("base64url") : null };
+    }
     const items: TaskHistorySummary[] = [];
     let next = cursor.next;
     // Ограничиваем и сканирование редкого фильтра; пустая страница с курсором не означает конец.
@@ -247,9 +274,6 @@ export class TaskActivityRepository {
   ): Promise<ActivityFile[]> {
     const files: ActivityFile[] = [];
     let sequence = await this.sequence(task);
-    if (!(await this.hasHistory(task))) {
-      for (const event of legacyTaskEvents(task)) files.push(...this.eventFiles(event));
-    }
     for (const input of events) {
       sequence++;
       const event = parse(
@@ -316,19 +340,30 @@ export class TaskActivityRepository {
       for (const file of files) {
         if (file.path.includes("/events/")) {
           const event = storedEventSchema.parse(file.value);
-          await session.appendValue(
-            "task-activity-event",
-            `${event.taskId}:${event.id.padStart(16, "0")}`,
-            json(event),
-            [{ index: "task-activity", key: event.taskId }],
-          );
+          const ref = { kind: "task", id: event.taskId };
+          const record = session.store.registry.encode(await session.get(ref));
+          record.commentSequence = Math.max(record.commentSequence ?? 0, event.sequence);
+          if (event.action === "comment-publish") {
+            const comment = storedCommentSchema.parse(event);
+            const previous = record.comments?.find((entry) => entry.id === comment.id);
+            invariant(!previous || activityHash(previous) === activityHash(comment), "STORAGE_MIGRATION_CONFLICT", "Номер комментария занят другим содержанием", 4);
+            if (!previous) record.comments = [...(record.comments ?? []), comment].sort((a, b) => a.sequence - b.sequence);
+          }
+          await session.writeFile(session.store.registry.path(ref), json(session.store.registry.validate(record)));
           session.touched.add(`task:${event.taskId}`);
-        } else if (file.path.startsWith("receipts/"))
-          await session.appendValue(
-            "task-comment-receipt",
-            file.path.slice("receipts/".length, -5),
-            json(receiptSchema.parse(file.value)),
-          );
+        } else if (file.path.startsWith("receipts/")) {
+          const receipt = receiptSchema.parse(file.value);
+          const owner = await session.indexGet("records", `task:${receipt.result.id}`)
+            ? { kind: "task", id: receipt.result.id }
+            : { kind: "project", id: this.workspace.config.projectId ?? "project" };
+          await session.saveCompatibilityReceipt(owner, "task-comment-receipt",
+            file.path.slice("receipts/".length, -5), json(receipt));
+        } else if (file.path.endsWith("/meta.json")) {
+          const ref = { kind: "task", id: file.path.split("/")[0]! };
+          const record = session.store.registry.encode(await session.get(ref));
+          record.commentSequence = Math.max(record.commentSequence ?? 0, metaSchema.parse(file.value).sequence);
+          await session.writeFile(session.store.registry.path(ref), json(record));
+        }
       }
       return;
     }

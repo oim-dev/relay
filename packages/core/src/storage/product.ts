@@ -198,7 +198,7 @@ export class ProductRepository {
   }
 
   /** Единый снимок предоставляет метаданные отдельных реализаций без повторного чтения файлов. */
-  async snapshot(assertOwned: () => void) {
+  async snapshot(assertOwned: () => void, persistKeys = false) {
     if (this.workspace.storageSession)
       return {
         records: await this.all(),
@@ -209,7 +209,14 @@ export class ProductRepository {
           ]),
         ),
       };
-    const records = await this.ensureKeys(assertOwned);
+    const records = await this.ensureKeys(assertOwned, persistKeys);
+    if (!persistKeys) for (const record of records) {
+      if (record.fields.kind !== "scope") continue;
+      for (const contract of record.fields.contracts) {
+        const implementation = this.decodedImplementations.get(contract.id);
+        if (implementation && contract.key) implementation.key = contract.key;
+      }
+    }
     return { records, implementations: new Map(this.decodedImplementations) };
   }
 
@@ -223,8 +230,9 @@ export class ProductRepository {
   }
 
   /** Однократное закрепление ключей на диске; техническая миграция не меняет требования. */
-  async ensureKeys(assertOwned: () => void): Promise<ProductRecord[]> {
+  async ensureKeys(assertOwned: () => void, persist = false): Promise<ProductRecord[]> {
     if (this.workspace.storageSession) return this.all();
+    if (persist) this.workspace.assertWritableStorage();
     const records = await this.all();
     const ordered = [...records].sort(
       (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
@@ -242,7 +250,7 @@ export class ProductRepository {
           : kind === "application" && record.fields.kind === "application"
             ? (record.fields.prefix ?? defaultBoardPrefix(record.fields.slug))
             : nextProductKey(kind as "feature" | "scenario" | "document", records);
-      await this.save(record, false, assertOwned);
+      if (persist) await this.save(record, false, assertOwned);
     }
     const keys = new Set([
       ...(await new EntityDeletionRepository(this.workspace).reservedKeys()),
@@ -291,14 +299,18 @@ export class ProductRepository {
         keys.add(contract.key);
         changed = true;
       }
-      if (changed || !(await exists(join(this.root, this.path(record)))))
+      if (persist && (changed || !(await exists(join(this.root, this.path(record))))))
         await this.save(record, false, assertOwned);
     }
-    return this.all();
+    return persist ? this.all() : records;
   }
+
+  /** Пути уже декодированных источников для явного переноса; неизвестные файлы не удаляются. */
+  async migrationSources() { return this.sources(); }
 
   /** Явная миграция переносит также старые записи, которым ключи уже назначены. */
   async migrate(assertOwned: () => void): Promise<number> {
+    this.workspace.assertWritableStorage();
     if (this.workspace.storageSession) return 0;
     let migrated = 0;
     for (const path of await this.sources()) {

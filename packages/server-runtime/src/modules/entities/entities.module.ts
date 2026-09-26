@@ -163,19 +163,6 @@ class EntitiesController {
   ) {
     return success(await (await this.engine()).keySpaces(query));
   }
-  @Get("history")
-  @ApiEndpoint({
-    id: "getEntityHistory",
-    summary: "Прочитать сохранённые события ревизий сущности по ключу или ID",
-    query: "EntityKeysQuery",
-    response: "EntityHistory",
-  })
-  async history(
-    @Query(new ZodValidationPipe(entityKeysQuerySchema))
-    query: z.input<typeof entityKeysQuerySchema>,
-  ) {
-    return success(await (await this.engine()).history(query));
-  }
   @Post()
   @HttpCode(200)
   @ApiEndpoint({

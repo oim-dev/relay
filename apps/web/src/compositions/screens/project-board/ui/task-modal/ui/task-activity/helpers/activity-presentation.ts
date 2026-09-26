@@ -1,15 +1,4 @@
-import {
-  ArrowRightLeft,
-  CheckCheck,
-  Circle,
-  FileText,
-  Link2,
-  ListChecks,
-  MessageSquare,
-  Plus,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import type { ActivityChange, ActivitySummary } from "domains/board-tasks";
+import type { ActivitySummary } from "domains/board-tasks";
 
 /** Записи одного календарного дня в часовом поясе пользователя. */
 type ActivityDay = {
@@ -29,8 +18,6 @@ type ActivityEntryPresentation = {
   time: string;
   /** Полная дата для доступного имени и подсказки. */
   timestamp: string;
-  /** Название действия. */
-  title: string;
 };
 
 /**
@@ -88,35 +75,5 @@ export const describeActivityEntry = (entry: ActivitySummary): ActivityEntryPres
       second: "2-digit",
     }),
     timestamp: date.toLocaleString("ru-RU", { dateStyle: "full", timeStyle: "medium" }),
-    title: entry.action === "comment-publish" ? `Сообщение «${entry.title}»` : entry.title,
   };
 };
-
-/**
- * Выбирает нейтральный маркер по смыслу события, а не по автору.
- */
-export const getActivityIcon = (action: string): LucideIcon => {
-  if (action === "comment-publish") return MessageSquare;
-  if (action === "create") return Plus;
-  if (action === "move") return ArrowRightLeft;
-  if (action === "criterion-complete") return CheckCheck;
-  if (action.startsWith("criterion-")) return ListChecks;
-  if (action === "link" || action.startsWith("graph-")) return Link2;
-  if (action === "update" || action === "snapshot") return FileText;
-  return Circle;
-};
-
-/**
- * Сохраняет все подробности, заменяя адрес критерия в подписи его названием при наличии.
- */
-export const presentActivityChanges = (changes: ActivityChange[]): ActivityChange[] =>
-  changes.map((change) => {
-    const match = /^acceptanceCriteria\.([^.]+)\./.exec(change.field);
-    if (!match) return change;
-    const titleChange = changes.find(
-      (entry) => entry.field === `acceptanceCriteria.${match[1]}.title`,
-    );
-    const title = titleChange?.after ?? titleChange?.before;
-    const prefix = title ? `Критерий «${title}»` : "Критерий приёмки";
-    return { ...change, label: change.label.replace(/^Критерий\s+[^:]+:/, () => `${prefix}:`) };
-  });

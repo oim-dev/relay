@@ -29,11 +29,10 @@ import {
   resolveEntity,
 } from "./catalog.js";
 import { validateProduct } from "../product/model.js";
-import { prepareTaskHistory } from "../board-tasks/history.js";
 import type { ProductRecord } from "../../domain/product.js";
 import type { BoardTaskRecord } from "../../domain/board-task.js";
 import { syncProductRelations, syncTaskRelations } from "./owned-relations.js";
-import { json, saveAudit } from "../../storage/unified-adapter.js";
+import { json } from "../../storage/unified-adapter.js";
 
 const detachProduct = (
   record: ProductRecord,
@@ -275,17 +274,6 @@ export class EntityDeletionService {
           }
           return next;
         });
-      const activity = await prepareTaskHistory(
-        this.workspace,
-        beforeTasks,
-        afterTasks,
-        boards,
-        preview.target.ref.id,
-        "entity-delete",
-        actor,
-        key,
-      );
-      for (const file of activity) add({ path: `task-activity/${file.path}`, after: file.value });
       for (const next of afterTasks) {
         const previous = beforeTasks.find((task) => task.id === next.id);
         if (JSON.stringify(next) === JSON.stringify(previous)) continue;
@@ -418,23 +406,9 @@ export class EntityDeletionService {
           next.revision++;
           next.updatedAt = at;
           next.updatedBy = actor;
-          next.events = [
-            ...(next.events ?? []),
-            { revision: next.revision, actor, at, action: "entity-delete" },
-          ];
         }
         return next;
       });
-    const activity = await prepareTaskHistory(
-      this.workspace,
-      beforeTasks,
-      afterTasks,
-      boards,
-      preview.target.ref.id,
-      "entity-delete",
-      actor,
-      key,
-    );
     const changed = afterTasks.filter(
       (task) =>
         JSON.stringify(task) !== JSON.stringify(beforeTasks.find((entry) => entry.id === task.id)),
@@ -446,7 +420,7 @@ export class EntityDeletionService {
       })),
       [],
       owned,
-      activity,
+      [],
     );
     await syncTaskRelations(this.workspace, changed);
     const graph = new GraphRepository(this.workspace),
@@ -486,12 +460,6 @@ export class EntityDeletionService {
       );
     for (const ref of removed) {
       const record = await session.get(ref);
-      await saveAudit(
-        this.workspace,
-        ref,
-        [{ revision: record.revision + 1, actor, at, action: "delete" }],
-        {},
-      );
       await session.remove(ref, record.revision, actor);
     }
     const result: EntityDeleted = {
@@ -502,7 +470,8 @@ export class EntityDeletionService {
       detached: preview.detached.length,
       relations: preview.relations,
     };
-    await session.appendValue("deletion-receipt", key, json({ hash, result }));
+    session.setCommandOwner(result.ref);
+    await session.saveCompatibilityReceipt(result.ref, "deletion-receipt", key, json({ hash, result }));
     return result;
   }
 }

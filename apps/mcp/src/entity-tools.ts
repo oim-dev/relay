@@ -106,15 +106,6 @@ export const entityTools: EntityTool[] = [
     }),
   },
   {
-    name: "entity_history",
-    description: "Прочитать фактически сохранённые события ревизий сущности по ключу или ID",
-    schema: entityKeysQuerySchema,
-    readOnly: true,
-    run: async (backend, input) => ({
-      data: await backend.entities.history(entityKeysQuerySchema.parse(input)),
-    }),
-  },
-  {
     name: "entity_context",
     description:
       "Получить полный контекст сущности одним вызовом: все узлы и сохранённые рёбра достижимой компоненты в обоих направлениях, включая циклы. Успех всегда complete=true; при превышении maxBytes возвращается ошибка, усечённого графа нет",

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { entityAddress, entityRefSchema, graphEdgeSchema } from "@relay/contracts/entities/graph";
 import type { EntityRef } from "@relay/contracts/entities/graph";
-import type { GraphEdge, GraphEvent } from "@relay/contracts/entities/graph";
+import type { GraphEdge } from "@relay/contracts/entities/graph";
 import { actorSchema } from "@relay/contracts/primitives";
 import { directories, jsonFiles } from "../files.js";
 import { invariant } from "../../shared/errors.js";
@@ -49,10 +49,16 @@ const address = (session: StorageSession, owner: EntityRef) =>
 const signature = (edge: Pick<DesiredRelation, "type" | "from" | "to">) =>
   JSON.stringify([edge.type, entityAddress(edge.from), entityAddress(edge.to)]);
 
-export async function readOwned(session: StorageSession, owner: EntityRef) {
+export async function readOwned(session: StorageSession, owner: EntityRef, verifyIndex = true) {
   const base = address(session, owner);
   const raw = await session.readFile(`${base}.json`);
-  if (raw === null) return { entries: [] as Entry[], files: [] as string[] };
+  if (raw === null) {
+    invariant(!verifyIndex || await session.indexGet("file-hashes", `${base}.json`) === undefined,
+      "STORAGE_INDEX_CORRUPT", "Потерян постоянный файл отношений", 5, { path: `${base}.json` });
+    return { entries: [] as Entry[], files: [] as string[] };
+  }
+  if (verifyIndex) invariant(await session.indexGet("file-hashes", `${base}.json`) === digest(raw),
+    "STORAGE_INDEX_STALE", "Файл отношений изменён вне Core. Выполните storage reindex", 4);
   const record = ownerSchema.parse(raw);
   invariant(
     entityAddress(record.owner) === entityAddress(owner),
@@ -66,7 +72,10 @@ export async function readOwned(session: StorageSession, owner: EntityRef) {
   else
     for (const [prefix, hash] of Object.entries(record.segments)) {
       const path = `${base}/${prefix}.json`;
-      const shard = shardSchema.parse(await session.readFile(path));
+      const rawShard = await session.readFile(path);
+      if (verifyIndex) invariant(rawShard !== null && await session.indexGet("file-hashes", path) === digest(rawShard),
+        "STORAGE_INDEX_STALE", "Сегмент отношений изменён вне Core. Выполните storage reindex", 4);
+      const shard = shardSchema.parse(rawShard);
       invariant(
         digest(json(shard)) === hash &&
           entityAddress(shard.owner) === entityAddress(owner) &&
@@ -85,6 +94,36 @@ export async function readOwned(session: StorageSession, owner: EntityRef) {
     5,
   );
   return { entries, files };
+}
+
+/** Адресное чтение открывает только манифест и нужный сегмент, проверяя производный отпечаток. */
+export async function readOwnedEntry(session: StorageSession, owner: EntityRef, id: string): Promise<Entry> {
+  const base = address(session, owner);
+  const read = async (path: string) => {
+    const value = await session.readFile(path);
+    invariant(value, "STORAGE_INDEX_CORRUPT", "Потерян постоянный файл отношения", 5, { path });
+    invariant(await session.indexGet("file-hashes", path) === digest(value),
+      "STORAGE_INDEX_STALE", "Файл отношений изменён вне Core. Выполните storage reindex", 4, { path });
+    return value;
+  };
+  const record = ownerSchema.parse(await read(`${base}.json`));
+  invariant(entityAddress(record.owner) === entityAddress(owner), "INVALID_DATA", "Неверный владелец отношений", 5);
+  let entries: Entry[];
+  if (record.storage === "inline") entries = record.entries;
+  else {
+    const prefixes = Object.keys(record.segments).filter((prefix) => keyHash(id).startsWith(prefix));
+    invariant(prefixes.length === 1, "STORAGE_INDEX_CORRUPT", "Потерян или неоднозначен сегмент отношения", 5);
+    const prefix = prefixes[0]!;
+    const raw = await read(`${base}/${prefix}.json`);
+    invariant(digest(raw) === record.segments[prefix], "INVALID_DATA", "Повреждён сегмент отношений", 5);
+    const shard = shardSchema.parse(raw);
+    invariant(entityAddress(shard.owner) === entityAddress(owner) && shard.entries.every((entry) => keyHash(entry.edge.id).startsWith(prefix)),
+      "INVALID_DATA", "Сегмент принадлежит другому владельцу или диапазону", 5);
+    entries = shard.entries;
+  }
+  const selected = entries.filter((entry) => entry.edge.id === id);
+  invariant(selected.length === 1, "STORAGE_INDEX_CORRUPT", "Индекс указывает на потерянное или повторное отношение", 5);
+  return selected[0]!;
 }
 
 async function saveOwned(
@@ -173,6 +212,7 @@ async function indexEntry(session: StorageSession, owner: EntityRef, entry: Entr
     from: edge.from,
     to: edge.to,
     revision: edge.revision,
+    hash: digest(json(edge)),
   });
   for (const ref of new Set([entityAddress(edge.from), entityAddress(edge.to)]))
     await session.addPosting("adjacency", ref, edge.id, !edge.active);
@@ -280,16 +320,6 @@ export async function replaceOwnedRelations(
     if (before && digest(json(before)) === digest(json(entry))) continue;
     changed = true;
     await indexEntry(session, owner, entry);
-    const operations = await session.postings("graph-operations", "all");
-    const baseline = await session.value("graph-baseline", "legacy");
-    const initial = baseline ? z.object({ revision: z.number() }).parse(baseline).revision : 0;
-    await appendGraphEvent(session, {
-      action: !before ? "add" : entry.edge.active ? "update" : "remove",
-      edge: publicRelation(entry),
-      actor,
-      at,
-      revision: initial + operations.length + (operations.includes(session.operationId) ? 0 : 1),
-    });
     for (const ref of [owner, entry.edge.from, entry.edge.to])
       session.touched.add(entityAddress(ref));
   }
@@ -335,27 +365,6 @@ export async function writeOwnedRelations(
   await saveOwned(session, owner, [...entries.values()], previous.files);
 }
 
-/** История связи входит в общую операцию; отдельного файла события или квитанции нет. */
-export async function appendGraphEvent(
-  session: StorageSession,
-  event: GraphEvent,
-  legacyKey?: string,
-): Promise<void> {
-  const key = `${String(event.revision).padStart(16, "0")}:${event.at}:${legacyKey ?? session.operationId}:${String(session.events.length).padStart(16, "0")}:${event.edge.id}`;
-  await session.appendValue(
-    "graph-event",
-    key,
-    { ...event, edge: { ...event.edge, description: event.edge.description.split("\n") } },
-    [
-      { index: "graph-events", key: "*" },
-      { index: "graph-events", key: event.edge.id },
-      ...(!legacyKey
-        ? [{ index: "graph-operations", key: "all", member: session.operationId }]
-        : []),
-    ],
-  );
-  for (const ref of [event.edge.from, event.edge.to]) session.touched.add(entityAddress(ref));
-}
 
 /** Перестроение читает сохранённые наборы; продуктовые поля не являются источником рёбер. */
 export async function rebuildOwnedRelations(session: StorageSession) {
@@ -378,7 +387,7 @@ export async function rebuildOwnedRelations(session: StorageSession) {
     session.store.metrics.directoryReads++;
     for (const filename of await jsonFiles(join(directory, collection))) {
       const owner = { kind: definition.kind, id: filename.slice(0, -5) };
-      const record = await readOwned(session, owner);
+      const record = await readOwned(session, owner, false);
       for (const path of [`${address(session, owner)}.json`, ...record.files])
         session.indexSet("file-hashes", path, digest((await session.readFile(path))!));
       for (const entry of record.entries) await indexEntry(session, owner, entry);

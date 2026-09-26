@@ -254,18 +254,16 @@ export function registerEntities(program: Command, runtime: Runtime): void {
         return { data, text: entityResolvedText(data) };
       },
     });
-  for (const action of ["keys", "history", "key-spaces"] as const)
+  for (const action of ["keys", "key-spaces"] as const)
     registerCommand<PageOptions>(group, runtime, {
       name: `${action} <${action === "key-spaces" ? "kind" : "ref"}>`,
       arguments:
         action === "key-spaces" ? { kind: "Вид сущности" } : { ref: "Ключ или ID сущности" },
       description: {
         keys: "Прочитать текущий ключ и прежние алиасы",
-        history: "Прочитать сохранённые события ревизий",
         "key-spaces": "Перечислить актуальные области нумерации и префиксы",
       }[action],
-      details:
-        "Список ограничен и содержит продолжение той же версии. История показывает фактически сохранённые события владельца.",
+      details: "Список ограничен и содержит продолжение той же версии.",
       examples: [
         [
           `relay-cli entities ${action} ${action === "key-spaces" ? "task" : "WEB-24"}`,
@@ -287,21 +285,6 @@ export function registerEntities(program: Command, runtime: Runtime): void {
                 )
                 .join("\n"),
               entityContinuation(data, `keys '${ref}'`, query),
-            ].join("\n\n"),
-          };
-        }
-        if (action === "history") {
-          const data = await context.backend.entities.history({ ref, ...query });
-          return {
-            data,
-            text: [
-              data.items
-                .map(
-                  (item) =>
-                    `${item.at} · ${safeText(item.actor)} · ${safeText(item.action)} · ревизия ${item.revision}`,
-                )
-                .join("\n") || "Сохранённых событий пока нет.",
-              entityContinuation(data, `history '${ref}'`, query),
             ].join("\n\n"),
           };
         }

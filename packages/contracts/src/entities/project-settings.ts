@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { entityKeySchema, recordEventSchema, recordRequestsSchema } from "../primitives.js";
+import { entityKeySchema } from "../primitives.js";
 import { documentSectionsSchema } from "./document-library.js";
 
 /** Имя проекта — однострочный текст, независимый от паспорта продукта. */
@@ -40,8 +40,6 @@ export const storedProjectSettingsSchema = projectSettingsSchema.extend({
   version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   entityKey: entityKeySchema.optional(),
   aliases: z.array(entityKeySchema).optional(),
-  requests: recordRequestsSchema.optional(),
-  events: z.array(recordEventSchema).optional(),
 });
 
 /** Полная идемпотентная замена редактируемых настроек. */

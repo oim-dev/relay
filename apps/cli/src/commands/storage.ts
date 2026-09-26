@@ -23,9 +23,9 @@ export function registerStorage(program: Command, runtime: Runtime): void {
   });
   registerCommand(group, runtime, {
     name: "migrate",
-    description: "Перенести базу в единый формат с компактной сегментированной историей",
+    description: "Перенести базу в единый формат",
     details:
-      "Перед переносом остановите старые версии клиентов. ID, ключи, текущие тексты, ревизии, комментарии и квитанции сохраняются. Полные технические снимки удаляются; для прежних изменений Markdown остаётся факт изменения. Журнал группируется в сегменты. Незавершённый WAL восстанавливается; повтор переноса не дублирует данные.",
+      "Перед переносом остановите старые версии клиентов. ID, ключи, текущие тексты, ревизии, комментарии и квитанции сохраняются. Незавершённый WAL восстанавливается; повтор переноса не дублирует данные.",
     examples: [
       [
         "relay-cli --local --config .relay/config.json storage migrate",
@@ -50,9 +50,9 @@ export function registerStorage(program: Command, runtime: Runtime): void {
   });
   registerCommand(group, runtime, {
     name: "reindex",
-    description: "Перестроить адреса, карточки, связи и указатели истории из постоянных данных",
+    description: "Перестроить адреса, карточки и связи из постоянных данных",
     details:
-      "Используйте после Git-слияния, ручной правки либо потери индекса. Факты и история не удаляются. Команда работает и при отсутствующем заголовке индекса.",
+      "Используйте после Git-слияния, ручной правки либо потери индекса. Предметные данные не удаляются. Команда работает и при отсутствующем заголовке индекса.",
     examples: [["relay-cli --local storage reindex", "Восстановить индексы проекта"]],
     run: async (context) => {
       const workspace = context.backend.localWorkspace;
@@ -64,7 +64,7 @@ export function registerStorage(program: Command, runtime: Runtime): void {
       const data = await new StorageService(workspace).reindex();
       return {
         data,
-        text: `Индексы единого хранилища восстановлены.\nДействующих связей: ${data.edges}\nСобытий связей: ${data.events}\nРевизия графа: ${data.revision}`,
+        text: `Индексы единого хранилища восстановлены.\nДействующих связей: ${data.edges}\nРевизия графа: ${data.revision}`,
       };
     },
   });

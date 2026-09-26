@@ -2,7 +2,6 @@ import {
   entityAddress,
   graphQuerySchema,
   graphMutationSchema,
-  graphHistoryQuerySchema,
   graphNodeSchema,
   graphEdgeSchema,
   fullContextQuerySchema,
@@ -13,7 +12,6 @@ import type {
   GraphPage,
   GraphMutation,
   GraphSaved,
-  GraphHistoryQuery,
   GraphEdge,
   GraphEvent,
   FullContext,
@@ -30,12 +28,6 @@ import { projectGraphCatalog } from "./catalog.js";
 import type { GraphCatalogProvider, GraphCatalog } from "./catalog.js";
 import { resolveAddress } from "../entities/resolver.js";
 import { AppError } from "../../shared/errors.js";
-import { BoardTaskRepository } from "../../storage/board-tasks.js";
-import { BoardRepository } from "../../storage/boards.js";
-import { TaskActivityRepository } from "../../storage/task-activity.js";
-import type { ActivityFile } from "../../storage/task-activity.js";
-import type { TaskHistoryEvent } from "../../domain/board-task.js";
-import { taskBaseline } from "../board-tasks/history.js";
 import {
   FullContextReader,
   FULL_CONTEXT_LIMITS,
@@ -317,13 +309,11 @@ export class GraphService {
       );
       const records = new Map<string, GraphCurrent>();
       const events: GraphEvent[] = [];
-      const taskEvents = new Map<string, Omit<TaskHistoryEvent, "id" | "sequence" | "taskId">[]>();
       const ids: string[] = [];
       const at = new Date().toISOString();
       const revision = store.meta.revision + 1;
       for (const operation of command.operations) {
         let record: GraphCurrent;
-        let previousEdge: GraphEdge | undefined;
         if (operation.action === "add") {
           let from: EntityRef;
           let to: EntityRef;
@@ -376,7 +366,6 @@ export class GraphService {
               4,
             );
           }
-          previousEdge = existing.edge;
           record = {
             active: operation.action !== "remove",
             historyCount: existing.historyCount + 1,
@@ -390,44 +379,6 @@ export class GraphService {
         records.set(record.edge.id, record);
         ids.push(record.edge.id);
         events.push({ action: operation.action, edge: record.edge, actor, at, revision });
-        for (const ref of [record.edge.from, record.edge.to].filter((ref) => ref.kind === "task")) {
-          const endpointLabel = (ref: EntityRef) => {
-            const node = catalog.nodes.find(
-              (entry) => entry.ref.kind === ref.kind && entry.ref.id === ref.id,
-            );
-            return node
-              ? `${node.key} — ${node.title} (${ref.kind}:${ref.id})`
-              : `${ref.kind}:${ref.id}`;
-          };
-          const label = `${record.edge.type}: ${endpointLabel(record.edge.from)} → ${endpointLabel(record.edge.to)}`;
-          const event: Omit<TaskHistoryEvent, "id" | "sequence" | "taskId"> = {
-            at,
-            actor,
-            action: `graph-${operation.action}`,
-            title: `Связь графа: ${label}`,
-            operationId: key,
-            revision: 1,
-            legacy: false,
-            fields: ["Связь графа"],
-            changes: [
-              {
-                field: `graph.${record.edge.id}`,
-                label: "Связь графа",
-                format: "text",
-                before: previousEdge ? label : null,
-                after: operation.action === "remove" ? null : label,
-              },
-              {
-                field: `graph.${record.edge.id}.description`,
-                label: "Описание связи",
-                format: "markdown",
-                before: previousEdge?.description ?? null,
-                after: operation.action === "remove" ? null : record.edge.description,
-              },
-            ],
-          };
-          taskEvents.set(ref.id, [...(taskEvents.get(ref.id) ?? []), event]);
-        }
       }
       if (this.validateMutation) {
         const edges: GraphEdge[] = [];
@@ -437,27 +388,6 @@ export class GraphService {
           ...[...records.values()].filter((record) => record.active).map((record) => record.edge),
         );
         this.validateMutation(catalog, edges);
-      }
-      const activityFiles: ActivityFile[] = [];
-      if (taskEvents.size) {
-        const tasks = await new BoardTaskRepository(this.workspace).all();
-        const boards = await new BoardRepository(this.workspace).all();
-        const activity = new TaskActivityRepository(this.workspace);
-        for (const task of tasks) {
-          const history = taskEvents.get(task.id);
-          if (!history) continue;
-          const baseline = (await activity.hasHistory(task))
-            ? []
-            : [taskBaseline(task, tasks, boards, at)];
-          activityFiles.push(
-            ...(await activity.prepare(task, [
-              ...baseline,
-              ...history.map((event) => ({ ...event, revision: task.revision })),
-            ])),
-          );
-        }
-        if (activityFiles.length)
-          activityFiles.push({ path: "signal.json", value: { operationId: key, at } });
       }
       const result = await this.repository.commit(
         store,
@@ -472,7 +402,7 @@ export class GraphService {
           requestId: command.requestId,
         }),
         assertOwned,
-        activityFiles,
+        [],
       );
       // Предыдущий снимок и все изменённые концы уже проверены под той же блокировкой.
       versions.set(this.repository.root, result.version);
@@ -480,10 +410,6 @@ export class GraphService {
     });
   }
 
-  async history(input: GraphHistoryQuery = {}) {
-    const query = parse(graphHistoryQuerySchema, input, "история отношений");
-    return this.workspace.locked((assertOwned) => this.repository.history(query, assertOwned));
-  }
   /** Явный локальный перенос v1 с сохранением исходника и всех квитанций. */
   async migrate() {
     return this.workspace.locked((assertOwned) => this.repository.migrate(assertOwned));

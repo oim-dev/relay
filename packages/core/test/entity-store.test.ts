@@ -31,7 +31,8 @@ const codec = (kind: string): EntityCodec => ({
 const registry = () => new EntityStorageRegistry([codec("note"), codec("future")]);
 const ref = (id: string) => ({ kind: "note", id });
 const record = (id: string, key = `NOTE-${id.toUpperCase()}`, kind = "note"): EntityRecord => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
+  receipts: [],
   dataVersion: 1,
   kind,
   id,
@@ -275,6 +276,7 @@ test("ключ, совпавший с ID, не выбирает первого �
 test("выдача ключей учитывает другие виды, алиасы и надгробия без повторного сканирования", async (t) => {
   const { store } = await fixture(t);
   await store.run(command("space"), async (tx) => {
+    tx.setCommandOwner(ref("board"));
     await tx.put(record("board", "BOARD"), null);
     await tx.put({ ...record("foreign", "WEB-99", "future"), aliases: ["WEB-101"] }, null);
     await tx.saveKeySpace({
@@ -302,6 +304,7 @@ test("выдача ключей учитывает другие виды, али
 test("продуктовая запись → явный Core: циклы, петли, параллельные рёбра, повтор и отзыв группы", async (t) => {
   const { store, root } = await fixture(t);
   await store.run(command("nodes"), async (tx) => {
+    tx.setCommandOwner(ref("a"));
     for (const id of ["a", "b", "c", "alone"]) await tx.put(record(id), null);
     return null;
   });
@@ -309,6 +312,7 @@ test("продуктовая запись → явный Core: циклы, пе�
   assert.equal((await reader.read("NOTE-A")).edges.length, 0);
   const input = command("attach", { target: "b" });
   const saved = await store.run(input, async (tx) => {
+    tx.setCommandOwner(ref("a"));
     const document = await tx.get(ref("a"));
     await tx.put({ ...document, revision: 2, data: { ...document.data, links: ["b"] } }, 1);
     const ids = await replaceOwnedRelations(
@@ -349,6 +353,7 @@ test("продуктовая запись → явный Core: циклы, пе�
   assert.equal(owned.entries.length, 3);
   assert.deepEqual(owned.entries[0].edge.description, ["## Причина", "", "  пробелы  \r", ""]);
   await store.run(command("same-links"), async (tx) => {
+    tx.setCommandOwner(ref("a"));
     assert.deepEqual(
       (
         await replaceOwnedRelations(
@@ -361,10 +366,11 @@ test("продуктовая запись → явный Core: циклы, пе�
       ).sort(),
       [...saved.ids].sort(),
     );
-    assert.deepEqual(tx.events, []);
+    assert.equal("events" in tx, false);
     return null;
   });
   await store.run(command("detach"), async (tx) => {
+    tx.setCommandOwner(ref("a"));
     const document = await tx.get(ref("a"));
     await tx.put({ ...document, revision: 3, data: { ...document.data, links: [] } }, 2);
     await replaceOwnedRelations(tx, ref("a"), "attachments", [], "agent");
@@ -382,6 +388,7 @@ test("продуктовая запись → явный Core: циклы, пе�
 test("1000 прогретых контекстов не читают сущности, связи и историю; снимки и ответы изолированы", async (t) => {
   const { store } = await fixture(t);
   await store.run(command("create-graph"), async (tx) => {
+    tx.setCommandOwner(ref("a"));
     await tx.put(record("a"), null);
     await tx.put(record("b"), null);
     await replaceOwnedRelations(tx, ref("a"), "links", [relation("a", "b")], "agent");
@@ -409,7 +416,7 @@ test("1000 прогретых контекстов не читают сущно�
   assert.equal(updated.edges[0]!.revision, 1);
 });
 
-for (const stage of ["intent", "entity", "relation", "segment", "operation", "state", "published"])
+for (const stage of ["intent", "entity", "relation", "segment", "state", "published"])
   test(`WAL: прерывание на шаге ${stage} восстанавливает обе записи и точный результат`, async (t) => {
     const { root, store: initial } = await fixture(t);
     await initial.run(command("baseline"), async (tx) => {
@@ -423,13 +430,13 @@ for (const stage of ["intent", "entity", "relation", "segment", "operation", "st
           ((stage === "entity" && path?.startsWith("entities/")) ||
             (stage === "relation" && path?.startsWith("relations/")) ||
             (stage === "segment" && path?.startsWith(".indexes/segments/")) ||
-            (stage === "operation" && path?.startsWith("history/")) ||
             (stage === "state" && path === ".indexes/state.json")));
       if (matches) throw new Error("Имитированное прерывание");
     });
     const input = command(`crash-${stage}`);
     await assert.rejects(
       crashed.run(input, async (tx) => {
+        tx.setCommandOwner(ref("a"));
         await tx.put({ ...record("a"), data: { ...record("a").data, links: ["b"] } }, null);
         const ids = await replaceOwnedRelations(
           tx,
@@ -462,6 +469,7 @@ test("recovery проверяет весь пакет до публикации 
   });
   await assert.rejects(
     crashed.run(command("two"), async (tx) => {
+      tx.setCommandOwner(ref("a"));
       await tx.put(record("a"), null);
       await tx.put(record("b"), null);
       return null;
@@ -494,7 +502,7 @@ test("потеря/порча сегмента обнаруживается, rei
   await store.reindex();
   assert.equal((await store.resolve("NOTE-A")).ref.id, "a");
   assert.deepEqual(await store.run(input, async () => null), { id: "a", original: true });
-  assert.equal((await store.history(ref("a"))).total, 1);
+  assert.equal((await store.get(ref("a"))).receipts?.length, 1);
   await writeFile(segment, '{"schemaVersion":1,"type":"leaf","entries":[]}');
   forgetStorageSegments(root);
   await assert.rejects(store.resolve("NOTE-A"), { code: "STORAGE_INDEX_CORRUPT" });
@@ -551,6 +559,7 @@ test("два экземпляра и symlink разделяют блокиров
 test("большой набор владельца сегментируется; reindex сохраняет ID, отзыв и историю обоих концов", async (t) => {
   const { root, store } = await fixture(t);
   const saved = await store.run(command("large-owner"), async (tx) => {
+    tx.setCommandOwner(ref("a"));
     await tx.put(record("a"), null);
     await tx.put(record("b"), null);
     const ids = await replaceOwnedRelations(
@@ -566,6 +575,7 @@ test("большой набор владельца сегментируется;
   assert.equal(manifest.storage, "segments");
   assert.ok(Object.keys(manifest.segments).length <= 16);
   await store.run(command("revoke-one"), async (tx) => {
+    tx.setCommandOwner(ref("a"));
     await replaceOwnedRelations(
       tx,
       ref("a"),
@@ -577,11 +587,12 @@ test("большой набор владельца сегментируется;
   });
   const before = await new FullContextReader(store).read("NOTE-B");
   assert.equal(before.edges.length, 299);
-  assert.equal((await store.history(ref("b"))).total, 2);
+  assert.equal((await store.get(ref("a"))).receipts?.length, 2);
+  assert.equal((await store.get(ref("b"))).receipts?.length, 0);
   await store.reindex();
   const reopened = await EntityStore.open(root, registry());
   assert.deepEqual((await new FullContextReader(reopened).read("NOTE-A")).edges, before.edges);
-  assert.equal((await reopened.history(ref("b"))).total, 2);
+  assert.equal((await reopened.get(ref("a"))).receipts?.length, 2);
   const stored = JSON.parse(await readFile(join(root, "entities/notes/a.json"), "utf8"));
   assert.equal(stored.events, undefined);
   assert.equal(stored.requests, undefined);

@@ -6,7 +6,7 @@ import {
   criterionIdSchema,
 } from "./task-acceptance.js";
 export * from "./task-acceptance.js";
-export * from "./task-activity.js";
+export * from "./task-comments.js";
 import {
   actorSchema,
   singleLine,
@@ -14,7 +14,6 @@ import {
   timestampSchema,
   requestIdSchema,
   entityReferenceSchema,
-  recordEventSchema,
 } from "../primitives.js";
 
 export const boardTaskIdSchema = z
@@ -150,12 +149,7 @@ export const boardTaskRecordSchema = boardTaskSchema.extend({
     .max(100)
     .default([])
     .describe("Критерии приёмки в порядке добавления, максимум 100"),
-  events: z.array(recordEventSchema).optional(),
   keys: z.array(boardTaskReferenceSchema).min(1),
-  requests: z.record(
-    z.string(),
-    z.strictObject({ hash: z.string(), result: boardTaskSavedSchema }),
-  ),
 });
 export const createBoardTaskSchema = z.strictObject({
   ...write,

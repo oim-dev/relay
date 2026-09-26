@@ -62,7 +62,7 @@ export class EntityDeletionRepository {
   async receipt(key: string) {
     invariant(/^[a-f0-9]{64}$/.test(key), "INVALID_DATA", "Неверный адрес квитанции", 5);
     if (this.workspace.storageSession) {
-      const value = await this.workspace.storageSession.value("deletion-receipt", key);
+      const value = await this.workspace.storageSession.compatibilityReceipt("deletion-receipt", key);
       return value === undefined ? undefined : receiptSchema.parse(value);
     }
     const path = join(this.root, "entity-deletions", "receipts", `${key}.json`);

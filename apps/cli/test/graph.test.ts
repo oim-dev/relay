@@ -106,8 +106,8 @@ test("CLI графа: контекстный документ, путь, без�
   assert.equal(invalidJson.code, 2);
   assert.ok(!invalidJson.body.ok && invalidJson.body.error.code === "INVALID_JSON");
   successful(await app.run(["graph", "unlink", receipt.ids[0]!, "--if-version", context.version]));
-  const history = successful(
-    await app.run<{ total: number }>(["graph", "history", "--id", receipt.ids[0]!]),
+  const afterUnlink = successful(
+    await app.run<{ edges: { id: string }[] }>(["graph", "list"]),
   ).data;
-  assert.equal(history.total, 2);
+  assert.ok(!afterUnlink.edges.some((edge) => edge.id === receipt.ids[0]));
 });

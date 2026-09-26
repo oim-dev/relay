@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Command } from "commander";
 import { graphMutationSchema } from "@relay/core/domain/entity-graph";
-import type { GraphQuery, GraphHistoryQuery } from "@relay/core/domain/entity-graph";
+import type { GraphQuery } from "@relay/core/domain/entity-graph";
 import { parse } from "@relay/core/domain/validation";
 import { AppError } from "@relay/core/shared/errors";
 import { GraphService } from "@relay/core/application/graph/service";
@@ -9,12 +9,7 @@ import { commandGroup, registerCommand } from "../command.js";
 import { author } from "../context.js";
 import type { Runtime } from "../context.js";
 import { integer } from "../options.js";
-import {
-  graphText,
-  fullContextText,
-  graphSavedText,
-  graphHistoryText,
-} from "../presentation/graph.js";
+import { graphText, fullContextText, graphSavedText } from "../presentation/graph.js";
 
 /** Некорректный JSON является ошибкой ввода, а не отказом файлового хранилища. */
 function readOperations(value: string): unknown {
@@ -32,7 +27,7 @@ function readOperations(value: string): unknown {
 export function registerGraph(program: Command, runtime: Runtime): void {
   const group = commandGroup(program, {
     name: "graph",
-    description: "Связи всех сущностей, контекст и история проекта",
+    description: "Связи всех сущностей и контекст проекта",
     details:
       "Сущность задаётся ключом, ID или kind:ID. Все связи явно сохранены в Core; продуктовые поля не создают рёбер. Типы расширяемы, циклы допустимы. Прямая запись графа предназначена для диагностики и ремонта; продуктовые действия выполняйте предметными командами.",
     examples: [
@@ -46,9 +41,9 @@ export function registerGraph(program: Command, runtime: Runtime): void {
       description:
         action === "migrate"
           ? "Перенести единый JSON графа в раздельное хранилище v2"
-          : "Восстановить индексы графа и истории из постоянных записей",
+          : "Восстановить индексы графа из постоянных записей",
       details:
-        "Только локальный режим выбранного проекта. Перед миграцией остановите старые клиенты. Прерванная операция возобновляется; ID, ревизии, события и квитанции сохраняются. Исходник v1 остаётся резервной копией.",
+        "Только локальный режим выбранного проекта. Перед миграцией остановите старые клиенты. Прерванная операция возобновляется; ID, ревизии и квитанции сохраняются. Исходник v1 остаётся резервной копией.",
       examples: [
         [
           `relay-cli --local --config .relay/config.json graph ${action}`,
@@ -65,7 +60,7 @@ export function registerGraph(program: Command, runtime: Runtime): void {
         const data = await new GraphService(workspace)[action]();
         return {
           data,
-          text: `${action === "migrate" ? "Хранилище связей готово к работе в формате v2." : "Индексы связей восстановлены."}\nСвязей: ${data.edges}\nСобытий: ${data.events}\nРевизия: ${data.revision}`,
+          text: `${action === "migrate" ? "Хранилище связей готово к работе в формате v2." : "Индексы связей восстановлены."}\nСвязей: ${data.edges}\nРевизия: ${data.revision}`,
         };
       },
     });
@@ -118,27 +113,6 @@ export function registerGraph(program: Command, runtime: Runtime): void {
       return { data, text: (options) => fullContextText(data, options) };
     },
   });
-  registerCommand<GraphHistoryQuery>(group, runtime, {
-    name: "history",
-    description: "Прочитать историю установленных и отозванных отношений",
-    details:
-      "Содержит автора, действие и состояние связи; не является историей редакций продуктовых требований.",
-    examples: [["relay-cli graph history --limit 20", "Прочитать журнал отношений"]],
-    configure: (command) =>
-      command
-        .option("--id <id>", "ID отношения")
-        .option("--offset <n>", "Смещение", integer(0, Number.MAX_SAFE_INTEGER))
-        .option("--limit <n>", "Размер страницы", integer(1, 100))
-        .option(
-          "--revision <n>",
-          "Ревизия журнала первой страницы",
-          integer(0, Number.MAX_SAFE_INTEGER),
-        ),
-    run: async (context, input) => {
-      const data = await context.backend.graph.history(input.options);
-      return { data, text: (options) => graphHistoryText(data, input.options.id, options) };
-    },
-  });
   type WriteOptions = {
     from?: string;
     to?: string;
@@ -154,7 +128,7 @@ export function registerGraph(program: Command, runtime: Runtime): void {
       description: {
         link: "Установить произвольную направленную связь",
         update: "Изменить пояснение связи",
-        unlink: "Отозвать связь с сохранением истории",
+        unlink: "Отозвать связь",
         apply: "Применить атомарный пакет изменений",
       }[action],
       ...(action === "unlink" || action === "update"

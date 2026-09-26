@@ -187,14 +187,6 @@ export const productRecordSchema = z.strictObject({
   updatedAt: timestampSchema,
   createdBy: actorSchema,
   updatedBy: actorSchema,
-  events: z.array(
-    z.strictObject({
-      revision: z.number().int().positive(),
-      actor: actorSchema,
-      at: timestampSchema,
-    }),
-  ),
-  requests: z.record(z.string(), z.strictObject({ hash: z.string(), result: productSavedSchema })),
 });
 export const productReadinessSchema = z.strictObject({
   id: productIdSchema,
@@ -206,7 +198,7 @@ export const productReadinessSchema = z.strictObject({
 export const productStateSchema = z.strictObject({
   productId: z.string(),
   version: z.string(),
-  records: z.array(productRecordSchema.omit({ requests: true, events: true })),
+  records: z.array(productRecordSchema),
   readiness: z.array(productReadinessSchema),
 });
 export const productContextQuerySchema = z.strictObject({
@@ -218,7 +210,7 @@ export const productContextSchema = z.strictObject({
   version: z.string(),
   records: z.array(
     z.strictObject({
-      record: productRecordSchema.omit({ requests: true, events: true }),
+      record: productRecordSchema,
       reasons: z.array(z.string()),
     }),
   ),
@@ -234,7 +226,7 @@ export const productListQuerySchema = z.strictObject({
 export const productListSchema = z.strictObject({
   version: z.string(),
   total: z.number(),
-  items: z.array(productRecordSchema.omit({ requests: true, events: true })),
+  items: z.array(productRecordSchema),
   nextOffset: z.number().nullable(),
 });
 export const productOverviewSchema = z.strictObject({

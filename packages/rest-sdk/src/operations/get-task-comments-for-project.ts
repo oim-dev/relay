@@ -8,7 +8,7 @@ import type {
   ApiFailure,
   GetTaskCommentsForProjectOkEnum,
   GetTaskCommentsForProjectParams,
-  TaskActivityPage,
+  TaskCommentsPage,
 } from "../data-contracts.js";
 import type { ApiRequestClient, RequestParams } from "../http-client.js";
 
@@ -28,7 +28,7 @@ export const getTaskCommentsForProject = (
   http.request<
     {
       ok: GetTaskCommentsForProjectOkEnum;
-      data: TaskActivityPage;
+      data: TaskCommentsPage;
     },
     ApiFailure
   >({

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { legacyWorkspace, seedLegacyTask } from "./helpers/workspace.js";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
@@ -24,7 +25,7 @@ import type { PlanningSaved } from "@relay/contracts/planning";
 async function fixture(t: TestContext, legacy = false) {
   const root = await mkdtemp(join(tmpdir(), "relay-planning-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const workspace = await initialize(root, "tasks", undefined, { legacy });
+  const workspace = legacy ? await legacyWorkspace(root) : await initialize(root, "tasks");
   return {
     root,
     workspace,
@@ -522,9 +523,11 @@ test("планы: ревизии, одна текущая принадлежно
     "agent",
   );
   assert.equal((await progress.task({ ref: task.id })).planning?.planId, b.id);
-  const history = await entities.history({ ref: a.id });
+  const detail = await entities.get({ ref: a.id });
+  assert.equal(detail.data.kind, "work-plan");
+  if (detail.data.kind !== "work-plan") assert.fail();
   assert(
-    history.items.some(
+    detail.data.planningEvents.some(
       (event) =>
         event.action === "transfer" && event.description?.includes("Изменился ближайший результат"),
     ),
@@ -1163,6 +1166,10 @@ test("совпавшие локальные ID этапов разных пла�
 });
 
 test("переполнение файла целевого плана отклоняет перенос атомарно, включая связи и квитанцию", async (t) => {
+  const subjectBytes = (value: Record<string, unknown>) => {
+    const { receipts: _receipts, comments: _comments, planningEvents: _events, ...subject } = value;
+    return Buffer.byteLength(JSON.stringify(subject, null, 2) + "\n");
+  };
   const { root, workspace, plans, tasks } = await fixture(t);
   const task = await tasks.create({ board: "product", requestId: "task" }, "agent");
   const source = await plans.create({ title: "Исходный план", requestId: "source" }, "agent");
@@ -1208,9 +1215,7 @@ test("переполнение файла целевого плана откло
         })),
       },
     };
-    const size = Buffer.byteLength(
-      JSON.stringify(session.store.registry.encode(record), null, 2) + "\n",
-    );
+    const size = subjectBytes(session.store.registry.encode(record));
     record.data.rationale = "x".repeat(RECORD_BYTES - size - 1);
     await session.put(record, prior.revision);
     return record.revision;
@@ -1224,7 +1229,7 @@ test("переполнение файла целевого плана откло
   ];
   const read = () => Promise.all(files.map((path) => readFile(join(workspace.root, path), "utf8")));
   const before = await read();
-  assert.equal(Buffer.byteLength(before[1]!), RECORD_BYTES - 1);
+  assert.equal(subjectBytes(JSON.parse(before[1]!)), RECORD_BYTES - 1);
   const command = {
     task: task.id,
     targetPlan: target.id,
@@ -1262,7 +1267,7 @@ test("переполнение файла целевого плана откло
 
 test("старый формат: существующие задачи доступны, планирование требует явного перехода", async (t) => {
   const { workspace, plans, tasks } = await fixture(t, true);
-  const task = await tasks.create({ board: "product", requestId: "task" }, "agent");
+  const task = await seedLegacyTask(workspace);
   await assert.rejects(plans.create({ title: "План", requestId: "plan" }, "agent"), {
     code: "STORAGE_MIGRATION_REQUIRED",
   });

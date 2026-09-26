@@ -21,20 +21,12 @@ import { EntityDeletionRepository } from "../../storage/entity-deletion.js";
 import { defaultDocumentSections } from "@relay/contracts/entities";
 import { storedProjectSettingsSchema } from "../../domain/project-settings.js";
 import { relative } from "node:path";
-import { planningRecords, planningHistory } from "../../storage/planning.js";
+import { planningRecords } from "../../storage/planning.js";
 
-export type EntityEvent = {
-  revision: number;
-  actor: string;
-  at: string;
-  action: string;
-  description?: string | undefined;
-};
 export type EntityEntry = Omit<EntityDetail, "references"> & {
   aliases: string[];
   selectors: string[];
   filters: Record<string, string | string[] | null>;
-  events: EntityEvent[];
 };
 export type EntityCatalog = { entries: EntityEntry[]; version: string; reservedKeys: string[] };
 export const entityAddress = (ref: { kind: string; id: string }) => `${ref.kind}:${ref.id}`;
@@ -132,7 +124,6 @@ export async function readEntityCatalog(
         | "filters"
         | "status"
         | "active"
-        | "events"
         | "document"
         | "context"
       >
@@ -150,7 +141,6 @@ export async function readEntityCatalog(
       filters: {},
       status: null,
       active: true,
-      events: [],
       ...options,
     });
   };
@@ -171,7 +161,6 @@ export async function readEntityCatalog(
     {
       aliases: config.projectSettings?.aliases ?? [],
       selectors: [settings.slug],
-      events: config.projectSettings?.events ?? [],
     },
   );
   if (!source.records.some((record) => record.fields.kind === "passport"))
@@ -218,7 +207,6 @@ export async function readEntityCatalog(
               scenario: contract.scenarioId,
               target: contract.scenarioId ?? contract.featureId,
             },
-            events: (stored?.events ?? []).map((event) => ({ ...event, action: "save" })),
           },
         );
       }
@@ -267,9 +255,6 @@ export async function readEntityCatalog(
                   ],
                 }
               : {},
-        events: source.records
-          .find((entry) => entry.id === record.id)!
-          .events.map((event) => ({ ...event, action: "save" })),
       },
     );
   }
@@ -300,7 +285,6 @@ export async function readEntityCatalog(
         aliases: board.aliases ?? [],
         selectors: [board.slug, prefix],
         filters: { application: board.applicationId },
-        events: board.events ?? [],
       },
     );
   }
@@ -338,7 +322,6 @@ export async function readEntityCatalog(
           parent: task.parentId,
           target: task.productLinks.map((link) => link.id),
         },
-        events: task.events ?? [],
       },
     );
   }
@@ -357,7 +340,6 @@ export async function readEntityCatalog(
         } = record;
         add(kind, id, key, record.title, record.summary, revision, data, {
           status: "status" in record ? record.status : null,
-          events: await planningHistory(workspace, kind, id),
         });
       }
     }

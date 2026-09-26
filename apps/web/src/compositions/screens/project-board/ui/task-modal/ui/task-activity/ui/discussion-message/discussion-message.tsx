@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { useId } from "react";
 import { Button, Skeleton, Text } from "@mantine/core";
-import { useTaskActivityEvent } from "domains/board-tasks";
+import { useTaskComment } from "domains/board-tasks";
 import { MarkdownView } from "ui/markdown-view";
 import { isDefined } from "shared/value-predicates";
 import { describeActivityEntry } from "../../helpers/activity-presentation";
@@ -17,7 +17,7 @@ import styles from "./styles/discussion-message.module.css";
 export const DiscussionMessage = (props: DiscussionMessageProps) => {
   const { projectId, taskId, entry, active, className, ...rootAttrs } = props;
   const titleId = useId();
-  const query = useTaskActivityEvent(projectId, taskId, active ? entry.id : null);
+  const query = useTaskComment(projectId, taskId, active ? entry.id : null);
   const authorData = describeActivityEntry(entry);
   const hasRole = authorData.role !== "";
   const hasDescription = isDefined(query.data?.description);

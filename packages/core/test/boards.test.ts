@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFile, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { BoardsService } from "@relay/core/application/boards/service";
 import { ProductService } from "@relay/core/application/product/service";
-import { BoardRepository } from "@relay/core/storage/boards";
 import { initialize } from "@relay/core/storage/workspace";
 import type { ProductMutation } from "@relay/core/domain/product";
 import { fixture } from "./helpers/workspace.js";
+import { BoardTasksService } from "../src/application/board-tasks/service.js";
+import { failWal } from "./helpers/wal.js";
+import { exists } from "../src/storage/files.js";
 
 const application = (slug: string, requestId = slug) =>
   ({
@@ -25,15 +27,15 @@ const application = (slug: string, requestId = slug) =>
 
 test("init создаёт две системные доски и повтор не стирает данные", async (t) => {
   const { root, workspace } = await fixture(t);
-  const repository = new BoardRepository(workspace);
   assert.deepEqual(
     (await new BoardsService(workspace).list()).items.map((board) => board.slug),
     ["product", "infrastructure"],
   );
-  const path = join(repository.root, "product", "tasks", "example.json");
-  await writeFile(path, "сохранить");
+  const task = await new BoardTasksService(workspace).create({ board: "product", title: "Сохранить", requestId: "task" }, "tester");
+  const path = join(dirname(workspace.configPath), "entities/tasks", `${task.id}.json`);
+  const before = await readFile(path, "utf8");
   await assert.rejects(initialize(root, "tasks"), { code: "ALREADY_INITIALIZED" });
-  assert.equal(await readFile(path, "utf8"), "сохранить");
+  assert.equal(await readFile(path, "utf8"), before);
 });
 
 test("создание приложения создаёт контейнер доски; повтор и переименование сохраняют адрес", async (t) => {
@@ -45,7 +47,9 @@ test("создание приложения создаёт контейнер д
   assert.deepEqual(await products.mutate(command, "tester"), created);
   const board = await boards.get("web");
   assert.equal(board.applicationId, created.id);
-  assert.deepEqual(await readdir(join(new BoardRepository(workspace).root, "web", "tasks")), []);
+  assert.equal((await new BoardTasksService(workspace).list({ board: board.id })).total, 0);
+  const storedBoard = JSON.parse(await readFile(join(dirname(workspace.configPath), "entities/boards", `${board.id}.json`), "utf8"));
+  assert.equal(storedBoard.data.applicationId, created.id);
   assert.deepEqual(
     (await boards.list()).items.map((entry) => entry.slug),
     ["product", "web", "infrastructure"],
@@ -93,28 +97,19 @@ test("slug проверяется и уникален при конкуренц�
 test("прерванное создание восстанавливается перед чтением и повтор возвращает прежнюю квитанцию", async (t) => {
   const { workspace } = await fixture(t);
   const products = new ProductService(workspace);
-  const repository = new BoardRepository(workspace);
-  // Имитируем отказ файловой системы после публикации доски, до публикации приложения.
-  const originalEnsure = BoardRepository.prototype.ensure;
-  let failed = false;
-  BoardRepository.prototype.ensure = async function (board, owned) {
-    await originalEnsure.call(this, board, owned);
-    if (board.slug === "web" && !failed) {
-      failed = true;
-      throw new Error("Имитированный сбой");
-    }
-  };
-  try {
-    await assert.rejects(products.mutate(application("web"), "tester"), /Имитированный сбой/);
-  } finally {
-    BoardRepository.prototype.ensure = originalEnsure;
-  }
-  assert.equal((await readdir(repository.pending)).length, 1);
+  failWal(t, (stage, path) => {
+    if (stage === "file" && path?.startsWith("entities/boards/")) throw new Error("Имитированный сбой");
+  });
+  await assert.rejects(products.mutate(application("web"), "tester"), /Имитированный сбой/);
+  t.mock.restoreAll();
+  const pending = join(dirname(workspace.configPath), "transactions/pending.json");
+  assert(await exists(pending));
   const board = await new BoardsService(workspace).get("web");
   const replay = await products.mutate(application("web"), "tester");
   assert.equal(replay.id, board.applicationId);
   assert.equal(replay.revision, 1);
-  assert.deepEqual(await readdir(repository.pending), []);
+  assert.equal(await exists(pending), false);
+  assert.equal((await new BoardsService(workspace).list()).total, 3);
 });
 
 test("страницы сохраняют порядок и обнаруживают изменение каталога, повреждение slug не скрывается", async (t) => {
@@ -128,8 +123,9 @@ test("страницы сохраняют порядок и обнаружива
   await assert.rejects(boards.list({ offset: 1, version: first.version }), {
     code: "BOARD_CHANGED",
   });
-  const path = join(new BoardRepository(workspace).root, "web", "board.json");
+  const board = await boards.get("web");
+  const path = join(dirname(workspace.configPath), "entities/boards", `${board.id}.json`);
   const stored = JSON.parse(await readFile(path, "utf8"));
-  await writeFile(path, JSON.stringify({ ...stored, slug: "other" }));
+  await writeFile(path, JSON.stringify({ ...stored, data: { ...stored.data, slug: "other" } }));
   await assert.rejects(boards.list(), { code: "INVALID_DATA" });
 });

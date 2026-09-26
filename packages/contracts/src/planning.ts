@@ -95,6 +95,13 @@ export const workPlanDataSchema = workPlanFieldsSchema.extend({
   startedAt: timestampSchema.nullable().describe("Фактическое время начала либо null"),
   closedAt: timestampSchema.nullable().describe("Фактическое время закрытия либо null"),
 });
+export const planningEventSchema = z.strictObject({
+  revision: z.number().int().nonnegative().describe("Ревизия плана или релиза при действии"),
+  actor: actorSchema,
+  at: timestampSchema,
+  action: z.string().describe("Предметное действие плана или релиза"),
+  description: z.string().optional().describe("Предметное пояснение действия в Markdown"),
+});
 export const planningMetadata = {
   id: planningIdSchema,
   key: z.string().describe("Читаемый ключ записи"),
@@ -103,6 +110,7 @@ export const planningMetadata = {
   updatedAt: timestampSchema,
   createdBy: actorSchema,
   updatedBy: actorSchema,
+  planningEvents: z.array(planningEventSchema).default([]).describe("Сохранённые предметные события этой записи, без общего аудита"),
 };
 export const workPlanSchema = workPlanDataSchema.extend(planningMetadata);
 export const planningCountsSchema = z.strictObject({
