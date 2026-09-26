@@ -205,7 +205,7 @@ export const planningTasksPageSchema = planningPage(
 export const planningWrite = {
   actor: actorSchema.optional().describe("Автор действия; по умолчанию автор интерфейса"),
   requestId: requestIdSchema.describe(
-    "Ключ повтора; тот же запрос возвращает первоначальную квитанцию",
+    "Идентификатор корреляции; повтор исполняется заново с проверкой текущей ревизии",
   ),
 };
 export const planningRevision = z

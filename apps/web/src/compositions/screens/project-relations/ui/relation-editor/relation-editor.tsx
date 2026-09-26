@@ -57,7 +57,7 @@ export const RelationEditor = (props: RelationEditorProps) => {
     const first = Object.keys(errors)[0];
     if (first !== undefined) form.getInputNode(first)?.focus();
   };
-  /** Повторяет неподтверждённый запрос с прежним ключом, сохраняя черновик при ошибке. */
+  /** Отправляет изменения по действию пользователя, сохраняя черновик при ошибке. */
   const handleSubmit = async (values: RelationFormValues): Promise<void> => {
     setError(null);
     const signature = JSON.stringify([values, version]);

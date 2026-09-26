@@ -84,7 +84,7 @@ class EntitiesController {
   @ApiEndpoint({
     id: "deleteEntity",
     summary:
-      "Удалить подтверждённый каскад и снять внешние связи; проверка версии и безопасный повтор по requestId",
+      "Удалить подтверждённый каскад и снять внешние связи с проверкой версии; requestId служит корреляции",
     body: "DeleteEntity",
     response: "EntityDeleted",
   })
@@ -163,19 +163,6 @@ class EntitiesController {
   ) {
     return success(await (await this.engine()).keySpaces(query));
   }
-  @Get("history")
-  @ApiEndpoint({
-    id: "getEntityHistory",
-    summary: "Прочитать сохранённые события ревизий сущности по ключу или ID",
-    query: "EntityKeysQuery",
-    response: "EntityHistory",
-  })
-  async history(
-    @Query(new ZodValidationPipe(entityKeysQuerySchema))
-    query: z.input<typeof entityKeysQuerySchema>,
-  ) {
-    return success(await (await this.engine()).history(query));
-  }
   @Post()
   @HttpCode(200)
   @ApiEndpoint({
@@ -191,7 +178,7 @@ class EntitiesController {
   @HttpCode(200)
   @ApiEndpoint({
     id: "updateEntity",
-    summary: "Изменить содержание сущности по ключу или ID с проверкой ревизии и повтора",
+    summary: "Изменить содержание сущности по ключу или ID с проверкой ревизии",
     body: "UpdateEntity",
     response: "EntitySaved",
   })

@@ -42,7 +42,6 @@
 | `P/relations`                 | Каталог сущностей и граф связей; `?root=kind:id` — выбранный контекст | `ProjectRelationsScreen`                                           |
 | `P/plans`                     | Планирование                                                          | `PlansScreen`, заглушка                                            |
 | `P/releases`                  | Релизы                                                                | `ReleasesScreen`, заглушка                                         |
-| `P/history`                   | История                                                               | `HistoryScreen`, заглушка                                          |
 | `P/boards`                    | Вход в доски                                                          | Перенаправление на `P/boards/product`, отдельного списка досок нет |
 | `P/boards/:boardSlug`         | Канбан выбранной доски                                                | `ProjectBoardScreen`                                               |
 | `P/boards/:boardSlug/:taskId` | Задача в центральном модальном окне поверх канбана                    | Тот же `ProjectBoardScreen` и `TaskModal`                          |

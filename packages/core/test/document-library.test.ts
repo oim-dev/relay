@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { writeLegacyMigrationFixture } from "./helpers/legacy-migration-fixture.js";
+import { StorageService } from "../src/application/storage/service.js";
 import { test } from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -34,7 +36,7 @@ test("библиотека: черновик, атомарные связи с �
     requestId: "document",
   };
   const saved = await engine.create(command, "agent");
-  assert.deepEqual(await engine.create(command, "agent"), saved);
+  assert.equal((await engine.get({ ref: saved.key })).ref.id, saved.ref.id);
   const entry = await engine.get({ ref: saved.key });
   assert.equal(entry.status, "draft");
   assert.equal(entry.document?.kind, "proposal");
@@ -46,18 +48,20 @@ test("библиотека: черновик, атомарные связи с �
   );
   // Продуктовый сценарий уже установил отдельную связь; чтение ничего не создаёт.
   const graph = await new GraphService(workspace).read({ root: task.key });
-  assert.equal(graph.totalEdges, 1);
-  assert.equal(graph.edges[0]?.source, "graph");
-  assert.equal(graph.edges[0]?.from.id, task.ref.id);
-  assert.equal(graph.edges[0]?.to.id, saved.ref.id);
-  assert.equal(graph.edges[0]?.description, command.data.relations[0]!.description);
+  const attachment = graph.edges.filter(
+    (edge) =>
+      edge.type === "references" && edge.from.id === task.ref.id && edge.to.id === saved.ref.id,
+  );
+  assert.equal(attachment.length, 1);
+  assert.equal(attachment[0]?.source, "graph");
+  assert.equal(attachment[0]?.description, command.data.relations[0]!.description);
   const repository = new ProductRepository(workspace);
-  const path = join(repository.root, "documents", `${saved.ref.id}.json`);
+  const path = join(repository.root, "../entities/documents", `${saved.ref.id}.json`);
   const disk = JSON.parse(await readFile(path, "utf8"));
-  assert.equal(disk.version, 4);
-  assert.deepEqual(disk.fields.body, command.data.body.split("\n"));
+  assert.equal(disk.schemaVersion, 3);
+  assert.deepEqual(disk.data.body, command.data.body.split("\n"));
   assert.deepEqual(
-    disk.fields.relations[0].description,
+    disk.data.relations[0].description,
     command.data.relations[0]!.description.split("\n"),
   );
   const update = {
@@ -71,7 +75,7 @@ test("библиотека: черновик, атомарные связи с �
     },
   };
   const accepted = await engine.update(update, "agent");
-  assert.deepEqual(await engine.update(update, "agent"), accepted);
+  await assert.rejects(engine.update(update, "agent"), { code: "REVISION_CONFLICT" });
   await assert.rejects(engine.update({ ...update, requestId: "stale" }, "agent"), {
     code: "REVISION_CONFLICT",
   });
@@ -194,6 +198,7 @@ test("библиотека: повторяемая миграция прежне
     "agent",
   );
   const repository = new ProductRepository(workspace);
+  await writeLegacyMigrationFixture(workspace);
   const path = join(repository.root, "documents", `${saved.ref.id}.json`);
   const disk = JSON.parse(await readFile(path, "utf8"));
   disk.version = 3;
@@ -204,8 +209,16 @@ test("библиотека: повторяемая миграция прежне
   await writeFile(path, JSON.stringify(disk));
   const before = await engine.get({ ref: saved.key });
   assert.equal(before.document?.status, "active");
-  await workspace.locked((owned) => repository.migrate(owned));
-  assert.equal(await workspace.locked((owned) => repository.migrate(owned)), 0);
+  assert.equal((await new StorageService(workspace).migrate()).migrated, true);
+  assert.equal((await new StorageService(workspace).migrate()).migrated, false);
   assert.deepEqual(await engine.get({ ref: saved.key }), before);
-  assert.equal(JSON.parse(await readFile(path, "utf8")).version, 4);
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        join(repository.root, "../entities/documents", `${saved.ref.id}.json`),
+        "utf8",
+      ),
+    ).schemaVersion,
+    3,
+  );
 });

@@ -21,14 +21,13 @@ test("REST планирования: local/scoped, SDK, ревизии, повт
   const response = await app.inject({ method: "POST", url: `${prefix}/plans`, payload: command });
   assert.equal(response.statusCode, 200, response.body);
   const created = planningSavedSchema.parse(response.json().data);
-  assert.deepEqual(
-    (await app.inject({ method: "POST", url: `${prefix}/plans`, payload: command })).json().data,
-    created,
-  );
+  const repeated = await app.inject({ method: "POST", url: `${prefix}/plans`, payload: command });
+  assert.equal(repeated.statusCode, 200, repeated.body);
+  assert.notEqual(repeated.json().data.id, created.id);
   for (const base of ["/api/v1", prefix]) {
     const page = await app.inject(`${base}/plans?limit=1`);
     assert.equal(page.statusCode, 200, page.body);
-    assert.equal(plansPageSchema.parse(page.json().data).total, 1);
+    assert.equal(plansPageSchema.parse(page.json().data).total, 2);
     assert.equal(
       planSummarySchema.parse((await app.inject(`${base}/plans/${created.key}`)).json().data).goal,
       command.goal,
@@ -212,7 +211,9 @@ test("REST вложенных этапов: перенос указывает о
   );
   const command = { ...transfer, targetPlan: target.key };
   const moved = await backend.plans.transfer(source.id, command, "agent");
-  assert.deepEqual(await backend.plans.transfer(source.id, command, "agent"), moved);
+  await assert.rejects(backend.plans.transfer(source.id, command, "agent"), {
+    code: "REVISION_CONFLICT",
+  });
   assert.equal(moved.revision, included.revision + 1);
   assert.equal(moved.targetRevision, to.revision + 1);
   assert.equal((await backend.plans.tasks(source.id, from.stageId)).total, 0);
@@ -272,7 +273,7 @@ test("REST вложенных этапов: перенос указывает о
   );
 });
 
-test("REST частичного изменения этапа: исходная квитанция после другой правки, очистка и пустой набор полей", async (t) => {
+test("REST частичного изменения этапа: конфликт устаревшего повтора, очистка и пустой набор полей", async (t) => {
   const { app, workspace } = await fixture(t);
   const spec = (await app.inject("/api/openapi.json")).json();
   const changes = spec.components.schemas.ChangePlanStage.properties.fields;
@@ -339,8 +340,7 @@ test("REST частичного изменения этапа: исходная 
     assert.equal(summaryResponse.statusCode, 200, summaryResponse.body);
     const changed = planningSavedSchema.parse(summaryResponse.json().data);
     const repeated = await app.inject({ method: "POST", url, payload: titleInput });
-    assert.equal(repeated.statusCode, 200, repeated.body);
-    assert.deepEqual(repeated.json().data, title);
+    assert.equal(repeated.statusCode, 409, repeated.body);
     const afterReplay = stagesPageSchema.parse((await app.inject(url)).json().data);
     assert.equal(afterReplay.planRevision, changed.revision);
     assert.equal(afterReplay.items[0]?.title, titleInput.fields.title);

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { writeLegacyMigrationFixture } from "./helpers/legacy-migration-fixture.js";
+import { StorageService } from "../src/application/storage/service.js";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
@@ -97,7 +99,7 @@ test("цели карточки ограничены доской при соз�
       if (allowed) {
         const created = await tasks.create(command, "agent");
         assert.deepEqual((await tasks.get(created.id)).productLinks, [goal]);
-        assert.deepEqual(await tasks.create(command, "agent"), created);
+        assert.equal((await tasks.get(created.id)).id, created.id);
       } else {
         await assert.rejects(tasks.create(command, "agent"), { code: "INVALID_REFERENCE" });
         await assert.rejects(
@@ -138,8 +140,8 @@ test("цели карточки ограничены доской при соз�
     assert.equal((await tasks.get(task.id)).revision, 1);
   }
   const update = { productLinks: [goals[3]!], ifRevision: 1, requestId: "valid-update" };
-  const saved = await tasks.update(task.id, update, "agent");
-  assert.deepEqual(await tasks.update(task.id, update, "agent"), saved);
+  await tasks.update(task.id, update, "agent");
+  await assert.rejects(tasks.update(task.id, update, "agent"), { code: "REVISION_CONFLICT" });
   await assert.rejects(tasks.update(task.id, { ...update, requestId: "stale" }, "agent"), {
     code: "REVISION_CONFLICT",
   });
@@ -201,6 +203,7 @@ test("снятые реализации сохраняются в прежних
 test("старые несовместимые цели читаются без миграции и удаляются явно", async (t) => {
   const { workspace, feature, tasks } = await targetsFixture(t);
   const task = await tasks.create({ board: "infrastructure", requestId: "legacy" }, "agent");
+  await writeLegacyMigrationFixture(workspace);
   const path = join(
     dirname(workspace.configPath),
     "boards/infrastructure/tasks",
@@ -212,6 +215,7 @@ test("старые несовместимые цели читаются без �
   const original = await readFile(path, "utf8");
   assert.deepEqual((await tasks.get(task.id)).productLinks, stored.productLinks);
   assert.equal(await readFile(path, "utf8"), original);
+  await new StorageService(workspace).migrate();
   await tasks.update(task.id, { title: "Исправляем", ifRevision: 1, requestId: "title" }, "agent");
   await tasks.move(task.id, { column: "ready", ifRevision: 2, requestId: "column" }, "agent");
   await tasks.update(task.id, { productLinks: [], ifRevision: 3, requestId: "repair" }, "agent");

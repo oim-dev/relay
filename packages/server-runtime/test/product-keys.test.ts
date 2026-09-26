@@ -102,9 +102,9 @@ test("HTTP: ключи, краткое пакетное чтение и неза
   };
   const updated = await app.inject({ method: "POST", url: `${base}/implementations`, payload });
   assert.equal(updated.statusCode, 200, updated.body);
-  assert.deepEqual(
-    (await app.inject({ method: "POST", url: `${base}/implementations`, payload })).json(),
-    updated.json(),
+  assert.equal(
+    (await app.inject({ method: "POST", url: `${base}/implementations`, payload })).statusCode,
+    409,
   );
   const conflict = await app.inject({
     method: "POST",

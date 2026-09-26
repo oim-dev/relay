@@ -27,7 +27,7 @@ export type CriterionContent = {
 type CriterionWrite = {
   /** Прочитанная ревизия задачи. */
   ifRevision: number;
-  /** Стабильный ключ повтора. */
+  /** Корреляция HTTP-запроса, не ключ дедупликации. */
   requestId: string;
 };
 /** Предметное изменение одного критерия. */

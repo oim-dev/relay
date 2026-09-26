@@ -282,7 +282,7 @@ export function productSavedText(
         ...(result.key ? [`Ключ: ${result.key}`] : []),
         `ID: ${result.id}`,
         `Ревизия: ${result.revision}`,
-        `Ключ повтора: ${safeText(command.requestId)}`,
+        `Идентификатор запроса: ${safeText(command.requestId)}`,
       ].join("\n"),
       options.width,
     ),

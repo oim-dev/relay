@@ -135,7 +135,7 @@ export const ProjectRelationsScreen = () => {
       request.current = { signature, id: crypto.randomUUID() };
     try {
       await saveRelations(projectId, [{ action: "remove", id }], version, request.current.id);
-      setNotice("Связь удалена. Сущности и история сохранены.");
+      setNotice("Связь удалена. Сущности сохранены.");
       handleRefresh();
     } catch (failure) {
       setError(relationError(failure).message);

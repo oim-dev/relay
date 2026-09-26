@@ -299,7 +299,7 @@ export const PlanDetail = (props: PlanDetailProps) => {
                 Этапы и задачи<span className={styles.tabCount}>{plan.stageCount}</span>
               </Tabs.Tab>
               <Tabs.Tab value="overview" leftSection={<FileText size={14} />}>
-                Материалы и история
+                Материалы
               </Tabs.Tab>
             </Tabs.List>
             <Tabs.Panel value="stages" pt="lg">

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { ProductQueries } from "@relay/core/application/product/queries";
 import { GraphService } from "@relay/core/application/graph/service";
 import { test } from "node:test";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ServerEvent } from "@relay/contracts";
 import { fixture } from "./helpers/server.js";
@@ -36,7 +36,7 @@ test(
   "SSE замечает локальную публикацию без изменения ревизии карточки",
   { timeout: 10000 },
   async (t) => {
-    const { app, tasks } = await fixture(t);
+    const { app, tasks, root } = await fixture(t);
     await app.listen(0, "127.0.0.1");
     const stream = await connect(await app.getUrl());
     try {
@@ -53,6 +53,7 @@ test(
       });
       await stream.next((event) => event.type === "changed" && event.data.source === "storage");
       assert.deepEqual(await tasks.get(task.id), before);
+      await assert.rejects(access(join(root, ".relay/history")), { code: "ENOENT" });
       assert.equal(
         (await app.inject(`/api/v1/board-tasks/${task.id}/comments`)).json().data.items[0].title,
         "Локальный отчёт",

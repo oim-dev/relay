@@ -135,10 +135,9 @@ test("HTTP канбана: проект, короткий ID, повтор, Mark
   assert.equal(created.statusCode, 200, created.body);
   const task = created.json().data;
   assert.equal(task.key, "PRODUCT-1");
-  assert.deepEqual(
-    (await app.inject({ method: "POST", url: base, payload })).json(),
-    created.json(),
-  );
+  const repeated = await app.inject({ method: "POST", url: base, payload });
+  assert.equal(repeated.statusCode, 200, repeated.body);
+  assert.notEqual(repeated.json().data.id, task.id);
   const dependency = (
     await app.inject({
       method: "POST",

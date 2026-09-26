@@ -1,11 +1,5 @@
 import { z } from "zod";
-import {
-  actorSchema,
-  timestampSchema,
-  entityKeySchema,
-  recordEventSchema,
-  recordRequestsSchema,
-} from "../primitives.js";
+import { actorSchema, timestampSchema, entityKeySchema } from "../primitives.js";
 
 export const boardPrefixSchema = z
   .string()
@@ -52,8 +46,6 @@ export const boardSchema = z.strictObject({
   prefix: boardPrefixSchema.optional(),
   key: entityKeySchema.optional(),
   aliases: z.array(entityKeySchema).optional(),
-  requests: recordRequestsSchema.optional(),
-  events: z.array(recordEventSchema).optional(),
   kind: z
     .enum(["product", "application", "infrastructure"])
     .describe("Область ответственности доски"),
@@ -66,12 +58,10 @@ export const boardSchema = z.strictObject({
   createdAt: timestampSchema.describe("Дата создания доски"),
   createdBy: actorSchema.describe("Автор создания доски"),
 });
-export const boardViewSchema = boardSchema
-  .omit({ aliases: true, requests: true, events: true })
-  .extend({
-    prefix: boardPrefixSchema,
-    name: z.string().describe("Название доски; для приложения — его актуальное название"),
-  });
+export const boardViewSchema = boardSchema.omit({ aliases: true }).extend({
+  prefix: boardPrefixSchema,
+  name: z.string().describe("Название доски; для приложения — его актуальное название"),
+});
 export const boardsQuerySchema = z.strictObject({
   offset: z.coerce.number().int().nonnegative().default(0).describe("Смещение в каталоге досок"),
   limit: z.coerce

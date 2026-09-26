@@ -1,27 +1,98 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize } from "@relay/core/storage/workspace";
-import { BoardTasksService } from "@relay/core/application/board-tasks/service";
+import { defaultConfig } from "@relay/core/domain/config";
+import { boardTaskRecordSchema } from "@relay/core/domain/board-task";
 import type { FullContext } from "@relay/core/domain/entity-graph";
-import { invoke, invokeRaw, successful } from "./helpers/cli.js";
+import { failed, fixture, invoke, invokeRaw, successful } from "./helpers/cli.js";
 
 test("CLI хранилища: явный перенос, читаемый повтор и восстановление потерянных индексов", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-storage-cli-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const workspace = await initialize(root, "tasks", undefined, { legacy: true });
-  const task = await new BoardTasksService(workspace).create(
-    { board: "product", title: "Сохранить данные", requestId: "original" },
-    "agent",
+  // Прежний формат задаётся файлами: актуальный Core запрещает legacy-записи.
+  const at = "2026-09-26T00:00:00.000Z";
+  await mkdir(join(root, ".relay/boards/product/tasks"), { recursive: true });
+  await writeFile(
+    join(root, ".relay/config.json"),
+    JSON.stringify({
+      ...structuredClone(defaultConfig),
+      projectId: "Legacy01",
+      storageDir: "tasks",
+      projectSettings: { version: 1, name: "Legacy", slug: "legacy", revision: 1 },
+    }),
   );
+  await writeFile(
+    join(root, ".relay/boards/product/board.json"),
+    JSON.stringify({
+      version: 1,
+      id: "board_product",
+      slug: "product",
+      prefix: "PRODUCT",
+      kind: "product",
+      applicationId: null,
+      revision: 1,
+      createdAt: at,
+      createdBy: "relay",
+    }),
+  );
+  const task = boardTaskRecordSchema.parse({
+    version: 4,
+    id: "LegacyT1",
+    key: "PRODUCT-1",
+    keys: ["PRODUCT-1"],
+    boardId: "board_product",
+    title: "Сохранить данные",
+    description: "Текст\r\n\n  пробелы  \n",
+    productLinks: [],
+    column: "inbox",
+    rank: 1,
+    revision: 1,
+    dependencies: [],
+    related: [],
+    parentId: null,
+    acceptanceCriteria: [],
+    requests: {},
+    events: [],
+    createdAt: at,
+    updatedAt: at,
+    createdBy: "agent",
+    updatedBy: "agent",
+  });
+  const legacyPath = join(root, ".relay/boards/product/tasks", `${task.id}.json`);
+  const original = JSON.stringify({ ...task, description: task.description.split("\n") });
+  await writeFile(legacyPath, original);
+  failed(
+    await invoke(root, [
+      "--local",
+      "task",
+      "update",
+      task.id,
+      "--title",
+      "Не записывать",
+      "--if-revision",
+      "1",
+    ]),
+    "STORAGE_MIGRATION_REQUIRED",
+    4,
+  );
+  assert.equal(await readFile(legacyPath, "utf8"), original);
   const migrated = successful(
     await invoke<{ migrated: boolean }>(root, ["--local", "storage", "migrate"]),
   );
   assert.equal(migrated.data.migrated, true);
   const path = join(root, ".relay/entities/tasks", `${task.id}.json`);
   assert.equal(JSON.parse(await readFile(path, "utf8")).data.title, "Сохранить данные");
+  const fresh = await fixture(t);
+  assert.equal(
+    JSON.parse(await readFile(join(root, ".relay/storage.json"), "utf8")).schemaVersion,
+    JSON.parse(await readFile(join(fresh.root, ".relay/storage.json"), "utf8")).schemaVersion,
+  );
+  const restored = successful(
+    await invoke<{ description: string }>(root, ["task", "get", task.id]),
+  ).data;
+  assert.equal(restored.description, task.description);
   const repeated = await invokeRaw(root, ["--local", "storage", "migrate"]);
   assert.equal(repeated.code, 0, repeated.stderr);
   assert.match(repeated.stdout, /Перенос не требуется/);

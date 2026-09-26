@@ -42,7 +42,6 @@ HTTP-статус и код процесса различаются. API пер�
 | TASK_ACCEPTANCE_INCOMPLETE                        | Прочитайте task criterion list и выполните оставшиеся критерии              |
 | TASK_ACCEPTANCE_LOCKED                            | Верните задачу из done перед изменением критериев                           |
 | REVISION_CONFLICT                                 | Перечитайте запись и согласуйте изменение                                   |
-| IDEMPOTENCY_CONFLICT                              | Восстановите исходный запрос с тем же ключом                                |
 | BOARD_CHANGED, GRAPH_CHANGED                      | Начните чтение снимка заново                                                |
 | PROGRESS_CHANGED                                  | Перечитайте прогресс с offset=0; продолжите с новой version и прежним limit |
 | STORAGE_BUSY, LOCK_LOST                           | Проверьте завершение конкурентной операции и перечитайте состояние          |
@@ -60,4 +59,5 @@ VALIDATION_FAILED сообщают о повреждении действующ�
 LOCAL_ONLY требует прямого доступа к выбранному проекту. SERVER_UNAVAILABLE — проверьте
 процесс и URL; SERVER_INCOMPATIBLE — версию сервера и relay-projects-v1.
 INVALID_SERVER_RESPONSE/HTTP_ERROR означают несовместимый ответ либо транспортную ошибку.
-После потери ответа повторяйте неизменный requestId. [Диагностика](../TROUBLESHOOTING.md).
+После потери ответа читайте текущее состояние, не повторяйте мутацию безусловно.
+requestId не гарантирует дедупликацию. [Диагностика](../TROUBLESHOOTING.md).

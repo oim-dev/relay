@@ -3,19 +3,17 @@ import { test } from "node:test";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { GraphService } from "../src/application/graph/service.js";
-import { GraphTransaction } from "../src/storage/graph-transaction.js";
-import { forgetGraphIndex } from "../src/storage/graph-index.js";
-import {
-  currentPath,
-  eventPath,
-  receiptPath,
-  graphDigest,
-  legacyGraphSchema,
-} from "../src/storage/graph-format.js";
+import { StorageService } from "../src/application/storage/service.js";
+import { forgetStorageSegments } from "../src/storage/entity-store/hash-index.js";
+import { readOwned } from "../src/storage/entity-store/relations.js";
+import { currentPath, graphDigest, legacyGraphSchema } from "../src/storage/graph-format.js";
 import { atomicJson, exists } from "../src/storage/files.js";
 import { graphMutationSchema } from "../src/domain/entity-graph.js";
-import type { GraphEdge, GraphNode } from "../src/domain/entity-graph.js";
-import { fixture } from "./helpers/workspace.js";
+import type { GraphNode } from "../src/domain/entity-graph.js";
+import { legacyFixture, seedLegacyTask } from "./helpers/workspace.js";
+import { graphFixture } from "./helpers/graph-workspace.js";
+import { failWal } from "./helpers/wal.js";
+import { legacyGraphEvents } from "./helpers/legacy-graph.js";
 
 const nodes: GraphNode[] = ["A", "B", "C"].map((id) => ({
   ref: { kind: "any", id },
@@ -33,11 +31,10 @@ const add = {
   description: "## Контекст\n\nТекст\n",
 };
 
-test("v2: сумма больше 16 МиБ; адресные чтения не открывают все связи и историю", async (t) => {
-  const { workspace } = await fixture(t);
+test("v3: сумма больше 16 МиБ; адресное чтение открывает только выбранный сегмент отношений", async (t) => {
+  const { workspace } = await graphFixture(t, nodes);
   const graph = new GraphService(workspace, catalog);
   let version = (await graph.read()).version;
-  let first = "";
   for (let batch = 0; batch < 10; batch++) {
     const saved = await graph.mutate(
       {
@@ -50,41 +47,62 @@ test("v2: сумма больше 16 МиБ; адресные чтения не 
       },
       "agent",
     );
-    first ||= saved.ids[0]!;
     version = saved.version;
   }
-  assert.equal((await graph.read({ limit: 1 })).totalEdges, 1000);
-  assert.equal(await exists(graph.repository.legacyPath), false);
-  const before = { ...graph.repository.metrics };
-  const context = await graph.read({ root: "any:A", depth: 1, limit: 1 });
-  assert.equal(context.totalEdges, 1000);
-  assert.equal(graph.repository.metrics.currentReads - before.currentReads, 1);
-  assert.equal(graph.repository.metrics.eventReads - before.eventReads, 0);
-  assert.equal(graph.repository.metrics.receiptReads - before.receiptReads, 0);
-  const history = await graph.history({ id: first });
-  assert.equal(history.total, 1);
-  assert.equal(graph.repository.metrics.eventReads - before.eventReads, 1);
+  const manifest = JSON.parse(
+    await readFile(join(workspace.root, "relations/anys/A.json"), "utf8"),
+  );
+  assert.equal(manifest.storage, "segments");
+  let bytes = 0;
+  for (const prefix of Object.keys(manifest.segments))
+    bytes += (await stat(join(workspace.root, "relations/anys/A", `${prefix}.json`))).size;
+  assert(bytes > 16 * 1024 * 1024);
+  await workspace.locked(async () => {
+    const store = workspace.storageSession!.store;
+    const before = { ...store.metrics };
+    const beforeGraph = { ...graph.repository.metrics };
+    const page = await graph.read({ root: "any:A", depth: 1, limit: 1 });
+    assert.equal(page.totalEdges, 1000);
+    assert.equal(page.edges.length, 1);
+    assert.equal(page.edges[0]!.description.length, 18 * 1024);
+    assert.equal(
+      store.metrics.relationReads - before.relationReads,
+      2,
+      "Манифест и один сегмент, не весь владелец",
+    );
+    assert.equal(graph.repository.metrics.currentReads - beforeGraph.currentReads, 1);
+    assert.equal(graph.repository.metrics.eventReads - beforeGraph.eventReads, 0);
+    assert.equal(graph.repository.metrics.receiptReads - beforeGraph.receiptReads, 0);
+  });
+  for (const path of ["history", "operations", "relations/history"])
+    assert.equal(await exists(join(workspace.root, path)), false);
 });
 
-test("v1: чтение без записи, явная миграция сохраняет данные, отозванные ID и квитанции", async (t) => {
-  const { workspace } = await fixture(t);
-  const graph = new GraphService(workspace, catalog);
-  const edge: GraphEdge = {
+test("legacy graph v1: чтение без записи, storage migrate сохраняет отозванные ID без квитанций", async (t) => {
+  const { workspace } = await legacyFixture(t);
+  const a = await seedLegacyTask(workspace);
+  const b = await seedLegacyTask(workspace, {
+    id: "LegacyT2",
+    key: "PRODUCT-2",
+    keys: ["PRODUCT-2"],
+    rank: 2,
+  });
+  const graph = new GraphService(workspace);
+  const edge = {
     id: "Edge0001",
     type: "references",
-    from: nodes[0]!.ref,
-    to: nodes[1]!.ref,
-    description: "## Описание\n\n  строка\r\n",
+    from: { kind: "task", id: a.id },
+    to: { kind: "task", id: b.id },
+    description: ["## Описание", "", "  строка\r", ""],
     revision: 2,
     source: "graph",
     createdBy: "agent",
     createdAt: "2026-09-20T00:00:00.000Z",
   };
-  const deleted = { ...edge, id: "Edge0002", revision: 2 };
-  const stored = (entry: GraphEdge) => ({ ...entry, description: entry.description.split("\n") });
+  const removed = { ...edge, id: "Edge0002" };
   const command = graphMutationSchema.parse({
-    operations: [add],
-    ifVersion: "version-before-v1-write",
+    operations: [{ ...add, from: edge.from, to: edge.to }],
+    ifVersion: "old-version",
     requestId: "original",
   });
   const receipt = {
@@ -93,167 +111,170 @@ test("v1: чтение без записи, явная миграция сохр
     version: "original-version",
     requestId: "original",
   };
-  const key = graphDigest(["agent", command.requestId]);
-  const legacy = {
+  const legacy = legacyGraphSchema.parse({
     schemaVersion: 1,
     revision: 7,
-    edges: [stored(edge)],
+    edges: [edge],
     events: [
       {
         action: "add",
-        edge: stored({ ...edge, revision: 1 }),
+        edge: { ...edge, revision: 1 },
         actor: "agent",
         at: edge.createdAt,
         revision: 1,
       },
-      { action: "update", edge: stored(edge), actor: "agent", at: edge.createdAt, revision: 2 },
+      { action: "update", edge, actor: "agent", at: edge.createdAt, revision: 2 },
       {
         action: "add",
-        edge: stored({ ...deleted, revision: 1 }),
+        edge: { ...removed, revision: 1 },
         actor: "agent",
         at: edge.createdAt,
         revision: 3,
       },
-      {
-        action: "remove",
-        edge: stored(deleted),
-        actor: "operator",
-        at: edge.createdAt,
-        revision: 7,
-      },
+      { action: "remove", edge: removed, actor: "operator", at: edge.createdAt, revision: 7 },
     ],
-    requests: { [key]: { hash: graphDigest({ ...command, actor: "agent" }), result: receipt } },
-  };
-  const original = JSON.stringify(legacy, null, 2) + "\n";
+    requests: {
+      [graphDigest(["agent", command.requestId])]: {
+        hash: graphDigest({ ...command, actor: "agent" }),
+        result: receipt,
+      },
+    },
+  });
+  const original = JSON.stringify(legacy);
   await writeFile(graph.repository.legacyPath, original);
   const before = await graph.read();
-  assert.equal(before.edges[0]!.description, edge.description);
-  assert.equal(await exists(graph.repository.path), false);
-  assert.deepEqual(await graph.mutate(command, "agent"), receipt);
-  await assert.rejects(
-    graph.mutate({ operations: [add], ifVersion: before.version, requestId: "new" }, "agent"),
-    { code: "GRAPH_MIGRATION_REQUIRED" },
-  );
-  assert.deepEqual(await graph.migrate(), { migrated: true, revision: 7, edges: 1, events: 4 });
+  assert.equal(before.edges[0]!.description, edge.description.join("\n"));
+  assert.equal(await readFile(graph.repository.legacyPath, "utf8"), original);
+  await assert.rejects(graph.mutate(command, "agent"), { code: "STORAGE_MIGRATION_REQUIRED" });
+  await assert.rejects(graph.migrate(), { code: "STORAGE_MIGRATION_REQUIRED" });
+  assert.equal(await readFile(graph.repository.legacyPath, "utf8"), original);
+  await new StorageService(workspace).migrate();
   assert.equal(await exists(graph.repository.legacyPath), false);
-  assert.equal(await readFile(join(graph.repository.root, "v1-backup.json"), "utf8"), original);
   const after = await graph.read();
-  assert.deepEqual(after.edges, before.edges);
-  assert.deepEqual(await graph.mutate(command, "agent"), receipt);
-  assert.equal((await graph.history({ id: deleted.id })).total, 2);
-  const record = JSON.parse(
-    await readFile(join(graph.repository.root, currentPath(deleted.id)), "utf8"),
+  assert.deepEqual(
+    after.edges.filter((item) => item.id === edge.id),
+    before.edges,
   );
-  assert.equal(record.active, false);
-  assert.equal(record.edge.revision, 2);
+  await assert.rejects(graph.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
+  const owned = await workspace.locked(() => readOwned(workspace.storageSession!, edge.from));
+  const tombstone = owned.entries.find((entry) => entry.edge.id === removed.id)!;
+  assert.equal(tombstone.edge.active, false);
+  assert.equal(tombstone.edge.revision, 2);
+  await new StorageService(workspace).reindex();
+  await assert.rejects(graph.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
+  for (const path of ["history", "operations", "relations/history"])
+    assert.equal(await exists(join(dirname(workspace.configPath), path)), false);
 });
 
-for (const stage of ["journal", "partial", "published"] as const)
-  test(`v2: восстановление после прерывания ${stage}`, async (t) => {
-    const { workspace } = await fixture(t);
-    const graph = new GraphService(workspace, catalog);
+for (const stage of ["intent", "relations", "published"] as const)
+  test(`v3 graph: восстановление после прерывания ${stage}`, async (t) => {
+    const fixture = await graphFixture(t, nodes);
+    const graph = new GraphService(fixture.workspace, catalog);
     const command = {
       ifVersion: (await graph.read()).version,
       requestId: `crash-${stage}`,
       operations: [add, { ...add, to: nodes[2]!.ref }],
     };
-    const recover = GraphTransaction.prototype.recover;
-    const mocked = t.mock.method(
-      GraphTransaction.prototype,
-      "recover",
-      async function (this: GraphTransaction, assertOwned: () => void) {
-        if (await exists(this.pending)) throw new Error("Имитировано прерывание после журнала");
-        await recover.call(this, assertOwned);
-      },
-    );
+    failWal(t, (phase, path) => {
+      if (
+        phase === stage ||
+        (stage === "relations" && phase === "file" && path?.startsWith("relations/"))
+      )
+        throw new Error("Имитировано прерывание");
+    });
     await assert.rejects(graph.mutate(command, "agent"), /прерывание/);
-    mocked.mock.restore();
-    const transaction = new GraphTransaction(workspace);
-    const journal = JSON.parse(await readFile(transaction.pending, "utf8"));
-    const selected =
-      stage === "journal"
-        ? []
-        : stage === "partial"
-          ? journal.changes.slice(0, 3)
-          : journal.changes;
-    for (const change of selected)
-      await atomicJson(join(transaction.root, change.path), change.after, workspace.runtime);
-    // Открытие завершает журнал до выдачи согласованного ответа.
-    const page = await graph.read();
+    t.mock.restoreAll();
+    const pending = join(fixture.storage, "transactions/pending.json");
+    assert(await exists(pending));
+    const restored = new GraphService(fixture.reopen(), catalog);
+    const page = await restored.read();
     assert.equal(page.totalEdges, 2);
-    assert.equal((await graph.history()).total, 2);
-    const repeated = await graph.mutate(command, "agent");
-    assert.equal(repeated.ids.length, 2);
-    assert.equal(repeated.version, page.version);
-    assert.equal(await exists(transaction.pending), false);
+    await assert.rejects(restored.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
+    assert.equal(new Set(page.edges.map((edge) => edge.id)).size, 2);
+    assert.equal(await exists(pending), false);
   });
 
-test("v2: внешняя правка во время восстановления не перезаписывается", async (t) => {
-  const { workspace } = await fixture(t);
+test("v3 graph: внешняя правка во время восстановления не перезаписывается", async (t) => {
+  const { workspace } = await graphFixture(t, nodes);
   const graph = new GraphService(workspace, catalog);
   const created = await graph.mutate(
     { ifVersion: (await graph.read()).version, requestId: "one", operations: [add] },
     "agent",
   );
-  const transaction = new GraphTransaction(workspace);
-  const relative = currentPath(created.ids[0]!);
-  const path = join(transaction.root, relative);
-  const before = JSON.parse(await readFile(path, "utf8"));
-  const after = structuredClone(before);
-  after.edge.description = ["Новое содержание"];
-  await mkdir(dirname(transaction.pending), { recursive: true });
-  await writeFile(
-    transaction.pending,
-    JSON.stringify({
-      schemaVersion: 1,
-      changes: [{ path: relative, before: graphDigest(before), after }],
-    }),
+  failWal(t, (stage) => {
+    if (stage === "intent") throw new Error("Прерывание");
+  });
+  await assert.rejects(
+    graph.mutate(
+      {
+        ifVersion: created.version,
+        requestId: "edit",
+        operations: [{ action: "update", id: created.ids[0]!, description: "Новое содержание" }],
+      },
+      "agent",
+    ),
+    /Прерывание/,
   );
-  const external = structuredClone(before);
-  external.edge.description = ["Правка оператора"];
+  t.mock.restoreAll();
+  const path = join(workspace.root, "relations/anys/A.json");
+  const external = JSON.parse(await readFile(path, "utf8"));
+  external.entries[0].edge.description = ["Правка оператора"];
   await writeFile(path, JSON.stringify(external));
-  await assert.rejects(graph.read(), { code: "GRAPH_RECOVERY_CONFLICT" });
+  await assert.rejects(graph.read(), { code: "STORAGE_RECOVERY_CONFLICT" });
   assert.deepEqual(JSON.parse(await readFile(path, "utf8")), external);
+  assert(await exists(join(workspace.root, "transactions/pending.json")));
 });
 
-test("v2: потеря индекса, испорченный сегмент, история и явное принятие внешней правки", async (t) => {
-  const { workspace } = await fixture(t);
+test("v3 graph: потеря/порча индекса, внешняя правка и отсутствие постоянного файла различаются", async (t) => {
+  const { workspace, store } = await graphFixture(t, nodes);
   const graph = new GraphService(workspace, catalog);
-  const created = await graph.mutate(
-    { ifVersion: (await graph.read()).version, requestId: "index", operations: [add] },
-    "agent",
-  );
-  const root = graph.repository.root;
-  await rm(join(root, ".indexes"), { recursive: true });
-  forgetGraphIndex(root);
+  const command = {
+    ifVersion: (await graph.read()).version,
+    requestId: "index",
+    operations: [add],
+  };
+  const created = await graph.mutate(command, "agent");
+  await rm(join(workspace.root, ".indexes"), { recursive: true });
+  forgetStorageSegments(workspace.root);
+  await assert.rejects(graph.read(), { code: "STORAGE_INDEX_CORRUPT" });
+  await store.reindex();
   assert.equal((await graph.read()).version, created.version);
-  assert.equal((await graph.history({ id: created.ids[0]! })).total, 1);
-  assert.equal(graph.repository.metrics.eventReads, 2);
+  const state = await store.state();
+  const hash = state.roots.edges!;
   await writeFile(
-    join(root, ".indexes", "edges.json"),
-    JSON.stringify({ schemaVersion: 1, revision: 1, shards: {} }),
+    join(workspace.root, ".indexes/segments", hash.slice(0, 2), `${hash}.json`),
+    "{}",
   );
-  assert.equal((await graph.read()).totalEdges, 1);
-  const path = join(root, currentPath(created.ids[0]!));
+  forgetStorageSegments(workspace.root);
+  await assert.rejects(graph.read(), { code: "STORAGE_INDEX_CORRUPT" });
+  await store.reindex();
+  const path = join(workspace.root, "relations/anys/A.json");
   const stored = JSON.parse(await readFile(path, "utf8"));
-  stored.edge.description = ["Внешнее пояснение"];
+  stored.entries[0].edge.description = ["Внешнее пояснение"];
   await writeFile(path, JSON.stringify(stored));
-  await assert.rejects(graph.read(), { code: "GRAPH_INDEX_STALE" });
-  await graph.reindex();
+  await assert.rejects(graph.read(), { code: "STORAGE_INDEX_STALE" });
+  // Добавление в тот же набор тоже не должно молча принять внешнюю правку.
+  await assert.rejects(
+    graph.mutate(
+      { ifVersion: created.version, requestId: "dirty-add", operations: [add] },
+      "agent",
+    ),
+    { code: "STORAGE_INDEX_STALE" },
+  );
+  await store.reindex();
   assert.equal((await graph.read()).edges[0]!.description, "Внешнее пояснение");
-  // История остаётся фактом прежней записи, а не подменяется внешним текстом.
-  assert.equal((await graph.history()).items[0]!.edge.description, add.description);
+  await assert.rejects(graph.read({ version: created.version }), { code: "GRAPH_CHANGED" });
+  await assert.rejects(graph.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
   const preserved = await readFile(path, "utf8");
   await rm(path);
-  await assert.rejects(graph.reindex(), { code: "INVALID_DATA" });
+  await assert.rejects(store.reindex(), { code: "STORAGE_INDEX_CORRUPT" });
   await writeFile(path, preserved);
-  await graph.reindex();
-  await rm(join(root, eventPath(1)));
-  await assert.rejects(graph.history());
+  await store.reindex();
+  assert.equal((await graph.read()).totalEdges, 1);
 });
 
-test("v1: прерванная миграция завершается до чтения, изменённый исходник не теряется", async (t) => {
-  const { workspace } = await fixture(t);
+test("legacy graph v1: только уже записанное намерение восстанавливается, изменённый исходник не теряется", async (t) => {
+  const { workspace } = await legacyFixture(t);
   const graph = new GraphService(workspace, catalog);
   const edge = {
     id: "Edge0003",
@@ -274,10 +295,9 @@ test("v1: прерванная миграция завершается до чт
     requests: {},
   });
   await writeFile(graph.repository.legacyPath, JSON.stringify(legacy));
-  const marker = join(graph.repository.root, "transactions", "migration.json");
+  const marker = join(graph.repository.root, "transactions/migration.json");
   await mkdir(dirname(marker), { recursive: true });
   await writeFile(marker, JSON.stringify({ schemaVersion: 1, sourceHash: graphDigest(legacy) }));
-  // Имитируем уже опубликованный текущий файл; остальная миграция ещё не выполнена.
   await atomicJson(
     join(graph.repository.root, currentPath(edge.id)),
     { schemaVersion: 2, active: true, historyCount: 1, edge: legacy.edges[0] },
@@ -285,12 +305,18 @@ test("v1: прерванная миграция завершается до чт
   );
   assert.equal((await graph.read()).totalEdges, 1);
   assert.equal(await exists(marker), false);
-  assert.equal((await graph.history()).items[0]!.edge.description, "Строка\n");
-
-  const second = await fixture(t);
+  assert.equal((await legacyGraphEvents(graph)).items[0]!.edge.description, "Строка\n");
+  await assert.rejects(
+    graph.mutate(
+      { ifVersion: (await graph.read()).version, requestId: "blocked", operations: [add] },
+      "agent",
+    ),
+    { code: "STORAGE_MIGRATION_REQUIRED" },
+  );
+  const second = await legacyFixture(t);
   const other = new GraphService(second.workspace, catalog);
   await writeFile(other.repository.legacyPath, JSON.stringify(legacy));
-  const otherMarker = join(other.repository.root, "transactions", "migration.json");
+  const otherMarker = join(other.repository.root, "transactions/migration.json");
   await mkdir(dirname(otherMarker), { recursive: true });
   await writeFile(
     otherMarker,
@@ -300,31 +326,24 @@ test("v1: прерванная миграция завершается до чт
   changed.edges[0]!.description = ["Более новая запись оператора"];
   await writeFile(other.repository.legacyPath, JSON.stringify(changed));
   await assert.rejects(other.read(), { code: "GRAPH_RECOVERY_CONFLICT" });
-  assert.equal(
-    JSON.parse(await readFile(other.repository.legacyPath, "utf8")).edges[0].description[0],
-    "Более новая запись оператора",
-  );
+  assert.deepEqual(JSON.parse(await readFile(other.repository.legacyPath, "utf8")), changed);
 });
 
-test("v2: запись не переписывает чужие файлы, версия учитывает изменения каталога", async (t) => {
-  const { workspace } = await fixture(t);
+test("v3 graph: запись не переписывает чужого владельца, версия учитывает изменения каталога", async (t) => {
+  const { workspace } = await graphFixture(t, nodes);
   const mutableNodes = structuredClone(nodes);
   const graph = new GraphService(workspace, async () => ({ nodes: mutableNodes }));
   const saved = await graph.mutate(
     {
       ifVersion: (await graph.read()).version,
       requestId: "unchanged",
-      operations: [add, { ...add, to: nodes[2]!.ref }],
+      operations: [add, { ...add, from: nodes[2]!.ref }],
     },
     "agent",
   );
-  const paths = [
-    currentPath(saved.ids[0]!),
-    eventPath(1),
-    receiptPath(graphDigest(["agent", "unchanged"])),
-  ];
+  const paths = ["relations/anys/A.json", "entities/anys/A.json"];
   const stats = await Promise.all(
-    paths.map((path) => stat(join(graph.repository.root, path), { bigint: true })),
+    paths.map((path) => stat(join(workspace.root, path), { bigint: true })),
   );
   const next = await graph.mutate(
     {
@@ -335,18 +354,21 @@ test("v2: запись не переписывает чужие файлы, ве
     "agent",
   );
   for (const [index, path] of paths.entries()) {
-    const actual = await stat(join(graph.repository.root, path), { bigint: true });
+    const actual = await stat(join(workspace.root, path), { bigint: true });
     assert.equal(actual.ino, stats[index]!.ino);
     assert.equal(actual.mtimeNs, stats[index]!.mtimeNs);
   }
-  mutableNodes[0]!.revision++;
+  await workspace.locked(async () => {
+    const tx = workspace.storageSession!;
+    const record = await tx.get(nodes[0]!.ref);
+    await tx.put({ ...record, revision: record.revision + 1 }, record.revision);
+    mutableNodes[0]!.revision++;
+  });
   await assert.rejects(graph.read({ version: next.version }), { code: "GRAPH_CHANGED" });
   assert.notEqual((await graph.read()).version, next.version);
   const context = await graph.read({ root: "any:A", depth: 1 });
-  const path = context.paths.find((entry) => entry.target.id === "B");
-  assert.ok(path);
-  path.target.id = "changed-by-caller";
+  context.paths.find((entry) => entry.target.id === "B")!.target.id = "changed-by-caller";
   const reread = await graph.read({ root: "any:A", depth: 1 });
-  assert.ok(reread.nodes.some((node) => node.ref.id === "B"));
-  assert.ok(reread.paths.some((entry) => entry.target.id === "B"));
+  assert(reread.nodes.some((node) => node.ref.id === "B"));
+  assert(reread.paths.some((entry) => entry.target.id === "B"));
 });

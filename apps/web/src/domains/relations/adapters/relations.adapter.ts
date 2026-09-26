@@ -54,9 +54,13 @@ export const relationError = (error: unknown): Error => {
     );
   if (error instanceof ApiError && error.status === 404)
     return new Error("Сущность или связь больше не найдена. Обновите граф.");
-  if (error instanceof ApiError || error instanceof TypeError)
+  if (
+    error instanceof ApiError ||
+    error instanceof TypeError ||
+    (error instanceof DOMException && error.name === "AbortError")
+  )
     return new Error(
-      "Не удалось подтвердить операцию. Проверьте соединение и повторите запрос с тем же содержимым.",
+      "Ответ сервера не получен. Если вы изменяли связи, перечитайте граф перед новой отправкой: действие могло выполниться.",
     );
   return error instanceof Error ? error : new Error("Не удалось обработать граф связей");
 };
@@ -89,7 +93,7 @@ export const getEntityContext = async (projectId: string, root: string): Promise
 };
 
 /**
- * Сохраняет пакет с исходной версией и стабильным ключом повтора.
+ * Сохраняет пакет с исходной версией; requestId служит только корреляции.
  */
 export const saveRelations = async (
   projectId: string,

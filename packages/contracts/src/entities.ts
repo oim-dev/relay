@@ -448,19 +448,6 @@ export const entitySavedSchema = z.strictObject({
 });
 export type EntitySaved = z.infer<typeof entitySavedSchema>;
 
-export const entityEventSchema = z.strictObject({
-  revision: z.number().int().positive().describe("Ревизия записи"),
-  actor: actorSchema,
-  at: timestampSchema,
-  action: z.string().describe("Действие, создавшее ревизию"),
-  description: text(64 * 1024)
-    .optional()
-    .describe("Пояснение предметного действия в Markdown, если сохранено владельцем"),
-});
-export const entityHistorySchema = z.strictObject({
-  items: z.array(entityEventSchema).describe("События записи, доступные у её владельца"),
-  ...pageShape,
-});
 export const entityTypeSchema = z.strictObject({
   kind: entityKindSchema,
   title: z.string().describe("Название вида по-русски"),

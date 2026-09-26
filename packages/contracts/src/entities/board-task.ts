@@ -6,7 +6,7 @@ import {
   criterionIdSchema,
 } from "./task-acceptance.js";
 export * from "./task-acceptance.js";
-export * from "./task-activity.js";
+export * from "./task-comments.js";
 import {
   actorSchema,
   singleLine,
@@ -14,7 +14,6 @@ import {
   timestampSchema,
   requestIdSchema,
   entityReferenceSchema,
-  recordEventSchema,
 } from "../primitives.js";
 
 export const boardTaskIdSchema = z
@@ -65,7 +64,7 @@ const productLinks = z
   .describe("Явные связи «Реализует», максимум 100; пустой массив удаляет все связи");
 const write = {
   requestId: requestIdSchema.describe(
-    "Ключ повтора: повтор с тем же содержимым возвращает первоначальную квитанцию",
+    "Идентификатор корреляции; повтор исполняется заново и не возвращает сохранённый результат",
   ),
   actor: actorSchema.optional().describe("Автор изменения; по умолчанию автор текущего интерфейса"),
 };
@@ -102,7 +101,7 @@ export const boardTaskSchema = z.strictObject({
 export const boardTaskViewSchema = boardTaskSchema.extend({
   acceptance: criteriaProgressSchema
     .optional()
-    .describe("Прогресс критериев приёмки; отсутствует в старых квитанциях"),
+    .describe("Прогресс критериев приёмки; может отсутствовать в совместимом ответе"),
   canComplete: z
     .boolean()
     .optional()
@@ -150,12 +149,7 @@ export const boardTaskRecordSchema = boardTaskSchema.extend({
     .max(100)
     .default([])
     .describe("Критерии приёмки в порядке добавления, максимум 100"),
-  events: z.array(recordEventSchema).optional(),
   keys: z.array(boardTaskReferenceSchema).min(1),
-  requests: z.record(
-    z.string(),
-    z.strictObject({ hash: z.string(), result: boardTaskSavedSchema }),
-  ),
 });
 export const createBoardTaskSchema = z.strictObject({
   ...write,
@@ -188,7 +182,7 @@ export const createBoardTaskSchema = z.strictObject({
     .boolean()
     .default(false)
     .describe(
-      "Вернуть первоначальную задачу в квитанции для открытия редактора без GET; по умолчанию компактная квитанция",
+      "Вернуть задачу в ответе для открытия редактора без GET; по умолчанию компактный результат. Ответ не сохраняется для повтора",
     ),
 });
 export const updateBoardTaskSchema = z.strictObject({

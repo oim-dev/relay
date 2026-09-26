@@ -13,7 +13,7 @@ export function setupOpenApi(app: INestApplication): void {
   const config = new DocumentBuilder()
     .setTitle("Relay API")
     .setDescription(
-      "API основных сущностей, графа и предметных операций Relay. Публичные ссылки принимают ключи или ID; внутри Core связи используют ID. Markdown основных сущностей передаётся строками, прежних задач — массивами строк.",
+      "API основных сущностей, графа и предметных операций Relay. Публичные ссылки принимают ключи или ID; внутри Core связи используют ID. Markdown основных сущностей передаётся строками, прежних задач — массивами строк. requestId служит только корреляции: постоянной истории запросов и сохранённых ответов нет, дедупликация не гарантируется. После потери ответа запись могла завершиться: перечитайте текущее состояние перед новой отправкой. Автоматически повторять мутации нельзя; повтор может создать новую сущность или сообщение либо завершиться конфликтом ревизии.",
     )
     .setVersion("1")
     .addServer("/")
@@ -78,11 +78,12 @@ export function setupOpenApi(app: INestApplication): void {
           "LinkEntityTask",
           "GraphMutation",
           "GraphQuery",
-          "GraphHistoryQuery",
           "FullContextQuery",
           "CreateBoardTask",
           "ChangeCriterion",
           "CriteriaQuery",
+          "TaskCommentsQuery",
+          "PublishTaskComment",
           "UpdateBoardTask",
           "MoveBoardTask",
           "LinkBoardTask",

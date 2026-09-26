@@ -66,7 +66,7 @@ class ProductController {
   @HttpCode(200)
   @ApiEndpoint({
     id: "updateProductImplementation",
-    summary: "Изменить отдельную реализацию с проверкой её ревизии и защитой повтора",
+    summary: "Изменить отдельную реализацию с проверкой её ревизии",
     response: "ProductSaved",
     body: "UpdateImplementation",
   })

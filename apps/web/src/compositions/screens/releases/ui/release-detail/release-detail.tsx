@@ -16,7 +16,6 @@ import { isDefined } from "shared/value-predicates";
 import { MarkdownView } from "ui/markdown-view";
 import { ReleaseContent } from "./ui/release-content/release-content";
 import { EntityDocuments } from "compositions/widgets/entity-documents";
-import { EntityHistory } from "compositions/widgets/entity-history";
 import type { ReleaseDetailProps } from "./types/release-detail-props.type";
 import styles from "./styles/release-detail.module.css";
 
@@ -66,7 +65,7 @@ export const ReleaseDetail = (props: ReleaseDetailProps) => {
   }, [release.id, release.title]);
 
   /**
-   * Фиксирует подтверждённый состав с исходной ревизией; повтор сохраняет тот же запрос.
+   * Фиксирует выбранный состав с исходной ревизией без автоматического повтора.
    */
   const handleRelease = async () => {
     if (!isDefined(releaseDraft) || isReleasing) return;
@@ -187,7 +186,6 @@ export const ReleaseDetail = (props: ReleaseDetailProps) => {
         <h2>Материалы релиза</h2>
         <EntityDocuments target={{ kind: "release", id: release.id }} />
       </section>
-      <EntityHistory reference={`release:${release.id}`} />
       <Modal
         attributes={{ header: { role: "presentation" } }}
         opened={isConfirmationOpen}

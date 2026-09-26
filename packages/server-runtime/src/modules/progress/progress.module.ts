@@ -27,7 +27,7 @@ class ProgressController {
   @Get("release")
   @ApiEndpoint({
     id: "getReleaseProgress",
-    summary: "Прочитать готовность релиза либо исторический результат его снимка",
+    summary: "Прочитать текущую готовность релиза",
     response: "ReleaseProgress",
     query: "ProgressQuery",
   })

@@ -31,7 +31,7 @@ const codec = (kind: string): EntityCodec => ({
 const registry = () => new EntityStorageRegistry([codec("note"), codec("future")]);
 const ref = (id: string) => ({ kind: "note", id });
 const record = (id: string, key = `NOTE-${id.toUpperCase()}`, kind = "note"): EntityRecord => ({
-  schemaVersion: 1,
+  schemaVersion: 3,
   dataVersion: 1,
   kind,
   id,
@@ -330,16 +330,7 @@ test("продуктовая запись → явный Core: циклы, пе�
   });
   assert.equal(saved.ids.length, 2);
   assert.notEqual(saved.ids[0], saved.ids[1]);
-  assert.deepEqual(
-    await store.run(input, async () => {
-      throw new Error("Повтор не вызывает сценарий");
-    }),
-    saved,
-  );
-  await assert.rejects(
-    store.run({ ...input, request: "другое" }, async () => null),
-    { code: "IDEMPOTENCY_CONFLICT" },
-  );
+  assert.equal(await store.run({ ...input, request: "другое" }, async () => null), null);
   const graph = await reader.read("NOTE-C");
   assert.equal(graph.nodes.length, 3);
   assert.equal(graph.edges.length, 6);
@@ -361,7 +352,7 @@ test("продуктовая запись → явный Core: циклы, пе�
       ).sort(),
       [...saved.ids].sort(),
     );
-    assert.deepEqual(tx.events, []);
+    assert.equal("events" in tx, false);
     return null;
   });
   await store.run(command("detach"), async (tx) => {
@@ -409,8 +400,8 @@ test("1000 прогретых контекстов не читают сущно�
   assert.equal(updated.edges[0]!.revision, 1);
 });
 
-for (const stage of ["intent", "entity", "relation", "segment", "operation", "state", "published"])
-  test(`WAL: прерывание на шаге ${stage} восстанавливает обе записи и точный результат`, async (t) => {
+for (const stage of ["intent", "entity", "relation", "segment", "state", "published"])
+  test(`WAL: прерывание на шаге ${stage} восстанавливает обе записи без квитанции`, async (t) => {
     const { root, store: initial } = await fixture(t);
     await initial.run(command("baseline"), async (tx) => {
       await tx.put(record("b"), null);
@@ -423,7 +414,6 @@ for (const stage of ["intent", "entity", "relation", "segment", "operation", "st
           ((stage === "entity" && path?.startsWith("entities/")) ||
             (stage === "relation" && path?.startsWith("relations/")) ||
             (stage === "segment" && path?.startsWith(".indexes/segments/")) ||
-            (stage === "operation" && path?.startsWith("history/")) ||
             (stage === "state" && path === ".indexes/state.json")));
       if (matches) throw new Error("Имитированное прерывание");
     });
@@ -446,11 +436,12 @@ for (const stage of ["intent", "entity", "relation", "segment", "operation", "st
     assert.deepEqual((await recovered.get(ref("a"))).data.links, ["b"]);
     const graph = await new FullContextReader(recovered).read("NOTE-A");
     assert.equal(graph.edges.length, 1);
-    assert.deepEqual(
-      await recovered.run(input, async () => {
-        throw new Error("Не должен исполняться");
+    await assert.rejects(
+      recovered.run(input, async (tx) => {
+        await tx.put(record("a"), null);
+        return null;
       }),
-      { ids: [graph.edges[0]!.id], revision: 1 },
+      { code: "REVISION_CONFLICT" },
     );
     await assert.rejects(readFile(join(root, "transactions/pending.json")), { code: "ENOENT" });
   });
@@ -478,7 +469,7 @@ test("recovery проверяет весь пакет до публикации 
   assert.equal(await readFile(join(root, "entities/notes/b.json"), "utf8"), external);
 });
 
-test("потеря/порча сегмента обнаруживается, reindex сохраняет историю и квитанцию", async (t) => {
+test("потеря/порча сегмента обнаруживается, reindex сохраняет состояние без квитанции", async (t) => {
   const { root, store } = await fixture(t);
   const input = command("keep-receipt");
   await store.run(input, async (tx) => {
@@ -493,8 +484,8 @@ test("потеря/порча сегмента обнаруживается, rei
   await assert.rejects(store.resolve("NOTE-A"), { code: "STORAGE_INDEX_CORRUPT" });
   await store.reindex();
   assert.equal((await store.resolve("NOTE-A")).ref.id, "a");
-  assert.deepEqual(await store.run(input, async () => null), { id: "a", original: true });
-  assert.equal((await store.history(ref("a"))).total, 1);
+  assert.equal(await store.run(input, async () => null), null);
+  assert.equal("receipts" in (await store.get(ref("a"))), false);
   await writeFile(segment, '{"schemaVersion":1,"type":"leaf","entries":[]}');
   forgetStorageSegments(root);
   await assert.rejects(store.resolve("NOTE-A"), { code: "STORAGE_INDEX_CORRUPT" });
@@ -548,7 +539,7 @@ test("два экземпляра и symlink разделяют блокиров
   await assert.rejects(separate.resolve("NOTE-SHARED"), { code: "ENTITY_NOT_FOUND" });
 });
 
-test("большой набор владельца сегментируется; reindex сохраняет ID, отзыв и историю обоих концов", async (t) => {
+test("большой набор владельца сегментируется; reindex сохраняет ID и состояние отзыва", async (t) => {
   const { root, store } = await fixture(t);
   const saved = await store.run(command("large-owner"), async (tx) => {
     await tx.put(record("a"), null);
@@ -577,11 +568,12 @@ test("большой набор владельца сегментируется;
   });
   const before = await new FullContextReader(store).read("NOTE-B");
   assert.equal(before.edges.length, 299);
-  assert.equal((await store.history(ref("b"))).total, 2);
+  assert.equal("receipts" in (await store.get(ref("a"))), false);
+  assert.equal("receipts" in (await store.get(ref("b"))), false);
   await store.reindex();
   const reopened = await EntityStore.open(root, registry());
   assert.deepEqual((await new FullContextReader(reopened).read("NOTE-A")).edges, before.edges);
-  assert.equal((await reopened.history(ref("b"))).total, 2);
+  assert.equal("receipts" in (await reopened.get(ref("a"))), false);
   const stored = JSON.parse(await readFile(join(root, "entities/notes/a.json"), "utf8"));
   assert.equal(stored.events, undefined);
   assert.equal(stored.requests, undefined);

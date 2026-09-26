@@ -22,29 +22,3 @@
 .message {
   min-width: 0;
 }
-
-.timelineItem {
-  margin-top: 0;
-  padding-bottom: 4px;
-
-  &::before {
-    top: 5px;
-    bottom: -5px;
-    border-color: var(--tasks-border);
-  }
-
-  &:last-child {
-    padding-bottom: 0;
-  }
-}
-
-.bullet {
-  top: 5px;
-  background: var(--tasks-surface);
-  border-color: var(--tasks-border);
-  color: var(--tasks-muted);
-}
-
-.itemBody {
-  min-width: 0;
-}

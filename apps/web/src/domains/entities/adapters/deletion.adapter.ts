@@ -28,14 +28,15 @@ export class EntityDeletionError extends Error {
 const throwDeletionFailure = (failure: unknown): never => {
   if (failure instanceof ApiError) {
     const response = FAILURE_SCHEMA.safeParse(failure.error);
-    if (response.success) {
+    if (response.success && failure.status < 500) {
       throw new EntityDeletionError(
         response.data.error.message,
         response.data.error.code === "REVISION_CONFLICT",
       );
     }
     throw new EntityDeletionError(
-      "Сервер не подтвердил операцию. Повторите запрос после восстановления соединения.",
+      "Исход удаления неизвестен. Перечитайте состояние и состав каскада перед новым подтверждением.",
+      true,
     );
   }
   if (
@@ -43,7 +44,8 @@ const throwDeletionFailure = (failure: unknown): never => {
     (failure instanceof DOMException && failure.name === "AbortError")
   ) {
     throw new EntityDeletionError(
-      "Не удалось получить ответ. Проверьте соединение и повторите запрос — повторное удаление безопасно.",
+      "Исход удаления неизвестен. Перечитайте состояние и состав каскада перед новым подтверждением.",
+      true,
     );
   }
   throw failure;
@@ -65,7 +67,7 @@ export const previewEntityDeletion = async (
 };
 
 /**
- * Подтверждает именно просмотренную версию с постоянным ключом повтора.
+ * Подтверждает именно просмотренную версию; requestId служит только корреляции.
  */
 export const deleteEntity = async (
   projectId: string,

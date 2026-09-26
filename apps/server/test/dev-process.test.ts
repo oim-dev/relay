@@ -14,9 +14,40 @@ test("Ожидание dev-процесса различает готовнос�
     return { child, monitor };
   };
   await t.test("успешный typecheck остаётся обязательным", async () => {
-    const { monitor } = start('console.log("Found 0 errors"); setInterval(() => {}, 1000)');
-    await monitor.waitFor(() => monitor.output.includes("Found 0 errors"), "Typecheck", 5000);
+    const { monitor } = start('console.log("Found 0 errors."); setInterval(() => {}, 1000)');
+    await monitor.waitForTypecheck(5000);
     assert.equal(monitor.closed, false);
+  });
+  await t.test("HTTP и незавершённый маркер не заменяют успешную компиляцию", async () => {
+    const { monitor } = start(
+      'console.log("Relay: http://127.0.0.1:4700"); ' +
+        'process.stdout.write("Found 0 err"); ' +
+        "setInterval(() => {}, 1000)",
+    );
+    await monitor.waitFor(() => monitor.output.includes("Relay:"), "HTTP", 5000);
+    await assert.rejects(monitor.waitForTypecheck(100), /таймаут ожидания/);
+    assert.equal(monitor.closed, false);
+  });
+  await t.test("отложенный typecheck с разбитым выводом подтверждает готовность", async () => {
+    const { monitor } = start(
+      'console.log("Relay: http://127.0.0.1:4700"); ' +
+        'process.stdout.write("Found 0 err"); ' +
+        'setTimeout(() => console.log("ors. Watching for file changes."), 200); ' +
+        "setInterval(() => {}, 1000)",
+    );
+    await monitor.waitFor(() => monitor.output.includes("Relay:"), "HTTP", 5000);
+    await monitor.waitForTypecheck(5000);
+    assert.equal(monitor.closed, false);
+  });
+  await t.test("живой watch с ошибкой типов не считается готовым", async () => {
+    const { monitor } = start(
+      'console.log("Found 1 error. Watching for file changes."); setInterval(() => {}, 1000)',
+    );
+    await monitor.waitFor(() => monitor.output.includes("Found 1 error"), "Запуск", 5000);
+    await assert.rejects(
+      monitor.waitForTypecheck(5000),
+      /компиляция завершилась с ошибками: 1[\s\S]*Found 1 error/,
+    );
   });
   await t.test("ранний exit содержит код и вывод", async () => {
     const { monitor } = start('console.error("typecheck failed"); process.exitCode = 7');

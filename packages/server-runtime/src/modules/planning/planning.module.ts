@@ -68,7 +68,7 @@ class PlanningController {
   @ApiParam({ name: "reference", description: "ID или ключ задачи" })
   @ApiEndpoint({
     id: "getTaskPlanMemberships",
-    summary: "Текущее и историческое участие задачи в планах",
+    summary: "Текущее участие задачи в планах",
     query: "PlanningPageQuery",
     response: "PlanMemberships",
   })
@@ -138,7 +138,7 @@ class PlanningController {
   @HttpCode(200)
   @ApiEndpoint({
     id: "createPlan",
-    summary: "Создать черновик плана; ссылки, история и квитанция публикуются вместе",
+    summary: "Создать черновик плана и атомарно согласовать его связи",
     body: "CreatePlan",
     response: "PlanningSaved",
   })

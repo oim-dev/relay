@@ -28,9 +28,9 @@ test("HTTP досок: slug, страницы, создание приложен
   };
   const saved = await app.inject({ method: "POST", url: `${prefix}/product/records`, payload });
   assert.equal(saved.statusCode, 200, saved.body);
-  assert.deepEqual(
-    (await app.inject({ method: "POST", url: `${prefix}/product/records`, payload })).json(),
-    saved.json(),
+  assert.equal(
+    (await app.inject({ method: "POST", url: `${prefix}/product/records`, payload })).statusCode,
+    409,
   );
   const board = await app.inject(`${prefix}/boards/web`);
   assert.equal(board.json().data.applicationId, saved.json().data.id);

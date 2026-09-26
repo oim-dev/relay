@@ -285,20 +285,16 @@ GitHub prerelease flag и получает `latest`; SemVer с предвари�
 
 `ci.yml` запускается на push веток, PR и `workflow_call`. Его последовательность:
 
-1. `check` на Node.js 24 проверяет сохранённые agents/skills до build, затем выполняет
-   полный `check`. На Node.js 22 выполняются build, `release:test` и тесты runtime
-   без тестов tooling-пакетов `@relay/dev-agents` и `@relay/relay-skill`.
-2. `package` после обеих проверок на Node.js 24 выполняет `package:check` и сохраняет
+1. `check` на Node.js 24 проверяет сохранённые agents/skills, затем выполняет `build`
+   и полный `check`.
+2. `package` после успешного `check` на Node.js 24 выполняет `package:check` и сохраняет
    один артефакт `npm-packages`: **ровно три `.tgz` и `manifest.json`**. Ведомость
    содержит schema, SHA коммита, тег, имена, версии, имена файлов и SHA-512 integrity.
-3. `installed-node22` скачивает этот же комплект по `artifact_id`, проверяет и
-   восстанавливает его, затем запускает `pnpm run package:smoke` на Node.js 22.
-   Здесь нет build, repack или установки зависимостей монорепозитория.
 
 В `release.yml` сначала `metadata` проверяет событие, версии, описания выпуска,
 соответствие checkout коммиту тега и согласованность prerelease flag с SemVer.
-Затем `ci` вызывает весь reusable CI; `publish` ждёт его успешного завершения,
-включая `installed-node22`, и получает именно его `artifact_id`.
+Затем `ci` вызывает весь reusable CI; `publish` ждёт его успешного завершения
+и получает `artifact_id` комплекта, сохранённого job `package`.
 Пустой или некорректный ID останавливает загрузку; `download-artifact` версии 8.0.1
 использует `digest-mismatch: error`, а не продолжает при несовпадении digest.
 

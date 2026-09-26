@@ -50,7 +50,7 @@ export function boardTaskText(task: BoardTaskView, options: TextOptions): string
   ].join("\n\n");
 }
 export function boardTaskSavedText(saved: BoardTaskSaved): string {
-  return `Задача ${saved.key}: действие ${saved.action} выполнено.\nID: ${saved.id}${saved.criterionId ? `\nКритерий: ${saved.criterionId}` : ""}\nРевизия: ${saved.revision}\nКлюч повтора: ${saved.requestId}`;
+  return `Задача ${saved.key}: действие ${saved.action} выполнено.\nID: ${saved.id}${saved.criterionId ? `\nКритерий: ${saved.criterionId}` : ""}\nРевизия: ${saved.revision}\nИдентификатор запроса: ${saved.requestId}`;
 }
 
 /** Компактный список критериев с продолжением и сохранением переносов краткого текста. */

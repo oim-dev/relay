@@ -10,8 +10,8 @@ export {
   useBoardTaskCreation,
   useTaskCriteria,
   useTaskCriterion,
-  useTaskActivity,
-  useTaskActivityEvent,
+  useTaskComments,
+  useTaskComment,
 } from "./hooks/board-tasks.hook";
 export {
   createBoardTask,
@@ -54,7 +54,6 @@ export type {
 } from "./types/acceptance.type";
 export type {
   ActivitySummary,
-  ActivityChange,
   ActivityEvent,
   ActivityPage,
   PublishCommentInput,

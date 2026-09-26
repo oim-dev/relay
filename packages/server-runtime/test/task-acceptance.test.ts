@@ -43,9 +43,9 @@ test("HTTP: критерии, повтор, конфликт, изоляция �
   };
   const completed = await app.inject({ method: "POST", url: `${base}/${id}/criteria`, payload });
   assert.equal(completed.statusCode, 200, completed.body);
-  assert.deepEqual(
-    (await app.inject({ method: "POST", url: `${base}/${id}/criteria`, payload })).json(),
-    completed.json(),
+  assert.equal(
+    (await app.inject({ method: "POST", url: `${base}/${id}/criteria`, payload })).statusCode,
+    409,
   );
   assert.equal(
     (

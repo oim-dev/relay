@@ -55,14 +55,13 @@ export interface Backend {
     | "resolve"
     | "keys"
     | "keySpaces"
-    | "history"
     | "create"
     | "update"
     | "rename"
     | "moveTask"
     | "linkTask"
   >;
-  graph: Pick<GraphService, "read" | "context" | "mutate" | "history">;
+  graph: Pick<GraphService, "read" | "context" | "mutate">;
   boardTasks: Pick<
     BoardTasksService,
     | "list"
@@ -75,8 +74,8 @@ export interface Backend {
     | "listCriteria"
     | "getCriterion"
     | "changeCriterion"
-    | "listActivity"
-    | "getActivity"
+    | "listComments"
+    | "getComment"
     | "publishComment"
   >;
   boards: Pick<BoardsService, "list" | "get">;

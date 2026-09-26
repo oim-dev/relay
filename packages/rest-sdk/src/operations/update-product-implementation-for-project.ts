@@ -15,11 +15,11 @@ import type { ApiRequestClient, RequestParams } from "../http-client.js";
 import { ContentType } from "../http-client.js";
 
 /**
- * @description Изменить отдельную реализацию с проверкой её ревизии и защитой повтора
+ * @description Изменить отдельную реализацию с проверкой её ревизии
  *
  * @tags product
  * @name UpdateProductImplementationForProject
- * @summary Изменить отдельную реализацию с проверкой её ревизии и защитой повтора
+ * @summary Изменить отдельную реализацию с проверкой её ревизии
  * @request POST:/api/v1/projects/{project}/product/implementations
  */
 export const updateProductImplementationForProject = (

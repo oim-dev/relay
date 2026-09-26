@@ -129,7 +129,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
       description: "Изменить реализацию или разрешить конфликт ключа",
       arguments: { ref: "ID или ключ реализации" },
       details:
-        "Передайте прочитанную ревизию. done подтверждает актуальные требования. После потери ответа повторяйте тот же request-id.",
+        "Передайте прочитанную ревизию. done подтверждает актуальные требования. После потери ответа перечитайте состояние; request-id не предотвращает повторную запись.",
       examples: [
         [
           "relay-cli product implementation update WEB-FI-12 --if-revision 1 --status partial --actor agent",
@@ -147,7 +147,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
           .option("--description <markdown>", "Полное описание Markdown")
           .option("--status <status>", "none, partial или done")
           .option("--key <key>", "Свободный ключ; ID и связи сохраняются")
-          .option("--request-id <id>", "Ключ повтора"),
+          .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
       run: async (context, input) => {
         const command = updateImplementationSchema.parse({
           ...input.options,
@@ -157,7 +157,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
         const result = await context.backend.product.updateImplementation(command, author(context));
         return {
           data: { ...result, requestId: command.requestId },
-          text: `Реализация сохранена: ${result.key ?? result.id}\nID: ${result.id}\nРевизия: ${result.revision}\nКлюч повтора: ${command.requestId}`,
+          text: `Реализация сохранена: ${result.key ?? result.id}\nID: ${result.id}\nРевизия: ${result.revision}\nИдентификатор запроса: ${command.requestId}`,
         };
       },
     },
@@ -212,7 +212,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
     name: "migrate",
     description: "Перенести продукт в каталоги и многострочный JSON",
     details:
-      "Только локальный режим: --local --config <проект/.relay/config.json>. Перед запуском остановите старые клиенты и сохраните копию product. Возобновляемый перенос сохраняет содержание, ID, ревизии и повторы. Серверный конфиг workspace не подходит.",
+      "Только локальный режим: --local --config <проект/.relay/config.json>. Перед запуском остановите старые клиенты и сохраните копию product. Возобновляемый перенос сохраняет содержание, ID и ревизии, но не историю и результаты запросов. Серверный конфиг workspace не подходит.",
     examples: [
       [
         "relay-cli --local --config .relay/config.json product migrate",
@@ -342,7 +342,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
               "description",
             )
             .option("--if-revision <n>", "Прочитанная ревизия", integer(0, Number.MAX_SAFE_INTEGER))
-            .option("--request-id <id>", "Ключ безопасного повтора");
+            .option("--request-id <id>", "Идентификатор корреляции, не дедупликации");
         },
         run: async (context, input) => {
           const options = input.options;
@@ -424,7 +424,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
             integer(0, Number.MAX_SAFE_INTEGER),
           )
           .requiredOption("--if-version <version>", "Версия прочитанного продукта")
-          .option("--request-id <id>", "Ключ повтора"),
+          .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
       run: async (context, input) => {
         let contracts: unknown;
         try {
@@ -482,7 +482,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
         .option("--description <markdown>", "Многострочное описание напрямую")
         .requiredOption("--if-revision <n>", "Ревизия состава", integer(1, Number.MAX_SAFE_INTEGER))
         .requiredOption("--if-version <version>", "Версия прочитанного продукта")
-        .option("--request-id <id>", "Ключ повтора"),
+        .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
     run: async (context, input) => {
       const options = input.options;
       const command = parse(

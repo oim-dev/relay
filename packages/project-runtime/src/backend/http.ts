@@ -53,7 +53,6 @@ import {
   entitySummarySchema,
   entityKeysPageSchema,
   entityKeySpacesSchema,
-  entityHistorySchema,
   entitySavedSchema,
   entityCreateSchema,
   entityUpdateSchema,
@@ -66,8 +65,6 @@ import {
   graphQuerySchema,
   graphMutationSchema,
   graphSavedSchema,
-  graphHistorySchema,
-  graphHistoryQuerySchema,
   fullContextSchema,
   fullContextQuerySchema,
 } from "@relay/core/domain/entity-graph";
@@ -87,9 +84,9 @@ import {
   criteriaQuerySchema,
   criterionViewSchema,
   createBoardTaskSchema,
-  taskActivityQuerySchema,
-  taskActivityPageSchema,
-  taskHistoryEventSchema,
+  taskCommentsQuerySchema,
+  taskCommentsPageSchema,
+  taskCommentSchema,
   taskCommentSavedSchema,
   publishTaskCommentSchema,
 } from "@relay/core/domain/board-task";
@@ -164,15 +161,23 @@ export async function createHttpBackend(url: string, project?: string): Promise<
       try {
         const response = await operation();
         if (!response || response.ok !== true || !("data" in response))
-          throw new AppError("INVALID_SERVER_RESPONSE", "Сервер вернул неверный API-конверт", 5, {
-            url,
-          });
+          throw new AppError(
+            "INVALID_SERVER_RESPONSE",
+            mode === "write"
+              ? "Сервер вернул неверный API-конверт. Запись могла завершиться. Перечитайте состояние; requestId не предотвращает дублирование."
+              : "Сервер вернул неверный API-конверт",
+            5,
+            {
+              url,
+              ...(requestId ? { requestId } : {}),
+            },
+          );
         return response.data;
       } catch (error) {
         const transportFailure =
           !(error instanceof AppError) && (!(error instanceof ApiError) || error.status >= 500);
-        // Повтор записи разрешён только при стабильном ключе, который проверяет Core.
-        if (transportFailure && attempt < 2 && (mode === "read" || requestId !== undefined)) {
+        // requestId служит корреляции, а не дедупликации: повторяем только чтения.
+        if (transportFailure && attempt < 2 && mode === "read") {
           await delay(100 * (attempt + 1));
           continue;
         }
@@ -183,21 +188,28 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             const { code, message, details, exitCode } = parsed.data.error;
             throw new AppError(
               code,
-              message,
+              mode === "write" && error.status >= 500
+                ? `${message}. Результат записи не подтверждён. Перечитайте состояние; повтор может выполнить новое действие, requestId не предотвращает дублирование.`
+                : message,
               exitCode ??
                 (error.status === 404 ? 3 : error.status === 409 ? 4 : error.status < 500 ? 2 : 5),
               requestId === undefined ? details : { serverDetails: details, requestId, url },
             );
           }
-          throw new AppError("HTTP_ERROR", `HTTP ${error.status} от сервера задач`, 5, {
-            url,
-            ...(requestId ? { requestId } : {}),
-          });
+          throw new AppError(
+            "HTTP_ERROR",
+            `HTTP ${error.status} от сервера задач${mode === "write" ? ". Результат записи не подтверждён. Перечитайте состояние перед новой отправкой; requestId не предотвращает дублирование." : ""}`,
+            5,
+            {
+              url,
+              ...(requestId ? { requestId } : {}),
+            },
+          );
         }
         throw new AppError(
           "SERVER_UNAVAILABLE",
           mode === "write"
-            ? "Не удалось подтвердить запись на сервере. Проверьте состояние перед повтором; для отчёта используйте тот же --request-id."
+            ? "Не удалось подтвердить запись на сервере. Запись могла завершиться. Перечитайте состояние перед новой отправкой; requestId служит корреляции и не предотвращает дублирование."
             : "Сервер задач недоступен. Проверьте URL и запуск сервера; локальный режим выбирается явно через --local.",
           5,
           { url, ...(requestId ? { requestId } : {}) },
@@ -483,13 +495,6 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             api.entities.getEntityKeySpaces(defined(entityKeySpacesQuerySchema.parse(input))),
           ),
         ),
-      history: async (input) =>
-        decode(
-          entityHistorySchema,
-          await call(() =>
-            api.entities.getEntityHistory(defined(entityKeysQuerySchema.parse(input))),
-          ),
-        ),
       create: async (input, actor) => {
         const command = entityCreateSchema.parse(input);
         return decode(
@@ -590,13 +595,6 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             input.requestId,
           ),
         ),
-      history: async (input = {}) =>
-        decode(
-          graphHistorySchema,
-          await call(() =>
-            api.graph.getGraphHistory(defined(graphHistoryQuerySchema.parse(input))),
-          ),
-        ),
     },
     boards: {
       list: async (input = {}) =>
@@ -608,21 +606,21 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         decode(boardViewSchema, await call(() => api.boards.getBoardBySlug({ slug }))),
     },
     boardTasks: {
-      listActivity: async (reference, input = {}, comments = false) =>
+      listComments: async (reference, input = {}) =>
         decode(
-          taskActivityPageSchema,
+          taskCommentsPageSchema,
           await call(() =>
-            (comments ? api.kanban.getTaskComments : api.kanban.getTaskHistory)({
+            api.kanban.getTaskComments({
               reference,
-              ...defined(taskActivityQuerySchema.parse(input)),
+              ...defined(taskCommentsQuerySchema.parse(input)),
             }),
           ),
         ),
-      getActivity: async (reference, entryId, comments = false) =>
+      getComment: async (reference, entryId) =>
         decode(
-          taskHistoryEventSchema,
+          taskCommentSchema,
           await call(() =>
-            (comments ? api.kanban.getTaskComment : api.kanban.getTaskHistoryEvent)({
+            api.kanban.getTaskComment({
               reference,
               entryId,
             }),

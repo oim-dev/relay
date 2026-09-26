@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { entityAddress, graphEventSchema, entityRefSchema } from "../domain/entity-graph.js";
+import { entityAddress, entityRefSchema } from "../domain/entity-graph.js";
 import type { GraphEvent, GraphSaved } from "../domain/entity-graph.js";
 import type { Workspace } from "./workspace.js";
 import type { GraphCurrent } from "./graph-format.js";
@@ -7,51 +7,71 @@ import type { GraphSnapshot } from "./graph.js";
 import type { ActivityFile } from "./task-activity.js";
 import { TaskActivityRepository } from "./task-activity.js";
 import { GraphIndex } from "./graph-index.js";
-import {
-  readOwned,
-  publicRelation,
-  writeOwnedRelations,
-  appendGraphEvent,
-} from "./entity-store/relations.js";
-import { session, json } from "./unified-adapter.js";
+import { graphDigest, graphShard } from "./graph-format.js";
+import type { GraphSummary } from "./graph-format.js";
 import { invariant } from "../shared/errors.js";
+import { digest } from "./entity-store/format.js";
+import { readOwnedEntry, publicRelation, writeOwnedRelations } from "./entity-store/relations.js";
+import { session, json } from "./unified-adapter.js";
 import { fullContextVersion } from "./entity-store/context.js";
 
-const snapshots = new WeakMap<GraphSnapshot, Map<string, GraphCurrent>>();
 const ownerSchema = z.object({ owner: entityRefSchema, slot: z.string() });
-const storedEventSchema = graphEventSchema.extend({
-  edge: graphEventSchema.shape.edge.extend({ description: z.array(z.string()) }),
+const indexedEdgeSchema = ownerSchema.extend({
+  id: z.string(),
+  type: z.string(),
+  from: entityRefSchema,
+  to: entityRefSchema,
+  active: z.boolean(),
+  revision: z.number(),
+  hash: z.string().optional(),
 });
+const snapshots = new WeakMap<GraphSnapshot, Map<string, z.infer<typeof indexedEdgeSchema>>>();
 
-/** Совместимое представление прежнего API графа над наборами владельцев и общим журналом. */
+/** Каталог графа читается из индекса; полные записи открываются только для выбранной страницы. */
 export async function openUnifiedGraph(workspace: Workspace): Promise<GraphSnapshot> {
   const tx = session(workspace);
-  const owners = new Map(
-    (await tx.indexEntries("edges")).map(([, value]) => {
-      const owner = ownerSchema.parse(value).owner;
-      return [entityAddress(owner), owner];
-    }),
+  const records = new Map(
+    (await tx.indexEntries("edges")).map(([id, value]) => [id, indexedEdgeSchema.parse(value)]),
   );
-  const records = new Map<string, GraphCurrent>();
-  for (const owner of owners.values())
-    for (const entry of (await readOwned(tx, owner)).entries)
-      records.set(entry.edge.id, {
-        active: entry.edge.active,
-        historyCount: entry.edge.historyCount ?? entry.edge.revision,
-        edge: publicRelation(entry),
-      });
-  const base = await tx.value("graph-baseline", "legacy");
-  const revision =
-    (base ? z.object({ revision: z.number() }).parse(base).revision : 0) +
-    (await tx.postings("graph-operations", "all")).length;
-  const index = new GraphIndex({ schemaVersion: 1, revision: 0, shards: {} }, []);
-  index.prepare([...records.values()], revision).publish();
+  const summaries: GraphSummary[] = [...records.values()].map((entry) => ({
+    id: entry.id,
+    type: entry.type,
+    from: entry.from,
+    to: entry.to,
+    active: entry.active,
+    revision: entry.revision,
+    hash: entry.hash ?? graphDigest(entry),
+  }));
+  const revision = summaries.reduce((sum, entry) => sum + entry.revision, 0);
+  const shards = new Map<string, GraphSummary[]>();
+  for (const entry of summaries) {
+    const key = graphShard(entry.id);
+    shards.set(key, [...(shards.get(key) ?? []), entry]);
+  }
+  const index = new GraphIndex(
+    {
+      schemaVersion: 1,
+      revision,
+      shards: Object.fromEntries(
+        [...shards]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, entries]) => [
+            key,
+            {
+              hash: graphDigest(entries.sort((a, b) => a.id.localeCompare(b.id))),
+              count: entries.length,
+            },
+          ]),
+      ),
+    },
+    summaries,
+  );
   const snapshot: GraphSnapshot = {
     index,
     meta: {
       schemaVersion: 2,
       revision,
-      eventCount: (await tx.postings("graph-events", "*")).length,
+      eventCount: 0,
       indexFingerprint: index.fingerprint,
     },
   };
@@ -59,16 +79,44 @@ export async function openUnifiedGraph(workspace: Workspace): Promise<GraphSnaps
   return snapshot;
 }
 
-export function unifiedGraphRecord(snapshot: GraphSnapshot, id: string): GraphCurrent | undefined {
-  return structuredClone(snapshots.get(snapshot)?.get(id));
+export async function unifiedGraphRecord(
+  workspace: Workspace,
+  snapshot: GraphSnapshot,
+  id: string,
+): Promise<GraphCurrent | undefined> {
+  const pointer = snapshots.get(snapshot)?.get(id);
+  if (!pointer) return undefined;
+  const entry = await readOwnedEntry(session(workspace), pointer.owner, id);
+  invariant(
+    entry.slot === pointer.slot &&
+      entry.edge.active === pointer.active &&
+      entry.edge.revision === pointer.revision &&
+      entry.edge.type === pointer.type &&
+      entityAddress(entry.edge.from) === entityAddress(pointer.from) &&
+      entityAddress(entry.edge.to) === entityAddress(pointer.to),
+    "STORAGE_INDEX_STALE",
+    "Индекс отношения не соответствует сохранённой записи",
+    4,
+  );
+  invariant(
+    pointer.hash === undefined || pointer.hash === digest(json(entry.edge)),
+    "STORAGE_INDEX_STALE",
+    "Содержание отношения не соответствует индексу",
+    4,
+  );
+  return {
+    active: entry.edge.active,
+    historyCount: entry.edge.historyCount ?? entry.edge.revision,
+    edge: publicRelation(entry),
+  };
 }
 
 export async function commitUnifiedGraph(
   workspace: Workspace,
   records: GraphCurrent[],
   events: GraphEvent[],
-  key: string,
-  hash: string,
+  _key: string,
+  _hash: string,
   saved: (fingerprint: string, revision: number) => GraphSaved,
   owned: () => void,
   activity: ActivityFile[] = [],
@@ -100,42 +148,9 @@ export async function commitUnifiedGraph(
     groups.set(address, group);
   }
   for (const group of groups.values()) await writeOwnedRelations(tx, group.owner, group.updates);
-  for (const event of events) await appendGraphEvent(tx, event);
   await new TaskActivityRepository(workspace).publish(activity, owned);
   const snapshot = await openUnifiedGraph(workspace);
   const result = saved(snapshot.index.fingerprint, snapshot.meta.revision);
   result.version = await fullContextVersion(tx);
-  await tx.appendValue("graph-receipt", key, json({ hash, result }));
   return result;
-}
-
-export async function unifiedGraphHistory(
-  workspace: Workspace,
-  query: { id?: string | undefined; revision?: number | undefined; offset: number; limit: number },
-) {
-  const tx = session(workspace);
-  const state = await openUnifiedGraph(workspace);
-  invariant(
-    query.revision === undefined || query.revision === state.meta.revision,
-    "GRAPH_CHANGED",
-    "Журнал изменился. Начните чтение заново",
-    4,
-  );
-  const events: GraphEvent[] = [];
-  const keys = await tx.postings("graph-events", query.id ?? "*");
-  for (const key of keys.slice(query.offset, query.offset + query.limit)) {
-    const value = await tx.value("graph-event", key);
-    const stored = storedEventSchema.parse(value);
-    events.push({
-      ...stored,
-      edge: { ...stored.edge, description: stored.edge.description.join("\n") },
-    });
-  }
-  const next = query.offset + query.limit;
-  return {
-    items: events,
-    total: keys.length,
-    nextOffset: next < keys.length ? next : null,
-    revision: state.meta.revision,
-  };
 }

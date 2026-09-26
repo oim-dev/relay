@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { actorSchema, entityKeySchema, timestampSchema } from "./primitives.js";
+import { taskCommentSchema } from "./entities/task-comments.js";
 import { entityRefSchema, graphNodeSchema } from "./entities/graph.js";
 import { entitySummarySchema } from "./entities.js";
 
@@ -7,8 +8,10 @@ import { entitySummarySchema } from "./entities.js";
 export const storageManifestSchema = z.strictObject({
   format: z.literal("relay-entities").describe("Маркер единого ID-хранилища"),
   schemaVersion: z
-    .union([z.literal(1), z.literal(2)])
-    .describe("Версия физического формата: 2 — сегментированная история"),
+    .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
+    .describe(
+      "Версия физического формата: 4 — только текущее состояние и комментарии; прежние версии требуют явного переноса",
+    ),
   productId: z
     .string()
     .optional()
@@ -24,8 +27,13 @@ export const storageKindDefinitionSchema = z.strictObject({
   collection: storageCollectionSchema,
   dataVersion: z.number().int().positive().describe("Версия предметных данных на диске"),
 });
+export const storedCommentSchema = taskCommentSchema.extend({
+  description: z.array(z.string()).describe("Полный Markdown, разделённый по LF без нормализации"),
+});
 const identity = {
-  schemaVersion: z.literal(1).describe("Версия оболочки записи"),
+  schemaVersion: z
+    .literal(3)
+    .describe("Версия оболочки текущего состояния без квитанций и автоматических событий"),
   dataVersion: z.number().int().positive().describe("Версия данных зарегистрированного вида"),
   kind: entityRefSchema.shape.kind,
   id: storageTokenSchema,
@@ -34,6 +42,22 @@ const identity = {
     .nullable()
     .describe("Публичный ключ; null только для технического владельца"),
   aliases: z.array(entityKeySchema).describe("Зарезервированные прежние ключи"),
+  reservedKeys: z
+    .array(entityKeySchema)
+    .optional()
+    .describe(
+      "Резервы прежнего формата без сохранившегося владельца; только явный перенос в проект",
+    ),
+  comments: z
+    .array(storedCommentSchema)
+    .optional()
+    .describe("Только опубликованные комментарии задачи"),
+  commentSequence: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("Максимальный номер прежней ленты или нового комментария, включая пропуски"),
 };
 export const storedEntitySchema = z.strictObject({
   ...identity,

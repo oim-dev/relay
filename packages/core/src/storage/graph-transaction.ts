@@ -9,6 +9,7 @@ import { parse } from "../domain/validation.js";
 import type { Workspace } from "./workspace.js";
 import { activityFileSchema, TaskActivityRepository } from "./task-activity.js";
 import type { ActivityFile } from "./task-activity.js";
+import { DocumentLinksRepository, documentLinksPendingSchema } from "./document-links.js";
 
 const pathSchema = z
   .string()
@@ -23,6 +24,9 @@ const pendingSchema = z.strictObject({
   schemaVersion: z.union([z.literal(1), z.literal(2)]),
   changes: z.array(changeSchema),
   activity: z.array(activityFileSchema).default([]),
+  documentCheckpoint: z
+    .strictObject({ before: z.string(), after: documentLinksPendingSchema })
+    .optional(),
 });
 export type GraphFileChange = { path: string; after: unknown };
 const MAX_TRANSACTION_BYTES = 128 * 1024 * 1024;
@@ -74,6 +78,7 @@ export class GraphTransaction {
     changes: GraphFileChange[],
     assertOwned: () => void,
     activity: ActivityFile[] = [],
+    documentCheckpoint?: z.infer<typeof pendingSchema>["documentCheckpoint"],
   ): Promise<void> {
     new TaskActivityRepository(this.workspace).validate(activity);
     invariant(
@@ -110,7 +115,12 @@ export class GraphTransaction {
       prepared.push({ ...change, before });
     }
     // Канонические файлы проверяются полностью до первой публикации. Индексы производны.
-    const transaction = pendingSchema.parse({ schemaVersion: 2, changes: prepared, activity });
+    const transaction = pendingSchema.parse({
+      schemaVersion: 2,
+      changes: prepared,
+      activity,
+      documentCheckpoint,
+    });
     invariant(
       Buffer.byteLength(JSON.stringify(transaction, null, 2) + "\n") <= MAX_TRANSACTION_BYTES,
       "RESPONSE_TOO_LARGE",
@@ -156,6 +166,18 @@ export class GraphTransaction {
       await publishGraphJson(path, change.after, this.workspace, assertOwned);
     };
     // Сначала проверяем все исходные канонические состояния, чтобы не затирать чужую правку.
+    const documents = new DocumentLinksRepository(this.workspace);
+    if (transaction.documentCheckpoint) {
+      const actual = await documents.readPending();
+      invariant(
+        actual &&
+          (graphDigest(actual) === transaction.documentCheckpoint.before ||
+            graphDigest(actual) === graphDigest(transaction.documentCheckpoint.after)),
+        "DOCUMENT_LINK_RECOVERY_CONFLICT",
+        "Намерение прикрепления изменилось вне WAL",
+        5,
+      );
+    }
     for (const change of transaction.changes.filter(
       (entry) => !entry.path.startsWith(".indexes/"),
     )) {
@@ -178,6 +200,8 @@ export class GraphTransaction {
     for (const change of transaction.changes.filter((entry) => entry.path === "meta.json"))
       await apply(change);
     await new TaskActivityRepository(this.workspace).publish(transaction.activity, assertOwned);
+    if (transaction.documentCheckpoint)
+      await documents.writePending(transaction.documentCheckpoint.after, assertOwned);
     // WAL остаётся до fsync всех канонических файлов и каталогов, включая уже опубликованные
     // до прерывания. Кеши можно потерять: их контрольные суммы/счётчики запускают восстановление.
     const canonical = transaction.changes.filter((change) => !change.path.startsWith(".indexes/"));

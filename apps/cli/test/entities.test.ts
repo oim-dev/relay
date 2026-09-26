@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { EntitySaved, EntityDetail, EntitiesPage } from "@relay/contracts/entities";
 import type { FullContext } from "@relay/core/domain/entity-graph";
-import { fixture, successful, invokeRaw } from "./helpers/cli.js";
+import { fixture, successful, invokeRaw, failed } from "./helpers/cli.js";
 
 test("CLI движка: определения, ключи вместо ID, содержимое, пагинация и сохранные связи", async (t) => {
   const app = await fixture(t);
@@ -87,8 +87,8 @@ test("CLI движка: определения, ключи вместо ID, со
     "--request-id",
     "rename",
   ];
-  const saved = successful(await app.run<EntitySaved>(rename)).data;
-  assert.deepEqual(successful(await app.run<EntitySaved>(rename)).data, saved);
+  successful(await app.run<EntitySaved>(rename));
+  failed(await app.run(rename), "REVISION_CONFLICT", 4);
   const old = successful(await app.run<EntityDetail>(["entities", "get", created.key])).data;
   assert.equal(old.key, "TASK-PRODUCT-23");
   assert.equal(old.ref.id, created.ref.id);
@@ -145,8 +145,8 @@ test("CLI движка: определения, ключи вместо ID, со
     "--request-id",
     "unlink-doc",
   ];
-  const detached = successful(await app.run<EntitySaved>(unlink)).data;
-  assert.deepEqual(successful(await app.run<EntitySaved>(unlink)).data, detached);
+  successful(await app.run<EntitySaved>(unlink));
+  failed(await app.run(unlink), "REVISION_CONFLICT", 4);
   assert.equal(
     successful(await app.run<FullContext>(["graph", "context", doc.key])).data.edges.length,
     0,

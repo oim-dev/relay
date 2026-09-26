@@ -40,6 +40,8 @@ test("справка каждой команды содержит объясне
     assert.match(result.stdout, /relay-cli /, path.join(" "));
     assert.match(result.stdout, /--actor/);
     assert.match(result.stdout, /--format/);
+    assert.doesNotMatch(result.stdout, /Ключ (?:безопасного )?повтора|первоначальную квитанцию/i);
+    if (result.stdout.includes("--request-id")) assert.match(result.stdout, /корреляции/);
   }
   for (const args of [[], ["task"], ["product"], ["entities"], ["config"], ["graph"]]) {
     const result = await invokeRaw(app.root, args);

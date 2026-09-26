@@ -161,7 +161,7 @@ export function entitySavedText(saved: EntitySaved): string {
     move: "Перемещена",
     link: "Связи изменены",
   };
-  return `${actions[saved.action]}: ${safeText(saved.key)}\nВид: ${labels.get(saved.ref.kind)}\nID: ${saved.ref.id}\nРевизия: ${saved.revision}\nКлюч повтора: ${safeText(saved.requestId)}`;
+  return `${actions[saved.action]}: ${safeText(saved.key)}\nВид: ${labels.get(saved.ref.kind)}\nID: ${saved.ref.id}\nРевизия: ${saved.revision}\nИдентификатор запроса: ${safeText(saved.requestId)}`;
 }
 
 export function entityTypeText(

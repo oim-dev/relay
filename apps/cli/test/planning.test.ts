@@ -15,6 +15,7 @@ import { ReleasesService } from "@relay/core/application/releases/service";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import { startServer } from "@relay/server-runtime";
 import { fixture, invoke, invokeRaw, successful, failed } from "./helpers/cli.js";
+import { planningSavedText } from "../src/presentation/planning.js";
 
 test("CLI планирования: предметные аргументы, Markdown, ревизии, этапы и human/JSON", async (t) => {
   const { root } = await fixture(t);
@@ -180,10 +181,12 @@ test("CLI планирования: предметные аргументы, Mar
   transfer.push("--target-plan", other.key);
   const moved = successful(await invoke<PlanningSaved>(root, transfer)).data;
   assert.equal(moved.targetRevision, targetStage.revision + 1);
-  assert.deepEqual(successful(await invoke<PlanningSaved>(root, transfer)).data, moved);
+  assert.match(planningSavedText(moved), /Задача перенесена/);
+  assert.match(planningSavedText(moved), /Ревизия целевого плана:/);
+  failed(await invoke(root, transfer), "REVISION_CONFLICT", 4);
   const movedText = await invokeRaw(root, transfer);
-  assert.match(movedText.stdout, /Задача перенесена/);
-  assert.match(movedText.stdout, /Ревизия целевого плана:/);
+  assert.equal(movedText.code, 4, movedText.stdout + movedText.stderr);
+  assert.equal(movedText.stderr, "");
   const release = successful(
     await invoke<PlanningSaved>(root, [
       "--actor",
@@ -204,6 +207,9 @@ test("CLI планирования: предметные аргументы, Mar
 });
 
 test("CLI stage update: этап за пределами 100 записей, сохранность полей, повтор и ревизия плана в local/HTTP", async (t) => {
+  let server: Awaited<ReturnType<typeof startServer>> | undefined;
+  // Сервер останавливается до удаления временной базы обработчиком fixture.
+  t.after(() => server?.close());
   const { root } = await fixture(t);
   const workspace = await openWorkspace(root);
   assert(workspace.config.projectId);
@@ -251,8 +257,7 @@ test("CLI stage update: этап за пределами 100 записей, с�
       "human",
     )
   ).revision;
-  const server = await startServer({ cwd: root, actor: "server", port: 0 });
-  t.after(() => server.close());
+  server = await startServer({ cwd: root, actor: "server", port: 0 });
   for (const [mode, transport] of [
     ["local", ["--local"]],
     ["HTTP", ["--server-url", server.url, "--project", workspace.config.projectId]],
@@ -274,11 +279,12 @@ test("CLI stage update: этап за пределами 100 записей, с�
     const saved = successful(await invoke<PlanningSaved>(root, command)).data;
     assert.equal(saved.revision, revision + 1);
     assert.equal(saved.stageId, stageId);
-    assert.deepEqual(successful(await invoke<PlanningSaved>(root, command)).data, saved);
-    const receipt = await invokeRaw(root, command);
-    assert.equal(receipt.code, 0, receipt.stderr);
-    assert.match(receipt.stdout, /Этап изменён/);
-    assert(receipt.stdout.includes(`ID владельца: ${plan.id}`));
+    assert.match(planningSavedText(saved), /Этап изменён/);
+    assert(planningSavedText(saved).includes(`ID владельца: ${plan.id}`));
+    failed(await invoke(root, command), "REVISION_CONFLICT", 4);
+    const repeated = await invokeRaw(root, command);
+    assert.equal(repeated.code, 4, repeated.stdout + repeated.stderr);
+    assert.equal(repeated.stderr, "");
     const full = entityDetailSchema.parse(
       successful(
         await invoke(root, [...transport, "entities", "get", plan.key, "--max-bytes", 131072]),
@@ -422,6 +428,8 @@ test("CLI частичного изменения этапа: повтор по�
       `title-${mode}`,
     ];
     const title = successful(await invoke<PlanningSaved>(root, titleCommand)).data;
+    assert(planningSavedText(title).includes(`Ревизия: ${title.revision}`));
+    assert(planningSavedText(title).includes(`Идентификатор запроса: title-${mode}`));
     const summary = `Отдельная правка ${mode}\nВторая строка`;
     const description = successful(
       await invoke<PlanningSaved>(root, [
@@ -436,12 +444,10 @@ test("CLI частичного изменения этапа: повтор по�
         `summary-${mode}`,
       ]),
     ).data;
-    assert.deepEqual(successful(await invoke<PlanningSaved>(root, titleCommand)).data, title);
-    const receipt = await invokeRaw(root, titleCommand);
-    assert.equal(receipt.code, 0, receipt.stderr);
-    assert.match(receipt.stdout, /Этап изменён/);
-    assert(receipt.stdout.includes(`Ревизия: ${title.revision}`));
-    assert(receipt.stdout.includes(`Ключ повтора: title-${mode}`));
+    failed(await invoke(root, titleCommand), "REVISION_CONFLICT", 4);
+    const repeated = await invokeRaw(root, titleCommand);
+    assert.equal(repeated.code, 4, repeated.stdout + repeated.stderr);
+    assert.equal(repeated.stderr, "");
     const read = async () =>
       stagesPageSchema.parse(
         successful(await invoke(root, [...transport, "plan", "stages", plan.key])).data,
@@ -466,7 +472,7 @@ test("CLI частичного изменения этапа: повтор по�
       `clear-${mode}`,
     ];
     const cleared = successful(await invoke<PlanningSaved>(root, clearCommand)).data;
-    assert.deepEqual(successful(await invoke<PlanningSaved>(root, clearCommand)).data, cleared);
+    failed(await invoke(root, clearCommand), "REVISION_CONFLICT", 4);
     const emptyCommand = [
       ...update,
       "--if-revision",
@@ -495,7 +501,7 @@ test("CLI частичного изменения этапа: повтор по�
       },
       "human",
     );
-    assert.deepEqual(successful(await invoke<PlanningSaved>(root, clearCommand)).data, cleared);
+    failed(await invoke(root, clearCommand), "REVISION_CONFLICT", 4);
     const afterClearReplay = await read();
     assert.equal(afterClearReplay.planRevision, restore.revision);
     assert.equal(afterClearReplay.items[0]?.summary, fields.summary);
@@ -570,7 +576,7 @@ test("CLI релиза: состав и готовность обновляют�
     "--request-id",
     "publish",
   ];
-  const saved = successful(await invoke<PlanningSaved>(root, publish)).data;
+  successful(await invoke<PlanningSaved>(root, publish));
   const published = releaseSummarySchema.parse(
     successful(await invoke(root, ["release", "get", release.key])).data,
   );
@@ -580,7 +586,7 @@ test("CLI релиза: состав и готовность обновляют�
     successful(await invoke(root, ["release", "plans", release.key, "--limit", 1])).data,
   );
   await tasks.move(task.id, { column: "ready", ifRevision: 1, requestId: "reopen" }, "human");
-  assert.deepEqual(successful(await invoke<PlanningSaved>(root, publish)).data, saved);
+  failed(await invoke(root, publish), "REVISION_CONFLICT", 4);
   const server = await startServer({ cwd: root, actor: "server", port: 0 });
   t.after(() => server.close());
   for (const transport of [

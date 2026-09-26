@@ -14,13 +14,7 @@ import {
   transitionPlanSchema,
   transferPlanTaskSchema,
 } from "@relay/contracts/planning";
-import {
-  getProjectApi,
-  ApiError,
-  readApiPages,
-  pendingApiRequest,
-  PendingRequestError,
-} from "infra/tasks-api";
+import { getProjectApi, ApiError, readApiPages } from "infra/tasks-api";
 import { planningView, stageView, planningTaskView } from "../helpers/planning-view";
 import type {
   PlanningPlan,
@@ -58,20 +52,18 @@ const request = async <Result>(
   } catch (error) {
     if (error instanceof ApiError) {
       const failure = FAILURE_SCHEMA.safeParse(error.error);
-      if (failure.success)
+      if (failure.success && error.status < 500)
         throw new PlanningError(failure.data.error.message, failure.data.error.code);
     }
     if (
       error instanceof TypeError ||
-      error instanceof PendingRequestError ||
+      (error instanceof ApiError && error.status >= 500) ||
       (error instanceof DOMException && error.name === "AbortError")
     )
       throw new PlanningError(
-        error instanceof PendingRequestError
-          ? error.message
-          : isWrite
-            ? "Сервер не подтвердил действие. Ввод сохранён; повторите после восстановления соединения."
-            : "Не удалось загрузить данные планирования. Проверьте соединение и повторите загрузку.",
+        isWrite
+          ? "Исход сохранения неизвестен. Ввод сохранён. Перечитайте состояние перед новой отправкой: повтор может создать дубликат."
+          : "Не удалось загрузить данные планирования. Проверьте соединение и повторите загрузку.",
         "UNAVAILABLE",
       );
     throw error;
@@ -181,7 +173,7 @@ export const getPlanningCandidates = async (
 export type PlanningSaved = z.infer<typeof planningSavedSchema>;
 
 /**
- * Сохраняет форму по её исходной ревизии; повтор не создаёт второй план.
+ * Сохраняет форму по её исходной ревизии без автоматического повтора.
  */
 export const savePlan = async (project: string, plan: PlanningPlan): Promise<PlanningSaved> => {
   const fields = {
@@ -200,23 +192,16 @@ export const savePlan = async (project: string, plan: PlanningPlan): Promise<Pla
   };
   const isNew = plan.revision === 0;
   const payload = { ...fields, ...(isNew ? {} : { ifRevision: plan.revision }) };
+  const requestId = crypto.randomUUID();
   return request(
     planningSavedSchema,
     () =>
-      pendingApiRequest(
-        project,
-        `plan-save:v2:${plan.id}:${plan.revision}`,
-        payload,
-        (requestId) =>
-          isNew
-            ? getProjectApi(project).plans.createPlan(
-                createPlanSchema.parse({ ...payload, requestId }),
-              )
-            : getProjectApi(project).plans.updatePlan(
-                { reference: plan.id },
-                updatePlanSchema.parse({ ...payload, requestId }),
-              ),
-      ),
+      isNew
+        ? getProjectApi(project).plans.createPlan(createPlanSchema.parse({ ...payload, requestId }))
+        : getProjectApi(project).plans.updatePlan(
+            { reference: plan.id },
+            updatePlanSchema.parse({ ...payload, requestId }),
+          ),
     true,
   );
 };
@@ -257,15 +242,9 @@ export const changePlanStage = async (
   return request(
     planningSavedSchema,
     () =>
-      pendingApiRequest(
-        project,
-        `plan-stage:v2:${planId}:${revision}:${stage.id}:${action}`,
-        payload,
-        (requestId) =>
-          getProjectApi(project).plans.changePlanStage(
-            { reference: planId },
-            changeStageSchema.parse({ ...payload, requestId }),
-          ),
+      getProjectApi(project).plans.changePlanStage(
+        { reference: planId },
+        changeStageSchema.parse({ ...payload, requestId: crypto.randomUUID() }),
       ),
     true,
   );
@@ -288,15 +267,9 @@ export const changePlanTasks = async (
   return request(
     planningSavedSchema,
     () =>
-      pendingApiRequest(
-        project,
-        `plan-tasks:v2:${planId}:${revision}:${stage.id}`,
-        payload,
-        (requestId) =>
-          getProjectApi(project).plans.changePlanTasks(
-            { reference: planId },
-            changePlanTasksSchema.parse({ ...payload, requestId }),
-          ),
+      getProjectApi(project).plans.changePlanTasks(
+        { reference: planId },
+        changePlanTasksSchema.parse({ ...payload, requestId: crypto.randomUUID() }),
       ),
     true,
   );
@@ -316,15 +289,9 @@ export const transitionPlan = async (
   return request(
     planningSavedSchema,
     () =>
-      pendingApiRequest(
-        project,
-        `plan-transition:v2:${planId}:${revision}:${action}`,
-        payload,
-        (requestId) =>
-          getProjectApi(project).plans.transitionPlan(
-            { reference: planId },
-            transitionPlanSchema.parse({ ...payload, requestId }),
-          ),
+      getProjectApi(project).plans.transitionPlan(
+        { reference: planId },
+        transitionPlanSchema.parse({ ...payload, requestId: crypto.randomUUID() }),
       ),
     true,
   );
@@ -353,15 +320,9 @@ export const transferPlanTask = async (
   return request(
     planningSavedSchema,
     () =>
-      pendingApiRequest(
-        project,
-        `plan-transfer:v2:${source.id}:${task}:${source.revision}:${target.id}:${target.revision}`,
-        payload,
-        (requestId) =>
-          getProjectApi(project).plans.transferPlanTask(
-            { reference: source.id },
-            transferPlanTaskSchema.parse({ ...payload, requestId }),
-          ),
+      getProjectApi(project).plans.transferPlanTask(
+        { reference: source.id },
+        transferPlanTaskSchema.parse({ ...payload, requestId: crypto.randomUUID() }),
       ),
     true,
   );

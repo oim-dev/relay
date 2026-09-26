@@ -13,7 +13,7 @@ export type EntityCodec = {
   kind: string;
   collection: string;
   dataVersion: number;
-  /** Технический владелец сохраняет историю и ID, но не занимает публичные ключи и каталог. */
+  /** Технический владелец сохраняет состояние и ID, но не занимает публичные ключи и каталог. */
   addressable?: boolean;
   indexes?(record: EntityRecord): { index: string; key: string; value: JsonValue }[];
   schema: z.ZodType<Record<string, unknown>>;
@@ -28,7 +28,11 @@ export type EntityCodec = {
   ): Pick<StorageCard, "title" | "status" | "selectors"> &
     Partial<Pick<StorageCard, "summary" | "active" | "context" | "document">>;
 };
-export type EntityRecord = Omit<StoredEntity, "data"> & { data: Record<string, unknown> };
+export type EntityRecord = Omit<StoredEntity, "data" | "schemaVersion"> & {
+  data: Record<string, unknown>;
+  /** Вход предметных адаптеров; на диск всегда записывается оболочка 3. */
+  schemaVersion: 1 | 2 | 3;
+};
 
 /** Виды регистрируют кодеки; общий алгоритм пути и резолвер не перечисляют предметные виды. */
 export class EntityStorageRegistry {
@@ -78,6 +82,7 @@ export class EntityStorageRegistry {
     );
     const stored = storedEntitySchema.parse({
       ...record,
+      schemaVersion: 3,
       data: codec.encode(codec.schema.parse(record.data)),
     });
     this.validate(stored);
@@ -87,6 +92,33 @@ export class EntityStorageRegistry {
   validate(value: unknown): StoredRecord {
     const record = storedRecordSchema.parse(value);
     const codec = this.definition(record.kind);
+    invariant(
+      record.kind === "task" ||
+        (record.comments === undefined && record.commentSequence === undefined),
+      "INVALID_DATA",
+      "Лента комментариев допустима только у задачи",
+      5,
+    );
+    if (record.comments !== undefined) {
+      let sequence = 0;
+      for (const comment of record.comments) {
+        invariant(
+          comment.taskId === record.id &&
+            comment.id === String(comment.sequence) &&
+            comment.sequence > sequence,
+          "INVALID_DATA",
+          "Неверная принадлежность или порядок комментариев",
+          5,
+        );
+        sequence = comment.sequence;
+      }
+      invariant(
+        record.commentSequence !== undefined && record.commentSequence >= sequence,
+        "INVALID_DATA",
+        "Потерян максимальный номер ленты комментариев",
+        5,
+      );
+    }
     invariant(
       codec.addressable === false
         ? record.key === null && record.aliases.length === 0
