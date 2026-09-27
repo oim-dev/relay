@@ -1,51 +1,24 @@
 # Relay Server
 
-`@oim-dev/relay-server` предоставляет REST API, SSE, OpenAPI, Swagger и готовый
-веб-интерфейс. Команда: `relay-server`. Требуется Node.js 22+.
+`@oim-dev/relay-server` предоставляет REST API, SSE, Swagger и готовый Web-интерфейс
+к проектным данным Relay. Требуется Node.js 22+. Команда пакета — `relay-server`.
 
-[Контракт приложения](https://github.com/oim-dev/relay/blob/main/docs/product/applications/server/README.md) ·
-[Состояние реализации](https://github.com/oim-dev/relay/blob/main/docs/engineering/implementation/applications.md) ·
-[Протокол разработки](https://github.com/oim-dev/relay/blob/main/docs/development/PROTOCOL.md).
-
-Ссылки ведут на документацию целевой ветки `main` в GitHub.
-Она может отличаться от установленной версии пакета. Параметры установленной команды
-проверяйте через `--help`.
+Из каталога инициализированного проекта или workspace:
 
 ```bash
 npx @oim-dev/relay-server --open
-npx @oim-dev/relay-server --config ./relay.workspace.json --port 3001
 ```
 
-Сервер ищет конфигурацию вверх от текущего каталога:
+Сервер найдёт ближайшую конфигурацию, выведет адрес и откроет браузер.
+Он слушает только loopback; `Ctrl+C` завершает процесс и подписки.
+Запуск не инициализирует отсутствующий проект и не запускает агентов или CI/CD.
 
-- `.relay/config.json` — local, один проект;
-- `relay.workspace.json` — workspace, несколько независимых проектных баз.
+- [Запуск, параметры, Web и устранение ошибок](https://github.com/oim-dev/relay/blob/main/apps/server/docs/USAGE.md)
+- [Конфигурация и подключения](https://github.com/oim-dev/relay/blob/main/packages/project-runtime/docs/CONFIGURATION.md)
+- [REST API](https://github.com/oim-dev/relay/blob/main/packages/server-runtime/docs/API.md)
+- [Начало работы с Relay](https://github.com/oim-dev/relay/blob/main/docs/guides/GETTING_STARTED.md)
+- [Разработка и проверка поставки](https://github.com/oim-dev/relay/blob/main/apps/server/docs/DEVELOPMENT.md)
 
-В ближайшем каталоге workspace имеет приоритет. Явный `--config` переопределяет
-`RELAY_CONFIG` и поиск. Все пути в конфиге относительны к этому файлу.
-
-Порт: `--port` → `RELAY_PORT` → `server.port` → `4700`.
-Автор интерфейса: `--actor` → `RELAY_ACTOR` → `human`.
-`--format json` выводит адрес и PID процесса; `Ctrl+C` завершает сервер и подписки.
-
-| Адрес                               | Назначение                                  |
-| ----------------------------------- | ------------------------------------------- |
-| `/`                                 | Веб-интерфейс с выбором проекта в workspace |
-| `/api/v1/server`                    | Режим и доступные проекты                   |
-| `/api/v1/projects`                  | Реестр сервера                              |
-| `/api/v1/projects/:project/context` | Конфигурация выбранного проекта             |
-| `/api/v1/projects/:project/tasks`   | Задачи проекта                              |
-| `/api/v1/projects/:project/events`  | SSE проекта                                 |
-| `/api/docs`                         | Swagger                                     |
-| `/api/openapi.json`                 | OpenAPI 3.1                                 |
-
-В local проектные операции также доступны непосредственно под `/api/v1`.
-Workspace требует адресации проекта. Сервер слушает `127.0.0.1`.
-
-Runtime принадлежит `packages/server-runtime`; приложение отвечает за пользовательскую
-точку входа и поставку Web в `dist/web`. Каждый запрос имеет собственный контекст,
-наблюдатели разделяются только внутри одной базы. Реестр перечитывается без перезапуска.
-
-Разработка: `pnpm run dev:server`, `pnpm run build:server`, `pnpm run test:server`.
-Поставка: `pnpm run package:check` из корня монорепозитория.
+Ссылки ведут на ветку `main` и могут отличаться от установленной версии.
+Параметры своей команды проверяйте через `npx @oim-dev/relay-server --help`.
 Исходники: <https://github.com/oim-dev/relay>.
