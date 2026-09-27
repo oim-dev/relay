@@ -13,7 +13,7 @@ function optionDescription(option) {
   if (option.argChoices) description += ` Значения: ${option.argChoices.join(", ")}.`;
   if (option.defaultValue !== undefined)
     description += ` По умолчанию: ${JSON.stringify(option.defaultValue)}.`;
-  return cell(description);
+  return cell(description.replace(/(?<![\w/-])relay-cli(?= )/g, "npx @oim-dev/relay-cli"));
 }
 
 /** Строит справочник из тех же определений, которые предоставляют --help. */
@@ -28,9 +28,9 @@ function commandReference() {
   const lines = [
     "# Команды Relay CLI",
     "",
-    "Справочник сформирован из зарегистрированных команд. Порядок работы и примеры — в [главном руководстве](../skill.md) и [сценариях](EXAMPLES.md).",
+    "Справочник сформирован из зарегистрированных команд. Порядок работы — в [главном руководстве](../../skill.md), семантика — в [CLI](CLI.md), примеры — в [сценариях](../agent/EXAMPLES.md).",
     "",
-    "`relay-cli` означает установленную команду или `npx @oim-dev/relay-cli`. В workspace указывайте проект префиксом либо `--project`. Конкретный help: `relay-cli <команда> --help`.",
+    "Запускайте только через `npx @oim-dev/relay-cli`. В workspace указывайте проект префиксом либо `--project`. Конкретный help: `npx @oim-dev/relay-cli <команда> --help`.",
     "",
     "## Общие параметры",
     "",
@@ -50,7 +50,7 @@ function commandReference() {
     lines.push(
       `## ${path.join(" ")}`,
       "",
-      `**Синтаксис:** \`relay-cli ${path.join(" ")} ${command.usage()}\`.`,
+      `**Синтаксис:** \`npx @oim-dev/relay-cli ${path.join(" ")} ${command.usage()}\`.`,
       "",
       command.description(),
       "",

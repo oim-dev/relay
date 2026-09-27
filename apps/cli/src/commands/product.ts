@@ -44,14 +44,15 @@ export function registerProduct(program: Command, runtime: Runtime): void {
     name: "product",
     description: "Паспорт, фичи, реализации и документы продукта",
     details:
-      "Продукт независим от задач. Markdown передаётся непосредственно текстом. Все изменения требуют автора; обновления — прочитанной ревизии.",
+      "Паспорт и требования описывают продукт, задачи — работу по их реализации. Markdown передаётся непосредственно текстом. Все изменения требуют автора; обновления — прочитанной ревизии.",
     examples: [["relay-cli product overview", "Познакомиться с продуктом"]],
   });
   for (const name of ["state", "overview"] as const)
     registerCommand(group, runtime, {
       name,
       description: name === "state" ? "Полный снимок продукта" : "Компактная карта продукта",
-      details: "Общая готовность вычисляется по контрактам всех проектов.",
+      details:
+        "Готовность продукта выбранного проекта вычисляется по задачам, активным реализациям и обязательным сценариям. Ручные отметки статуса не переопределяют расчёт.",
       examples: [[`relay-cli product ${name}`, "Прочитать продукт"]],
       run: async (context) => {
         if (name === "state") {
@@ -129,11 +130,11 @@ export function registerProduct(program: Command, runtime: Runtime): void {
       description: "Изменить реализацию или разрешить конфликт ключа",
       arguments: { ref: "ID или ключ реализации" },
       details:
-        "Передайте прочитанную ревизию. done подтверждает актуальные требования. После потери ответа перечитайте состояние; request-id не предотвращает повторную запись.",
+        "Передайте прочитанную ревизию. status — совместимая ручная отметка: даже done не подтверждает требования и не меняет вычисляемую готовность. После потери ответа перечитайте состояние; request-id не предотвращает повторную запись.",
       examples: [
         [
           "relay-cli product implementation update WEB-FI-12 --if-revision 1 --status partial --actor agent",
-          "Обновить готовность",
+          "Сохранить совместимую ручную отметку",
         ],
       ],
       configure: (command) =>
@@ -145,7 +146,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
           )
           .option("--title <text>", "Однострочный заголовок")
           .option("--description <markdown>", "Полное описание Markdown")
-          .option("--status <status>", "none, partial или done")
+          .option("--status <status>", "Совместимая ручная отметка: none, partial или done")
           .option("--key <key>", "Свободный ключ; ID и связи сохраняются")
           .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
       run: async (context, input) => {
@@ -166,11 +167,11 @@ export function registerProduct(program: Command, runtime: Runtime): void {
     name: "context",
     description: "Собрать связанный контекст",
     details: "Паспорт, исходные контракты, реализации и документы с причинами включения.",
-    examples: [["relay-cli product context --id scenario_<id>", "Контекст сценария"]],
+    examples: [["relay-cli product context --id SCENARIO-1", "Контекст сценария"]],
     configure: (command) =>
       command
         .option("--id <id>", "Цель контекста")
-        .option("--application <id>", "Проект-реализатор"),
+        .option("--application <id>", "Приложение-реализатор"),
     run: async (context, input) => {
       const data = await context.backend.product.context({
         id: input.options.id,
@@ -210,14 +211,11 @@ export function registerProduct(program: Command, runtime: Runtime): void {
   });
   registerCommand(group, runtime, {
     name: "migrate",
-    description: "Перенести продукт в каталоги и многострочный JSON",
+    description: "Совместимая команда без изменений в формате 4",
     details:
-      "Только локальный режим: --local --config <проект/.relay/config.json>. Перед запуском остановите старые клиенты и сохраните копию product. Возобновляемый перенос сохраняет содержание, ID и ревизии, но не историю и результаты запросов. Серверный конфиг workspace не подходит.",
+      "Только локальный режим выбранного проекта. В формате 4 ничего не переносит и возвращает migrated: 0. Для прежней базы выполните storage migrate. Нестандартную базу выбирайте через --config <проект/.relay/config.json>, не через workspace-конфиг.",
     examples: [
-      [
-        "relay-cli --local --config .relay/config.json product migrate",
-        "Обновить дисковый формат продукта",
-      ],
+      ["relay-cli --local product migrate", "Вызвать совместимую команду в текущем формате"],
     ],
     run: async (context) => {
       const workspace = context.backend.localWorkspace;
@@ -237,7 +235,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
     name: "save",
     description: "Создать или изменить запись через JSON",
     details:
-      "JSON содержит action, fields, id/ifRevision для update, ifVersion для scope и requestId. --description и --body заменяют соответствующее поле прямым многострочным текстом.",
+      "JSON содержит action, fields, id/ifRevision для update, ifVersion для scope/contract и необязательный requestId для корреляции. --description и --body заменяют соответствующее поле прямым многострочным текстом.",
     examples: [
       [
         `relay-cli product save --json '{"action":"create","fields":{"kind":"feature","name":"Каталог","summary":"Поиск товаров","description":"## Поведение\\n\\nОписание"}}' --actor agent`,
@@ -338,7 +336,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
             .option("--links <json>", "Типизированные связи документа", "[]")
             .option(
               "--document-kind <kind>",
-              "Назначение документа: specification/description/rules/decision",
+              "Назначение документа: specification/description/rules/instruction/proposal/decision/research",
               "description",
             )
             .option("--if-revision <n>", "Прочитанная ревизия", integer(0, Number.MAX_SAFE_INTEGER))
@@ -408,11 +406,11 @@ export function registerProduct(program: Command, runtime: Runtime): void {
       description: "Заменить весь активный состав",
       arguments: { applicationId: "ID или ключ приложения" },
       details:
-        "--json содержит массив контрактов: featureId, scenarioId (или null), title, description, status. Пустой массив снимает участие, сохраняя историю ссылок.",
+        "--json содержит массив контрактов: featureId, scenarioId (или null), title, description, status. status — совместимая ручная отметка, не вычисляемая готовность. Пустой массив снимает участие, сохраняя адреса, тексты и существующие ссылки реализаций; это не история изменений.",
       examples: [
         [
-          "relay-cli product scope replace application_<id> --json '[]' --if-revision 1 --if-version <version> --actor agent",
-          "Снять участие",
+          "relay-cli --actor agent product scope replace APPLICATION_ID --json '[]' --if-revision 1 --if-version VERSION",
+          "Снять участие; APPLICATION_ID, ревизию и VERSION замените прочитанными значениями",
         ],
       ],
       configure: (command) =>
@@ -464,20 +462,20 @@ export function registerProduct(program: Command, runtime: Runtime): void {
     requestId?: string;
   }>(contractGroup, runtime, {
     name: "update <id>",
-    description: "Изменить или подтвердить контракт",
+    description: "Изменить содержание и совместимую отметку контракта",
     arguments: { id: "ID контракта" },
     details:
-      "done подтверждает актуальные общие требования и описание реализации. Остальные контракты не переподтверждаются.",
+      "status — совместимая ручная отметка: даже done не подтверждает требования и не меняет вычисляемую готовность. Остальные контракты не изменяются.",
     examples: [
       [
-        "relay-cli product contract update contract_<id> --application application_<id> --status done --if-revision 1 --if-version <version> --actor agent",
-        "Подтвердить реализацию",
+        "relay-cli --actor agent product contract update CONTRACT_ID --application APPLICATION_ID --status done --if-revision 1 --if-version VERSION",
+        "Сохранить ручную отметку; ID, ревизию и VERSION замените прочитанными значениями",
       ],
     ],
     configure: (command) =>
       command
         .requiredOption("--application <id>", "Приложение")
-        .requiredOption("--status <status>", "Готовность реализации: none/partial/done")
+        .requiredOption("--status <status>", "Совместимая ручная отметка: none/partial/done")
         .option("--title <text>", "Заголовок вклада")
         .option("--description <markdown>", "Многострочное описание напрямую")
         .requiredOption("--if-revision <n>", "Ревизия состава", integer(1, Number.MAX_SAFE_INTEGER))

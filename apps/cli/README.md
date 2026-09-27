@@ -1,36 +1,49 @@
 # Relay CLI
 
-`@oim-dev/relay-cli` — терминальный клиент Relay. Команда: `relay-cli`.
-Требуется Node.js 22+.
+`@oim-dev/relay-cli` — интерфейс памяти проекта Relay прежде всего для агентов,
+также для человека в терминале. Читает знания, задачи, планы и связи, сохраняет
+предметные изменения через Core или необязательный HTTP-сервер. Требуется Node.js 22+.
 
-[Контракт приложения](https://github.com/oim-dev/relay/blob/main/docs/product/applications/cli/README.md) ·
-[Состояние реализации](https://github.com/oim-dev/relay/blob/main/docs/engineering/implementation/applications.md) ·
-[Протокол разработки](https://github.com/oim-dev/relay/blob/main/docs/development/PROTOCOL.md).
-
-Ссылки ведут на документацию целевой ветки `main` в GitHub.
-Она может отличаться от установленной версии пакета. Параметры установленной команды
-проверяйте через `--help`.
+Первый запуск для агента: установите Relay skill, затем подготовьте проект.
+Подробности — [начало работы](https://github.com/oim-dev/relay/blob/main/docs/guides/GETTING_STARTED.md).
 
 ```bash
+npx skills add oim-dev/relay
 npx @oim-dev/relay-cli init
-npx @oim-dev/relay-cli task create --board product --title "Первая задача" --actor human
+```
+
+Далее агент сохраняет и уточняет знания проекта, а затем создаёт задачи на их основе.
+Skill — подготовка агентского сценария, не runtime-зависимость CLI: обычное чтение
+и ручное обслуживание доступны без него. Например, проверить чтение списка можно так:
+
+```bash
 npx @oim-dev/relay-cli task list
 ```
 
-`.relay/config.json` выбирает local: прямой Core либо HTTP по `server.url`.
-`relay.workspace.json` выбирает workspace: общий сервер и явный проект.
+Запускайте команды через npx без глобальной установки. `--help` работает без проекта.
+Агент читает обычный человекочитаемый вывод: пользователь видит команды, знания и результаты.
+Если конфигурация меняет формат, явно выберите `--format text`. JSON используется для отладки CLI.
+
+`init` создаёт `.relay/config.json` и хранилище в текущем проекте. Конфиг ищется
+вверх от рабочего каталога. Для уже настроенного workspace нужен выбранный проект;
+сервер с Web запускается отдельно пакетом `@oim-dev/relay-server`.
 
 ```bash
 npx @oim-dev/relay-cli a task list
-npx @oim-dev/relay-cli --project b task get PRODUCT-1
 npx @oim-dev/relay-cli --server-url http://127.0.0.1:4700 --project a task get PRODUCT-1
 ```
 
-`--config` переопределяет `RELAY_CONFIG` и поиск вверх. `--server-url` переопределяет
-`RELAY_SERVER_URL` и конфиг. `--local` доступен для прямой работы с одним проектом.
-Автор мутации: `--actor` или `RELAY_ACTOR`.
+Автор предметной записи — `--actor` или `RELAY_ACTOR`; обновление требует прочитанной
+ревизии. После потери ответа сначала прочитайте состояние: `requestId` — корреляция,
+не гарантия безопасного повтора. Для обычного локального проекта `--local` и
+`--config` не нужны; они полезны для обслуживания или выбора нестандартной базы.
 
-Сервер с Web запускается отдельным пакетом `@oim-dev/relay-server`.
+- [Полный справочник команд и параметров](https://github.com/oim-dev/relay/blob/main/apps/cli/docs/CLI.md)
+- [Терминальное представление](https://github.com/oim-dev/relay/blob/main/apps/cli/docs/TERMINAL.md)
+- [Разработка и расширение CLI](https://github.com/oim-dev/relay/blob/main/apps/cli/docs/EXTENDING.md)
+- [Продукт](https://github.com/oim-dev/relay/blob/main/docs/PRODUCT.md),
+  [возможности](https://github.com/oim-dev/relay/blob/main/docs/CAPABILITIES.md),
+  [предметные правила](https://github.com/oim-dev/relay/blob/main/docs/domain/README.md)
 
-Исходники: <https://github.com/oim-dev/relay>.
-Разработка: `pnpm run build:cli`, `pnpm run test:cli`, `pnpm run package:check` из корня.
+Справочники также входят в каталог `docs` npm-пакета. HTTPS-ссылки ведут на `main`
+и могут отличаться от установленной версии; её синтаксис проверяйте через `--help`.

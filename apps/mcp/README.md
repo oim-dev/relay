@@ -1,43 +1,43 @@
 # Relay MCP
 
-`@oim-dev/relay-mcp` подключает AI-агентов к Relay Server через Streamable HTTP.
-Требуется Node.js 22+.
+`@oim-dev/relay-mcp` предоставляет агентам инструменты Relay через **stdio или Streamable HTTP**.
+MCP обращается только к уже запущенному Relay Server, не открывает базу напрямую.
+Нужны Node.js 22+ и npm; checkout Relay не требуется.
 
-[Контракт приложения](https://github.com/oim-dev/relay/blob/main/docs/product/applications/mcp/README.md) ·
-[Состояние реализации](https://github.com/oim-dev/relay/blob/main/docs/engineering/implementation/applications.md) ·
-[Протокол разработки](https://github.com/oim-dev/relay/blob/main/docs/development/PROTOCOL.md).
+## Подключение
 
-Ссылки ведут на документацию целевой ветки `main` в GitHub.
-Она может отличаться от установленной версии пакета. Параметры установленной команды
-проверяйте через `--help`.
+Первый шаг в корне вашего проекта — установить пользовательский скилл:
 
 ```bash
-npx @oim-dev/relay-mcp --server-url http://127.0.0.1:4700
+npx skills add oim-dev/relay
 ```
 
-Адрес MCP по умолчанию — `http://127.0.0.1:4710/mcp`.
-`--server-url` переопределяет `RELAY_SERVER_URL`. Без явного адреса настройки
-подключения читаются из ближайшего `.relay/config.json` или `relay.workspace.json`.
-Relay Server должен уже работать.
+Выберите Relay и своего агента. Инициализация проекта и запуск Server описаны в
+[начале работы](https://github.com/oim-dev/relay/blob/main/docs/guides/GETTING_STARTED.md).
+Обычный агентский маршрут — проектный конфиг, по которому клиент запускает:
 
-`projects_list` показывает режим и доступные проекты. В local `project` можно
-опустить. В workspace он обязателен для проектных операций даже при одной регистрации.
-
-```text
-board_task_get({ project: "a", reference: "PRODUCT-1" })
+```bash
+npx @oim-dev/relay-mcp --transport stdio --server-url http://127.0.0.1:4700
 ```
 
-Порт MCP: `--port`, затем `RELAY_MCP_PORT`, конфиг и `4710`.
-Проекты регистрируются на Relay Server. MCP использует общий REST SDK и получает
-изменения реестра без перезапуска. При недоступном сервере инструмент возвращает ошибку.
+Не запускайте stdio вручную: [проектные конфиги клиентов](https://github.com/oim-dev/relay/blob/main/apps/mcp/docs/CLIENTS.md)
+задают запуск через npx. После настройки перезапустите клиент и вызовите `projects_list({})`.
+Совместимый запуск без `--transport` остаётся HTTP на `http://127.0.0.1:4710/mcp`;
+он требует отдельно управляемого процесса и HTTP-подключения клиента.
+В local поле `project` можно опустить; в workspace оно обязательно для проектных вызовов.
 
-`requestId` служит только корреляции запроса: дедупликации и сохранённого результата
-для повтора нет. MCP не повторяет мутации автоматически. После потери ответа прочитайте
-текущее состояние (для публикации — сообщения задачи) и согласуйте дальнейшее действие;
-не повторяйте запись вслепую и не подставляйте свежую ревизию в старое тело.
-Повтор создания может создать ещё одну запись, повтор изменения со старой ревизией
-возвращает конфликт. Комментарии, текущее состояние и ревизии сохраняются;
-инструменты автоматической истории и аудита недоступны.
+При записи передавайте своего `actor` и прочитанную ревизию, если действие её требует.
+`requestId` — только корреляция, не дедупликация и не сохранённая квитанция.
+После потери ответа сначала перечитайте состояние; не повторяйте запись вслепую.
 
-Исходники и справочник: <https://github.com/oim-dev/relay>.
-Разработка: `pnpm run build:mcp`, `pnpm run test:mcp`, `pnpm run package:check`.
+## Документация
+
+- [Подключение, все инструменты и аргументы](https://github.com/oim-dev/relay/blob/main/apps/mcp/docs/MCP.md).
+- [Устройство и разработка MCP](https://github.com/oim-dev/relay/blob/main/apps/mcp/docs/DEVELOPMENT.md).
+- [Конфигурация](https://github.com/oim-dev/relay/blob/main/packages/project-runtime/docs/CONFIGURATION.md).
+- [Общий HTTP API](https://github.com/oim-dev/relay/blob/main/packages/server-runtime/docs/API.md).
+
+Ссылки ведут на канонические страницы ветки `main`, которая может отличаться
+от установленного пакета. Каталог `docs` не включён в npm `files` этого приложения;
+документация читается по HTTPS. Параметры своей версии проверяйте через
+`npx @oim-dev/relay-mcp --help`, инструменты — через discovery клиента.

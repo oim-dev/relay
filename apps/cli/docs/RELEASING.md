@@ -1,19 +1,9 @@
-# Релизы Relay CLI, Server и MCP
+# Поставка и публикация Relay CLI
 
-Процесс находится в [руководстве по релизам](https://github.com/oim-dev/relay/blob/main/docs/development/RELEASING.md).
-Ссылки ведут на ветку `main`, не на документацию установленной версии пакета.
-Обновлённый процесс CI станет доступен в ней после merge соответствующего PR;
-до этого страница описывает прежний процесс базового выпуска `0.6.1`.
+Проверка архивов, версии и публикация принадлежат общему
+[руководству поставки](https://github.com/oim-dev/relay/blob/main/scripts/release/README.md).
+Этот документ — вход из установленного npm-пакета, не отдельный релизный процесс CLI.
+Ссылка ведёт на ветку `main` и может отличаться от установленной версии.
 
-## Релиз по тегу
-
-[Публикация проверенных архивов при Publish GitHub Release](https://github.com/oim-dev/relay/blob/main/docs/development/RELEASING.md#публикация-через-ci).
-Одна отправка тега не запускает npm-публикацию нового процесса.
-
-## Ручная публикация
-
-[Ручной fallback с отдельным разрешением](https://github.com/oim-dev/relay/blob/main/docs/development/RELEASING.md#локальная-публикация).
-
-## Уже опубликованная версия и повторный запуск
-
-[Сверка integrity и повтор](https://github.com/oim-dev/relay/blob/main/docs/development/RELEASING.md#повтор-после-неполной-публикации).
+Команды `relay-cli release` работают с записями выпусков пользовательского проекта,
+а не публикуют npm-пакеты: см. [справочник CLI](CLI.md#релизы).

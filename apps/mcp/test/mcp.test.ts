@@ -1087,10 +1087,7 @@ test("несколько MCP-клиентов, общий Relay Server, горя
     "log_add",
   ];
   assert.ok(toolsBefore.tools.every((tool) => !removed.includes(tool.name)));
-  const documentation = await readFile(
-    new URL("../../../docs/reference/MCP.md", import.meta.url),
-    "utf8",
-  );
+  const documentation = await readFile(new URL("../docs/MCP.md", import.meta.url), "utf8");
   for (const tool of toolsBefore.tools) {
     assert.equal(tool.annotations?.idempotentHint, tool.annotations?.readOnlyHint);
     if (!tool.annotations?.readOnlyHint) {

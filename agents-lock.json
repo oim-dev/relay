@@ -4,39 +4,39 @@
   "outputs": [
     {
       "path": ".claude/agents/relay-backend.md",
-      "sha256": "e589c997e8aac0a08c5f2f0b6da383f3261dee6182f689771ab752c23100cc5c"
+      "sha256": "27ca381650ff62f0b77678447f2e26aff7bd7e9208630543617e2a4b429039fa"
     },
     {
       "path": ".claude/agents/relay-cli.md",
-      "sha256": "c9e460cb8dc9c6653c6efa3c55dfe156c2c9f3eb0918987d5bc663977195c981"
+      "sha256": "a51689aefa95b951759d083984d9baf7e60531392773fdf5c61f8286742f15c1"
     },
     {
       "path": ".claude/agents/relay-core.md",
-      "sha256": "2205c2a461e0ef49ed1df1a1668f822e33ec4b3ca8fb5799b5d45bdbc43b74d6"
+      "sha256": "28fd640e4b70ca304a7fea0b4aa68e856d9cf0cf983c85fa5e96faae72e20137"
     },
     {
       "path": ".claude/agents/relay-delivery.md",
-      "sha256": "00a4f7ea807b6ffebe8ea42b9bfe08fd7da7612c555dc3f06546bf8c52fea9e7"
+      "sha256": "e790e3e21845a7d3ed79f89ac3e31a4ec396736d6a0e97d5eb75c07cd168b164"
     },
     {
       "path": ".claude/agents/relay-docs.md",
-      "sha256": "64258902866c90f8799eeee1f38f1b04c1c22f0f75bdb7f060b113e72204cdbc"
+      "sha256": "b9e811ad651d61dd2db3a265d2963fc431013ac3c53502f3a825024aa873b07b"
     },
     {
       "path": ".claude/agents/relay-frontend.md",
-      "sha256": "897b96bb281cb61a7cae59d5e5a49a79e33a0daed21141e749a768c8dbacbb7d"
+      "sha256": "4396a8593bdd34072160ba06262cd4f474c0c6242da79bc75c5f3619e287b727"
     },
     {
       "path": ".claude/agents/relay-mcp.md",
-      "sha256": "76ff7bcb26ab73da07f479325ba920a391b448ebc8e25ea3a11c58cb883b31f0"
+      "sha256": "404b43df763b005ae0100d2029d527f9deffd4295f75068384103ff999440963"
     },
     {
       "path": ".claude/agents/relay-orchestrator.md",
-      "sha256": "aade1fc96fecf14cd4cceafcedf1c8a6b46e1436f1485e7fe34ca620a20acb03"
+      "sha256": "bc5b86c6541a0198ed7ddfc2cdaa49b6d36cd70c88d75f09e7508a26913a4874"
     },
     {
       "path": ".claude/agents/relay-qa.md",
-      "sha256": "bce9c2a2bd257682ad70bbebfe05953eb4721529f923a8c8b5efba9a6ae3650b"
+      "sha256": "1862c7d333f13fb6f8ad33ee0a582d36ce767b58ffc6de665a7138dc1fcda0f9"
     },
     {
       "path": ".claude/settings.json",
@@ -44,75 +44,75 @@
     },
     {
       "path": ".codex/agents/relay-backend.toml",
-      "sha256": "ca6972a54c83a35553bc52fc4801c67fafb231a9fa9d189ed33cd614d5d01d36"
+      "sha256": "b5564b3b888ecc2d70b1ebc9268046ff9b9114f9f20a8a9f50fb5dc53defa677"
     },
     {
       "path": ".codex/agents/relay-cli.toml",
-      "sha256": "aca7233d5e8897b9caa86965db99c50888d1e1c37190d4d40750c4698bac16a0"
+      "sha256": "8179403e8e2f68e37386f4f5f10a963885befbe2e2fa34cb27e6e699ade9b78d"
     },
     {
       "path": ".codex/agents/relay-core.toml",
-      "sha256": "6711b497d275d68b6e527f6cac99414b1e3ae21d8be24ab13412ac5ec9eefbf1"
+      "sha256": "9254cda991364a9ec1452c5329b598a437d280ab96240595086b41927bd42f08"
     },
     {
       "path": ".codex/agents/relay-delivery.toml",
-      "sha256": "cfd27219f26485cf6229ea783b6e331211b9770359aef52962232fdc8d1a3c1e"
+      "sha256": "77fad4cc60bc32c8ddf4185cba0af2eb79b80dd534a9a2dcfe5501110e61f33d"
     },
     {
       "path": ".codex/agents/relay-docs.toml",
-      "sha256": "74da60adfbe06f501fa9d49e24ed19a4fe9e089668aff275eda6da343150a5e9"
+      "sha256": "215b8e29a44f2f31530aff754070e5f096fb5e6c2c865b75844d75105ef50b50"
     },
     {
       "path": ".codex/agents/relay-frontend.toml",
-      "sha256": "13c45575a34f6010df7df7e08c530c52f71553ad27f8a79ad4f2f01bffc33a2c"
+      "sha256": "e410cd201c55dfd59bf578c7a76d7058c86b84aedcd471f53ef2f4d735c8974e"
     },
     {
       "path": ".codex/agents/relay-mcp.toml",
-      "sha256": "8a8a08b80952dae4eec8ff552cd0412446a1e45bf650b40c97dcc830f57dd5ba"
+      "sha256": "5f518e578725b8b87b24d24ada6d531c09febc2b8350ea2464d8602bafd8bff5"
     },
     {
       "path": ".codex/agents/relay-qa.toml",
-      "sha256": "10dd7aa2ed421e15929afad82a24b00d488365a17cb288287eddd2f17513293b"
+      "sha256": "81bfddb425ac8ddb3eed9220181e204a3a2b571aa3023da9f3465983b8cc06e4"
     },
     {
       "path": ".codex/config.toml",
-      "sha256": "a383a1c4e2632527fa28662483fd4b63151a57ace6cbfc59272bc04244a96968"
+      "sha256": "896fe5a5cc23a963095fe3adb3b4b8a0172aaee83afa2951e009775b52b7555c"
     },
     {
       "path": ".opencode/agents/relay-backend.md",
-      "sha256": "421bf6617472ec0a43ebf8ec24d867891c7fc72a59ea9e75c82a5f6de4a42dec"
+      "sha256": "6d1775ce4603b671d7c5f9df56ff8334e9711d49d27564cce3cffca6286055fe"
     },
     {
       "path": ".opencode/agents/relay-cli.md",
-      "sha256": "e1bd6d36dec7464a555c9d5930de3c29658c20c0e51e045378ed3d43f20433c5"
+      "sha256": "e06a2df1cc0f137af69630051e51bc0ac2e57130af9ad2dedeeab7a610617ec8"
     },
     {
       "path": ".opencode/agents/relay-core.md",
-      "sha256": "53db6266ecba90f30021d4a79a53c8afd9eb7dcfd893700f78b27719c4d46143"
+      "sha256": "fc27a69e1a797c178d3d66efc0e0515faef0f6855f801c188d420707a05cd889"
     },
     {
       "path": ".opencode/agents/relay-delivery.md",
-      "sha256": "4626f73e59f1fda529b6de9b0f71717c6073995ca4b207d933a5779d0450167a"
+      "sha256": "1f6ff7332d1fce5cdbe4d2d3453daf93bfe0100ca3a60541de838811c062fd1f"
     },
     {
       "path": ".opencode/agents/relay-docs.md",
-      "sha256": "2d1b7094eb5a4d8fc630ae07e6b38f522f5f3720b7dc73dfb15dd877746b339d"
+      "sha256": "22211559f9770c5f77d86af394b2d97a46537b702f483e65776ecb9087059b0a"
     },
     {
       "path": ".opencode/agents/relay-frontend.md",
-      "sha256": "b4c328ce768481ca278ab72bffdde6bb8f443d9c0ee371ca0ce80508273dcfa1"
+      "sha256": "4e1cd2b3ddd05f2eb618cfda0ee486a5b99b89403caaf7ccf22156d8c1ccb651"
     },
     {
       "path": ".opencode/agents/relay-mcp.md",
-      "sha256": "a543d6fe07e52f023a6bcf511b761cd4adfe2ac605c264f5805d98a4cc6f740b"
+      "sha256": "ad7a75eb94c04cce7568c913054cda5c569af83658abd3840e8c4e78a27f86f0"
     },
     {
       "path": ".opencode/agents/relay-orchestrator.md",
-      "sha256": "690d2010ac604da4f0bb36109effeca2ce7dfa5f8fde0792328ca0f498bf3de5"
+      "sha256": "2c4a9dd4f28b5ffbba9cda97c0a72e76a60b9c565fd46b6d668f0964660ac989"
     },
     {
       "path": ".opencode/agents/relay-qa.md",
-      "sha256": "6a648e02df578a20bf0f495f476c14a94b32aed0dd1c60e8663957af08bc2de6"
+      "sha256": "c12ff42b0728310e0a2a6fe2d27e964fe5fd32f2ec453d7fce8980389edb2bd7"
     },
     {
       "path": "opencode.json",
