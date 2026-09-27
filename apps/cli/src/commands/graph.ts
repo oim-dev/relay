@@ -40,16 +40,11 @@ export function registerGraph(program: Command, runtime: Runtime): void {
       name: action,
       description:
         action === "migrate"
-          ? "Перенести единый JSON графа в раздельное хранилище v2"
+          ? "Совместимая команда без изменений в формате 4"
           : "Восстановить индексы графа из постоянных записей",
       details:
-        "Только локальный режим выбранного проекта. Перед миграцией остановите старые клиенты. Прерванная операция возобновляется; ID и ревизии сохраняются, история и результаты запросов не переносятся. Исходник v1 остаётся резервной копией.",
-      examples: [
-        [
-          `relay-cli --local --config .relay/config.json graph ${action}`,
-          "Обслужить выбранную базу связей",
-        ],
-      ],
+        "Только локальный режим выбранного проекта. migrate в формате 4 возвращает migrated: false; прежнюю базу переносит storage migrate. reindex восстанавливает производные индексы, но не создаёт предметные отношения из полей; для согласования используйте storage reconcile-relations.",
+      examples: [[`relay-cli --local graph ${action}`, "Обслужить выбранную базу связей"]],
       run: async (context) => {
         const workspace = context.backend.localWorkspace;
         if (!workspace)
@@ -60,7 +55,7 @@ export function registerGraph(program: Command, runtime: Runtime): void {
         const data = await new GraphService(workspace)[action]();
         return {
           data,
-          text: `${action === "migrate" ? "Хранилище связей готово к работе в формате v2." : "Индексы связей восстановлены."}\nСвязей: ${data.edges}\nРевизия: ${data.revision}`,
+          text: `${action === "migrate" ? "Хранилище связей использует формат 4. Перенос не требуется." : "Индексы связей восстановлены."}\nСвязей: ${data.edges}\nРевизия: ${data.revision}`,
         };
       },
     });
@@ -135,11 +130,17 @@ export function registerGraph(program: Command, runtime: Runtime): void {
         ? { arguments: { id: "ID явно установленного отношения" } }
         : {}),
       details:
-        "Диагностика и ремонт сохранённых связей. Требуется прочитанная версия графа и автор. Повтор после потери ответа выполняйте с тем же request-id, версией и содержимым. Запись графа не меняет продуктовые линки и статусы.",
+        "Диагностика и ремонт сохранённых связей. Требуется прочитанная версия графа и автор. После потери ответа перечитайте связи, затем решайте, нужно ли новое изменение; request-id служит только корреляции. Запись графа не меняет продуктовые линки и статусы.",
       examples: [
         [
-          "relay-cli --actor agent graph link --from WEB-24 --to DOC-1 --type references --if-version VERSION",
-          "Прикрепить контекстный материал",
+          {
+            link: "relay-cli --actor agent graph link --from WEB-24 --to DOC-1 --type references --if-version VERSION",
+            update:
+              'relay-cli --actor agent graph update EDGE_ID --description "Основание решения" --if-version VERSION',
+            unlink: "relay-cli --actor agent graph unlink EDGE_ID --if-version VERSION",
+            apply: `relay-cli --actor agent graph apply --json '[{"action":"add","from":"WEB-24","to":"DOC-1","type":"references","description":"Основание решения"}]' --if-version VERSION`,
+          }[action],
+          "Изменить диагностические связи; VERSION и EDGE_ID замените прочитанными значениями",
         ],
       ],
       configure: (command) => {

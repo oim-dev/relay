@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -22,6 +22,9 @@ async function documentationFixture(t: TestContext) {
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, "docs/assets"), { recursive: true });
   await mkdir(join(root, "apps/cli"), { recursive: true });
+  await mkdir(join(root, "packages"));
+  await mkdir(join(root, "scripts"));
+  await writeFile(join(root, "AGENTS.md"), "# Правила\n");
   await writeFile(join(root, "README.md"), "# Tasks\n");
   await writeFile(join(root, "docs/assets/board (dark).png"), "изображение");
   await writeFile(join(root, "apps/cli/CHANGELOG.md"), "# Изменения\n");
@@ -86,6 +89,98 @@ test("обход документации включает полные проф
   await assert.rejects(checkDocumentation(app.root, files), /missing.md/);
 });
 
+test("обход включает корневые инструкции и вложенные документы scripts, исключая артефакты и данные", async (t) => {
+  const app = await documentationFixture(t);
+  const expected = [
+    "AGENTS.md",
+    "README.md",
+    "docs/guide.md",
+    "apps/cli/CHANGELOG.md",
+    "apps/cli/AGENTS.md",
+    "apps/cli/docs/CLI.md",
+    "packages/example/AGENTS.md",
+    "packages/example/docs/nested/guide.md",
+    "scripts/README.md",
+    "scripts/AGENTS.md",
+    "scripts/release/README.md",
+    "scripts/release/nested/AGENTS.md",
+    "scripts/release/nested/docs/guide.md",
+  ].sort();
+  for (const path of expected) {
+    await mkdir(join(app.root, path, ".."), { recursive: true });
+    await writeFile(join(app.root, path), "# Документ\n");
+  }
+  const excluded = ["node_modules", ".git", ".artifacts", "dist", "coverage", ".agents/skills"];
+  for (const base of ["docs", "scripts/release", "apps/cli/docs", "packages/example/docs"])
+    for (const directory of excluded) {
+      const path = join(app.root, base, directory);
+      await mkdir(path, { recursive: true });
+      await writeFile(join(path, "AGENTS.md"), "[Ошибка](missing.md)\n");
+    }
+  for (const path of [
+    "unrelated/docs",
+    "apps/cli/src",
+    "apps/playground/data",
+    ".agents/skills/external",
+  ]) {
+    await mkdir(join(app.root, path), { recursive: true });
+    await writeFile(join(app.root, path, "ignored.md"), "[Ошибка](missing.md)\n");
+  }
+  await symlink(join(app.root, "unrelated"), join(app.root, "scripts/linked"), "dir");
+  const files = await documentationFiles(app.root);
+  assert.deepEqual(files, expected);
+  assert.deepEqual(await documentationFiles(app.root), files);
+  await checkDocumentation(app.root, files);
+  // Ошибка в новом источнике должна доходить до checker, а не исчезать при discovery.
+  for (const path of ["AGENTS.md", "scripts/release/nested/docs/guide.md"]) {
+    await writeFile(join(app.root, path), "[Ошибка](missing.md)\n");
+    await assert.rejects(
+      checkDocumentation(app.root, await documentationFiles(app.root)),
+      /missing.md/,
+    );
+    await writeFile(join(app.root, path), "# Документ\n");
+  }
+  await rm(join(app.root, "AGENTS.md"));
+  await assert.rejects(checkDocumentation(app.root, await documentationFiles(app.root)), /ENOENT/);
+  await rm(join(app.root, "docs"), { recursive: true });
+  await assert.rejects(documentationFiles(app.root), /ENOENT/);
+});
+
+test("тематические каталоги документации и имя пакета storage не скрывают ошибки ссылок", async (t) => {
+  const app = await documentationFixture(t);
+  const paths = [
+    "docs/storage/README.md",
+    "docs/data/README.md",
+    "docs/build/guide.md",
+    "docs/user-data/guide.md",
+    "docs/tmp-example/guide.md",
+    "packages/core/docs/storage/FORMAT.md",
+    "packages/storage/README.md",
+    "packages/storage/docs/storage/FORMAT.md",
+    "scripts/build/README.md",
+    "scripts/tmp-example/README.md",
+  ];
+  for (const path of paths) {
+    await mkdir(join(app.root, path, ".."), { recursive: true });
+    await writeFile(join(app.root, path), "# Документ\n");
+  }
+  const files = await documentationFiles(app.root);
+  for (const path of paths) assert(files.includes(path), `Не обнаружен документ ${path}`);
+  await checkDocumentation(app.root, files);
+  for (const path of paths) {
+    await writeFile(join(app.root, path), "[Ошибка](missing.md)\n");
+    await assert.rejects(
+      checkDocumentation(app.root, await documentationFiles(app.root)),
+      (error) => {
+        assert(error instanceof Error);
+        assert(error.message.includes(`${path}:1: missing.md`));
+        return true;
+      },
+    );
+    await writeFile(join(app.root, path), "# Документ\n");
+  }
+});
+
 test("README npm получает версионные ссылки и raw-изображения с сохранением Markdown", async (t) => {
   const app = await documentationFixture(t);
   const markdown = [
@@ -143,7 +238,7 @@ test("документы архива сохраняют локальные пе
 });
 
 test("справочник включает все зарегистрированные команды и параметры CLI", async () => {
-  const markdown = await readFile(join(repoRoot, "docs/reference/CLI.md"), "utf8");
+  const markdown = await readFile(join(repoRoot, "apps/cli/docs/CLI.md"), "utf8");
   const headings = new Set([...markdown.matchAll(/^### (.+)$/gm)].map((match) => match[1]));
   const program = createProgram(
     runtime(

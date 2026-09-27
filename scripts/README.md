@@ -120,9 +120,15 @@ RELAY_PORT=3001 RELAY_API_URL=http://127.0.0.1:3001 RELAY_WEB_PORT=5174 pnpm run
 node --input-type=module -e 'import { checkDocumentation } from "./apps/cli/scripts/lib/documentation.mjs"; console.log(await checkDocumentation(process.cwd(), ["scripts/README.md", "scripts/release/README.md"]));'
 ```
 
-Текущий общий обход `documentationFiles` охватывает `docs`, корневой README,
-страницы приложений и пакетов, но не каталог `scripts`. Его страницы проверяйте
-явным списком, пока охват общего checker не расширен.
+Общий обход `documentationFiles` охватывает корневые `README.md` и `AGENTS.md`,
+Markdown в `docs/**` и `scripts/**` (включая вложенные инструкции и документацию выпуска),
+корневые Markdown и `docs/**` приложений и пакетов, а также профили `packages/dev-agents/src`.
+В этих областях исключаются скрытые каталоги (включая `.git`, `.artifacts`, `.agents/skills`
+и `.relay`), `node_modules`, `dist`, `coverage` и симлинки. Тематические имена `storage`,
+`data`, `build`, `user-data` и `tmp-*` не исключаются, в том числе в именах пакетов.
+Данные вне выбранных областей, например `apps/playground/data`, не обходятся.
+Готовый `skills/relay` отдельно проверяется на внутренние ссылки;
+виртуальные ссылки исходников скилла проверяет его сборщик.
 
 ## Генераторы и отдельные инструменты
 

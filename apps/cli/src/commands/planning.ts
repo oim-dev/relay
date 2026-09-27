@@ -371,8 +371,9 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
   });
   registerCommand<Options>(plan, runtime, {
     name: "memberships <reference>",
-    description: "Текущее и историческое участие задачи",
-    details: "Закрытые включения сохраняются отдельно от текущего.",
+    description: "Текущее участие задачи и включения в закрытые планы",
+    details:
+      "Читает включения из актуального состава планов, включая закрытые. Это не журнал перемещений или история изменений задачи.",
     arguments: { reference: "Ключ или ID задачи" },
     examples: [["relay-cli plan memberships PRODUCT-1", "Прочитать участие задачи"]],
     configure: paging,
