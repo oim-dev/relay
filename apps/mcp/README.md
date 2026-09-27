@@ -1,6 +1,6 @@
 # Relay MCP
 
-`@oim-dev/relay-mcp` предоставляет агентам инструменты Relay через **Streamable HTTP**.
+`@oim-dev/relay-mcp` предоставляет агентам инструменты Relay через **stdio или Streamable HTTP**.
 MCP обращается только к уже запущенному Relay Server, не открывает базу напрямую.
 Нужны Node.js 22+ и npm; checkout Relay не требуется.
 
@@ -14,15 +14,16 @@ npx skills add oim-dev/relay
 
 Выберите Relay и своего агента. Инициализация проекта и запуск Server описаны в
 [начале работы](https://github.com/oim-dev/relay/blob/main/docs/guides/GETTING_STARTED.md).
-Когда Server уже работает, из того же корня запустите:
+Обычный агентский маршрут — проектный конфиг, по которому клиент запускает:
 
 ```bash
-npx @oim-dev/relay-mcp
+npx @oim-dev/relay-mcp --transport stdio --server-url http://127.0.0.1:4700
 ```
 
-В агентском клиенте добавьте HTTP-подключение к `http://127.0.0.1:4710/mcp`,
-обновите список инструментов и вызовите `projects_list({})`.
-Это не stdio-сервер: запуск процесса сам по себе не подключает инструменты клиенту.
+Не запускайте stdio вручную: [проектные конфиги клиентов](https://github.com/oim-dev/relay/blob/main/apps/mcp/docs/CLIENTS.md)
+задают запуск через npx. После настройки перезапустите клиент и вызовите `projects_list({})`.
+Совместимый запуск без `--transport` остаётся HTTP на `http://127.0.0.1:4710/mcp`;
+он требует отдельно управляемого процесса и HTTP-подключения клиента.
 В local поле `project` можно опустить; в workspace оно обязательно для проектных вызовов.
 
 При записи передавайте своего `actor` и прочитанную ревизию, если действие её требует.

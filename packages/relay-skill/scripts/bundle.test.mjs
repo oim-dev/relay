@@ -207,3 +207,56 @@ test("metadata v1 содержит новые пути и watch обнаружи
   await writeFile(join(app.root, metadata), '{"private":true,"version":"0.0.0"}\n');
   await assert.rejects(processBundle({ root: app.root, check: true }), /bundle-info/);
 });
+
+test("пакет переносит диагностический скрипт побайтно и замыкает HTTPS-ссылки", async (t) => {
+  const app = await fixture(t);
+  await mkdir(join(app.source, "scripts"));
+  const script = 'console.log("[это код](missing.md)");\n';
+  await writeFile(join(app.source, "scripts/diagnose.mjs"), script);
+  app.manifest.files["scripts/diagnose.mjs"] = "scripts/diagnose.mjs";
+  app.manifest.externalRoots = ["packages/"];
+  await app.saveManifest();
+  await writeFile(
+    join(app.source, "skill.md"),
+    ENTRY +
+      "\n[API](https://github.com/oim-dev/relay/blob/main/docs/API.md#поля)\n[Код](../../core/src/index.ts)\n[Скрипт](scripts/diagnose.mjs)\n",
+  );
+  const output = await prepareBundle(app.root, "relay");
+  assert.equal(output.get("scripts/diagnose.mjs"), script);
+  assert.match(output.get("SKILL.md"), /\(references\/API\.md#поля\)/);
+  assert.match(
+    output.get("SKILL.md"),
+    /https:\/\/github.com\/oim-dev\/relay\/blob\/main\/packages\/core\/src\/index.ts/,
+  );
+  await processBundle({ root: app.root });
+  await processBundle({ root: app.root, check: true });
+});
+
+test("полный пакет требует каждую справочную страницу в карте главного файла", async (t) => {
+  const app = await fixture(t);
+  await writeFile(join(app.root, "docs/CAPABILITIES.md"), "# Возможности\n");
+  app.manifest.documents["docs/CAPABILITIES.md"] = "references/CAPABILITIES.md";
+  await app.saveManifest();
+  await assert.rejects(prepareBundle(app.root, "relay"), /отсутствует в карте/);
+  await writeFile(
+    join(app.source, "skill.md"),
+    ENTRY +
+      "\n[Работник](references/WORKER.md)\n[API](references/API.md)\n[Покрытие](references/CAPABILITIES.md)\n",
+  );
+  await prepareBundle(app.root, "relay");
+  await mkdir(join(app.source, "scenarios"));
+  await writeFile(
+    join(app.source, "scenarios/NEW_PROJECT.md"),
+    "# Новый проект\n\n[Справочник](../references/API.md)\n",
+  );
+  app.manifest.files["scenarios/NEW_PROJECT.md"] = "scenarios/NEW_PROJECT.md";
+  await app.saveManifest();
+  await assert.rejects(prepareBundle(app.root, "relay"), /отсутствует в карте/);
+  const entry = await readFile(join(app.source, "skill.md"), "utf8");
+  await writeFile(
+    join(app.source, "skill.md"),
+    entry + "\n[Новый проект](scenarios/NEW_PROJECT.md)\n",
+  );
+  await processBundle({ root: app.root });
+  await processBundle({ root: app.root, check: true });
+});

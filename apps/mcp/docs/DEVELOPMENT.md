@@ -9,12 +9,15 @@
 ## Маршрут вызова
 
 ```text
-MCP-клиент → Streamable HTTP /mcp → tools / projectTool
+MCP-клиент → stdio или Streamable HTTP /mcp → tools / projectTool
           → Projects.withBackend → project-runtime HTTP Backend
           → REST SDK → Relay Server / server-runtime → Core
 ```
 
-MCP — отдельный HTTP-процесс, не транспорт stdio, не встроенный Core и не владелец базы.
+MCP — процесс со stdio или HTTP-транспортом, не встроенный Core и не владелец базы.
+`src/stdio.ts` подключает те же инструменты к stdin/stdout без слушающего порта.
+Discovery не требует доступного API; вызовы используют обычный Projects Backend.
+EOF и сигналы закрывают транспорт. Проверки процесса — `test/stdio.test.ts`.
 Импорты схем Core/Contracts не дают права открывать хранилище напрямую.
 Предметный инструмент использует Backend, а не собственный HTTP-клиент.
 Исключение общего маршрута — реестр Server: Projects предоставляет общий server API

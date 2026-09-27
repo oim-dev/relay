@@ -1,23 +1,22 @@
 # Терминальное представление Relay CLI
 
 Этот документ помогает читать человеческий вывод и настраивать его для терминала,
-pipe и CI. Для агента и скрипта используйте `--format json`; синтаксис команд,
+pipe и CI. Агент использует то же читаемое представление, которое видит пользователь; синтаксис команд,
 конверты, ошибки и страницы определены в [справочнике CLI](CLI.md).
 
 ## Выбор формата
 
 ```bash
-relay-cli task get PRODUCT-1 --format text
-relay-cli task get PRODUCT-1 --format json
-relay-cli task list --format text --color never
+npx @oim-dev/relay-cli task get PRODUCT-1
+npx @oim-dev/relay-cli task list --format text --color never
 ```
 
 Если формат не передан, используется настройка конфигурации; исходное значение CLI —
-`text`. Pipe сам по себе не переключает вывод в JSON. Поэтому агенту нужно явно
-передавать `--format json`, а не определять формат по наличию цвета.
+`text`. Pipe сам по себе не переключает формат. Если конфигурация меняет его,
+агент явно передаёт `--format text`, чтобы пользователь мог читать его действия и результаты.
 
 В text предметные команды показывают карточки, таблицы, содержание и подсказки
-следующего действия. В JSON они возвращают неизменённые машинные поля. Включение
+следующего действия. Отладочный JSON возвращает неизменённые машинные поля. Включение
 цвета или изменение ширины не меняет данные JSON. Help и версия всегда текстовые.
 Технические команды реестра `projects` используют общее структурированное
 представление, а не полноценные предметные карточки.
@@ -40,9 +39,9 @@ relay-cli task list --format text --color never
 100 колонок. `COLUMNS` не переопределяет фактическую ширину TTY, если она известна.
 
 ```bash
-NO_COLOR=1 relay-cli task list --format text
-COLUMNS=40 relay-cli product overview --format text --color never | less
-relay-cli task get PRODUCT-1 --format text --color always | less -R
+NO_COLOR=1 npx @oim-dev/relay-cli task list --format text
+COLUMNS=40 npx @oim-dev/relay-cli product overview --format text --color never | less
+npx @oim-dev/relay-cli task get PRODUCT-1 --format text --color always | less -R
 ```
 
 На узкой ширине представление может переходить от таблиц к карточкам. Выравнивание
@@ -65,7 +64,8 @@ relay-cli task get PRODUCT-1 --format text --color always | less -R
 Отображение применяет безопасный текст: пользовательские управляющие
 последовательности не должны исполняться терминалом. Не считайте text побайтовой
 копией исходного поля: переносы, оформление и обезвреживание управляющих символов
-принадлежат представлению. Для точного содержимого поля читайте JSON.
+принадлежат представлению. В обычной работе читайте полный текст карточки; побайтовую
+проверку содержимого выполняют отдельно при отладке CLI.
 
 ## Страницы и бюджет
 
@@ -83,15 +83,15 @@ relay-cli task get PRODUCT-1 --format text --color always | less -R
 с `complete:true` либо ошибку, никогда успешное усечение.
 
 ```bash
-relay-cli graph context PRODUCT-1 --format text --max-bytes 1048576
-relay-cli entities list --kind document --limit 10 --format text
+npx @oim-dev/relay-cli graph context PRODUCT-1 --format text --max-bytes 1048576
+npx @oim-dev/relay-cli entities list --kind document --limit 10 --format text
 ```
 
 ## Pipe и ошибки
 
 Штатный результат и штатная ошибка идут в stdout; stderr штатного вызова чист.
 Ошибка имеет код и понятное сообщение, в text — также визуальную отметку.
-Скрипт должен проверять exit code и `ok` JSON, а не наличие слова «ошибка».
+Проверяйте код завершения и сообщение результата, а не наличие слова «ошибка» в пользовательском тексте.
 Закрытие pipe получателем (`EPIPE`) считается штатным и даёт код 0.
 
 Help группы не требует открытия проекта. Ошибка синтаксиса указывает help команды,
