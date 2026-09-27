@@ -75,19 +75,43 @@ export async function filesBelow(directory) {
   return result.sort();
 }
 
-/** Пользовательские документы и документация владельцев, без исходников и skill references.
+/** Исключает технические каталоги, сохраняя тематические разделы выбранных источников.
+ * @param {string} name
+ */
+function documentationDirectory(name) {
+  return !name.startsWith(".") && !["node_modules", "dist", "coverage"].includes(name);
+}
+
+/** Обходит только выбранное дерево документации, не переходя по симлинкам.
+ * @param {string} directory @returns {Promise<string[]>}
+ */
+async function documentationBelow(directory) {
+  const result = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (entry.isDirectory() && documentationDirectory(entry.name)) {
+      for (const child of await documentationBelow(join(directory, entry.name)))
+        result.push(`${entry.name}/${child}`);
+    } else if (entry.isFile() && entry.name.endsWith(".md")) result.push(entry.name);
+  }
+  return result.sort();
+}
+
+/** Пользовательские документы и инструкции владельцев, без общего обхода исходников и данных.
  * @param {string} root
  */
 export async function documentationFiles(root) {
-  const result = ["README.md", ...(await filesBelow(join(root, "docs"))).map((p) => `docs/${p}`)];
+  const result = ["README.md", "AGENTS.md"];
+  for (const directory of ["docs", "scripts"])
+    for (const path of await documentationBelow(join(root, directory)))
+      result.push(`${directory}/${path}`);
   for (const scope of ["apps", "packages"]) {
     for (const workspace of await readdir(join(root, scope), { withFileTypes: true })) {
-      if (!workspace.isDirectory()) continue;
+      if (!workspace.isDirectory() || !documentationDirectory(workspace.name)) continue;
       const base = `${scope}/${workspace.name}`;
       for (const entry of await readdir(join(root, base), { withFileTypes: true })) {
         if (entry.isFile() && entry.name.endsWith(".md")) result.push(`${base}/${entry.name}`);
         if (entry.isDirectory() && entry.name === "docs")
-          for (const child of await filesBelow(join(root, base, "docs")))
+          for (const child of await documentationBelow(join(root, base, "docs")))
             result.push(`${base}/docs/${child}`);
         // У скилла есть виртуальные ссылки: его src проверяется сборщиком, не этим обходом.
         if (
@@ -96,7 +120,7 @@ export async function documentationFiles(root) {
           entry.isDirectory() &&
           entry.name === "src"
         )
-          for (const child of await filesBelow(join(root, base, "src")))
+          for (const child of await documentationBelow(join(root, base, "src")))
             result.push(`${base}/src/${child}`);
       }
     }

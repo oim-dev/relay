@@ -1,30 +1,34 @@
-# Общий контракт REST и SSE
+# Contracts — переносимые схемы и типы Relay
 
-Импорт: `import type { BoardResponse } from "@relay/contracts"`.
-Типы и переносимые константы находятся в `src/index.ts`; здесь нет зависимостей
-от Core, NestJS, Node.js или React.
+`@relay/contracts` задаёт общий язык данных для Core и его потребителей: Zod-схемы
+предметных полей, действий и результатов, переносимые оболочки хранения, DTO и
+константы API. Пакет зависит только от Zod, без Core, Node.js, NestJS или React.
+Схема проверяет форму данных, но не заменяет предметную операцию Core.
 
-`@relay/contracts/entities` — реестр девяти основных видов, схемы данных, выборок и действий.
-`entities/*` — схемы предметных полей и графа; `primitives` — единая семантика текста и адресов.
-Core, OpenAPI, MCP и валидаторы Web используют эти схемы; типы выводятся через Zod.
-Краткое описание — обычный текст, Markdown основного контура — строка API.
-[Контракт движка](../../docs/reference/ENTITIES.md).
+```ts
+import type { ApiResponse } from "@relay/contracts";
+import { entitiesQuerySchema } from "@relay/contracts/entities";
+```
 
-Источники требований: [предметные возможности](../../docs/product/CAPABILITIES.md),
-[API](../../docs/reference/API.md) и [контракт Web](../../docs/product/applications/web/README.md).
+- [Схемы, типы и изменение контракта](docs/API.md) — карта exports, input/output,
+  описания, граница DTO и хранения, проверки потребителей.
+- [Предметная модель](../../docs/domain/README.md) — смысл данных и действий.
+- [REST API](../server-runtime/docs/API.md) — канонический транспортный справочник;
+  Contracts не поддерживает вторую таблицу маршрутов.
+- [Каталог возможностей](../../docs/CAPABILITIES.md) — единственное место общего покрытия.
 
-Важные соглашения:
+## Разработка
 
-- Все REST-маршруты и SSE реализованы в `packages/server-runtime`; OpenAPI 3.1 доступна по `/api/openapi.json`.
-- У постраничных ответов доски и истории курсор расположен в `meta.nextCursor`, а элементы — в `data.items`.
-  CLI read models имеют отдельный контракт, включая полную выборку `/task-list`.
-- `data.version` доски относится к снимку, `task.revision` — к документу задачи.
-- `rank` — непрозрачная строка; порядок вычисляет Core.
-- Markdown в полях задач — массив строк; `text` добавляемой записи — строка.
-- Автор HTTP-изменения задаётся `actor` запроса, по умолчанию — из контекста сервера;
-  исполнитель — отдельное поле задачи.
-- Основные сущности используют переносимые Zod-схемы и для типов, и для runtime-валидации.
+Из корня репозитория после установки зависимостей:
 
-При изменении контракта одновременно обновить типы, описание, HTTP-проверки и клиент.
-Схемы сервера проверяются на двустороннюю совместимость с DTO в `packages/server-runtime/test/contract-types.ts`;
-HTTP-тесты валидируют фактические ответы по опубликованной OpenAPI-спецификации.
+```sh
+pnpm run build:contracts
+pnpm --filter @relay/contracts run typecheck
+pnpm run test:contracts
+```
+
+Обычные импорты используют `dist`; условие `tasks-source` выбирает исходники.
+Сборка очищает `dist` и запускает TypeScript. Пакетные `typecheck` и `test` оба выполняют
+`tsc -p tsconfig.test.json`: это проверка типов, **не runtime-тесты Zod**.
+Корневой `test:contracts` через Turbo предварительно собирает пакет. Отдельного
+lint-скрипта нет. Runtime-поведение схем проверяйте в сценариях Core и потребителей.

@@ -72,7 +72,7 @@ function fieldOptions(command: Command) {
   return command
     .option(
       "--name <text>",
-      "Однострочное название продукта, фичи, сценария, приложения или документа",
+      "Однострочное название продукта, фичи, сценария, приложения или документа; при update также проекта",
     )
     .option("--title <text>", "Однострочный заголовок задачи или реализации")
     .option("--summary <text>", "Краткое многострочное обычное описание")
@@ -102,7 +102,10 @@ function fieldOptions(command: Command) {
       "Массив связей документа: target {kind,id}, type references/documents, description Markdown",
     )
     .option("--document-sections <json>", "Упорядоченный массив разделов проекта: id и name")
-    .option("--status <status>", "Состояние реализации: none, partial или done")
+    .option(
+      "--status <status>",
+      "Совместимая ручная отметка реализации: none, partial или done; не меняет вычисляемую готовность",
+    )
     .option("--column <column>", "Начальная колонка задачи")
     .option("--parent <ref>", "Родитель задачи: ключ или ID")
     .option("--targets <refs...>", "Продуктовые цели задачи или документа: ключи или ID")
@@ -157,7 +160,7 @@ function fields(kind: EntityKind, options: Fields, creating: boolean) {
   };
 }
 
-/** Каталог видов и предметные операции над девятью основными сущностями. */
+/** Каталог одиннадцати видов; допустимые предметные операции определяет контракт вида. */
 export function registerEntities(program: Command, runtime: Runtime): void {
   const group = commandGroup(program, {
     name: "entities",
@@ -337,7 +340,7 @@ export function registerEntities(program: Command, runtime: Runtime): void {
     arguments: { ref: "Ключ или ID изменяемой сущности" },
     description: "Изменить поля сущности с проверкой ревизии",
     details:
-      "Вид определяется общим резолвером. Передавайте только изменяемые поля; отсутствие поля сохраняет его значение. Ключ меняется через rename.",
+      "Вид определяется общим резолвером. Передавайте только изменяемые поля; отсутствие поля сохраняет его значение. Имя проекта изменяется через --name, slug проекта здесь недоступен. Ключ меняется через rename.",
     examples: [
       [
         "relay-cli --actor agent entities update WEB-24 --title 'Уточнённая задача' --if-revision 2",

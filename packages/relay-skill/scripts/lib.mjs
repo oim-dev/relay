@@ -86,7 +86,10 @@ export async function prepareBundle(root, name) {
   const add = (source, target, markdown) => {
     safePath(source);
     safePath(target);
-    assert(target.endsWith(".md"), `В пакет разрешены Markdown-материалы: ${target}`);
+    assert(
+      target.endsWith(".md") || /^scripts\/[a-z\d-]+\.mjs$/.test(target),
+      `Недопустимый тип материала: ${target}`,
+    );
     assert(!targetNames.has(target.toLowerCase()), `Повтор пути в сборке: ${target}`);
     assert(!locations.has(source), `Повтор источника: ${source}`);
     assert(
@@ -134,10 +137,17 @@ export async function prepareBundle(root, name) {
   }
   const output = new Map();
   for (const [target, { source, markdown }] of files) {
+    if (!target.endsWith(".md")) {
+      output.set(target, markdown);
+      continue;
+    }
     const rewritten = rewriteMarkdownLinks(markdown, (url) => {
       if (url.startsWith("#")) return url;
       assert(!/^file:/i.test(url), `Локальный file: URL непереносим: ${source}: ${url}`);
-      if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) return url;
+      const repositoryUrl = "https://github.com/oim-dev/relay/blob/main/";
+      const repoLink = url.startsWith(repositoryUrl);
+      if (!repoLink && /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) return url;
+      if (repoLink) url = "/" + url.slice(repositoryUrl.length);
       const match = /^([^?#]*)(.*)$/.exec(url);
       const path = decodeURIComponent(match[1]);
       const key = path
@@ -146,6 +156,16 @@ export async function prepareBundle(root, name) {
           )
         : source;
       const destination = locations.get(key);
+      if (
+        destination === undefined &&
+        (manifest.externalRoots ?? []).some(
+          (prefix) => key === prefix || (prefix.endsWith("/") && key.startsWith(prefix)),
+        )
+      ) {
+        safePath(key);
+        // Только необязательные инженерные источники остаются внешними.
+        return repositoryUrl + key.split("/").map(encodeURIComponent).join("/") + match[2];
+      }
       assert(
         destination !== undefined,
         `Материал не включён в bundle.json: ${source}: ${url} → ${key}`,
@@ -159,6 +179,15 @@ export async function prepareBundle(root, name) {
     );
   }
   const entry = output.get("SKILL.md");
+  if (manifest.documents?.["docs/CAPABILITIES.md"]) {
+    for (const target of output.keys()) {
+      if (
+        (target.startsWith("references/") || target.startsWith("scenarios/")) &&
+        target.endsWith(".md")
+      )
+        assert(entry.includes(`(${target})`), `Справочник отсутствует в карте SKILL.md: ${target}`);
+    }
+  }
   const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(entry);
   assert(frontmatter, "SKILL.md должен начинаться с YAML frontmatter");
   assert(
@@ -169,7 +198,7 @@ export async function prepareBundle(root, name) {
     /^description: >-?\n\s+\S/m.test(frontmatter[1]),
     "Нужен непустой description в frontmatter",
   );
-  assert(entry.split("\n").length <= 220, "Основное руководство превышает бюджет 220 строк");
+  assert(entry.split("\n").length <= 300, "Основное руководство превышает бюджет 300 строк");
   output.set(
     "bundle-info.json",
     `${JSON.stringify({ version: 1, name, inputs: Object.fromEntries([...inputHashes].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) }, null, 2)}\n`,
