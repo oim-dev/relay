@@ -37,6 +37,38 @@ test("MCP: discovery не обещает дедупликацию; потеря 
   await client.connect(clientTransport);
   assert.match(client.getInstructions() ?? "", /После потери ответа прочитайте текущее состояние/);
   const { tools } = await client.listTools();
+  for (const [name, field, expected] of [
+    ["entity_feature_create", "description", /поведение, правила/],
+    ["entity_feature_update", "description", /поведение, правила/],
+    ["product_scenario_save", "description", /альтернативы, ошибки/],
+    ["entity_implementation_create", "description", /вкладу именно этого приложения/],
+    ["product_contract_update", "description", /вкладу именно этого приложения/],
+    ["board_task_create", "description", /конкретная работа/],
+    ["board_task_update", "description", /конкретная работа/],
+    ["plan_create", "goal", /что должно получиться/],
+    ["plan_stage_create", "completionConditions", /Наблюдаемые признаки/],
+    ["release_create", "description", /Содержание выпуска/],
+  ] as const) {
+    const property = tools.find((tool) => tool.name === name)?.inputSchema.properties?.[field] as
+      { description?: string } | undefined;
+    assert.match(property?.description ?? "", expected, `${name}.${field}`);
+    assert.match(property?.description ?? "", /Markdown/);
+    assert.match(property?.description ?? "", /не заменяйте краткой аннотацией/);
+  }
+  const scope = tools.find((tool) => tool.name === "product_scope_replace")!;
+  assert.match(
+    JSON.stringify(scope.inputSchema.properties?.contracts),
+    /вкладу именно этого приложения/,
+  );
+  const universal = tools.find((tool) => tool.name === "product_save")!;
+  assert.match(JSON.stringify(universal.inputSchema), /альтернативы, ошибки/);
+  assert.match(JSON.stringify(universal.inputSchema), /вкладу именно этого приложения/);
+  // Пояснение прикрепления документа не получает требования к полноценной реализации.
+  const document = tools.find((tool) => tool.name === "entity_document_create")!;
+  assert.doesNotMatch(
+    JSON.stringify(document.inputSchema.properties?.relations),
+    /не заменяйте краткой аннотацией/,
+  );
   assert(!tools.some((tool) => /history|audit|receipt/i.test(tool.name)));
   for (const name of ["task_comment_publish", "task_comments_list", "task_comment_get"])
     assert(tools.some((tool) => tool.name === name));

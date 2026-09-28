@@ -115,7 +115,7 @@ export function createTools(projects: Projects): Server {
           ? description
           : `${description} requestId служит только корреляции, не дедупликации. После потери ответа прочитайте текущее состояние и согласуйте дальнейшее действие; не повторяйте запись вслепую.`,
         inputSchema: ToolSchema.shape.inputSchema.parse(
-          documentToolSchema(z.toJSONSchema(schema, { io: "input" })),
+          documentToolSchema(z.toJSONSchema(schema, { io: "input" }), name),
         ),
         annotations: {
           readOnlyHint: readOnly,

@@ -123,7 +123,11 @@ export function registerTaskActivity(parent: Command, runtime: Runtime): void {
             "--request-id <id>",
             "Идентификатор корреляции, не дедупликации; по умолчанию UUID",
           );
-        textOption(command, "description", "Обязательное полное сообщение в Markdown");
+        textOption(
+          command,
+          "description",
+          "Полное сообщение в Markdown: сделанное или уточнение, основания, фактические проверки, ограничения и следующий шаг",
+        );
       },
       run: async (context, input) => {
         const { role, title, requestId } = input.options;

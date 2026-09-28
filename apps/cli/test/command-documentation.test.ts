@@ -205,11 +205,13 @@ test("documentation: установленный комплект skill сохр�
     "references/domain/TASKS.md",
     "references/interfaces/CLI.md",
     "references/interfaces/CLI-COMMANDS.md",
-    "scenarios/NEW_PROJECT.md",
+    "references/guides/CONTENT.md",
   ])
     assert.ok(paths.includes(path), path);
   await checkDocumentation(installed, paths);
   const skill = await readFile(join(installed, "SKILL.md"), "utf8");
   assert.match(skill, /^---\nname: relay\ndescription: >-/);
+  assert.match(skill, /## Как заполнять содержание сущностей/);
+  assert.ok(!paths.some((path: string) => path.startsWith("scenarios/")));
   assert.ok(skill.split("\n").length <= 300);
 });

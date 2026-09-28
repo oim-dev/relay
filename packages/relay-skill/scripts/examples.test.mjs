@@ -125,6 +125,17 @@ for (const mode of ["local", "workspace"])
             text.includes(found.items[0].key) || text.includes(values[variable]),
             `В выводе ${step} отсутствует адрес созданной записи`,
           );
+          if (["feature", "scenario", "fi", "si"].includes(step)) {
+            const expected = tokens[tokens.indexOf("--description") + 1];
+            const record = await cli(kind, "get", values[variable]);
+            assert.equal(
+              record.data.description,
+              expected,
+              `Полный Markdown ${step} сохранён без потерь`,
+            );
+            assert(expected.includes("## Провер") || expected.includes("## Результат"));
+            assert(expected.includes("До разработки") || expected.includes("до реализации"));
+          }
         }
         if (step === "application") {
           const boards = await cli("board", "list");

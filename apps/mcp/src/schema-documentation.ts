@@ -38,16 +38,60 @@ const descriptions: Record<string, string> = {
   replace: "Разрешить замену существующей регистрации проекта",
 };
 
+const contentByKind: Record<string, string> = {
+  product: "Назначение продукта, пользователи, цели, границы и ограничения",
+  passport: "Назначение продукта, пользователи, цели, границы и ограничения",
+  feature:
+    "Для кого и зачем возможность, требуемое поведение, правила, границы и проверяемые результаты",
+  scenario: "Участник, предусловия, шаги, альтернативы, ошибки и наблюдаемый результат",
+  application: "Ответственность приложения, границы, взаимодействия и ограничения",
+  implementation:
+    "Требования к вкладу именно этого приложения: поведение, входы/выходы, взаимодействия, ошибки и проверка",
+  contract:
+    "Требования к вкладу именно этого приложения: поведение, входы/выходы, взаимодействия, ошибки и проверка",
+  task: "Цель изменения, основания, конкретная работа, границы и способ проверки",
+  criterion: "Условия, действия проверки и наблюдаемый результат",
+  comment: "Сделанное или уточнение, основания, фактические проверки, ограничения и следующий шаг",
+  release: "Содержание выпуска, значимые изменения, ограничения и основания поставки",
+};
+const contentByField: Record<string, string> = {
+  body: "Содержание по типу документа, основания, правила или выводы и открытые вопросы",
+  goal: "Зачем изменение и что должно получиться",
+  rationale: "Проблема, источники и причины выбранной работы",
+  boundaries: "Что входит в изменение и что исключено",
+  expectedResult: "Наблюдаемые изменения и способ проверки",
+  outcome: "Результат этапа и границы ответственности",
+  completionConditions:
+    "Наблюдаемые признаки завершения и способ проверки; это текстовые условия, не исполняемый код",
+  result: "Фактический итог или причина отмены, основания проверок, ограничения и следующий шаг",
+};
+const contentRule =
+  "Структурируйте разделами и списками в Markdown, достаточно подробно для исполнения и проверки без чата; не заменяйте краткой аннотацией. Правила берите из источников, неизвестное уточняйте или обозначайте вопросом.";
+
 /** Дополняет JSON Schema без изменения валидации. Неизвестное поле требует явного описания. */
-export function documentToolSchema<T>(schema: T): T {
-  function visit(value: unknown): void {
+export function documentToolSchema<T>(schema: T, toolName = ""): T {
+  const toolKind =
+    /^(?:entity|product)_([^_]+)_/.exec(toolName)?.[1] ??
+    (/^task_criterion_/.test(toolName)
+      ? "criterion"
+      : /^task_comment_/.test(toolName)
+        ? "comment"
+        : /^board_task_/.test(toolName)
+          ? "task"
+          : /^release_/.test(toolName)
+            ? "release"
+            : undefined);
+  function visit(value: unknown, owner?: string): void {
     if (Array.isArray(value)) {
-      value.forEach(visit);
+      value.forEach((entry) => visit(entry, owner));
       return;
     }
     if (!value || typeof value !== "object") return;
     const node = value as Record<string, unknown>;
     if (node.properties && typeof node.properties === "object") {
+      const properties = node.properties as Record<string, Record<string, unknown>>;
+      const kind = properties.kind?.const;
+      if (typeof kind === "string") owner = kind;
       for (const [name, field] of Object.entries(node.properties)) {
         if (!field || typeof field !== "object") continue;
         const property = field as Record<string, unknown>;
@@ -57,10 +101,21 @@ export function documentToolSchema<T>(schema: T): T {
             throw new Error(`Нарушение протокола MCP: нет русского описания аргумента ${name}`);
           property.description = descriptions[name];
         }
+        const hint = name === "description" ? contentByKind[owner ?? ""] : contentByField[name];
+        if (hint) property.description = `${property.description}. ${hint}. ${contentRule}`;
+        // Предметный контекст нужен внутри универсального ввода и состава, но не у пояснений связей.
+        visit(
+          property,
+          name === "contracts"
+            ? "implementation"
+            : ["fields", "command"].includes(name)
+              ? owner
+              : undefined,
+        );
       }
     }
-    for (const entry of Object.values(node)) visit(entry);
+    for (const [key, entry] of Object.entries(node)) if (key !== "properties") visit(entry, owner);
   }
-  visit(schema);
+  visit(schema, toolKind);
   return schema;
 }
