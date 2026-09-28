@@ -44,7 +44,11 @@ jobs:
         run: pnpm run build
       - name: Проверить форматирование, типы, сборку и тесты
         shell: bash
-        run: pnpm run check 2>&1 | tee "$RUNNER_TEMP/tasks-check.log"
+        # CLI сам запускает три тестовых файла с дочерними процессами. Не делим
+        # CPU runner с остальными наборами; stream сохраняет прогресс до завершения.
+        run: |
+          pnpm run check --filter='!@oim-dev/relay-cli' --log-order=stream 2>&1 | tee "$RUNNER_TEMP/tasks-check.log"
+          pnpm exec turbo run lint typecheck test --filter=@oim-dev/relay-cli --log-order=stream 2>&1 | tee -a "$RUNNER_TEMP/tasks-check.log"
       - name: Показать причины падения проверок
         if: failure()
         run: |

@@ -287,7 +287,11 @@ test("CI не публикует; release.published публикует с мин
   }
   assert.match(check, /run: pnpm run agents:check && pnpm run skills:check/);
   assert.match(check, /run: pnpm run build/);
-  assert.match(check, /shell: bash\n        run: pnpm run check 2>&1 \| tee/);
+  assert.match(check, /shell: bash\n(?:        #.*\n)*        run: \|/);
+  assert.match(
+    check,
+    /pnpm run check --filter='!@oim-dev\/relay-cli' --log-order=stream 2>&1 \| tee "\$RUNNER_TEMP\/tasks-check.log"\n          pnpm exec turbo run lint typecheck test --filter=@oim-dev\/relay-cli --log-order=stream 2>&1 \| tee -a "\$RUNNER_TEMP\/tasks-check.log"/,
+  );
   assert.match(packaging, /^ {4}needs: check$/m);
   assert.match(packaging, /artifact_id: \$\{\{ steps.upload.outputs.artifact-id \}\}/);
   assert.match(packaging, /run: pnpm run package:check/);
