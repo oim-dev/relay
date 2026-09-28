@@ -232,31 +232,20 @@ test("пакет переносит диагностический скрипт 
   await processBundle({ root: app.root, check: true });
 });
 
-test("полный пакет требует каждую справочную страницу в карте главного файла", async (t) => {
+test("полный пакет требует входы в библиотеку и покрытие, но не прямую карту всех материалов", async (t) => {
   const app = await fixture(t);
   await writeFile(join(app.root, "docs/CAPABILITIES.md"), "# Возможности\n");
   app.manifest.documents["docs/CAPABILITIES.md"] = "references/CAPABILITIES.md";
+  delete app.manifest.aliases["docs/README.md"];
+  await writeFile(join(app.root, "docs/README.md"), "# Библиотека\n\n[API](API.md)\n");
+  app.manifest.documents["docs/README.md"] = "references/README.md";
   await app.saveManifest();
   await assert.rejects(prepareBundle(app.root, "relay"), /отсутствует в карте/);
   await writeFile(
     join(app.source, "skill.md"),
-    ENTRY +
-      "\n[Работник](references/WORKER.md)\n[API](references/API.md)\n[Покрытие](references/CAPABILITIES.md)\n",
+    ENTRY + "\n[Библиотека](references/README.md)\n[Покрытие](references/CAPABILITIES.md)\n",
   );
   await prepareBundle(app.root, "relay");
-  await mkdir(join(app.source, "scenarios"));
-  await writeFile(
-    join(app.source, "scenarios/NEW_PROJECT.md"),
-    "# Новый проект\n\n[Справочник](../references/API.md)\n",
-  );
-  app.manifest.files["scenarios/NEW_PROJECT.md"] = "scenarios/NEW_PROJECT.md";
-  await app.saveManifest();
-  await assert.rejects(prepareBundle(app.root, "relay"), /отсутствует в карте/);
-  const entry = await readFile(join(app.source, "skill.md"), "utf8");
-  await writeFile(
-    join(app.source, "skill.md"),
-    entry + "\n[Новый проект](scenarios/NEW_PROJECT.md)\n",
-  );
   await processBundle({ root: app.root });
   await processBundle({ root: app.root, check: true });
 });

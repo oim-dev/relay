@@ -180,13 +180,8 @@ export async function prepareBundle(root, name) {
   }
   const entry = output.get("SKILL.md");
   if (manifest.documents?.["docs/CAPABILITIES.md"]) {
-    for (const target of output.keys()) {
-      if (
-        (target.startsWith("references/") || target.startsWith("scenarios/")) &&
-        target.endsWith(".md")
-      )
-        assert(entry.includes(`(${target})`), `Справочник отсутствует в карте SKILL.md: ${target}`);
-    }
+    for (const target of ["references/README.md", "references/CAPABILITIES.md"])
+      assert(entry.includes(`(${target})`), `Справочник отсутствует в карте SKILL.md: ${target}`);
   }
   const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(entry);
   assert(frontmatter, "SKILL.md должен начинаться с YAML frontmatter");
