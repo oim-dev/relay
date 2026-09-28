@@ -48,10 +48,12 @@
 Для существующего workspace прочитай реестр, затем выбранную базу. `alpha` замени
 проверенным ключом регистрации; при необходимости добавь `--config` и `--server-url`:
 
-```sh
-npx @oim-dev/relay-cli projects list
-npx @oim-dev/relay-cli --project alpha config get
-npx @oim-dev/relay-cli --project alpha boards
+```bash
+npx @oim-dev/relay-cli workspace project list
+npx @oim-dev/relay-cli config get \
+  --project alpha
+npx @oim-dev/relay-cli board list \
+  --project alpha
 ```
 
 ## Когда этап закончен
@@ -67,4 +69,4 @@ npx @oim-dev/relay-cli --project alpha boards
 - Перед подготовкой реестра: [первый запуск](../references/guides/GETTING_STARTED.md).
 - Для путей и выбора базы: [конфигурация](../references/interfaces/CONFIGURATION.md).
 - Перед регистрацией: [покрытие](../references/CAPABILITIES.md), [CLI](../references/interfaces/CLI.md)
-  и `npx @oim-dev/relay-cli projects --help`.
+  и `npx @oim-dev/relay-cli workspace project --help`.

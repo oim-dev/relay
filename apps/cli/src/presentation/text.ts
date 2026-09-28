@@ -1,5 +1,5 @@
 import { toText } from "@relay/core/domain/markdown";
-import { safeText } from "./safe.js";
+import { safeText, safeJson } from "./safe.js";
 import { defaultTextOptions, palette } from "./theme.js";
 import type { TextOptions } from "./theme.js";
 import { renderMarkdown } from "./markdown.js";
@@ -13,10 +13,9 @@ export function markdownText(
   return renderMarkdown(toText(lines), options);
 }
 
-/** Короткий фрагмент не разрывает Unicode-символы и не меняет оригинал записи. */
-export function previewText(value: string, limit = 160): string {
-  const characters = Array.from(value);
-  return characters.slice(0, limit).join("") + (characters.length > limit ? "…" : "");
+/** Совместимость старых списков: ширина регулирует переносы, но не полноту текста. */
+export function previewText(value: string, _limit = 160): string {
+  return safeText(value);
 }
 
 export function valueText(value: unknown, options: TextOptions = defaultTextOptions): string {
@@ -33,6 +32,28 @@ export function valueText(value: unknown, options: TextOptions = defaultTextOpti
       )
       .join("\n");
   return safeText(String(value));
+}
+
+/** Диагностика различает типы и пустые значения; обычные карточки сохраняют свою политику. */
+export function diagnosticValueText(value: unknown): string {
+  const ancestors = new Set<object>();
+  const render = (item: unknown): string => {
+    if (typeof item === "string") return safeJson(item);
+    if (item === null) return "null";
+    if (typeof item !== "object") return safeText(String(item));
+    if (ancestors.has(item)) return "[циклическая ссылка]";
+    ancestors.add(item);
+    const result = Array.isArray(item)
+      ? `[${Array.from(item, render).join(", ")}]`
+      : Object.keys(item).length
+        ? `{\n${Object.entries(item)
+            .map(([key, entry]) => `  ${safeJson(key)}: ${render(entry).replaceAll("\n", "\n  ")}`)
+            .join(",\n")}\n}`
+        : "{}";
+    ancestors.delete(item);
+    return result;
+  };
+  return render(value);
 }
 
 export function fieldsText(

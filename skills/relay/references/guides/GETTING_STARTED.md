@@ -39,7 +39,7 @@ node "<каталог скилла>/scripts/diagnose.mjs" --root "<катало�
 ```sh
 npx @oim-dev/relay-cli init
 npx @oim-dev/relay-cli config get
-npx @oim-dev/relay-cli boards
+npx @oim-dev/relay-cli board list
 ```
 
 Результат: `.relay/config.json`, хранилище и системные доски `product`/`infrastructure`.
@@ -53,7 +53,9 @@ Init не заменяет данные. Для проверки не созда
 Проверьте конфигурацию и доски командами выше, сопоставьте проект и фактические пути.
 Для HTTP сначала обеспечьте работающий Server по следующему разделу, затем повторите чтения.
 Успешная команда и содержимое карточки подтверждают чтение; диагностического отчёта недостаточно.
-Если конфигурация меняет формат, явно выберите `--format text` для читаемого вывода.
+По умолчанию CLI использует text независимо от output.format в конфиге;
+JSON выбирается явно через `--format json`. Полный текст карточки не обрезается
+байтовым лимитом CLI; страницы списков продолжаются по `--cursor` из подсказки.
 Точный синтаксис — в [CLI](../interfaces/CLI.md).
 
 ## 4. Запустите Server и передайте URL
@@ -92,18 +94,22 @@ CLI читает нужную базу, Server доступен, пользов�
 ## Несколько проектов и специальные подключения
 
 Workspace регистрирует независимые базы. Каждый проект сначала инициализируется отдельно.
-Из общего каталога создайте реестр через `npx @oim-dev/relay-cli projects init`,
+Из общего каталога создайте реестр через `npx @oim-dev/relay-cli workspace project init`,
 запустите Server, затем зарегистрируйте существующие базы:
 
 ```sh
-npx @oim-dev/relay-cli projects add alpha ./alpha
-npx @oim-dev/relay-cli projects add beta ./beta
-npx @oim-dev/relay-cli projects list
-npx @oim-dev/relay-cli --project alpha config get
+npx @oim-dev/relay-cli workspace project add alpha ./alpha
+npx @oim-dev/relay-cli workspace project add beta ./beta
+npx @oim-dev/relay-cli workspace project list
+npx @oim-dev/relay-cli config get \
+  --project alpha
 ```
 
 В workspace все предметные CLI-команды требуют `--project`, даже при одной регистрации.
-Local CLI `projects list` не является универсальной проверкой. Local CLI без URL
+Команда CLI `workspace project list` не является универсальной проверкой local-проекта.
+Она читает регистрации через сервер, принимает `--limit`/`--cursor`, но не `--project`
+или `--local`. Курсор проверяет отпечаток текущего каталога, не хранит серверный снимок.
+Local CLI без URL
 обращается напрямую к базе, HTTP CLI и MCP — через Server. Ошибка HTTP не разрешает
 переключение базы. Подробности: [проекты](../domain/PROJECTS.md),
 [конфигурация](../interfaces/CONFIGURATION.md), [восстановление](RECOVERY.md).

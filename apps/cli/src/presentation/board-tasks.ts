@@ -1,13 +1,15 @@
-import Table from "cli-table3";
 import type { BoardTaskView, BoardTaskSaved, BoardTasksQuery } from "@relay/core/domain/board-task";
 import type { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import type { BoardsService } from "@relay/core/application/boards/service";
-import type { TextOptions } from "./theme.js";
+import type { EntityDetail, EntitySaved, EntitiesPage } from "@relay/contracts/entities";
+import type { TaskProgress } from "@relay/contracts/progress";
+import type { CommandContext } from "../context.js";
+import { commandInvocation } from "../command-kit.js";
+import { cardText, listText, receiptText, type OutputField } from "./common.js";
+import { defaultTextOptions, type TextOptions } from "./theme.js";
 import { renderMarkdown } from "./markdown.js";
-import { safeText } from "./text.js";
-import { wrap } from "./layout.js";
 
-const columns: Record<string, string> = {
+export const columns: Record<string, string> = {
   inbox: "Входящие",
   ready: "К выполнению",
   "in-progress": "В работе",
@@ -22,144 +24,329 @@ const relations = {
   parent: "Родитель",
   child: "Подзадача",
 };
-const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+const scopes: Record<string, string> = {
+  product: "Продукт",
+  infrastructure: "Инфраструктура",
+  application: "Приложение",
+};
+export type TaskInvocation = (args: readonly string[]) => string;
+export const taskInvocation =
+  (context: CommandContext): TaskInvocation =>
+  (args) =>
+    commandInvocation(context, args);
+const defaultInvocation: TaskInvocation = (args) =>
+  `npx @oim-dev/relay-cli ${args.map((value) => (/^[A-Za-z0-9_./:@-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`)).join(" ")}`;
 
-/** Полное содержание отдельно от адреса, колонок и блокеров. */
-export function boardTaskText(task: BoardTaskView, options: TextOptions): string {
-  return [
-    wrap(`${task.key} · ${safeText(task.title)}`, options.width),
-    `ID: ${task.id}\nДоска: ${task.boardSlug}\nКолонка: ${columns[task.column]}\nРевизия: ${task.revision}`,
-    task.blocked ? `Блокеры: ${task.blockers.join(", ")}` : "Невыполненных зависимостей нет.",
-    task.description ? renderMarkdown(task.description, options) : "Описание пока не заполнено.",
-    wrap(
-      `Критерии приёмки: выполнено ${task.acceptance?.completed ?? 0} из ${task.acceptance?.total ?? 0}.\nСписок: relay-cli task criterion list ${task.key}`,
-      options.width,
-    ),
-    task.productLinks.length === 0
-      ? "Продуктовых связей нет."
-      : "Реализует:\n" +
-        task.productLinks
-          .map((link) =>
-            wrap(
-              `${{ feature: "Фича", scenario: "Сценарий", implementation: "Контракт приложения" }[link.kind]} · ${safeText(link.id)}`,
-              options.width,
-            ),
-          )
-          .join("\n"),
-    `Связи: relay-cli task links ${task.key}`,
-  ].join("\n\n");
-}
-export function boardTaskSavedText(saved: BoardTaskSaved): string {
-  return `Задача ${saved.key}: действие ${saved.action} выполнено.\nID: ${saved.id}${saved.criterionId ? `\nКритерий: ${saved.criterionId}` : ""}\nРевизия: ${saved.revision}\nИдентификатор запроса: ${saved.requestId}`;
+/** Backend остаётся единственным источником содержания и отношений. */
+export function boardTaskText(
+  task: BoardTaskView,
+  options: TextOptions,
+  invoke = defaultInvocation,
+): string {
+  return cardText(
+    {
+      title: `${task.key} · ${task.title}`,
+      fields: [
+        ["Ревизия", task.revision],
+        ["Колонка", columns[task.column] ?? task.column],
+        ["Доска", task.boardSlug],
+        ["Родитель", task.parentId ? `task:${task.parentId}` : "не задан"],
+        ["Блокировка", task.blocked ? `есть (${task.blockers.length})` : "нет"],
+        [
+          "Можно завершить",
+          task.canComplete === undefined
+            ? "сводка не предоставлена"
+            : task.canComplete
+              ? "да"
+              : "нет",
+        ],
+        [
+          "Критерии",
+          task.acceptance
+            ? `${task.acceptance.completed}/${task.acceptance.total} выполнено`
+            : "сводка не предоставлена Backend",
+        ],
+        ["Прямые зависимости", task.dependencies.length],
+        ["Обычные связи", `${task.related.length} исходящих`],
+        [
+          "Продуктовые цели",
+          task.productLinks.map((link) => `${link.kind}:${link.id}`).join(", ") || "нет",
+        ],
+        ["Постоянный ID", task.id],
+      ],
+      sections: [
+        {
+          title: "Описание",
+          body: renderMarkdown(task.description || "Описание пока не заполнено.", options),
+        },
+      ],
+      commands: [
+        ["Критерии", "criterion", "list"],
+        ["Комментарии", "comment", "list"],
+        ["Подзадачи", "children"],
+        ["Зависимости", "dependency", "list"],
+        ["Все связи", "links"],
+      ].map(([label, ...args]) => ({
+        label: label!,
+        command: invoke(["task", ...args, task.key]),
+      })),
+    },
+    options,
+  );
 }
 
-/** Компактный список критериев с продолжением и сохранением переносов краткого текста. */
+export function boardTaskSavedText(
+  saved: BoardTaskSaved | EntitySaved,
+  invoke = defaultInvocation,
+  receipt: {
+    title?: string;
+    taskTitle?: string | undefined;
+    fields?: OutputField[];
+    criterion?: string | undefined;
+    removed?: boolean;
+    relations?: boolean;
+  } = {},
+  options: TextOptions = defaultTextOptions,
+): string {
+  const criterion = receipt.criterion ?? ("criterionId" in saved ? saved.criterionId : undefined);
+  const titles: Record<string, string> = {
+    create: "Создана задача",
+    update: "Задача обновлена",
+    move: "Задача перемещена",
+    rename: "Ключ задачи изменён",
+  };
+  const title = receipt.title ?? titles[saved.action] ?? "Задача изменена";
+  return receiptText(
+    {
+      title: `${saved.key} · ${title}`,
+      fields: [
+        ["Ревизия", saved.revision],
+        ["Заголовок", receipt.taskTitle ?? ("task" in saved ? saved.task?.title : undefined)],
+        ...(receipt.fields ?? []),
+        ...(criterion ? [["Критерий", criterion] as OutputField] : []),
+      ],
+      commands: [
+        { label: "Читать задачу", command: invoke(["task", "get", saved.key]) },
+        ...(criterion || receipt.removed
+          ? [
+              {
+                label: "Критерии",
+                command: invoke(
+                  criterion && !receipt.removed
+                    ? ["task", "criterion", "get", saved.key, criterion]
+                    : ["task", "criterion", "list", saved.key],
+                ),
+              },
+            ]
+          : []),
+        ...(receipt.relations
+          ? [{ label: "Проверить связи", command: invoke(["task", "links", saved.key]) }]
+          : []),
+      ],
+    },
+    options,
+  );
+}
+
 export function criteriaText(
   page: Awaited<ReturnType<BoardTasksService["listCriteria"]>>,
   reference: string,
   options: TextOptions,
 ): string {
-  const content = page.items
-    .map((criterion) =>
-      wrap(
-        `${criterion.completed ? "[✓]" : "[ ]"} ${criterion.id} · ${safeText(criterion.title)}\n${safeText(criterion.summary)}`,
-        options.width,
-      ),
-    )
-    .join("\n\n");
-  const next =
-    page.nextOffset === null
-      ? "Конец списка."
-      : `Продолжение: relay-cli task criterion list ${quote(reference)} --offset ${page.nextOffset} --version ${quote(page.version)}`;
-  return `Критерии приёмки · ${safeText(reference)}\n\n${content || "Критерии приёмки не заданы."}\n\nПоказано: ${page.items.length} из ${page.total}. Ревизия задачи: ${page.revision}.\n${next}`;
+  return listText(
+    {
+      title: `Критерии приёмки · ${reference}`,
+      filters: [["Ревизия задачи", page.revision]],
+      items: page.items.map((c) => ({
+        key: c.id,
+        title: c.title,
+        details: [
+          `${c.completed ? "Выполнен" : "Не выполнен"}${c.summary ? ` · ${c.summary}` : ""}`,
+        ],
+      })),
+      emptyMessage: "На этой странице критериев нет.",
+    },
+    options,
+  );
 }
-
-/** Полное содержание критерия отображается терминальным Markdown-рендерером. */
 export function criterionText(
   view: Awaited<ReturnType<BoardTasksService["getCriterion"]>>,
   options: TextOptions,
+  reference?: string,
+  invoke = defaultInvocation,
 ): string {
-  const criterion = view.criterion;
-  return [
-    wrap(`${criterion.id} · ${safeText(criterion.title)}`, options.width),
-    `Состояние: ${criterion.completed ? "Выполнен" : "Не выполнен"}. Ревизия задачи: ${view.revision}.`,
-    wrap(safeText(criterion.summary), options.width),
-    renderMarkdown(criterion.description || "Полное описание не задано.", options),
-    criterion.completed
-      ? wrap(
-          `Выполнил: ${safeText(criterion.completedBy ?? "")}, ${criterion.completedAt}`,
-          options.width,
-        )
-      : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  const c = view.criterion;
+  return cardText(
+    {
+      title: `${c.id} · ${c.title}`,
+      fields: [
+        ["Задача", reference],
+        ["Ревизия задачи", view.revision],
+        ["Состояние", c.completed ? "Выполнен" : "Не выполнен"],
+        ["Краткое описание", c.summary],
+        ["Выполнил", c.completed ? c.completedBy : undefined],
+        ["Время выполнения", c.completed ? c.completedAt : undefined],
+      ],
+      sections: [
+        {
+          title: "Описание",
+          body: renderMarkdown(c.description || "Полное описание не задано.", options),
+        },
+      ],
+      commands: reference
+        ? [{ label: "Критерии задачи", command: invoke(["task", "criterion", "list", reference]) }]
+        : [],
+    },
+    options,
+  );
 }
+
 export function boardTasksText(
   page: Awaited<ReturnType<BoardTasksService["list"]>>,
   query: BoardTasksQuery,
   options: TextOptions,
 ): string {
-  const rows = page.items.map((task) => [
-    task.key,
-    task.title,
-    columns[task.column]!,
-    task.blocked ? `Блокеры: ${task.blockers.join(", ")}` : "—",
-  ]);
-  const table = new Table({
-    head: ["Ключ", "Задача", "Колонка", "Блокеры"],
-    wordWrap: true,
-    colWidths: [20, Math.max(20, options.width - 65), 18, 20],
-  });
-  table.push(...rows.map((row) => row.map(safeText)));
-  const content =
-    rows.length === 0
-      ? "Задач не найдено."
-      : options.width < 100
-        ? rows.map((row) => wrap(row.map(safeText).join(" · "), options.width)).join("\n\n")
-        : table.toString();
-  const next =
-    page.nextOffset === null
-      ? "Конец списка."
-      : `Продолжение: relay-cli task list ${Object.entries({
-          ...query,
-          version: page.version,
-          offset: page.nextOffset,
-        })
-          .filter(([, value]) => value !== undefined)
-          .map(
-            ([key, value]) =>
-              `--${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} ${quote(String(value))}`,
-          )
-          .join(" ")}`;
-  return `${content}\n\n${wrap(`Показано: ${page.items.length} из ${page.total}.\n${next}`, options.width)}`;
+  return listText(
+    {
+      title: "Задачи",
+      filters: [
+        ["Доска", query.board ?? "все"],
+        ["Колонка", query.column ? (columns[query.column] ?? query.column) : "все"],
+        [
+          "Завершённость",
+          query.completion === "finished"
+            ? "done/cancelled (не гарантия выполнения)"
+            : query.completion === "unfinished"
+              ? "без done/cancelled"
+              : "все",
+        ],
+        [
+          "Готовность",
+          query.readiness === "ready"
+            ? "к выполнению без блокеров"
+            : query.readiness === "blocked"
+              ? "с блокерами"
+              : "все",
+        ],
+        ["Поиск", query.q],
+        ["Область поиска", query.searchIn === "title" ? "ключ, ID и заголовок" : "также Markdown"],
+        ["Продуктовая цель", query.productTarget],
+      ],
+      items: page.items.map((t) => ({
+        key: t.key,
+        title: t.title,
+        details: [
+          `${columns[t.column] ?? t.column} · Ревизия: ${t.revision} · ${t.blocked ? `Блокеры: ${t.blockers.length}` : "Нет блокеров"}`,
+        ],
+      })),
+      emptyMessage: "На этой странице задач нет.",
+    },
+    options,
+  );
 }
 export function boardTaskLinksText(
   page: Awaited<ReturnType<BoardTasksService["links"]>>,
   reference: string,
   options: TextOptions,
 ): string {
-  const content = page.items
-    .map(({ relation, task }) =>
-      wrap(
-        `${relations[relation]}: ${task.key} · ${safeText(task.title)} · ${columns[task.column]}${task.blocked ? " · заблокирована" : ""}`,
-        options.width,
-      ),
-    )
-    .join("\n");
-  const next =
-    page.nextOffset === null
-      ? "Конец списка."
-      : `Продолжение: relay-cli task links ${reference} --offset ${page.nextOffset} --version ${page.version}`;
-  return `${content || "Связей нет."}\n\n${wrap(`Показано: ${page.items.length} из ${page.total}.\n${next}`, options.width)}`;
+  return listText(
+    {
+      title: `Связи задачи · ${reference}`,
+      items: page.items.map(({ relation, task }) => ({
+        key: task.key,
+        title: task.title,
+        details: [
+          `${relations[relation]} · ${columns[task.column] ?? task.column} · Ревизия: ${task.revision}${task.blocked ? " · заблокирована" : ""}`,
+        ],
+      })),
+      emptyMessage: "На этой странице связей нет.",
+    },
+    options,
+  );
 }
 export function boardsText(
   page: Awaited<ReturnType<BoardsService["list"]>>,
   options: TextOptions,
 ): string {
-  const next =
-    page.nextOffset === null
-      ? "Конец каталога."
-      : `Продолжение: relay-cli boards --offset ${page.nextOffset} --version ${page.version}`;
-  return `${page.items.map((board) => wrap(`${board.prefix} · ${safeText(board.name)} · /${board.slug} · ID ${board.id}`, options.width)).join("\n") || "Досок нет."}\n\nВсего: ${page.total}. ${next}`;
+  return listText(
+    {
+      title: "Доски проекта",
+      items: page.items.map((b) => ({
+        key: b.key ?? b.slug,
+        title: b.name,
+        details: [
+          `${scopes[b.kind] ?? b.kind} · Адрес: ${b.slug} · Префикс: ${b.prefix} · Ревизия: ${b.revision}`,
+        ],
+      })),
+      emptyMessage: "На этой странице досок нет.",
+    },
+    options,
+  );
+}
+export function boardText(
+  entity: EntityDetail,
+  options: TextOptions,
+  invoke = defaultInvocation,
+): string {
+  const data = entity.data;
+  if (data.kind !== "board") return "Backend не вернул свойства доски.";
+  return cardText(
+    {
+      title: `${entity.key} · ${entity.title}`,
+      fields: [
+        ["Ревизия", entity.revision],
+        ["Область", scopes[data.scope] ?? data.scope],
+        ["Адрес", data.slug],
+        ["Префикс", data.prefix ?? "не задан"],
+        ["Приложение", data.applicationId ?? "не задано"],
+        ["Постоянный ID", entity.ref.id],
+      ],
+      commands: [
+        { label: "Задачи доски", command: invoke(["task", "list", "--board", data.slug]) },
+      ],
+    },
+    options,
+  );
+}
+export function taskChildrenText(
+  page: EntitiesPage,
+  options: TextOptions,
+  reference?: string,
+): string {
+  return listText(
+    {
+      title: `Прямые подзадачи${reference ? ` · ${reference}` : ""}`,
+      items: page.items.map((t) => ({
+        key: t.key,
+        title: t.title,
+        details: [
+          `${t.status ? (columns[t.status] ?? t.status) : "Состояние не предоставлено"} · Ревизия: ${t.revision}`,
+        ],
+      })),
+      emptyMessage: "На этой странице подзадач нет.",
+    },
+    options,
+  );
+}
+export function taskDependenciesText(
+  page: TaskProgress["dependencies"],
+  options: TextOptions,
+  _invoke = defaultInvocation,
+  reference?: string,
+): string {
+  return listText(
+    {
+      title: `Обязательные зависимости${reference ? ` · ${reference}` : ""}`,
+      filters: [["Ревизии", "не предоставлены; перед изменением прочитайте task get"]],
+      items: page.items.map((t) => ({
+        key: t.key ?? `${t.kind}:${t.id}`,
+        title: t.title,
+        details: [
+          `${columns[t.column] ?? t.column} · Фактически выполнена: ${t.completed ? "да" : "нет"}`,
+        ],
+      })),
+      emptyMessage: "На этой странице обязательных зависимостей нет.",
+    },
+    options,
+  );
 }

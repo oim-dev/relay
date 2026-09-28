@@ -56,4 +56,4 @@
 - Для связей с требованиями: [продукт](../references/domain/PRODUCT.md).
 - Если исследование ведётся задачей: [задачи](../references/domain/TASKS.md).
 - Перед новой операцией записи: [покрытие](../references/CAPABILITIES.md),
-  [CLI](../references/interfaces/CLI.md) и `npx @oim-dev/relay-cli entities --help`.
+  нужное действие в [CLI](../references/interfaces/CLI.md) и `npx @oim-dev/relay-cli document --help`.

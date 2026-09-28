@@ -53,10 +53,7 @@ export function cursorOptions(command: Command): Command {
 
 export function pageOptions(command: Command): Command {
   return cursorOptions(command).addOption(
-    new Option("--all", "Все результаты одним ответом; лимит --max-bytes сохраняется").conflicts([
-      "limit",
-      "cursor",
-    ]),
+    new Option("--all", "Все результаты одним ответом").conflicts(["limit", "cursor"]),
   );
 }
 

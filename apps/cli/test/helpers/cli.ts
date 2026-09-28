@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TestContext } from "node:test";
+import type { CliPage } from "../../src/queries/result.js";
 
 export const binary = fileURLToPath(
   new URL(
@@ -17,9 +18,8 @@ interface Success<T> {
   ok: true;
   data: T;
   meta?: {
-    hasMore?: boolean;
-    nextCursor?: string | null;
-    truncated?: boolean;
+    page?: CliPage;
+    project?: string;
   };
 }
 interface Failure {
@@ -32,10 +32,48 @@ export interface Invocation<T> {
   stderr: string;
   body: Success<T> | Failure;
 }
-interface RunOptions {
+export interface RunOptions {
   input?: string | Buffer;
   env?: NodeJS.ProcessEnv;
   nodeArgs?: string[];
+  timeoutMs?: number;
+}
+
+/** Не наследуем подключение к рабочей базе. Явные env теста имеют приоритет. */
+export function cliEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of ["RELAY_CONFIG", "RELAY_SERVER_URL", "INIT_CWD"]) delete env[key];
+  return {
+    ...env,
+    ...(process.env.RELAY_CLI_TEST_SOURCE === "1"
+      ? { TSX_TSCONFIG_PATH: fileURLToPath(new URL("../../tsconfig.dev.json", import.meta.url)) }
+      : {}),
+    RELAY_ACTOR: "test-agent",
+    ...overrides,
+  };
+}
+
+/** Абсолютный loader нужен, поскольку cwd дочернего процесса — изолированная база. */
+export const cliNodeArgs =
+  process.env.RELAY_CLI_TEST_SOURCE === "1"
+    ? ["--conditions=tasks-source", "--import", import.meta.resolve("tsx")]
+    : [];
+
+export async function tempDirectory(t: TestContext): Promise<string> {
+  let directory: string;
+  try {
+    directory = await mkdtemp(join(tmpdir(), "relay-cli-test-"));
+  } catch (error) {
+    if (
+      !["EACCES", "EPERM", "ENOENT", "EROFS"].includes((error as NodeJS.ErrnoException).code ?? "")
+    )
+      throw error;
+    const base = fileURLToPath(new URL("../../../../.artifacts", import.meta.url));
+    await mkdir(base, { recursive: true });
+    directory = await mkdtemp(join(base, "relay-cli-test-"));
+  }
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  return realpath(directory);
 }
 
 /** Сквозные проверки запускают CLI отдельно; RELAY_CLI_TEST_SOURCE=1 выбирает исходники с tsx. */
@@ -47,26 +85,48 @@ export async function invokeRaw(
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [...(options.nodeArgs ?? []), binary, ...args.map(String)],
+      [...cliNodeArgs, ...(options.nodeArgs ?? []), binary, ...args.map(String)],
       {
         cwd,
-        env: { ...process.env, RELAY_ACTOR: "orchestrator", ...options.env },
+        env: cliEnv(options.env),
         stdio: ["pipe", "pipe", "pipe"],
       },
     );
     let stdout = "";
     let stderr = "";
+    let failure: Error | undefined;
+    let forceKill: NodeJS.Timeout | undefined;
+    const stop = (error: Error) => {
+      failure ??= error;
+      child.kill("SIGTERM");
+      forceKill ??= setTimeout(() => child.kill("SIGKILL"), 1_000);
+    };
+    const timer = setTimeout(
+      () =>
+        stop(
+          new Error(`CLI превысил timeout ${options.timeoutMs ?? 30_000} мс: ${args.join(" ")}`),
+        ),
+      options.timeoutMs ?? 30_000,
+    );
     child.stdout.setEncoding("utf8").on("data", (text: string) => {
       stdout += text;
     });
     child.stderr.setEncoding("utf8").on("data", (text: string) => {
       stderr += text;
     });
-    child.on("error", reject);
+    child.on("error", (error) => {
+      failure ??= error;
+    });
     child.stdin.on("error", (error: NodeJS.ErrnoException) => {
-      if (error.code !== "EPIPE") reject(error);
+      if (error.code !== "EPIPE") stop(error);
     });
     child.on("close", (code) => {
+      clearTimeout(timer);
+      if (forceKill) clearTimeout(forceKill);
+      if (failure) {
+        reject(failure);
+        return;
+      }
       resolve({ code, stdout, stderr });
     });
     child.stdin.end(options.input);
@@ -101,9 +161,7 @@ export function failed(result: Invocation<unknown>, code: string, exitCode = 2):
 }
 
 export async function fixture(t: TestContext) {
-  // Core canonicalizes storage paths, including macOS temporary-directory symlinks.
-  const root = await realpath(await mkdtemp(join(tmpdir(), "tasks-cli-")));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await tempDirectory(t);
   successful(await invoke(root, ["init"]));
   return {
     root,
@@ -111,7 +169,7 @@ export async function fixture(t: TestContext) {
       invoke<T>(root, args, options),
     async create(title: string, args: Array<string | number> = []): Promise<string> {
       return successful(
-        await invoke<{ id: string }>(root, [
+        await invoke<{ ref: { id: string } }>(root, [
           "task",
           "create",
           "--board",
@@ -120,7 +178,7 @@ export async function fixture(t: TestContext) {
           title,
           ...args,
         ]),
-      ).data.id;
+      ).data.ref.id;
     },
   };
 }

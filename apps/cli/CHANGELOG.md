@@ -28,7 +28,7 @@
 
 ### Переход базы и совместимость
 
-- `relay-cli --local --config .relay/config.json storage migrate` явно переносит
+- `npx @oim-dev/relay-cli --local --config .relay/config.json storage migrate` явно переносит
   поддерживаемые legacy-базы и форматы 1/2/3 в формат хранения 4 (оболочки записей — версия 3).
   Чтение и `storage reindex` не выполняют этот переход автоматически.
 - Хранятся текущие данные и пользовательские комментарии, без автоматического аудита,
@@ -110,7 +110,7 @@ npx @oim-dev/relay-cli@0.6.1 --help
 
 - Первый выпуск `@gromlab/relay-cli` в репозитории `gromlab-ru/relay`.
 - Режимы local/workspace: `.relay/config.json` и `relay.workspace.json`; базы в `.relay/tasks`.
-- Обращение `relay-cli <проект> <команда>` и `--project`, общий `--config`, автоматический поиск и команды `projects init/list/add/remove`.
+- Обращение `npx @oim-dev/relay-cli <проект> <команда>` и `--project`, общий `--config`, автоматический поиск и команды `projects init/list/add/remove`.
 - Общий `@relay/project-runtime` для CLI и MCP; сохранены локальный Core и HTTP через существующий REST SDK.
 - Метаданные выбранного проекта и привязка курсоров именованных вызовов к проекту и хранилищу.
 - Отдельные `@gromlab/relay-server` с Web и `@gromlab/relay-mcp`, подключающийся к общему серверу.
