@@ -246,15 +246,21 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       examples: [
         [
           action === "create"
-            ? "npx @oim-dev/relay-cli task create --actor agent --board BOARD-PRODUCT --title 'Сделать поиск' --criterion-title 'search=Находит документ' --criterion-summary 'search=По названию' --criterion-description 'search=## Проверка\nВведите название.'"
+            ? "npx @oim-dev/relay-cli task create --actor agent --board BOARD-PRODUCT --title 'Показать состояния поиска' --description '## Цель и основания\n\nРеализовать состояния формы по связанному сценарию поиска. Перед работой прочитать его актуальные правила.\n\n## Объём\n\n- Показывать ожидание во время запроса.\n- Различать отсутствие совпадений и ошибку API.\n- Сохранять запрос при ошибке и предоставлять повтор.\n\n## Границы и проверка\n\nАлгоритм поиска API не меняется. Проверить успех, пустой ответ и отказ API; сохранить фактические результаты.' --criterion-title 'error=Запрос сохраняется при ошибке API' --criterion-description 'error=## Проверка\nВвести запрос, воспроизвести отказ API, проверить сообщение и повтор без потери ввода.'"
             : "npx @oim-dev/relay-cli task update PRODUCT-1 --actor agent --title 'Уточнённая задача' --if-revision 1",
-          "Сохранить задачу",
+          action === "create"
+            ? "Учебный пример: замените требования и адреса данными проекта"
+            : "Сохранить задачу",
         ],
       ],
       configure(command) {
         writeOptions(command, action === "update");
         command.option("--title <text>", "Однострочный заголовок");
-        textOption(command, "description", "Полное описание задачи в Markdown");
+        textOption(
+          command,
+          "description",
+          "Полное описание задачи в Markdown: цель, основания, конкретная работа, границы и проверка; не краткая аннотация",
+        );
         command
           .option("--targets <refs...>", "Полный набор продуктовых целей по ключам или ID")
           .option("--clear-targets", "Явно очистить цели; нельзя вместе с --targets");
@@ -672,7 +678,11 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
         if (action === "update") command.option("--title <text>", "Новый однострочный заголовок");
         if (action === "add" || action === "update") {
           textOption(command, "summary", "Краткое обычное описание");
-          textOption(command, "description", "Полное описание в Markdown");
+          textOption(
+            command,
+            "description",
+            "Полное описание критерия в Markdown: условия, действия проверки и наблюдаемый результат",
+          );
         }
       },
       async run(context, input) {

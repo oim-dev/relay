@@ -96,11 +96,14 @@ async function planFields(context: CommandContext, options: Options) {
 }
 const contentOptions = (command: Command) => {
   for (const [name, label] of [
-    ["summary", "Краткое описание"],
-    ["goal", "Цель в Markdown"],
-    ["rationale", "Обоснование"],
-    ["boundaries", "Границы изменения"],
-    ["expected-result", "Ожидаемый результат"],
+    ["summary", "Краткая аннотация обычным текстом"],
+    [
+      "goal",
+      "Полная цель в Markdown: зачем изменение, что должно получиться; не краткая аннотация",
+    ],
+    ["rationale", "Обоснование в Markdown: проблема, источники и причины выбранной работы"],
+    ["boundaries", "Границы в Markdown: что входит в изменение и что исключено"],
+    ["expected-result", "Ожидаемый результат в Markdown: наблюдаемые изменения и способ проверки"],
   ])
     textOption(command, name!, label!);
   return command
@@ -358,7 +361,11 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         ],
       ],
       configure: (command) =>
-        textOption(revision(command), "result", "Итог завершения или причина отмены в Markdown"),
+        textOption(
+          revision(command),
+          "result",
+          "Итог или причина отмены в Markdown: фактический результат, основания проверок, ограничения и следующий шаг",
+        ),
       run: async (context, input) => {
         const texts = await readTextFields(context, input.options, ["result"]);
         const data = await context.backend.plans.transition(
@@ -566,8 +573,14 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         if (action === "create" || action === "update")
           for (const [name, label] of [
             ["summary", "Краткое описание"],
-            ["outcome", "Результат этапа в Markdown"],
-            ["completion-conditions", "Условия завершения в Markdown"],
+            [
+              "outcome",
+              "Результат этапа в Markdown: что должно получиться и границы ответственности",
+            ],
+            [
+              "completion-conditions",
+              "Условия завершения в Markdown: наблюдаемые признаки и способ проверки; не исполняемый код",
+            ],
           ])
             textOption(command, name!, label!);
         if (action === "move")
@@ -843,7 +856,11 @@ function registerReleases(group: Command, runtime: Runtime) {
             .option("--release-version <label>", "Обозначение версии выпуска")
             .option("--plans <references...>", "Полный новый состав планов");
         textOption(command, "summary", "Краткое описание");
-        textOption(command, "description", "Полное описание в Markdown");
+        textOption(
+          command,
+          "description",
+          "Полное описание релиза в Markdown: содержание выпуска, значимые изменения, ограничения и основания поставки",
+        );
         command
           .option("--planned-for <date>", "Плановая дата YYYY-MM-DD; пустая строка очищает дату")
           .option(

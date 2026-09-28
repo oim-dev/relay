@@ -6,20 +6,7 @@
     "scripts/diagnose.mjs": "scripts/diagnose.mjs",
     "references/ORCHESTRATOR.md": "references/agent/ORCHESTRATOR.md",
     "references/WORKER.md": "references/agent/WORKER.md",
-    "references/EXAMPLES.md": "references/agent/EXAMPLES.md",
-    "scenarios/NEW_PROJECT.md": "scenarios/NEW_PROJECT.md",
-    "scenarios/ADOPT_EXISTING.md": "scenarios/ADOPT_EXISTING.md",
-    "scenarios/WORKSPACE.md": "scenarios/WORKSPACE.md",
-    "scenarios/RESUME.md": "scenarios/RESUME.md",
-    "scenarios/CHANGE.md": "scenarios/CHANGE.md",
-    "scenarios/TASK.md": "scenarios/TASK.md",
-    "scenarios/RESEARCH.md": "scenarios/RESEARCH.md",
-    "scenarios/PLANNING.md": "scenarios/PLANNING.md",
-    "scenarios/EXECUTION.md": "scenarios/EXECUTION.md",
-    "scenarios/REPLAN.md": "scenarios/REPLAN.md",
-    "scenarios/RELEASE.md": "scenarios/RELEASE.md",
-    "scenarios/COLLABORATION.md": "scenarios/COLLABORATION.md",
-    "scenarios/RECOVERY.md": "scenarios/RECOVERY.md"
+    "references/EXAMPLES.md": "references/agent/EXAMPLES.md"
   },
   "documents": {
     "docs/README.md": "references/README.md",

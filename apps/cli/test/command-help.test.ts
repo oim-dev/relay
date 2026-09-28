@@ -41,6 +41,34 @@ test("help: все 129 листьев и группы работают без co
   assert.doesNotMatch(child.stdout, /\x1b/);
 });
 
+test("help: запись объясняет содержание своего вида и показывает развёрнутый Markdown", async (t) => {
+  const root = await tempDirectory(t);
+  for (const [kind, expected] of [
+    ["feature", /правила, границы/],
+    ["scenario", /альтернативы, ошибки/],
+    ["implementation", /вкладу именно этого приложения/],
+    ["task", /конкретная работа, границы/],
+  ] as const) {
+    for (const action of ["create", "update"]) {
+      const result = await renderHelp(root, [kind, action, "--help"]);
+      assert.equal(result.code, 0);
+      const text = result.stdout.replace(/\s+/g, " ");
+      assert.match(text, expected, `${kind} ${action}`);
+      assert.match(text, /Markdown/);
+      assert.match(text, /не краткая аннотация/);
+      if (action === "create") {
+        const example = result.stdout.split("Примеры:").at(-1)!;
+        assert(
+          (example.match(/## /g) ?? []).length >= 3,
+          `${kind}: пример раскрывает несколько аспектов`,
+        );
+        assert.doesNotMatch(example, /Полное описание требований и результата/);
+      }
+    }
+  }
+  assert.deepEqual(await readdir(root), []);
+});
+
 test("help: multiline форматирование сохраняет Bash argv, не вызывая npx или CLI", () => {
   const prefix = "npx @oim-dev/relay-cli document create";
   const cases: [string, string[]][] = [
