@@ -3,13 +3,14 @@ import type { Result } from "./queries/result.js";
 import { invariant } from "@relay/core/shared/errors";
 import { action } from "./context.js";
 import type { CommandContext, Runtime } from "./context.js";
+import { formatHelpExample } from "./help-example.js";
 
 export interface CommandHelp {
   name: string;
   description: string;
-  details: string;
+  details?: string;
   arguments?: Record<string, string>;
-  examples: readonly (readonly [command: string, explanation: string])[];
+  examples?: readonly (readonly [command: string, explanation: string])[];
   configure?: (command: Command) => unknown;
 }
 
@@ -24,7 +25,9 @@ export interface CommandDefinition<Options> extends CommandHelp {
 }
 
 export function commandPath(command: Command): string {
-  return command.parent ? `${commandPath(command.parent)} ${command.name()}` : command.name();
+  return command.parent
+    ? `${commandPath(command.parent)} ${command.name()}`
+    : "npx @oim-dev/relay-cli";
 }
 
 export function addCommandHelp(
@@ -34,12 +37,12 @@ export function addCommandHelp(
   command.addHelpText("after", () =>
     [
       "",
-      help.details,
+      help.details ?? "",
       "",
-      "Примеры:",
-      ...help.examples.flatMap(([example, explanation]) => [
+      ...(help.examples?.length ? ["Примеры:"] : []),
+      ...(help.examples ?? []).flatMap(([example, explanation]) => [
         `  ${explanation}`,
-        `  ${example}`,
+        formatHelpExample(example, "  "),
         "",
       ]),
     ].join("\n"),

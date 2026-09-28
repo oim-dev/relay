@@ -1,14 +1,12 @@
 import { z } from "zod";
 import { decodeCursor, encodeCursor } from "@relay/core/shared/cursor";
-import { AppError } from "@relay/core/shared/errors";
-import { resultBytes } from "./result.js";
 import type { OutputFormat, Result } from "./result.js";
 import type { TextOptions } from "../presentation/theme.js";
 
 export interface PageOptions {
-  /** Без ограничения числа элементов страница определяется байтовым бюджетом. */
+  /** Совместимый helper для старых команд; размер определяется числом элементов. */
   limit?: number;
-  maxBytes: number;
+  maxBytes?: number;
   format: OutputFormat;
   cursor?: string;
   text?: TextOptions;
@@ -25,7 +23,7 @@ export function compareKeys(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-/** Лимит байтов уменьшает страницу, но курсор всегда указывает на последний выданный элемент. */
+/** Курсор всегда указывает на последний выданный элемент. */
 export function paginate<T>(
   items: readonly T[],
   key: (item: T) => string,
@@ -57,31 +55,7 @@ export function paginate<T>(
   };
   // Сначала пробуем страницу целиком: последней странице не нужен длинный курсор.
   // Для помещающегося рабочего списка это также исключает рендеринг каждого префикса.
-  const candidates = options.all ? available : available.slice(0, options.limit);
+  const candidates = options.all ? available : available.slice(0, options.limit ?? 20);
   for (const item of candidates) selected.push(item);
-  const result = response();
-  const requiredBytes = resultBytes(result, options.format, options.text);
-  if (requiredBytes <= options.maxBytes) return result;
-  if (options.all) {
-    throw new AppError(
-      "RESPONSE_TOO_LARGE",
-      "Полный список не помещается в --max-bytes; увеличьте лимит или используйте страницы",
-      2,
-      { requiredBytes, maxBytes: options.maxBytes },
-    );
-  }
-  selected.length = 0;
-  for (const item of candidates) {
-    selected.push(item);
-    if (resultBytes(response(), options.format, options.text) > options.maxBytes) {
-      selected.pop();
-      if (!selected.length)
-        throw new AppError(
-          "RESPONSE_TOO_LARGE",
-          "Элемент не помещается в ответ; увеличьте --max-bytes",
-        );
-      return response(true);
-    }
-  }
   return response();
 }

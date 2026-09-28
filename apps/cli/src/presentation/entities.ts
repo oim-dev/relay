@@ -1,4 +1,6 @@
-import Table from "cli-table3";
+import { cardText, listText, receiptText, commandText } from "./common.js";
+import type { OutputField } from "./common.js";
+import { defaultTextOptions } from "./theme.js";
 import { entityDefinitions } from "@relay/contracts/entities";
 import type {
   EntitiesPage,
@@ -11,8 +13,87 @@ import type { TextOptions } from "./theme.js";
 import { safeText } from "./text.js";
 import { wrap } from "./layout.js";
 import { renderMarkdown } from "./markdown.js";
+import { columns } from "./board-tasks.js";
+import { planningStatusLabels } from "./planning.js";
 
 const labels = new Map(entityDefinitions.map((entry) => [entry.kind, entry.title]));
+const readinessLabels: Record<string, string> = {
+  none: "Не реализовано",
+  partial: "Частично",
+  done: "Готово",
+};
+/** Один код может иметь разный смысл у разных владельцев; неизвестный не интерпретируем. */
+export function stateLabel(kind: string | undefined, value: string): string {
+  let dictionary: Readonly<Record<string, string>> = {};
+  if (kind === "task") dictionary = columns;
+  else if (kind === "document") dictionary = documentStates;
+  else if (kind === "work-plan" && ["draft", "active", "completed", "cancelled"].includes(value))
+    dictionary = planningStatusLabels;
+  else if (kind === "release" && ["planned", "released", "cancelled"].includes(value))
+    dictionary = planningStatusLabels;
+  else if (["feature", "scenario", "implementation"].includes(kind ?? "")) {
+    if (kind === "implementation" && value === "inactive") return "Участие снято";
+    dictionary = readinessLabels;
+  }
+  return Object.hasOwn(dictionary, value) ? dictionary[value]! : value;
+}
+
+function entityStateFields(entity: EntitySummary): OutputField[] {
+  const kind = entity.ref.kind;
+  if (kind === "implementation" && (entity.active === false || entity.status === "inactive"))
+    return [["Состояние", "Участие снято"]];
+  return [
+    ...(kind === "implementation" ? [["Участие", "Активно"] as OutputField] : []),
+    ...(entity.status
+      ? [
+          [
+            ["feature", "scenario", "implementation"].includes(kind)
+              ? "Готовность (расчёт)"
+              : "Состояние",
+            stateLabel(kind, entity.status),
+          ] as OutputField,
+        ]
+      : []),
+  ];
+}
+export function entityReadArgs(item: EntitySummary): string[] {
+  if (item.ref.kind === "product" || item.ref.kind === "project") return [item.ref.kind, "get"];
+  return [item.ref.kind === "work-plan" ? "plan" : item.ref.kind, "get", item.key];
+}
+export function filterFields(query: object): OutputField[] {
+  const kind = "kind" in query && typeof query.kind === "string" ? query.kind : undefined;
+  const names: Record<string, string> = {
+    kind: "Вид",
+    q: "Поиск",
+    refs: "Ключи",
+    application: "Приложение",
+    feature: "Фича",
+    scenario: "Сценарий",
+    target: "Цель",
+    parent: "Родитель",
+    board: "Доска",
+    status: "Состояние",
+    active: "Участие",
+    section: "Раздел",
+    documentKind: "Тип документа",
+    pinned: "Закрепление",
+    archived: "Архив",
+    sort: "Сортировка",
+    id: "Запись",
+  };
+  return Object.entries(query)
+    .filter(([key, value]) => names[key] && value !== undefined)
+    .map(([key, value]) => [
+      names[key]!,
+      key === "kind"
+        ? (labels.get(value as EntitySummary["ref"]["kind"]) ?? String(value))
+        : key === "status"
+          ? stateLabel(kind, String(value))
+          : Array.isArray(value)
+            ? value.join(", ")
+            : String(value),
+    ]);
+}
 const documentStates = { draft: "Черновик", active: "Действующий", archived: "Архив" };
 const documentKinds = {
   specification: "Техническое задание",
@@ -23,72 +104,79 @@ const documentKinds = {
   decision: "Решение",
   research: "Исследование",
 };
-const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
 type Page = { total: number; nextOffset: number | null; version: string };
 
-/** Продолжение сохраняет фильтры, размер страницы и версию снимка. */
-export function entityContinuation(page: Page, command: string, query: object): string {
-  if (page.nextOffset === null) return `Всего: ${page.total}. Выборка прочитана полностью.`;
-  const args = Object.entries({ ...query, offset: page.nextOffset, version: page.version })
-    .filter(([, value]) => value !== undefined)
-    .map(
-      ([key, value]) =>
-        `--${key === "version" ? "snapshot-version" : key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} ${(Array.isArray(value) ? value : [value]).map((part) => quote(String(part))).join(" ")}`,
-    );
-  return `Всего: ${page.total}.\nПродолжение: relay-cli entities ${command} ${args.join(" ")}`;
-}
-
-/** Ключ является основным обозначением; узкий терминал получает карточки вместо широкой таблицы. */
-export function entitiesText(page: EntitiesPage, query: object, options: TextOptions): string {
-  const table = new Table({
-    head: ["Ключ", "Вид", "Название", "Состояние"],
-    wordWrap: true,
-    colWidths: [22, 16, Math.max(20, options.width - 57), 14],
-  });
-  const rows = page.items.map((item) => [
-    item.key,
-    labels.get(item.ref.kind) ?? item.ref.kind,
-    item.title,
-    item.document ? documentStates[item.document.status] : (item.status ?? "—"),
-  ]);
-  table.push(...rows.map((row) => row.map(safeText)));
-  const content =
-    page.items.length === 0
-      ? "Сущностей по этим условиям нет."
-      : options.width < 100
-        ? page.items
-            .map((item) =>
-              wrap(
-                safeText(
-                  `${item.key} · ${labels.get(item.ref.kind)} · ${item.title}${item.status ? ` · ${item.status}` : ""}${item.summary ? `\n${item.summary}` : ""}`,
-                ),
-                options.width,
-              ),
-            )
-            .join("\n\n")
-        : table.toString();
-  return ["Сущности проекта", content, entityContinuation(page, "list", query)].join("\n\n");
+/** Компактный каталог одинаково раскрывает ключ, вид и контекст при любой ширине. */
+export function entitiesText(
+  page: EntitiesPage,
+  query: object,
+  options: TextOptions,
+  readCommands: string[] = [],
+): string {
+  return [
+    listText(
+      {
+        title: "Каталог сущностей",
+        filters: filterFields(query),
+        items: page.items.map((item) => ({
+          key: item.key,
+          title: item.title,
+          details: [
+            labels.get(item.ref.kind) ?? item.ref.kind,
+            ...(item.document
+              ? [
+                  stateLabel("document", item.document.status),
+                  documentKinds[item.document.kind],
+                  `Раздел: ${item.document.sectionId ?? "Без раздела"} · связей ${item.document.linkCount}${item.document.pinned ? " · закреплён" : ""}`,
+                ]
+              : entityStateFields(item).map(([label, value]) => `${label}: ${value}`)),
+            ...(item.context ? [item.context] : []),
+          ],
+        })),
+        emptyMessage:
+          page.total === 0 ? "Сущностей по этим условиям нет." : "На этой странице сущностей нет.",
+      },
+      options,
+    ),
+    ...readCommands.map(
+      (command, index) =>
+        `Прочитать ${safeText(page.items[index]!.key)}:\n${commandText(command, options)}`,
+    ),
+  ].join("\n\n");
 }
 
 export function entityTypesText(
   page: Page & { items: EntityType[] },
-  query: object,
+  _query: object,
   options: TextOptions,
+  commands: string[] = [],
 ): string {
   return [
-    "Виды сущностей",
-    ...page.items.map((item) =>
-      wrap(
-        `${item.kind} — ${item.title}\n${item.description}\nДействия: ${item.actions.join(", ")}`,
-        options.width,
-      ),
+    listText(
+      {
+        title: "Виды сущностей",
+        items: page.items.map((item) => ({
+          key: item.kind,
+          title: item.title,
+          details: [item.description, `Действия: ${item.actions.join(", ")}`],
+        })),
+        emptyMessage: "На этой странице видов нет.",
+      },
+      options,
     ),
-    entityContinuation(page, "types", query),
+    ...commands.map(
+      (command, index) =>
+        `Изучить ${safeText(page.items[index]!.kind)}:\n${commandText(command, options)}`,
+    ),
   ].join("\n\n");
 }
 
 /** Полное содержание имеет представление своего вида; Markdown сохраняет форматирование. */
-export function entityText(entity: EntityDetail, options: TextOptions): string {
+export function entityText(
+  entity: EntityDetail,
+  options: TextOptions,
+  commands: { scenarios?: string; overview?: string; context?: string } = {},
+): string {
   const addresses = new Map(
     entity.references.map((item) => [
       `${item.ref.kind}:${item.ref.id}`,
@@ -96,12 +184,11 @@ export function entityText(entity: EntityDetail, options: TextOptions): string {
     ]),
   );
   const address = (kind: string, id: string | null) =>
-    id ? safeText(addresses.get(`${kind}:${id}`) ?? `${kind}:${id}`) : "—";
-  const lines = [
-    `${safeText(entity.key)} — ${safeText(entity.title)}`,
-    `${labels.get(entity.ref.kind)} · ревизия ${entity.revision}${entity.status ? ` · ${safeText(entity.status)}` : ""}`,
-    ...(entity.summary ? [wrap(safeText(entity.summary), options.width)] : []),
-  ];
+    id
+      ? safeText(addresses.get(`${kind}:${id}`) ?? `${kind}:${id} (название не предоставлено)`)
+      : "—";
+  const relationSections: { title: string; body: string }[] = [];
+  const lines = [...(entity.summary ? [wrap(safeText(entity.summary), options.width)] : [])];
   const data = entity.data;
   if (data.kind === "project") lines.push(`Адрес проекта: ${safeText(data.slug)}`);
   if (data.kind === "board")
@@ -110,58 +197,127 @@ export function entityText(entity: EntityDetail, options: TextOptions): string {
     );
   if (data.kind === "application")
     lines.push(
-      `Тип: ${data.type}\nАдрес доски: ${data.slug}\nПрефикс задач: ${data.prefix ?? "—"}`,
+      `Тип: ${{ frontend: "Фронтенд", backend: "Бэкенд", internal: "Внутренний инструмент" }[data.type]}\nАдрес доски: ${safeText(data.slug)}\nПрефикс задач: ${safeText(data.prefix ?? "—")}`,
     );
   if (data.kind === "scenario") lines.push(`Фича: ${address("feature", data.featureId)}`);
   if (data.kind === "implementation")
     lines.push(
-      `Приложение: ${address("application", data.applicationId)}\nФича: ${address("feature", data.featureId)}\nСценарий: ${address("scenario", data.scenarioId)}\nУчастие: ${data.active ? "активно" : "снято"}`,
+      `Приложение: ${address("application", data.applicationId)}\nФича: ${address("feature", data.featureId)}\nСценарий: ${data.scenarioId ? address("scenario", data.scenarioId) : "Общий вклад в фичу (FI)"}`,
+      "Ручная совместимая отметка в этом ответе не раскрывается; вычисляемая готовность не заменяет сохранённый status.",
     );
   if (data.kind === "document") {
     lines.push(
-      `Тип документа: ${documentKinds[data.documentKind]}\nСостояние: ${documentStates[data.documentStatus ?? "active"]}\nРаздел: ${safeText(entity.document?.sectionId ?? "Без раздела")}\nЗакреплён: ${data.pinned ? "да" : "нет"}`,
+      `Тип документа: ${documentKinds[data.documentKind]}\nСостояние: ${safeText(stateLabel("document", data.documentStatus ?? "active"))}\nРаздел: ${safeText(entity.document?.sectionId ?? "Без раздела")}\nЗакреплён: ${data.pinned ? "да" : "нет"}`,
     );
     const relations = [
       ...data.links.map((link) => ({
         target: { kind: link.kind, id: link.kind === "product" ? "passport" : link.id },
-        type: "documents",
+        type: "legacy",
         description: "",
       })),
       ...(data.relations ?? []),
     ];
-    lines.push(
-      "Связи:",
-      ...relations.map(
-        (link) =>
-          `${link.type === "documents" ? "Описывает" : "Контекст"}: ${address(link.target.kind, link.target.id)}${link.description ? `\n${renderMarkdown(link.description, options)}` : ""}`,
-      ),
-    );
-    if (relations.length === 0) lines.push("Пока без связей.");
+    for (const link of relations)
+      relationSections.push({
+        title:
+          link.type === "legacy"
+            ? "Прежняя продуктовая область (links)"
+            : link.type === "documents"
+              ? "Документ описывает (documents)"
+              : "Цель ссылается на документ (references)",
+        body: [
+          wrap(address(link.target.kind, link.target.id), options.width),
+          ...(link.description ? [renderMarkdown(link.description, options)] : []),
+        ].join("\n\n"),
+      });
+    if (relations.length === 0)
+      relationSections.push({ title: "Прикрепления", body: "Пока без связей." });
   }
   if (data.kind === "task")
     lines.push(
-      `Доска: ${address("board", data.boardId)}\nКолонка: ${data.column}\nРодитель: ${address("task", data.parentId)}\nРеализует: ${data.productLinks.map((link) => address(link.kind, link.id)).join(", ") || "—"}\nЗависит от: ${data.dependencies.map((id) => address("task", id)).join(", ") || "—"}\nСвязана с: ${data.related.map((id) => address("task", id)).join(", ") || "—"}`,
+      `Доска: ${address("board", data.boardId)}\nКолонка: ${safeText(stateLabel("task", data.column))}\nРодитель: ${address("task", data.parentId)}\nРеализует: ${data.productLinks.map((link) => address(link.kind, link.id)).join(", ") || "—"}\nЗависит от: ${data.dependencies.map((id) => address("task", id)).join(", ") || "—"}`,
     );
   const markdown = "description" in data ? data.description : "body" in data ? data.body : "";
-  if (markdown) lines.push(renderMarkdown(markdown, options));
-  lines.push(
-    `Контекст: relay-cli graph context ${quote(entity.key)}\nID: ${safeText(entity.ref.id)}`,
+  if (
+    entity.references.length &&
+    !["document", "task", "implementation", "scenario"].includes(data.kind)
+  )
+    lines.push(
+      "Связанные записи:",
+      ...entity.references.map((item) =>
+        safeText(`${item.key} · ${labels.get(item.ref.kind)} · ${item.title}`),
+      ),
+    );
+  return cardText(
+    {
+      title: `${entity.key} — ${entity.title}`,
+      fields: [
+        ["Вид", labels.get(entity.ref.kind)],
+        ["Ревизия", entity.revision],
+        ...(data.kind !== "document" ? entityStateFields(entity) : []),
+      ],
+      sections: [
+        { title: "Сведения", body: lines.map((line) => wrap(line, options.width)).join("\n\n") },
+        ...(markdown
+          ? [{ title: "Полное содержание", body: renderMarkdown(markdown, options) }]
+          : []),
+        ...relationSections,
+      ],
+      commands: Object.entries(commands)
+        .filter((entry): entry is [string, string] => Boolean(entry[1]))
+        .map(([label, command]) => ({
+          label:
+            { scenarios: "Сценарии", overview: "Карта продукта", context: "Контекст" }[label] ??
+            label,
+          command,
+        })),
+    },
+    options,
   );
-  return lines.join("\n\n");
 }
 
-export function entityResolvedText(entity: EntitySummary): string {
-  return `${safeText(entity.key)} — ${safeText(entity.title)}\nВид: ${labels.get(entity.ref.kind)}\nID: ${safeText(entity.ref.id)}\nРевизия: ${entity.revision}`;
+export function entityResolvedText(
+  entity: EntitySummary,
+  options: TextOptions = defaultTextOptions,
+  readCommand?: string,
+): string {
+  return cardText(
+    {
+      title: `${entity.key} — ${entity.title}`,
+      fields: [
+        ["Вид", labels.get(entity.ref.kind)],
+        ["Ревизия", entity.revision],
+        ["Постоянный технический адрес", `${entity.ref.kind}:${entity.ref.id}`],
+      ],
+      commands: readCommand ? [{ label: "Прочитать", command: readCommand }] : [],
+    },
+    options,
+  );
 }
-export function entitySavedText(saved: EntitySaved): string {
+export function entitySavedText(
+  saved: EntitySaved,
+  readCommand?: string,
+  options: TextOptions = defaultTextOptions,
+  actionTitle?: string,
+): string {
   const actions = {
-    create: "Создана",
-    update: "Изменена",
+    create: "Запись создана",
+    update: "Запись изменена",
     rename: "Ключ изменён",
     move: "Перемещена",
     link: "Связи изменены",
   };
-  return `${actions[saved.action]}: ${safeText(saved.key)}\nВид: ${labels.get(saved.ref.kind)}\nID: ${saved.ref.id}\nРевизия: ${saved.revision}\nИдентификатор запроса: ${safeText(saved.requestId)}`;
+  return receiptText(
+    {
+      title: `${actionTitle ?? actions[saved.action]}: ${saved.key}`,
+      fields: [
+        ["Вид", labels.get(saved.ref.kind)],
+        [saved.ref.kind === "project" ? "Ревизия проекта" : "Ревизия", saved.revision],
+      ],
+      commands: readCommand ? [{ label: "Прочитать", command: readCommand }] : [],
+    },
+    options,
+  );
 }
 
 export function entityTypeText(
@@ -171,6 +327,7 @@ export function entityTypeText(
     updateSchema: Record<string, unknown> | null;
   },
   options: TextOptions,
+  ownerCommand?: string,
 ): string {
   const schema = type.createSchema ?? type.schema;
   const properties = schema.properties;
@@ -182,16 +339,46 @@ export function entityTypeText(
   const rows = fields.map(([name, raw]) => {
     const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
     return wrap(
-      `${name}${required.includes(name) ? " (обязательно)" : ""} — ${typeof value.description === "string" ? value.description : name === "kind" ? "Вид сущности" : "Поле контракта"}`,
+      safeText(
+        `${name}${required.includes(name) ? " (обязательно)" : ""} — ${typeof value.description === "string" ? value.description : name === "kind" ? "Вид сущности" : "Поле контракта"}${typeof value.type === "string" ? `; тип: ${value.type}` : ""}${Array.isArray(value.enum) ? `; значения: ${value.enum.join(", ")}` : ""}`,
+      ),
       options.width,
     );
   });
-  return [
-    `${type.kind} — ${type.title}`,
-    type.description,
-    `Контракт: ${type.contractVersion}\nКлючи: ${type.keyPolicy}`,
-    `Фильтры: ${["q", "refs", ...type.filters].join(", ")}\nДействия: ${type.actions.join(", ")}`,
-    "Поля",
-    ...rows,
-  ].join("\n\n");
+  return cardText(
+    {
+      title: `${type.kind} — ${type.title}`,
+      fields: [
+        ["Контракт", type.contractVersion],
+        ["Ключи", type.keyPolicy],
+        ["Фильтры", ["q", "refs", ...type.filters].join(", ")],
+        ["Действия", type.actions.join(", ")],
+        ["Общее создание", type.createSchema ? "Поддержано" : "Не поддержано"],
+        ["Общее изменение", type.updateSchema ? "Поддержано" : "Не поддержано"],
+      ],
+      sections: [
+        { title: "Назначение", body: wrap(safeText(type.description), options.width) },
+        {
+          title: type.createSchema ? "Поля создания" : "Поля чтения",
+          body: rows.join("\n") || "Схема не раскрывает отдельные поля.",
+        },
+        ...(
+          [
+            ["Схема чтения", type.schema],
+            ["Схема создания", type.createSchema],
+            ["Схема изменения", type.updateSchema],
+          ] as const
+        ).map(([title, schema]) => ({
+          title,
+          body: schema
+            ? renderMarkdown(`\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``, options)
+            : "Общая операция не поддержана; используйте предметные команды, перечисленные в действиях вида.",
+        })),
+      ],
+      commands: ownerCommand
+        ? [{ label: "Перейти к предметным записям", command: ownerCommand }]
+        : [],
+    },
+    options,
+  );
 }

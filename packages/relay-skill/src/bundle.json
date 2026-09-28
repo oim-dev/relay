@@ -42,6 +42,8 @@
     "docs/guides/CONTENT.md": "references/guides/CONTENT.md",
     "docs/guides/RECOVERY.md": "references/guides/RECOVERY.md",
     "docs/guides/ADOPT_EXISTING.md": "references/guides/ADOPT_EXISTING.md",
+    "apps/cli/docs/AGENT_GUIDE.md": "references/interfaces/AGENT_GUIDE.md",
+    "apps/cli/docs/COMMAND_STYLE.md": "references/interfaces/COMMAND_STYLE.md",
     "apps/cli/docs/CLI.md": "references/interfaces/CLI.md",
     "apps/cli/docs/TERMINAL.md": "references/interfaces/TERMINAL.md",
     "apps/mcp/docs/MCP.md": "references/interfaces/MCP.md",

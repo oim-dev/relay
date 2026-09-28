@@ -4,23 +4,30 @@ import type { Config } from "@relay/core/domain/config";
 import { safeText } from "./safe.js";
 
 export interface TextOptions {
+  /** Совместимость старых рендереров; значение не включает цвет. */
   color: boolean;
   width: number;
 }
 
 export const defaultTextOptions: TextOptions = { color: false, width: 100 };
 
-export function palette(options: TextOptions = defaultTextOptions) {
-  return pc.createColors(options.color);
+/** Старые рендереры сохраняют вызовы стилей, но ни один стиль не генерирует ANSI. */
+export function palette(_options: TextOptions = defaultTextOptions) {
+  const plain = pc.createColors(false);
+  return Object.fromEntries(
+    Object.entries(plain).map(([name, value]) => [
+      name,
+      typeof value === "function" ? (text: unknown) => safeText(String(text)) : value,
+    ]),
+  ) as typeof plain;
 }
 
 export function statusText(
   status: string,
-  options: TextOptions,
+  _options: TextOptions,
   config: Config = defaultConfig,
   blocked = false,
 ): string {
-  const colors = palette(options);
   const rule = config.statuses[status];
   const label = rule?.satisfiesDependencies
     ? `✓ ${status === "done" ? "Выполнена" : safeText(status)}`
@@ -31,17 +38,7 @@ export function statusText(
         : status === "review"
           ? "◇ На проверке"
           : `○ ${status === "todo" ? (blocked ? "Ожидает" : "К работе") : safeText(status)}`;
-  const fallback = rule?.satisfiesDependencies
-    ? "green"
-    : rule?.terminal
-      ? "gray"
-      : status === "in_progress"
-        ? "yellow"
-        : status === "review"
-          ? "magenta"
-          : "cyan";
-  const color = rule?.color ?? fallback;
-  return color === "none" ? label : colors[color](label);
+  return label;
 }
 
 export function taskReference(task: { id: number }): string {

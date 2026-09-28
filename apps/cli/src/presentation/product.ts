@@ -1,4 +1,5 @@
-import Table from "cli-table3";
+import { listText, cardText } from "./common.js";
+import { filterFields } from "./entities.js";
 import type {
   ProductContext,
   ProductList,
@@ -10,7 +11,6 @@ import type {
 import type { ContentWarning } from "@relay/core/application/product/content";
 import type { ProductContentQuery } from "@relay/core/application/product/content";
 import type { TextOptions } from "./theme.js";
-import { palette } from "./theme.js";
 import { wrap, section } from "./layout.js";
 import { renderMarkdown } from "./markdown.js";
 import { safeText, previewText } from "./text.js";
@@ -89,65 +89,62 @@ export function productRecordText(record: RecordView, options: TextOptions): str
     parts.push(
       renderMarkdown(fields.kind === "document" ? fields.body : fields.description, options),
     );
-    if (fields.kind === "document")
+    if (fields.kind === "document") {
       parts.push(
-        section(
-          "Связи",
-          fields.links.length
-            ? fields.links
-                .map((link) =>
-                  wrap(
-                    link.kind === "product"
-                      ? "• Продукт"
-                      : `• ${link.kind === "implementation" ? "Реализация" : kinds[link.kind]}: ${link.id}${link.kind === "implementation" ? ` · ${link.applicationId}` : ""}`,
-                    options.width,
-                  ),
-                )
-                .join("\n")
-            : "Связей нет.",
-          options,
+        `Тип: ${safeText(fields.documentKind)}\nСостояние: ${safeText(fields.documentStatus ?? "active")}\nРаздел: ${safeText(fields.sectionId ?? "Без раздела")}\nЗакреплён: ${fields.pinned ? "да" : "нет"}`,
+      );
+      const links = fields.links.map((link) =>
+        wrap(
+          safeText(
+            link.kind === "product"
+              ? "Прежняя область: продукт"
+              : `Прежняя область: ${link.kind}:${link.id}`,
+          ),
+          options.width,
         ),
       );
+      const relations = (fields.relations ?? []).map(
+        (link) =>
+          `${safeText(link.type)}: ${safeText(`${link.target.kind}:${link.target.id}`)}${link.description ? `\n${renderMarkdown(link.description, options)}` : ""}`,
+      );
+      parts.push(section("Связи", [...links, ...relations].join("\n\n") || "Связей нет.", options));
+    }
   }
   return parts.join("\n\n");
 }
 
-function listing(items: ProductOverview["items"], options: TextOptions): string {
-  if (!items.length) return "Записей пока нет.";
-  if (options.width < 80)
-    return items
-      .map((item) =>
-        wrap(
-          [
-            `${kinds[item.kind] ?? item.kind} · ${safeText(item.name)}`,
-            `${item.key ? `Ключ: ${item.key}\n` : ""}ID: ${item.id} · ревизия ${item.revision}`,
-            safeText(previewText(item.summary, 120)),
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          options.width,
-        ),
-      )
-      .join("\n\n");
-  const table = new Table({
-    head: ["Тип", "Название и описание", "ID / ревизия"],
-    colWidths: [15, options.width - 61, 42],
-    wordWrap: true,
-    wrapOnWordBoundary: false,
-    style: { head: [], border: [], "padding-left": 1, "padding-right": 1 },
-  });
-  for (const item of items)
-    table.push([
-      kinds[item.kind] ?? item.kind,
-      safeText(item.name) + (item.summary ? `\n${safeText(previewText(item.summary, 120))}` : ""),
-      `${item.key ? `${item.key}\n` : ""}${item.id}\nревизия ${item.revision}`,
-    ]);
-  return table.toString();
+function listing(
+  items: ProductOverview["items"],
+  options: TextOptions,
+  readiness: ProductOverview["readiness"] = [],
+): string {
+  const states = new Map(readiness.map((item) => [item.id, item.status]));
+  return listText(
+    {
+      title: "Записи продукта",
+      items: items.map((item) => ({
+        key: item.key ?? item.id,
+        title: item.name,
+        details: [
+          kinds[item.kind] ?? item.kind,
+          ...(states.has(item.id)
+            ? [`Готовность (расчёт): ${statuses[states.get(item.id)!]}`]
+            : []),
+          ...(item.kind === "scope"
+            ? ["Техническая запись состава; приложение не раскрывается в этой сводке."]
+            : []),
+          ...(item.summary ? [previewText(item.summary, 120)] : []),
+        ],
+      })),
+      emptyMessage: "На этой странице записей нет.",
+    },
+    options,
+  );
 }
 
 export function productListText(
   data: ProductList,
-  query: ProductListQuery,
+  _query: ProductListQuery,
   options: TextOptions,
 ): string {
   const items = data.items.map((record) => ({
@@ -161,34 +158,38 @@ export function productListText(
   const parts = [
     section(`Записи продукта · ${items.length} из ${data.total}`, listing(items, options), options),
   ];
-  if (data.nextOffset !== null) {
-    const quote = (value: string) => `'${safeText(value).replaceAll("'", "'\\''")}'`;
-    parts.push(
-      wrap(
-        `Продолжение (с тем же --config/--project): product list --offset ${data.nextOffset} --limit ${query.limit ?? 30}${query.kind ? ` --kind ${query.kind}` : ""}${query.q ? ` --q ${quote(query.q)}` : ""}${query.id ? ` --id ${query.id}` : ""}`,
-        options.width,
-      ),
-    );
-  }
   return parts.join("\n\n");
 }
 
-export function productOverviewText(data: ProductOverview, options: TextOptions): string {
-  const items = data.items.slice(0, 30);
-  const ready = data.readiness.filter((item) => item.status === "done").length;
+export function productOverviewText(
+  data: ProductOverview & {
+    total?: number;
+    readinessCounts?: { total: number; ready: number; stale: number };
+  },
+  options: TextOptions,
+): string {
+  const items = data.items;
+  const ready =
+    data.readinessCounts?.ready ?? data.readiness.filter((item) => item.status === "done").length;
   return [
-    section(
-      "Продукт",
-      wrap(
-        `Записей: ${data.items.length}\nГотовых фич и сценариев: ${ready} из ${data.readiness.length}\nТребуют переподтверждения: ${data.readiness.filter((item) => item.stale > 0).length}`,
-        options.width,
-      ),
+    cardText(
+      {
+        title: "Карта продукта",
+        fields: [
+          ["Записей всего", data.total ?? data.items.length],
+          [
+            "Готовых фич и сценариев",
+            `${ready} из ${data.readinessCounts?.total ?? data.readiness.length}`,
+          ],
+          [
+            "Требуют переподтверждения",
+            data.readinessCounts?.stale ?? data.readiness.filter((item) => item.stale > 0).length,
+          ],
+        ],
+      },
       options,
     ),
-    listing(items, options),
-    data.items.length > items.length
-      ? `Показано ${items.length} из ${data.items.length}. Все записи: product list --limit 30`
-      : "",
+    listing(items, options, data.readiness),
     wrap(`Версия для изменения состава: ${data.version}`, options.width),
   ]
     .filter(Boolean)
@@ -198,7 +199,7 @@ export function productOverviewText(data: ProductOverview, options: TextOptions)
 /** Компактные цели для выбора связи; полное описание читается отдельной командой get. */
 export function productEntitiesText(
   data: { items: ProductEntitySummary[]; total: number; nextOffset: number | null },
-  query: ProductEntitiesQuery,
+  _query: ProductEntitiesQuery,
   options: TextOptions,
 ): string {
   const items = data.items.map((entry) => ({
@@ -217,19 +218,12 @@ export function productEntitiesText(
       .filter(Boolean)
       .join(" · "),
   }));
-  const quote = (value: string) => `'${safeText(value).replaceAll("'", "'\\''")}'`;
   return [
     section(
       `Продуктовые цели · ${items.length} из ${data.total}`,
       listing(items, options),
       options,
     ),
-    data.nextOffset === null
-      ? ""
-      : wrap(
-          `Продолжение (с тем же --config/--project): product entities --offset ${data.nextOffset} --limit ${query.limit ?? 30}${query.q ? ` --q ${quote(query.q)}` : ""}${query.kind ? ` --kind ${query.kind}` : ""}${query.application ? ` --application ${quote(query.application)}` : ""}${query.active ? ` --active ${query.active}` : ""}`,
-          options.width,
-        ),
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -255,8 +249,10 @@ export function productContextText(data: ProductContext, options: TextOptions): 
       ].join("\n\n"),
     );
   if (!data.records.length)
-    sections.push("Связанного контекста пока нет. Посмотрите product overview или выберите --id.");
-  return sections.join(`\n\n${palette(options).dim("─".repeat(options.width))}\n\n`);
+    sections.push(
+      "Связанного контекста пока нет. Посмотрите npx @oim-dev/relay-cli product overview или выберите --id.",
+    );
+  return sections.join(`\n\n${"─".repeat(options.width)}\n\n`);
 }
 
 export function productStateText(data: ProductState, options: TextOptions): string {
@@ -293,28 +289,24 @@ export function productSavedText(
 export function productLintText(
   data: { records: number; warnings: ContentWarning[]; total: number; nextOffset: number | null },
   options: TextOptions,
-  query: ProductContentQuery = {},
+  _query: ProductContentQuery = {},
+  keys: ReadonlyMap<string, string> = new Map(),
 ): string {
-  return section(
-    "Качество содержания",
-    [
-      `Записей: ${data.records}. Показано предупреждений: ${data.warnings.length} из ${data.total}.`,
-      ...data.warnings.map((entry) =>
-        wrap(
-          `• ${safeText(entry.name)} (${entry.id})\n  ${entry.field}: ${entry.message}`,
-          options.width,
-        ),
-      ),
-      "Это структурная подсказка, а не подтверждение полноты требований.",
-      ...(data.nextOffset === null
-        ? []
-        : [
-            wrap(
-              `Продолжение (с тем же --config/--project): product lint --offset ${data.nextOffset} --limit ${query.limit ?? 30}${query.id ? ` --id ${query.id}` : ""}`,
-              options.width,
-            ),
-          ]),
-    ].join("\n\n"),
-    options,
-  );
+  return [
+    listText(
+      {
+        title: "Качество содержания",
+        filters: [["Проверено записей", data.records], ...filterFields(_query)],
+        items: data.warnings.map((entry) => ({
+          key: keys.get(entry.id) ?? entry.id,
+          title: entry.name,
+          details: [`${entry.field}: ${entry.message}`],
+        })),
+        emptyMessage:
+          data.total === 0 ? "Структурных замечаний нет." : "На этой странице замечаний нет.",
+      },
+      options,
+    ),
+    "Это структурная подсказка, а не подтверждение полноты требований.",
+  ].join("\n\n");
 }

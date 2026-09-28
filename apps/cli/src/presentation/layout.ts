@@ -2,13 +2,17 @@ import stringWidth from "string-width";
 import wrapAnsi from "wrap-ansi";
 import { palette } from "./theme.js";
 import type { TextOptions } from "./theme.js";
+import { safeText } from "./safe.js";
+
+const plain = (text: string) => safeText(text);
 
 export function wrap(text: string, width: number): string {
-  return wrapAnsi(text, Math.max(1, width), { hard: true, trim: false, wordWrap: true });
+  return wrapAnsi(plain(text), Math.max(1, width), { hard: true, trim: false, wordWrap: true });
 }
 
 export function pad(text: string, width: number): string {
-  return text + " ".repeat(Math.max(0, width - stringWidth(text)));
+  const value = plain(text);
+  return value + " ".repeat(Math.max(0, width - stringWidth(value)));
 }
 
 /** Ширина считается в ячейках терминала: ANSI, emoji и широкие символы не сдвигают колонки. */
@@ -29,24 +33,20 @@ export function table(
     ).join("\n");
   };
   return [
-    render(headers.map((header) => colors.bold(header))),
+    colors.bold(render(headers.map(plain))),
     colors.dim(widths.map((width) => "─".repeat(width)).join("  ")),
-    ...rows.map(render),
+    ...rows.map((row) => render(row.map(plain))),
   ].join("\n");
 }
 
 export function frame(title: string, lines: string[], options: TextOptions): string {
-  const colors = palette(options);
-  const width = options.width - 4;
-  const content = [colors.bold(title), ...lines].flatMap((line) => wrap(line, width).split("\n"));
   return [
-    colors.dim(`╭${"─".repeat(options.width - 2)}╮`),
-    ...content.map((line) => `${colors.dim("│")} ${pad(line, width)} ${colors.dim("│")}`),
-    colors.dim(`╰${"─".repeat(options.width - 2)}╯`),
+    wrap(plain(title), options.width),
+    ...lines.map((line) => wrap(line, options.width)),
   ].join("\n");
 }
 
 export function section(title: string, body: string, options: TextOptions): string {
-  const colors = palette(options);
-  return `${colors.bold(colors.cyan(title.toUpperCase()))}\n${body || colors.dim("—")}`;
+  if (!body.trim()) return "";
+  return `${wrap(plain(title), options.width)}\n${body}`;
 }

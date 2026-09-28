@@ -1,12 +1,21 @@
-import Table from "cli-table3";
 import { kanbanColumns } from "@relay/contracts/entities/board-task";
-import type { PlanSummary, PlanningSaved } from "@relay/contracts/planning";
+import type { PlanSummary, PlanningSaved, PlanStage } from "@relay/contracts/planning";
 import type { ReleaseSummary } from "@relay/contracts/releases";
 import type { TextOptions } from "./theme.js";
+import { defaultTextOptions } from "./theme.js";
 import type { GlobalOptions } from "../context.js";
 import { renderMarkdown } from "./markdown.js";
 import { safeText } from "./text.js";
-import { wrap, section } from "./layout.js";
+import { wrap } from "./layout.js";
+import { cardText, listText, receiptText } from "./common.js";
+
+const contentSections = (values: string[][], options: TextOptions) =>
+  values
+    .filter(([, body]) => body?.trim())
+    .map(([title, body]) => ({
+      title: title!,
+      body: renderMarkdown(body!, options),
+    }));
 
 export const planningStatusLabels: Record<string, string> = {
   draft: "Черновик",
@@ -16,7 +25,6 @@ export const planningStatusLabels: Record<string, string> = {
   planned: "Запланирован",
   released: "Выпущен",
 };
-const quote = (value: string) => `'${safeText(value).replaceAll("'", "'\\''")}'`;
 
 /** Колонка остаётся отдельным фактом, но читается человеком по-русски. */
 export const planningColumnLabel = (column: string): string =>
@@ -24,94 +32,198 @@ export const planningColumnLabel = (column: string): string =>
   (column === "cancelled" ? "Отменена" : column);
 
 /** Полные тексты плана и серверные показатели, отдельно от исторического статуса. */
-export function planText(plan: PlanSummary, options: TextOptions): string {
-  return [
-    wrap(`${plan.key} · ${safeText(plan.title)}`, options.width),
-    `Состояние: ${planningStatusLabels[plan.status]}\nID: ${plan.id}\nРевизия: ${plan.revision}\nЭтапов: ${plan.stageCount}\nВыполнено задач: ${plan.counts.completed}/${plan.counts.total}`,
-    wrap(safeText(plan.summary), options.width),
-    ...[
-      ["Цель", plan.goal],
-      ["Обоснование", plan.rationale],
-      ["Границы", plan.boundaries],
-      ["Ожидаемый результат", plan.expectedResult],
-      ["Итог", plan.result],
-    ].map(([title, text]) =>
-      section(title!, renderMarkdown(text || "Пока не заполнено.", options), options),
-    ),
-    section(
-      "Область",
-      plan.scope.map((ref) => `${ref.kind}:${ref.id}`).join("\n") || "Не задана.",
-      options,
-    ),
-    `Этапы: relay-cli plan stages ${quote(plan.key)}\nПрогресс: relay-cli progress work-plan ${quote(plan.key)}`,
-  ].join("\n\n");
+export function planText(
+  plan: PlanSummary,
+  options: TextOptions,
+  commands: { stages: string; progress: string },
+): string {
+  return cardText(
+    {
+      title: `${plan.key} · ${plan.title}`,
+      fields: [
+        ["Состояние", planningStatusLabels[plan.status]],
+        ["Ревизия", plan.revision],
+        ["Этапов", plan.stageCount],
+        ["Выполнено задач", `${plan.counts.completed}/${plan.counts.total}`],
+        [
+          "Цель",
+          plan.goal.trim()
+            ? undefined
+            : plan.status === "draft" || plan.status === "active"
+              ? "Не задана; нужна для начала плана."
+              : "Не была задана; закрытый план доступен только для чтения.",
+        ],
+        ["Состав", plan.counts.total ? undefined : "Задач нет; пустой план не готов к завершению."],
+        ["Участники", plan.participants.join(", ") || undefined],
+        ["Начат", plan.startedAt],
+        ["Закрыт", plan.closedAt],
+        ["Создан", `${plan.createdAt} · ${plan.createdBy}`],
+        ["Изменён", `${plan.updatedAt} · ${plan.updatedBy}`],
+      ],
+      sections: [
+        ...(plan.summary.trim()
+          ? [{ title: "Краткое описание", body: wrap(safeText(plan.summary), options.width) }]
+          : []),
+        ...contentSections(
+          [
+            ["Цель", plan.goal],
+            ["Обоснование", plan.rationale],
+            ["Границы", plan.boundaries],
+            ["Ожидаемый результат", plan.expectedResult],
+            ["Итог", plan.result],
+          ],
+          options,
+        ),
+        ...(plan.scopeLabels.length
+          ? [
+              {
+                title: "Область",
+                body: plan.scopeLabels
+                  .map((ref) => `${safeText(ref.label)} (${safeText(ref.ref)})`)
+                  .join("\n"),
+              },
+            ]
+          : []),
+      ],
+      commands: [
+        { label: "Этапы", command: commands.stages },
+        { label: "Прогресс", command: commands.progress },
+      ],
+    },
+    options,
+  );
 }
 /** Текущая готовность и сохранённый факт выпуска различаются в человеческом выводе. */
-export function releaseText(release: ReleaseSummary, options: TextOptions): string {
-  return [
-    wrap(`${release.key} · ${safeText(release.title)}`, options.width),
-    `Версия: ${safeText(release.version)}\nСостояние: ${planningStatusLabels[release.status]}\nID: ${release.id}\nРевизия: ${release.revision}\nТекущая готовность: ${release.readiness.ready}/${release.readiness.total} планов`,
-    `Плановая дата: ${release.plannedFor || "—"}\nВыпущен: ${release.releasedAt ?? "—"}\nАвтор выпуска: ${safeText(release.releasedBy ?? "—")}`,
-    wrap(safeText(release.summary), options.width),
-    renderMarkdown(release.description || "Описание пока не заполнено.", options),
-    `Состав: relay-cli release plans ${quote(release.key)}`,
-  ].join("\n\n");
+export function releaseText(
+  release: ReleaseSummary,
+  options: TextOptions,
+  commands: { plans: string; progress: string },
+): string {
+  return cardText(
+    {
+      title: `${release.key} · ${release.title}`,
+      fields: [
+        ["Версия", release.version],
+        ["Состояние", planningStatusLabels[release.status]],
+        ["Ревизия", release.revision],
+        ["Текущая готовность", `${release.readiness.ready}/${release.readiness.total} планов`],
+        ["Плановая дата", release.plannedFor || undefined],
+        ["Выпущен", release.releasedAt],
+        ["Автор выпуска", release.releasedBy],
+        ["Создан", `${release.createdAt} · ${release.createdBy}`],
+        ["Изменён", `${release.updatedAt} · ${release.updatedBy}`],
+      ],
+      sections: [
+        ...(release.summary.trim()
+          ? [{ title: "Краткое описание", body: wrap(safeText(release.summary), options.width) }]
+          : []),
+        ...contentSections([["Описание", release.description]], options),
+        {
+          title: "Состав",
+          body: wrap(
+            "Готовность вычислена по актуальным планам, не по историческому снимку выпуска." +
+              (release.status === "released"
+                ? " Факт выпуска сохранён независимо от текущей готовности; запись неизменяема."
+                : ""),
+            options.width,
+          ),
+        },
+      ],
+      commands: [
+        { label: "Планы", command: commands.plans },
+        { label: "Прогресс", command: commands.progress },
+      ],
+    },
+    options,
+  );
 }
 /** Таблица предметных строк с узким представлением и точной командой продолжения. */
 export function planningListText(
   title: string,
   columns: string[],
   rows: string[][],
-  page: { total: number; nextOffset: number | null; version: string },
-  command: string,
+  _page: { total: number; nextOffset: number | null; version: string },
+  _command: string,
   query: Record<string, unknown>,
   options: TextOptions,
-  globals: GlobalOptions,
+  _globals: GlobalOptions,
 ): string {
-  const table = new Table({
-    head: columns,
-    wordWrap: true,
-    colWidths: columns.map(() =>
-      Math.max(12, Math.floor((options.width - columns.length - 1) / columns.length)),
-    ),
-    style: { head: [], border: [] },
-  });
-  table.push(...rows.map((row) => row.map(safeText)));
-  const body =
-    rows.length === 0
-      ? "На этой странице записей нет."
-      : options.width < 90
-        ? rows.map((row) => wrap(row.map(safeText).join(" · "), options.width)).join("\n\n")
-        : table.toString();
-  const context = Object.entries({
-    config: globals.config,
-    project: globals.project,
-    "server-url": globals.serverUrl,
-    "max-bytes": globals.maxBytes,
-    format: globals.format,
-    ...(globals.local ? { local: true } : {}),
-  })
-    .filter(([, value]) => value !== undefined)
-    .map(([name, value]) => (value === true ? `--${name}` : `--${name} ${quote(String(value))}`))
-    .join(" ");
-  const next =
-    page.nextOffset === null
-      ? "Конец списка."
-      : `Продолжение: relay-cli ${context} ${command} ${Object.entries({
-          ...query,
-          offset: page.nextOffset,
-          snapshotVersion: page.version,
-        })
-          .filter(([, value]) => value !== undefined)
-          .map(
-            ([name, value]) =>
-              `--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} ${Array.isArray(value) ? value.map((item) => quote(String(item))).join(" ") : quote(String(value))}`,
-          )
-          .join(" ")}`;
-  return `${title}\n\n${body}\n\nПоказано ${rows.length} из ${page.total}.\n${next}`;
+  const labels: Record<string, string> = {
+    q: "Поиск",
+    status: "Состояние",
+    board: "Доска",
+    plan: "План",
+    stage: "Этап",
+    availableOnly: "Только доступные",
+    plans: "Выбранные планы",
+  };
+  return listText(
+    {
+      title,
+      filters: Object.entries(query)
+        .filter(([key, value]) => key in labels && (value !== undefined || key === "plans"))
+        .map(
+          ([key, value]) =>
+            [
+              labels[key]!,
+              key === "plans"
+                ? Array.isArray(value) && value.length
+                  ? value.join(", ")
+                  : "Планы не выбраны"
+                : key === "status"
+                  ? (planningStatusLabels[String(value)] ?? String(value))
+                  : String(value),
+            ] as const,
+        ),
+      items: rows.map((row) => ({
+        key: row[0]!,
+        title: row[1]!,
+        details: row.slice(2).map((value, index) => `${columns[index + 2]}: ${value}`),
+      })),
+      emptyMessage: "На этой странице записей нет.",
+    },
+    options,
+  );
+}
+/** Полный вложенный объект: тексты и состав не заменяются краткой строкой каталога. */
+export function stageText(
+  stage: PlanStage & { planId: string; planKey: string | null; planRevision: number },
+  options: TextOptions,
+  commands: { tasks: string },
+): string {
+  return cardText(
+    {
+      title: stage.title,
+      fields: [
+        ["План", stage.planKey ?? stage.planId],
+        ["Ревизия плана", stage.planRevision],
+        ["ID этапа", stage.id],
+        ["Задач в составе", stage.taskIds.length],
+      ],
+      sections: [
+        ...(stage.summary.trim()
+          ? [{ title: "Краткое описание", body: wrap(safeText(stage.summary), options.width) }]
+          : []),
+        ...contentSections(
+          [
+            ["Результат", stage.outcome],
+            ["Условия завершения", stage.completionConditions],
+          ],
+          options,
+        ),
+      ],
+      commands: [{ label: "Задачи", command: commands.tasks }],
+    },
+    options,
+  );
 }
 /** Ответ текущей записи; результат не хранится для последующего повтора. */
-export function planningSavedText(saved: PlanningSaved): string {
+export function planningSavedText(
+  saved: PlanningSaved,
+  options: TextOptions = defaultTextOptions,
+  commands: { label: string; command: string }[] = [],
+  context: { action?: string; stageId?: string; task?: string; targetPlan?: string } = {},
+): string {
   const labels: Record<string, string> = {
     create: "Запись создана",
     update: "Изменения сохранены",
@@ -127,6 +239,20 @@ export function planningSavedText(saved: PlanningSaved): string {
     "stage-remove": "Этап удалён",
     "stage-move": "Порядок этапов изменён",
   };
-  const action = labels[saved.action] ?? `Выполнено действие ${safeText(saved.action)}`;
-  return `${safeText(saved.key)}: ${action}.\nID владельца: ${saved.id}\nРевизия: ${saved.revision}${saved.stageId ? `\nЭтап: ${saved.stageId}` : ""}${saved.targetRevision ? `\nРевизия целевого плана: ${saved.targetRevision}` : ""}\nИдентификатор запроса: ${safeText(saved.requestId)}`;
+  const action =
+    context.action ?? labels[saved.action] ?? `Выполнено действие ${safeText(saved.action)}`;
+  return receiptText(
+    {
+      title: `${action} · ${saved.key}`,
+      fields: [
+        ["Ревизия", saved.revision],
+        ["ID этапа", context.stageId ?? saved.stageId],
+        ["Задача", context.task],
+        ["Целевой план", context.targetPlan],
+        ["Ревизия целевого плана", saved.targetRevision],
+      ],
+      commands,
+    },
+    options,
+  );
 }
