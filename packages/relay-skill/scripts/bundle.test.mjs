@@ -260,3 +260,26 @@ test("полный пакет требует каждую справочную �
   await processBundle({ root: app.root });
   await processBundle({ root: app.root, check: true });
 });
+
+test("новые руководства CLI замыкают локальные и HTTPS-ссылки внутри поставки", async (t) => {
+  const app = await fixture(t);
+  const directory = join(app.root, "apps/cli/docs");
+  await mkdir(directory, { recursive: true });
+  const documents = {
+    "AGENT_GUIDE.md": "# Агент\n\n[Стиль](COMMAND_STYLE.md)\n[CLI](CLI.md)\n",
+    "COMMAND_STYLE.md":
+      "# Стиль\n\n[Терминал](TERMINAL.md)\n[Агент](https://github.com/oim-dev/relay/blob/main/apps/cli/docs/AGENT_GUIDE.md)\n",
+    "CLI.md": "# CLI\n\n[Стиль](COMMAND_STYLE.md)\n",
+    "TERMINAL.md": "# Терминал\n\n[Стиль](COMMAND_STYLE.md)\n",
+  };
+  for (const [name, content] of Object.entries(documents)) {
+    await writeFile(join(directory, name), content);
+    app.manifest.documents[`apps/cli/docs/${name}`] = `references/interfaces/${name}`;
+  }
+  await app.saveManifest();
+  const output = await prepareBundle(app.root, "relay");
+  assert.match(output.get("references/interfaces/AGENT_GUIDE.md"), /\(COMMAND_STYLE\.md\)/);
+  assert.match(output.get("references/interfaces/COMMAND_STYLE.md"), /\(AGENT_GUIDE\.md\)/);
+  await processBundle({ root: app.root });
+  await processBundle({ root: app.root, check: true });
+});

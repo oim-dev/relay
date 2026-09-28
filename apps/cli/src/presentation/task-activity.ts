@@ -4,59 +4,92 @@ import type {
   TaskComment,
   TaskCommentSaved,
 } from "@relay/core/domain/board-task";
-import type { TextOptions } from "./theme.js";
+import { cardText, listText, receiptText } from "./common.js";
+import { defaultTextOptions, type TextOptions } from "./theme.js";
+import type { TaskInvocation } from "./board-tasks.js";
 import { renderMarkdown } from "./markdown.js";
-import { safeText } from "./text.js";
-import { wrap } from "./layout.js";
 
-const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
-
-/** Читаемая лента с точной командой продолжения и сохранением фильтров. */
 export function taskActivityText(
   page: TaskCommentsPage,
   reference: string,
   query: TaskCommentsQuery,
   options: TextOptions,
+  _invoke?: TaskInvocation,
 ): string {
-  const flags = [
-    query.actor ? `--by ${quote(query.actor)}` : "",
-    query.action ? `--action ${quote(query.action)}` : "",
-    query.after !== undefined ? `--after ${query.after}` : "",
-    `--limit ${query.limit ?? 20}`,
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const rows = page.items.map((event) =>
-    wrap(
-      `${event.id} · ${safeText(event.title)}\n${safeText(event.actor)} · ${event.at}\nЧитать: relay-cli task comment get ${quote(reference)} ${event.id}`,
-      options.width,
-    ),
+  return listText(
+    {
+      title: `Комментарии · ${reference}`,
+      filters: [
+        ["Автор", query.actor ?? "все"],
+        ["После номера", query.after === undefined ? undefined : String(query.after)],
+        ["Действие", query.action ? "Публикация комментария" : undefined],
+      ],
+      items: page.items.map((e) => ({
+        key: String(e.id),
+        title: e.title,
+        details: [`${e.actor} · ${e.at}`],
+      })),
+      emptyMessage: "В этой части ленты записей нет.",
+    },
+    options,
   );
-  return [
-    `Обсуждения · ${safeText(reference)}`,
-    rows.join("\n\n") || "В этой части ленты записей нет.",
-    `Граница снимка: ${page.snapshot}.`,
-    page.nextCursor
-      ? `Продолжение: relay-cli task comment list ${quote(reference)} ${flags} --cursor ${quote(page.nextCursor)}`
-      : "Конец списка.",
-  ].join("\n\n");
 }
-
-/** Полное сообщение: Markdown рендерится, обычный текст экранируется. */
-export function taskActivityEventText(event: TaskComment, options: TextOptions): string {
-  return [
-    wrap(`${event.id} · ${safeText(event.title)}`, options.width),
-    wrap(
-      `${safeText(event.actor)} · ${event.actorRole ?? "роль не задана"} · ${event.at}\nОперация: ${safeText(event.operationId)}`,
-      options.width,
-    ),
-    event.description !== undefined ? renderMarkdown(event.description, options) : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+export function taskActivityEventText(
+  event: TaskComment,
+  options: TextOptions,
+  reference?: string,
+  invoke?: TaskInvocation,
+): string {
+  const roles: Record<string, string> = {
+    operator: "Оператор",
+    orchestrator: "Оркестратор",
+    worker: "Исполнитель",
+  };
+  return cardText(
+    {
+      title: `${event.id} · ${event.title}`,
+      fields: [
+        ["Задача", reference],
+        ["Автор", event.actor],
+        ["Роль", event.actorRole ? (roles[event.actorRole] ?? event.actorRole) : "не задана"],
+        ["Опубликован", event.at],
+      ],
+      sections: [{ title: "Комментарий", body: renderMarkdown(event.description ?? "", options) }],
+      commands:
+        reference && invoke
+          ? [
+              {
+                label: "Обсуждение задачи",
+                command: invoke(["task", "comment", "list", reference]),
+              },
+            ]
+          : [],
+    },
+    options,
+  );
 }
-
-/** Ответ текущей публикации; ревизия относится к ленте. */
-export function taskCommentSavedText(saved: TaskCommentSaved): string {
-  return `Сообщение опубликовано.\nЗадача: ${saved.id}\nСообщение: ${saved.commentId}\nРевизия ленты: ${saved.revision}\nИдентификатор запроса: ${saved.requestId}`;
+export function taskCommentSavedText(
+  saved: TaskCommentSaved,
+  invoke: TaskInvocation,
+  reference = saved.id,
+  title?: string,
+  options: TextOptions = defaultTextOptions,
+): string {
+  return receiptText(
+    {
+      title: `${reference} · Комментарий опубликован`,
+      fields: [
+        ["Комментарий", saved.commentId],
+        ["Заголовок", title],
+        ["Ревизия ленты", saved.revision],
+      ],
+      commands: [
+        {
+          label: "Читать комментарий",
+          command: invoke(["task", "comment", "get", reference, String(saved.commentId)]),
+        },
+      ],
+    },
+    options,
+  );
 }

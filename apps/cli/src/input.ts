@@ -38,11 +38,21 @@ export class InputReader {
     if (value === undefined && file === undefined) return undefined;
     const buffers: Buffer[] = [];
     let size = 0;
-    for await (const chunk of this.source(value, file)) {
-      const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-      size += buffer.length;
-      invariant(size <= maxBytes, "INPUT_TOO_LARGE", `Текст превышает ${maxBytes} байт`);
-      buffers.push(buffer);
+    try {
+      for await (const chunk of this.source(value, file)) {
+        const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+        size += buffer.length;
+        invariant(size <= maxBytes, "INPUT_TOO_LARGE", `Текст превышает ${maxBytes} байт`);
+        buffers.push(buffer);
+      }
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        "INPUT_READ_FAILED",
+        file === "-"
+          ? "Не удалось прочитать stdin; проверьте источник данных"
+          : `Не удалось прочитать файл «${file}»; проверьте путь и права доступа`,
+      );
     }
     try {
       return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(

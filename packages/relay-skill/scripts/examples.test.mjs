@@ -72,8 +72,10 @@ for (const mode of ["local", "workspace"])
         "utf8",
       );
       const blocks = [...markdown.matchAll(/```bash\n# relay-example: ([\w-]+)\n([\s\S]*?)\n```/g)];
-      assert.equal(blocks.length, 32, "Потерян шаг опубликованного CLI-примера");
+      assert.equal(blocks.length, 34, "Потерян шаг опубликованного CLI-примера");
+      assert.equal(new Set(blocks.map(([, step]) => step)).size, blocks.length);
       const values = {
+        ACTOR: "skill-example-test",
         OBSERVED_RESULT: OBSERVED,
         RELEASE_VERSION: "1.0-demo",
         DEPLOYMENT_EVIDENCE: "Учебная фикстура поставки, реальная выкладка не выполнялась",
@@ -116,7 +118,7 @@ for (const mode of ["local", "workspace"])
         };
         if (created[step]) {
           const [variable, kind, title] = created[step];
-          const found = await cli("entities", "list", "--kind", kind, "--q", title);
+          const found = await cli("search", title, "--kind", kind);
           assert.equal(found.items.length, 1);
           values[variable] = found.items[0].ref.id;
           assert(
@@ -124,19 +126,16 @@ for (const mode of ["local", "workspace"])
             `В выводе ${step} отсутствует адрес созданной записи`,
           );
         }
-        if (step === "scenario")
-          values.DOCUMENT_RELATIONS = JSON.stringify([
-            {
-              target: { kind: "product", id: values.PRODUCT_ID },
-              type: "documents",
-              description: "Исходное требование",
-            },
-            {
-              target: { kind: "scenario", id: values.SCENARIO_ID },
-              type: "references",
-              description: "Основание сценария",
-            },
-          ]);
+        if (step === "application") {
+          const boards = await cli("board", "list");
+          const matching = [];
+          for (const board of boards.items) {
+            const detail = await cli("board", "get", board.key ?? board.slug);
+            if (detail.data.applicationId === values.APP_ID) matching.push(detail);
+          }
+          assert.equal(matching.length, 1, "Нужна единственная прочитанная доска приложения");
+          values.BOARD_REF = matching[0].key;
+        }
         // Только команды чтения повторяются в отладочном формате, мутации — никогда.
         let result;
         if (!tokens.includes("--actor")) {
@@ -150,10 +149,10 @@ for (const mode of ["local", "workspace"])
           values.PLAN_REVISION = String(result.revision);
         if (["task-read", "task-before-criterion", "task-before-done"].includes(step))
           values.TASK_REVISION = String(result.revision);
-        if (step === "stage") {
-          const stages = await cli("plan", "stages", values.PLAN_ID);
-          values.STAGE_ID = stages.items[0].id;
-          assert(text.includes(values.STAGE_ID), "Не показан ID созданного этапа");
+        if (step === "stage-list") {
+          assert.equal(result.items.length, 1);
+          values.STAGE_ID = result.items[0].id;
+          assert(text.includes(values.STAGE_ID), "Не показан ID этапа в списке");
         }
         if (step === "criteria") {
           values.CRITERION_ID = result.items[0].id;
@@ -164,8 +163,16 @@ for (const mode of ["local", "workspace"])
       }
       const document = results.get("document-check");
       assert(document.data.body.includes("Пользователь открывает каталог"));
-      assert.equal(document.data.relations.length, 2);
-      const graph = await cli("graph", "context", values.SCENARIO_ID);
+      assert.equal(document.data.relations.length, 1);
+      const links = results.get("document-links-check");
+      assert.equal(links.items.length, 1);
+      assert.deepEqual(links.items[0], {
+        source: "relations",
+        target: { kind: "scenario", id: values.SCENARIO_ID },
+        type: "references",
+        description: "Основание сценария",
+      });
+      const graph = await cli("inspect", "graph", "context", values.SCENARIO_ID);
       assert.equal(graph.complete, true);
       assert(graph.nodes.some((node) => node.ref.id === values.DOCUMENT_ID));
       const task = await cli("task", "get", values.TASK_ID);
@@ -185,7 +192,7 @@ for (const mode of ["local", "workspace"])
       assert.equal(criteria.items[0].completed, passed);
       const plan = await cli("plan", "get", values.PLAN_ID);
       assert.equal(plan.status, passed ? "completed" : "draft");
-      const members = await cli("plan", "tasks", values.PLAN_ID, values.STAGE_ID);
+      const members = await cli("plan", "stage", "task", "list", values.PLAN_ID, values.STAGE_ID);
       assert.equal(members.items.length, 1);
       const releases = await cli("release", "list");
       assert.equal(releases.items.length, passed ? 1 : 0);
