@@ -1,111 +1,222 @@
-name: CI
+name: PR
 
 on:
-  push:
-    branches: ["dev", "main"]
   pull_request:
-  workflow_call:
-    outputs:
-      artifact_id:
-        description: Идентификатор проверенных npm-архивов CLI, Server и MCP
-        value: ${{ jobs.package.outputs.artifact_id }}
+    types: [opened, synchronize]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+  group: relay-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  check:
-    name: Проверки / Node.js 24
+  preflight:
+    name: PR / Предварительные проверки
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Получить исходники
+      - &checkout
+        name: Получить точный synthetic merge commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Версия 7.0.1
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
           persist-credentials: false
-      - name: Подготовить Node.js
+      - &node
+        name: Подготовить Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # Версия 7.0.0
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Подготовить pnpm из packageManager
+      - &pnpm
+        name: Подготовить pnpm из packageManager
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # Версия 4
         with:
           run_install: false
-      - name: Установить зависимости из lockfile
+      - &install
+        name: Установить зависимости из lockfile
         run: pnpm install --frozen-lockfile
-      - name: Проверить сохранённые результаты генераторов до сборки
-        run: pnpm run agents:check && pnpm run skills:check
-      - name: Проверить общую версию и собрать все пакеты
-        run: pnpm run build
-      - name: Проверить форматирование, типы, сборку и тесты
-        shell: bash
-        # CLI сам запускает три тестовых файла с дочерними процессами. Не делим
-        # CPU runner с остальными наборами; stream сохраняет прогресс до завершения.
-        run: |
-          pnpm run check --filter='!@oim-dev/relay-cli' --log-order=stream 2>&1 | tee "$RUNNER_TEMP/tasks-check.log"
-          pnpm exec turbo run lint typecheck test --filter=@oim-dev/relay-cli --log-order=stream 2>&1 | tee -a "$RUNNER_TEMP/tasks-check.log"
-      - name: Показать причины падения проверок
-        if: failure()
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFile } from 'node:fs/promises';
-          import { join } from 'node:path';
-          const path = join(process.env.RUNNER_TEMP, 'tasks-check.log');
-          const log = await readFile(path, 'utf8').catch(() => '');
-          const lines = log.replace(/\u001b\[[0-9;]*m/g, '').split('\n');
-          const encode = (text) => text.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
-          let reported = 0;
-          for (let index = 0; index < lines.length && reported < 10; index++) {
-            if (!/AssertionError|SyntaxError|TypeError|Error:|error TS\d+/.test(lines[index])) continue;
-            console.log(`::error title=Причина падения проверки::${encode(lines.slice(Math.max(0, index - 2), index + 18).join('\n'))}`);
-            reported++;
-            index += 17;
-          }
-          if (!reported && log) console.log(`::error title=Проверки завершились с ошибкой::${encode(lines.slice(-60).join('\n'))}`);
-          NODE
+      - name: Проверить версию, формат, drift и документацию до генерации
+        run: node scripts/ci.mjs preflight
 
-  package:
-    name: Проверенные npm-архивы всех пакетов
-    needs: check
+  build:
+    name: PR / Сборка
+    needs: preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - name: Получить исходники
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Версия 7.0.1
-        with:
-          persist-credentials: false
-      - name: Подготовить Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # Версия 7.0.0
-        with:
-          node-version: "24"
-          package-manager-cache: false
-      - name: Зафиксировать версию npm для упаковки
-        run: npm install --global npm@11.16.0
-      - name: Подготовить pnpm из packageManager
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # Версия 4
-        with:
-          run_install: false
-      - name: Установить зависимости из lockfile
-        run: pnpm install --frozen-lockfile
-      - name: Проверить независимые установки CLI, Server и MCP в local/workspace
-        run: pnpm run package:check
-      - name: Связать проверенные архивы с коммитом и общей версией
-        run: node scripts/release/bundle.mjs create "$RUNNER_TEMP/npm-packages"
-      - name: Сохранить все проверенные архивы одним артефактом
+      - *checkout
+      - *node
+      - *pnpm
+      - *install
+      - name: Единственный производитель сборок и генерируемых выходов
+        run: node scripts/ci.mjs build
+      - name: Связать выходы с точным run, SHA и toolchain
+        run: node scripts/ci.mjs capture "$RUNNER_TEMP/pr-build"
+      - name: Сохранить неизменяемый снимок сборки
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # Версия 7.0.1
         with:
-          name: npm-packages
-          path: ${{ runner.temp }}/npm-packages
+          # Это попытка producer. При Re-run failed jobs потребитель берёт прежний exact ID из needs.
+          name: pr-build-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/pr-build
           include-hidden-files: true
           if-no-files-found: error
-          overwrite: true
           compression-level: 0
           retention-days: 14
+
+  tooling:
+    name: PR / Tooling
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *node
+      - *pnpm
+      - *install
+      - &artifact-id
+        name: Запретить загрузку при отсутствии точного ID
+        run: node scripts/ci.mjs artifact-id
+        env:
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+      - &download-build
+        name: Получить сборку только этого run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # Версия 8.0.1
+        with:
+          # Не восстанавливаем имя по текущему run_attempt: успешный build мог не перезапускаться.
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          digest-mismatch: error
+          path: ${{ runner.temp }}/pr-build
+          merge-multiple: true
+      - &restore-build
+        name: Проверить run, SHA, toolchain и байты всех выходов до восстановления
+        run: node scripts/ci.mjs restore "$RUNNER_TEMP/pr-build"
+      - name: Тесты release, agents и skills
+        run: node scripts/ci.mjs tooling
+
+  lint-types:
+    name: PR / Lint и типы
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *node
+      - *pnpm
+      - *install
+      - *artifact-id
+      - *download-build
+      - *restore-build
+      - name: Все workspace lint и typecheck без Turbo-сборок
+        run: node scripts/ci.mjs lint-types
+
+  libraries:
+    name: PR / Библиотеки
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *node
+      - *pnpm
+      - *install
+      - *artifact-id
+      - *download-build
+      - *restore-build
+      - name: Тесты Core, Contracts и project-runtime
+        run: node scripts/ci.mjs libraries
+
+  server:
+    name: PR / Server и runtime
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *node
+      - *pnpm
+      - *install
+      - *artifact-id
+      - *download-build
+      - *restore-build
+      - name: Тесты Server и server-runtime
+        run: node scripts/ci.mjs server
+
+  cli:
+    name: PR / CLI
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *node
+      - *pnpm
+      - *install
+      - *artifact-id
+      - *download-build
+      - *restore-build
+      - name: Тесты CLI на отдельном runner без конкуренции за CPU
+        run: node scripts/ci.mjs cli
+
+  mcp:
+    name: PR / MCP
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *node
+      - *pnpm
+      - *install
+      - *artifact-id
+      - *download-build
+      - *restore-build
+      - name: Тесты MCP
+        run: node scripts/ci.mjs mcp
+
+  package-smoke:
+    name: PR / Установка пакетов
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *node
+      - name: Зафиксировать npm для упаковки
+        run: npm install --global npm@11.16.0
+      - *pnpm
+      - *install
+      - *artifact-id
+      - *download-build
+      - *restore-build
+      - name: Упаковка существующих dist и независимые установки
+        run: node scripts/ci.mjs package-smoke
+
+  gate:
+    name: PR / Все проверки
+    if: always()
+    needs: [preflight, build, tooling, lint-types, libraries, server, cli, mcp, package-smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CI_NEEDS: ${{ toJSON(needs) }}
+    steps:
+      - *checkout
+      - *node
+      - name: Принять только success всех обязательных jobs
+        run: node scripts/ci.mjs gate
+      - name: Создать свидетельство проверенного synthetic merge
+        run: node scripts/release/verified-pr.mjs create "$RUNNER_TEMP/pr-verification/verification.json"
+      - name: Сохранить свидетельство текущей попытки
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # Версия 7.0.1
+        with:
+          name: pr-verification
+          path: ${{ runner.temp }}/pr-verification/verification.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 90
