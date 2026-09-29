@@ -1,11 +1,142 @@
+import { Button } from "@mantine/core";
+import { RefreshCw } from "lucide-react";
+import { useProjectBasePath, useProjectId } from "domains/project";
+import { useProductOverview } from "domains/product-overview";
 import { StatePanel } from "ui/state-panel";
+import { isDefined } from "shared/value-predicates";
+import { getOverviewErrorMessage } from "./helpers/overview-error";
+import { AttentionList } from "./ui/attention-list/attention-list";
+import { BoardList } from "./ui/board-list/board-list";
+import { OverviewHeader } from "./ui/overview-header/overview-header";
+import { OverviewMetrics } from "./ui/overview-metrics/overview-metrics";
+import { OverviewPanel } from "./ui/overview-panel/overview-panel";
+import { PinnedDocuments } from "./ui/pinned-documents/pinned-documents";
+import { PlanSummaries } from "./ui/plan-summaries/plan-summaries";
+import { ProductKnowledge } from "./ui/product-knowledge/product-knowledge";
+import { ReleaseSummaries } from "./ui/release-summaries/release-summaries";
+import { SyncNotice } from "./ui/sync-notice/sync-notice";
+import { TaskStages } from "./ui/task-stages/task-stages";
+import styles from "./styles/overview.module.css";
 
 /**
- * Показывает статус раздела обзора.
+ * Показывает согласованный срез проекта: продукт, работу, внимание, планы, релизы и документы.
  *
  * Используется для:
- *  - входа в проект через сохранённый пункт навигации
+ *  - входа в проект и ориентации «что это и что происходит»
+ *  - перехода к полным разделам для продолжения работы
  */
-export const OverviewScreen = () => (
-  <StatePanel title="Обзор" titleAs="h1" description="В разработке" />
-);
+export const OverviewScreen = () => {
+  const projectId = useProjectId();
+  const basePath = useProjectBasePath();
+  const overview = useProductOverview(projectId);
+  const { data, error, isValidating, mutate } = overview;
+  const retry = () => void mutate();
+  const retryButton = (
+    <Button
+      variant="default"
+      loading={isValidating}
+      leftSection={<RefreshCw size={14} aria-hidden="true" />}
+      onClick={retry}
+    >
+      Повторить чтение
+    </Button>
+  );
+
+  if (!isDefined(data) && isDefined(error)) {
+    return (
+      <StatePanel
+        title="Не удалось загрузить обзор"
+        titleAs="h1"
+        description={getOverviewErrorMessage(error)}
+        action={retryButton}
+      />
+    );
+  }
+
+  if (!isDefined(data)) {
+    return <StatePanel title="Обзор" titleAs="h1" description="Читаем срез проекта…" isLoading />;
+  }
+
+  const refreshError = isDefined(error) ? getOverviewErrorMessage(error) : null;
+  const { plans, releases, documents, boards } = data;
+  return (
+    <div className={styles.root}>
+      <OverviewHeader
+        project={data.project}
+        passport={data.passport}
+        generatedAt={data.generatedAt}
+        freshness={overview.freshness}
+        passportPath={`${basePath}/product/passport`}
+      />
+      <SyncNotice
+        freshness={overview.freshness}
+        storageMessage={overview.message}
+        refreshError={refreshError}
+        isRetrying={isValidating}
+        onRetry={retry}
+      />
+      <OverviewMetrics
+        tasks={data.tasks}
+        boards={boards}
+        documents={documents}
+        knowledge={data.knowledge}
+        basePath={basePath}
+      />
+      <div className={styles.work}>
+        <OverviewPanel
+          title="Задачи по стадиям"
+          total={data.tasks.total}
+          link={{ to: `${basePath}/boards/product`, label: "Доска продукта" }}
+        >
+          <TaskStages tasks={data.tasks} />
+        </OverviewPanel>
+        <OverviewPanel title="Требует внимания">
+          <AttentionList attention={data.attention} basePath={basePath} />
+        </OverviewPanel>
+      </div>
+      <div className={styles.progress}>
+        <OverviewPanel
+          title="Планы"
+          total={plans.total}
+          link={{ to: `${basePath}/plans`, label: "Все планы" }}
+          preview={{ shown: plans.active.items.length, total: plans.active.total }}
+        >
+          <PlanSummaries plans={plans} basePath={basePath} />
+        </OverviewPanel>
+        <OverviewPanel
+          title="Релизы"
+          total={releases.total}
+          link={{ to: `${basePath}/releases`, label: "Все релизы" }}
+        >
+          <ReleaseSummaries releases={releases} basePath={basePath} />
+        </OverviewPanel>
+      </div>
+      <div className={styles.context}>
+        <OverviewPanel
+          title="Продуктовые знания"
+          link={{ to: `${basePath}/product/features`, label: "Все фичи" }}
+        >
+          <ProductKnowledge knowledge={data.knowledge} />
+        </OverviewPanel>
+        <OverviewPanel
+          title="Доски"
+          total={boards.total}
+          preview={{ shown: boards.catalog.items.length, total: boards.catalog.total }}
+        >
+          <BoardList boards={boards.catalog.items} basePath={basePath} />
+        </OverviewPanel>
+        <OverviewPanel
+          title="Документы"
+          total={documents.total}
+          link={{ to: `${basePath}/documents`, label: "Библиотека знаний" }}
+          preview={{
+            shown: documents.pinnedActive.items.length,
+            total: documents.pinnedActive.total,
+          }}
+        >
+          <PinnedDocuments documents={documents} basePath={basePath} />
+        </OverviewPanel>
+      </div>
+    </div>
+  );
+};

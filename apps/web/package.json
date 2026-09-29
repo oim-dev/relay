@@ -12,6 +12,7 @@
     "lint": "eslint src vite.config.ts",
     "browser": "agent-browser --config ./agent-browser.json",
     "browser:install": "agent-browser install",
+    "test:e2e": "node --test --test-concurrency=1 --test-timeout=600000 test/e2e/*.test.mjs",
     "generate:api": "pnpm --filter @relay/rest-sdk run generate"
   },
   "dependencies": {

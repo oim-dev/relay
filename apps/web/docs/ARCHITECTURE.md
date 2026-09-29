@@ -15,8 +15,8 @@ Web — браузерная React SPA, представляющая данны�
   [app.tsx](../src/app/app.tsx), [router](../src/app/router/app-router.tsx).
 - `compositions/layouts` — устойчивые каркасы и навигация:
   [project](../src/compositions/layouts/project), [product](../src/compositions/layouts/product).
-- `compositions/screens` — законченные экранные пути: выбор проекта, доска с окном задачи,
-  продукт, библиотека, планы, релизы, связи.
+- `compositions/screens` — законченные экранные пути: выбор проекта, обзор проекта,
+  доска с окном задачи, продукт, библиотека, планы, релизы, связи.
 - `compositions/route-boundaries` — отдельное поведение ветки:
   [product-snapshot](../src/compositions/route-boundaries/product-snapshot)
   подключает снимок для части продуктовых страниц.
@@ -26,7 +26,7 @@ Web — браузерная React SPA, представляющая данны�
   [entity-documents](../src/compositions/widgets/entity-documents),
   [entity-delete](../src/compositions/widgets/entity-delete).
 - `domains` — предметные адаптеры, модели, операции и lifecycle чтения: project,
-  workspace, product, boards, board-tasks, entities, documents, relations, planning, releases.
+  workspace, product, product-overview, boards, board-tasks, entities, documents, relations, planning, releases.
 - `infra` — технические механизмы HTTP, SWR-конфигурации, SSE, browser storage.
 - `ui` — общие визуальные возможности: темы, Markdown, состояния страниц, канбан DnD.
 - `shared` — чистые значения и преобразования без сети, storage и браузерного lifecycle.
@@ -125,6 +125,32 @@ SSE-обновление не означает разрешения подста
 инициируют REST-перечитывание через доменные подписки; heartbeat не является изменением.
 Механизм закрывает поток и таймеры без подписчиков, учитывает StrictMode, закрытие
 потока прокси и `pagehide/pageshow` при BFCache. На каждую карточку не нужен свой SSE.
+
+Обзор проекта — пример такой доменной подписки. Экран
+[overview](../src/compositions/screens/overview/overview.screen.tsx) получает данные
+только из [product-overview](../src/domains/product-overview): адаптер читает
+`GET /api/v1/projects/:projectId/product/overview` проектным клиентом `getProjectApi`
+и проверяет ответ схемой `productOverviewSchema` из Contracts, маппер готовит модель экрана, хук `useProductOverview` хранит её
+под SWR-ключом `["product-overview", projectId]`. Web не пересчитывает показатели:
+все числа, подборки и готовность приходят из общего расчёта Core.
+
+Хук подписывается на общий поток `workspace-events` (один `EventSource` на проект,
+номер сигнала `sequence` монотонен в пределах страницы). Первый сигнал подписки
+отражает уже известное состояние и чтения не вызывает — начальное чтение выполняет SWR.
+Каждый следующий `connected` или `changed` запрашивает перечитывание; heartbeat
+игнорируется. Уведомления объединяются до 300 мс тишины, но не дольше 1 с от первого в пачке; одновременно
+выполняется не более одного чтения, а изменение во время чтения вызывает ещё одно после
+его завершения. Состояние актуальности `live`, `refreshing`, `connecting`, `offline`,
+`stale`, `storage-error` выводится из сигнала потока и результата перечитываний
+с приоритетом: `storage-error` и `offline`, затем `stale` (последнее повторное чтение
+не удалось, показаны прежние данные), затем `refreshing` при незавершённом чтении.
+Polling нет; replay пропущенных событий нет — после переподключения обзор перечитывается целиком.
+
+Ошибка перечитывания не заменяет показанные данные: они остаются с предупреждением
+и «Повторить чтение». Ошибка первого чтения показывает экран ошибки, а `workspace-error`
+показывается отдельно как ошибка хранилища. При смене проекта меняется ключ кеша и подписка,
+поэтому поздний ответ прежнего проекта не попадает в обзор нового. После HTTP-отказа,
+закрывающего `EventSource`, повторное подключение идёт с задержкой 1 → 2 → 4 с (не более 4 с).
 
 У списков сохраняются фильтры, запрошенный объём и предусмотренная API версия продолжения.
 [read-api-pages](../src/infra/tasks-api/helpers/read-api-pages.ts) не означает загрузку

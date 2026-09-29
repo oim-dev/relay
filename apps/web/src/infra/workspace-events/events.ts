@@ -13,13 +13,25 @@ const DISCONNECT_DELAY = 10_000;
 const RELEASE_DELAY = 100;
 /** Повтор после HTTP-отказа прокси, который окончательно закрывает нативный EventSource. */
 const RECONNECT_DELAY = 1_000;
-const MAX_RECONNECT_DELAY = 10_000;
+const MAX_RECONNECT_DELAY = 4_000;
+
+/**
+ * Общий счётчик уведомлений страницы: новое соединение того же проекта после освобождения
+ * продолжает нумерацию, поэтому подписчики могут сравнивать сигналы разных соединений.
+ */
+let lastSequence = 0;
+
+/** Выдаёт следующий номер уведомления. */
+const nextSequence = (): number => {
+  lastSequence += 1;
+  return lastSequence;
+};
 
 /** Последнее транспортное состояние соединения. */
 export type WorkspaceSignal = {
   /** Состояние транспорта либо отказа хранилища. */
   state: "connecting" | "connected" | "reconnecting" | "disconnected" | "storage-error";
-  /** Счётчик уведомлений, включая повторное подключение. */
+  /** Монотонный номер уведомления в пределах страницы, включая повторное подключение. */
   sequence: number;
   /** Диагностика повреждённого хранилища. */
   message?: string;
@@ -33,7 +45,7 @@ const createConnection = (projectId: string, onReleased: () => void) => {
   let disconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let reconnectDelay = RECONNECT_DELAY;
   let isPageSuspended = false;
-  let signal: WorkspaceSignal = { state: "connecting", sequence: 0 };
+  let signal: WorkspaceSignal = { state: "connecting", sequence: nextSequence() };
 
   /**
    * Публикует последнее состояние всем подписчикам единственного транспорта.
@@ -44,7 +56,7 @@ const createConnection = (projectId: string, onReleased: () => void) => {
       clearTimeout(disconnectTimer);
       disconnectTimer = undefined;
     }
-    signal = { state, sequence: signal.sequence + 1, message };
+    signal = { state, sequence: nextSequence(), message };
     for (const listener of listeners) listener(signal);
   };
 
@@ -158,7 +170,7 @@ const createConnection = (projectId: string, onReleased: () => void) => {
           closeTransport();
           window.removeEventListener("pagehide", handlePageHide);
           window.removeEventListener("pageshow", handlePageShow);
-          signal = { state: "connecting", sequence: signal.sequence + 1 };
+          signal = { state: "connecting", sequence: nextSequence() };
           onReleased();
         }, RELEASE_DELAY);
       }

@@ -167,3 +167,23 @@ test("help: ошибки адресуют нужный уровень; удал�
     failed(await invoke(root, path), "INVALID_ARGUMENT");
   }
 });
+
+test("help: product overview объясняет срез, подборки, --limit и версии", async (t) => {
+  const root = await tempDirectory(t);
+  const result = await renderHelp(root, ["product", "overview", "--help"]);
+  assert.equal(result.code, 0, result.stdout);
+  const text = result.stdout.replace(/\s+/g, " ");
+  for (const expected of [
+    /шести колонкам/,
+    /блокеры с причинами/,
+    /не более 5/,
+    /--limit и --cursor листают только карту/,
+    /snapshotVersion/,
+    /Поле version — версия продуктового состава/,
+    /не решает, какую задачу начинать или завершать/,
+    /product overview \\ --limit 20 \\ --format json/,
+  ])
+    assert.match(text, expected);
+  assert.doesNotMatch(result.stdout, /\x1b/);
+  assert.deepEqual(await readdir(root), []);
+});

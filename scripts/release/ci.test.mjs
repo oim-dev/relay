@@ -59,6 +59,16 @@ test("план CI покрывает все фактические workspace tes
     ["skills:test", "@relay/relay-skill"],
   ])
     assert.equal(rootScripts[alias], `pnpm --silent --filter ${owner} run test`);
+  // Браузерный suite запускается отдельной фазой после restore, а локально — с нужной сборкой.
+  const web = manifests.find(({ manifest }) => manifest.name === "@relay/web").manifest;
+  assert.match(web.scripts["test:e2e"], /^node --test --test-concurrency=1 /);
+  assert.doesNotMatch(web.scripts["test:e2e"], /\b(?:turbo|build|agent-browser install)\b/);
+  assert.doesNotMatch(web.scripts.test ?? "", /test:e2e|test\/e2e/);
+  assert.deepEqual(commandsFor("web-e2e"), [["pnpm", "--filter", "@relay/web", "run", "test:e2e"]]);
+  assert.equal(
+    rootScripts["test:web:e2e"],
+    "turbo run build --filter=@oim-dev/relay-server --filter=@oim-dev/relay-cli && pnpm --filter @relay/web run test:e2e",
+  );
   for (const [phase, owners] of Object.entries(testOwners)) {
     if (phase === "tooling") continue;
     assert.deepEqual(

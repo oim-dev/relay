@@ -179,6 +179,24 @@ jobs:
       - name: Тесты MCP
         run: node scripts/ci.mjs mcp
 
+  web-e2e:
+    name: PR / Web E2E
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - *node
+      - *pnpm
+      - *install
+      - *artifact-id
+      - *download-build
+      - *restore-build
+      - name: Установить Chrome for Testing и системные зависимости
+        run: pnpm exec agent-browser install --with-deps
+      - name: Браузерные регрессии Web на собранных Server и CLI
+        run: node scripts/ci.mjs web-e2e
+
   package-smoke:
     name: PR / Установка пакетов
     needs: build
@@ -200,7 +218,8 @@ jobs:
   gate:
     name: PR / Все проверки
     if: always()
-    needs: [preflight, build, tooling, lint-types, libraries, server, cli, mcp, package-smoke]
+    needs:
+      [preflight, build, tooling, lint-types, libraries, server, cli, mcp, web-e2e, package-smoke]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:

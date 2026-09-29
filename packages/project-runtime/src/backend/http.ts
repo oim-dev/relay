@@ -129,6 +129,27 @@ function decode<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data;
 }
 
+/**
+ * Обзор продукта расширен согласованным срезом (snapshotVersion, generatedAt, snapshot).
+ * Ответ сервера прежней версии без этих полей — рассинхронизация версий, а не повреждение.
+ */
+function decodeOverview(value: unknown, url: string) {
+  const legacy =
+    typeof value === "object" &&
+    value !== null &&
+    "items" in value &&
+    !("snapshot" in value) &&
+    !("snapshotVersion" in value);
+  if (legacy)
+    throw new AppError(
+      "SERVER_INCOMPATIBLE",
+      "Сервер Relay вернул обзор продукта прежнего формата без согласованного среза (snapshot, snapshotVersion). Обновите и перезапустите Relay Server той же версии, что и клиент.",
+      5,
+      { url },
+    );
+  return decode(productOverviewSchema, value);
+}
+
 function projectClient(url: string, project?: string) {
   return createApiClient(
     new HttpClient({
@@ -754,8 +775,7 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
       state: async () =>
         decode(productStateSchema, await call(() => api.product.getProductState())),
-      overview: async () =>
-        decode(productOverviewSchema, await call(() => api.product.getProductOverview())),
+      overview: async () => decodeOverview(await call(() => api.product.getProductOverview()), url),
       list: async (input = {}) =>
         decode(
           productListSchema,

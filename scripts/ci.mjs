@@ -25,6 +25,7 @@ export const requiredJobs = {
   server: "PR / Server и runtime",
   cli: "PR / CLI",
   mcp: "PR / MCP",
+  "web-e2e": "PR / Web E2E",
   "package-smoke": "PR / Установка пакетов",
 };
 export const gateName = "PR / Все проверки";
@@ -64,6 +65,8 @@ export function commandsFor(phase) {
     ];
   if (phase === "tooling")
     return ["release:test", "agents:test", "skills:test"].map((name) => rootScript(name));
+  // Браузерный suite Web не входит в `test`: ему нужен Chrome, установленный шагом workflow.
+  if (phase === "web-e2e") return [workspaceScript("@relay/web", "test:e2e")];
   if (Object.hasOwn(testOwners, phase))
     return testOwners[phase].map((name) => workspaceScript(name, "test"));
   if (phase === "pack")

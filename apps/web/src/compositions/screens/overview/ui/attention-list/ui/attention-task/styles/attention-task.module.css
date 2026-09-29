@@ -1,0 +1,54 @@
+.root {
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--tasks-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--tasks-raised);
+}
+
+.link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 1.5rem;
+  padding-block: 0.125rem;
+  color: var(--tasks-ink);
+  font-size: 0.8125rem;
+  text-decoration: none;
+
+  &:hover .title {
+    text-decoration: underline;
+  }
+}
+
+.key {
+  flex: none;
+  color: var(--tasks-muted);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.75rem;
+}
+
+.title {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.blockers {
+  margin: 0;
+  color: var(--tasks-warning-ink);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}

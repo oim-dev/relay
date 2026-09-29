@@ -93,7 +93,8 @@ REST `/server`, `/projects`, `/context`, `/context/settings`.
 | Создать или изменить паспорт продукта                 | Есть | Есть | Есть     | Есть | Есть | Предметный ввод и общие операции вида `product`.                                                                                   |
 | Прочитать паспорт продукта                            | Есть | Есть | Есть     | Есть | Есть | Полное содержание записи.                                                                                                          |
 | Получить полный снимок продукта                       | Есть | Есть | Частично | Нет  | Нет  | Web использует снимок для каталогов, но не предоставляет отдельную выдачу снимка пользователю. В CLI отдельного product state нет. |
-| Прочитать компактную карту продукта                   | Есть | Есть | Частично | Есть | Есть | Web: продуктовые каталоги есть, отдельная обзорная страница остаётся заглушкой.                                                    |
+| Прочитать обзор состояния продукта и проекта          | Есть | Есть | Есть     | Есть | Нет  | Согласованный срез проекта. Web — экран «Обзор» с SSE, CLI — `product overview`; MCP `product_overview` без среза.                 |
+| Прочитать компактную карту продукта                   | Есть | Есть | Частично | Есть | Есть | Записи продукта и готовность. Web: сводка знаний на «Обзоре» и каталоги, без перечня карты.                                        |
 | Найти продуктовые записи и прочитать одну запись      | Есть | Есть | Есть     | Есть | Есть | CLI: предметные list/get и search с cursor; ограничения старых backend-списков — ниже.                                             |
 | Создать или изменить фичу                             | Есть | Есть | Есть     | Есть | Есть | Предметные и общие операции сущностей.                                                                                             |
 | Прочитать фичу                                        | Есть | Есть | Есть     | Есть | Есть | Требования и связанные продуктовые данные.                                                                                         |
@@ -115,11 +116,13 @@ MCP `product_*_save`, `product_scope_replace`,
 REST `/product/{state,overview,records,entities,entity,context,implementations}` и `/entities`.
 
 Основания: [Core продукт](../packages/core/src/application/product/service.ts),
+[Core обзор](../packages/core/src/application/product/overview.ts),
 [CLI продукт](../apps/cli/src/commands/product.ts),
 [MCP продукт](../apps/mcp/src/product-tools.ts),
 [MCP регистрация](../apps/mcp/src/tools.ts),
 [REST продукт](../packages/server-runtime/src/modules/product/product.module.ts),
 [общие контракты сущностей](../packages/contracts/src/entities.ts),
+[Web обзор](../apps/web/src/compositions/screens/overview/overview.screen.tsx),
 [Web продуктовая сущность](../apps/web/src/compositions/screens/product-entity/product-entity.screen.tsx),
 [Web состав приложения](../apps/web/src/compositions/screens/product-application-scope/ui/application-scope-form/application-scope-form.tsx).
 

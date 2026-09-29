@@ -81,6 +81,10 @@ test("PR: явные jobs, один build, immutable exact artifact, прямы�
       assert.doesNotMatch(job, /ci\.mjs build|ci\.mjs capture/);
     }
   }
+  const chrome = jobs["web-e2e"].indexOf("run: pnpm exec agent-browser install --with-deps\n");
+  assert(chrome > jobs["web-e2e"].indexOf("ci.mjs restore"), "Chrome ставится после restore");
+  assert(chrome < jobs["web-e2e"].indexOf("ci.mjs web-e2e\n"), "Chrome нужен до suite");
+  assert.equal((ci.match(/agent-browser install/g) ?? []).length, 1);
   assert.match(jobs.build, /needs: preflight/);
   assert.match(jobs.build, /ci\.mjs capture/);
   assert.match(
@@ -94,7 +98,10 @@ test("PR: явные jobs, один build, immutable exact artifact, прямы�
   assert.match(jobs.gate, /if: always\(\)/);
   assert(jobs.gate.includes(`name: ${gateName}\n`));
   assert.deepEqual(
-    jobs.gate.match(/needs: \[([^\]]+)\]/)[1].split(", "),
+    jobs.gate
+      .match(/needs:\s+\[([^\]]+)\]/)[1]
+      .trim()
+      .split(/,\s*/),
     Object.keys(requiredJobs),
   );
   assert.match(jobs.gate, /CI_NEEDS: \$\{\{ toJSON\(needs\) \}\}/);

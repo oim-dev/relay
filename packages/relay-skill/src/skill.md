@@ -195,7 +195,7 @@ npx @oim-dev/relay-cli project get
 `implementation`, `document`, `board`, `task`, `plan`, `release`.
 Для критериев, комментариев и этапов есть подгруппы: `task criterion`, `task comment`, `plan stage`.
 
-Начни чтение знаний с `product overview`, затем адресно открывай нужные записи через `get`.
+Начни с `product overview` — среза состояния проекта с командами полного чтения, затем открывай записи через `get`.
 `list` и `search` помогают найти ключ; полное содержание читай отдельно.
 `product get` и `project get` вызываются без ключа. Например:
 

@@ -465,3 +465,61 @@ test("HTTP cursor восстанавливает фильтры, не перен
   );
   assert.equal(selected.data.key, "PROJECT");
 });
+
+test("HTTP product overview: cursor по snapshotVersion, отказ сервера не выдаётся нулями", async (t) => {
+  const app = await fixture(t);
+  for (const name of ["Одна", "Две", "Три"])
+    successful(await app.run(["feature", "create", "--name", name, "--description", "Текст"]));
+  const plan = successful(
+    await app.run<{ key: string }>(["plan", "create", "--title", "План", "--goal", "Цель"]),
+  ).data.key;
+  const server = await httpServer(t, app.root);
+  const first = successful(
+    await app.run<any>(["--server-url", server.url, "product", "overview", "--limit", 1]),
+  );
+  assert.match(first.data.snapshotVersion, /^[a-f0-9]{64}$/);
+  assert.equal(first.data.snapshot.plans.byStatus.draft, 1);
+  assert.match(first.data.commands.plans, new RegExp(`--server-url ${server.url} .*plan list$`));
+  const cursor = first.meta!.page!.nextCursor!;
+  assert.equal(
+    successful(
+      await app.run<any>(["--server-url", server.url, "product", "overview", "--cursor", cursor]),
+    ).data.items.length,
+    1,
+  );
+  const revision = successful(await app.run<any>(["plan", "get", plan])).data.revision;
+  successful(
+    await app.run([
+      "--server-url",
+      server.url,
+      "plan",
+      "update",
+      plan,
+      "--title",
+      "Другой план",
+      "--if-revision",
+      revision,
+    ]),
+  );
+  const after = successful(
+    await app.run<any>(["--server-url", server.url, "product", "overview", "--limit", 1]),
+  );
+  assert.equal(after.data.version, first.data.version);
+  assert.notEqual(after.data.snapshotVersion, first.data.snapshotVersion);
+  failed(
+    await app.run(["--server-url", server.url, "product", "overview", "--cursor", cursor]),
+    "VERSION_CONFLICT",
+  );
+  const denied = await httpProxy(t, async (_request, response) => {
+    response.writeHead(503, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        ok: false,
+        error: { code: "STORAGE_READ_FAILED", message: "Тестовый отказ чтения", exitCode: 5 },
+      }),
+    );
+  });
+  const human = await invokeRaw(app.root, ["--server-url", denied.url, "product", "overview"]);
+  assert.equal(human.code, 5, human.stdout);
+  assert.doesNotMatch(human.stdout, /Задач всего|Сводка|: 0/);
+});

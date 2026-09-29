@@ -1,0 +1,24 @@
+.root {
+  display: grid;
+  gap: 1rem;
+}
+
+.statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+
+  & li {
+    white-space: nowrap;
+  }
+
+  & strong {
+    color: var(--tasks-ink);
+    font-variant-numeric: tabular-nums;
+  }
+}

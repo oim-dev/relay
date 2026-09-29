@@ -1,0 +1,42 @@
+.root {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding-block: 0.5rem;
+  border-bottom: 1px solid var(--tasks-border);
+  color: var(--tasks-ink);
+  font-size: 0.8125rem;
+  text-decoration: none;
+
+  &:hover .name {
+    text-decoration: underline;
+  }
+}
+
+.prefix {
+  color: var(--tasks-muted);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.name {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,4 +1,4 @@
-import { listText, cardText } from "./common.js";
+import { listText, cardText, commandText } from "./common.js";
 import { filterFields } from "./entities.js";
 import type {
   ProductContext,
@@ -6,11 +6,13 @@ import type {
   ProductListQuery,
   ProductMutation,
   ProductOverview,
+  ProductOverviewSnapshot,
   ProductState,
 } from "@relay/core/domain/product";
 import type { ContentWarning } from "@relay/core/application/product/content";
 import type { ProductContentQuery } from "@relay/core/application/product/content";
 import type { TextOptions } from "./theme.js";
+import wrapAnsi from "wrap-ansi";
 import { wrap, section } from "./layout.js";
 import { renderMarkdown } from "./markdown.js";
 import { safeText, previewText } from "./text.js";
@@ -117,11 +119,13 @@ function listing(
   items: ProductOverview["items"],
   options: TextOptions,
   readiness: ProductOverview["readiness"] = [],
+  title = "Записи продукта",
+  emptyMessage = "На этой странице записей нет.",
 ): string {
   const states = new Map(readiness.map((item) => [item.id, item.status]));
   return listText(
     {
-      title: "Записи продукта",
+      title,
       items: items.map((item) => ({
         key: item.key ?? item.id,
         title: item.name,
@@ -136,7 +140,7 @@ function listing(
           ...(item.summary ? [previewText(item.summary, 120)] : []),
         ],
       })),
-      emptyMessage: "На этой странице записей нет.",
+      emptyMessage,
     },
     options,
   );
@@ -161,39 +165,532 @@ export function productListText(
   return parts.join("\n\n");
 }
 
-export function productOverviewText(
-  data: ProductOverview & {
-    total?: number;
-    readinessCounts?: { total: number; ready: number; stale: number };
-  },
+/** Исполняемые команды дальнейшего чтения; каждая сохраняет подключение исходного вызова. */
+export type ProductOverviewCommands = {
+  passport: string;
+  passportHelp: string;
+  progress: string;
+  features: string;
+  applications: string;
+  implementations: string;
+  boards: string;
+  tasks: string;
+  inProgress: string;
+  review: string;
+  blocked: string;
+  readyToStart: string;
+  plans: string;
+  activePlans: string;
+  releases: string;
+  plannedReleases: string;
+  releasedReleases: string;
+  documents: string;
+  pinnedDocuments: string;
+  sections: string;
+};
+
+export type ProductOverviewView = ProductOverview & {
+  total: number;
+  nextOffset: number | null;
+  readinessCounts: { total: number; ready: number; stale: number };
+  commands: ProductOverviewCommands;
+};
+
+type Snapshot = ProductOverviewSnapshot;
+type Preview<T> = { total: number; shown: number; hasMore: boolean; items: T[] };
+type AttentionTask = Snapshot["attention"]["inProgress"]["items"][number];
+type OverviewPlan = Snapshot["plans"]["active"]["items"][number];
+type OverviewRelease = Snapshot["releases"]["upcoming"]["items"][number];
+
+// Формулировки направления как в task links: «Зависит от», «Подзадача».
+const relations = { dependency: "зависит от", subtask: "подзадача" };
+
+/** Согласование существительного с числом: 1 задача, 2 задачи, 5 задач. */
+function plural(count: number, forms: readonly [string, string, string]): string {
+  const tens = count % 100;
+  const units = count % 10;
+  if (tens >= 11 && tens <= 14) return forms[2];
+  if (units === 1) return forms[0];
+  return units >= 2 && units <= 4 ? forms[1] : forms[2];
+}
+/** Родительный падеж после «из N»: из 1 задачи, из 5 задач. */
+const ofTasks = (count: number) => plural(count, ["задачи", "задач", "задач"]);
+const ofPlans = (count: number) => plural(count, ["плана", "планов", "планов"]);
+const planStatuses = {
+  draft: "черновик",
+  active: "в работе",
+  completed: "завершён",
+  cancelled: "отменён",
+};
+const releaseStatuses = { planned: "запланирован", released: "выпущен", cancelled: "отменён" };
+
+/** Перенос обычного текста без висячих пробелов в начале и конце строк. */
+function prose(text: string, width: number): string {
+  return wrapAnsi(safeText(text), Math.max(1, width), { hard: true, trim: true, wordWrap: true });
+}
+
+/** Markdown-фрагмент сохраняет исходные строки и отступы; переносятся только длинные строки. */
+function indent(text: string, width: number, prefix = "  ", markdown = false): string {
+  const body = markdown
+    ? safeText(text)
+        .split("\n")
+        .map((line) => wrap(line, Math.max(1, width - prefix.length)))
+        .join("\n")
+    : prose(text, Math.max(1, width - prefix.length));
+  return body
+    .split("\n")
+    .map((line) => (line ? prefix + line : line))
+    .join("\n");
+}
+
+function outputWidth(options: TextOptions): number {
+  return Number.isFinite(options.width)
+    ? Math.max(24, Math.min(160, Math.floor(options.width)))
+    : 100;
+}
+
+/** Заголовок подборки честно сообщает, полный ли показанный перечень. */
+function previewTitle(title: string, preview: Preview<unknown>): string {
+  if (!preview.total) return `${title} · 0`;
+  return preview.hasMore
+    ? `${title} · показано ${preview.shown} из ${preview.total}`
+    : `${title} · все ${preview.total}`;
+}
+
+function previewBlock<T>(
+  title: string,
+  preview: Preview<T>,
+  render: (item: T) => string,
+  empty: string,
+  full: string,
   options: TextOptions,
+  emptyCommand?: string,
 ): string {
-  const items = data.items;
-  const ready =
-    data.readinessCounts?.ready ?? data.readiness.filter((item) => item.status === "done").length;
+  const width = outputWidth(options);
+  const parts = [prose(previewTitle(title, preview), width)];
+  if (!preview.items.length)
+    parts.push(
+      indent(empty, width) + (emptyCommand ? `\n${commandText(emptyCommand, options)}` : ""),
+    );
+  else parts.push(preview.items.map(render).join("\n"));
+  if (preview.hasMore)
+    parts.push(
+      `${indent(`Полный список (ещё ${preview.total - preview.shown}):`, width)}\n${commandText(full, options)}`,
+    );
+  return parts.join("\n");
+}
+
+function taskLine(task: AttentionTask, options: TextOptions): string {
+  const width = outputWidth(options);
+  const lines = [
+    indent(`${task.key} — ${task.title || "Без названия"}`, width),
+    indent(
+      [
+        `доска ${task.board.name} (${task.board.prefix})`,
+        `колонка ${task.column}`,
+        task.acceptance.total
+          ? `критерии ${task.acceptance.completed} из ${task.acceptance.total}`
+          : "критериев нет",
+        ...(task.column === "done" && !task.completed ? ["обязательства не выполнены"] : []),
+      ].join(" · "),
+      width,
+      "    ",
+    ),
+  ];
+  if (task.blockers.total) {
+    const reasons = task.blockers.items.map(
+      (blocker) =>
+        `${blocker.key} (${relations[blocker.relation]}, ${blocker.column})${blocker.title ? ` ${blocker.title}` : ""}`,
+    );
+    const rest = task.blockers.total - task.blockers.items.length;
+    lines.push(
+      indent(
+        `Ждёт выполнения: ${reasons.join("; ")}${rest > 0 ? `; и ещё ${rest}` : ""}`,
+        width,
+        "    ",
+      ),
+    );
+  }
+  return lines.join("\n");
+}
+
+function planLine(plan: OverviewPlan, options: TextOptions): string {
+  const width = outputWidth(options);
+  const counts = plan.counts;
+  const lines = [
+    indent(`${plan.key} — ${plan.title}`, width),
+    indent(
+      `Статус: ${planStatuses[plan.status]} · состав: ${
+        counts.total
+          ? `выполнено ${counts.completed} из ${counts.total} ${ofTasks(counts.total)} (${counts.percent}%)`
+          : "задач нет"
+      }${plan.ready ? " · фактически готов" : ""}`,
+      width,
+      "    ",
+    ),
+    indent(
+      `Этапы: выполнено ${plan.stages.completed} из ${plan.stages.total}${
+        plan.nextStage ? ` · следующий: ${plan.nextStage.title}` : ""
+      }`,
+      width,
+      "    ",
+    ),
+  ];
+  if (counts.active || counts.review || counts.blocked)
+    lines.push(
+      indent(
+        `В работе ${counts.active} · на проверке ${counts.review} · заблокировано ${counts.blocked}`,
+        width,
+        "    ",
+      ),
+    );
+  const about = plan.summary || plan.goal.text;
+  if (about)
+    lines.push(
+      indent(
+        `${plan.summary ? "" : "Цель: "}${about}${!plan.summary && plan.goal.truncated ? " …" : ""}`,
+        width,
+        "    ",
+        !plan.summary,
+      ),
+    );
+  return lines.join("\n");
+}
+
+function releaseLine(release: OverviewRelease, options: TextOptions): string {
+  const width = outputWidth(options);
+  const readiness = release.readiness;
+  const date =
+    release.status === "released" && release.releasedAt
+      ? `выпущен ${release.releasedAt}`
+      : release.plannedFor
+        ? `плановая дата ${release.plannedFor}`
+        : "без плановой даты";
   return [
+    indent(`${release.key} — ${release.title} · версия ${release.version}`, width),
+    indent(`Статус: ${releaseStatuses[release.status]} · ${date}`, width, "    "),
+    indent(
+      readiness.total
+        ? `Готовность состава: ${readiness.ready} из ${readiness.total} ${ofPlans(readiness.total)} (${readiness.percent}%)${
+            readiness.missing ? ` · недоступно ${readiness.missing}` : ""
+          } · ${
+            readiness.ready === readiness.total && !readiness.missing
+              ? "состав фактически готов"
+              : "состав не готов"
+          }${release.status === "planned" && readiness.canRelease ? " · можно выпускать" : ""}`
+        : "Готовность состава: планов нет",
+      width,
+      "    ",
+    ),
+  ].join("\n");
+}
+
+const statusSplit = (counts: { none: number; partial: number; done: number }) =>
+  `готово ${counts.done} · частично ${counts.partial} · не начато ${counts.none}`;
+
+function passportText(
+  data: ProductOverviewView,
+  options: TextOptions,
+): { title: string; fields: [string, string | number][]; body: string } {
+  const passport = data.snapshot.passport;
+  const width = outputWidth(options);
+  if (passport.state === "missing")
+    return {
+      title: "Продукт без паспорта",
+      fields: [["Паспорт", "ещё не создан"]],
+      body: `${prose("Назначение продукта пока не описано. Поля и пример создания:", width)}\n${commandText(data.commands.passportHelp, options)}`,
+    };
+  const fields: [string, string | number][] = [
+    ["Паспорт", passport.state === "filled" ? "заполнен" : "без краткого описания"],
+    ["Ключ", passport.key ?? passport.id],
+    ["Ревизия", passport.revision],
+  ];
+  const body =
+    passport.state === "filled"
+      ? prose(safeText(passport.summary), width)
+      : passport.excerpt.text
+        ? `${prose(
+            `Краткое описание пустое. Начало описания паспорта${passport.excerpt.truncated ? " (фрагмент)" : ""}:`,
+            width,
+          )}\n${indent(passport.excerpt.text + (passport.excerpt.truncated ? " …" : ""), width, "  ", true)}`
+        : prose("Краткое описание и полное описание паспорта пусты.", width);
+  return { title: `Продукт · ${passport.name}`, fields, body };
+}
+
+/**
+ * Обзор для человека и агента: сначала контекст и сводка, затем внимание, планы и релизы,
+ * знания и документы, в конце — страница прежней карты и адресные команды чтения.
+ */
+export function productOverviewText(
+  data: ProductOverviewView,
+  options: TextOptions,
+  offset = 0,
+): string {
+  const snapshot = data.snapshot;
+  const width = outputWidth(options);
+  const commands = data.commands;
+  const passport = passportText(data, options);
+  const tasks = snapshot.tasks;
+  const columns = tasks.byColumn;
+  const knowledge = snapshot.knowledge;
+  const documents = snapshot.documents;
+  const plans = snapshot.plans;
+  const releases = snapshot.releases;
+
+  const head = cardText(
+    {
+      title: passport.title,
+      fields: [
+        ["Проект", `${snapshot.project.name} (${snapshot.project.slug})`],
+        ["ID проекта", snapshot.project.id ?? "не назначен"],
+        ["Срез получен", data.generatedAt],
+        ...passport.fields,
+      ],
+      sections: [{ title: "Паспорт", body: passport.body }],
+    },
+    options,
+  );
+
+  const summary = cardText(
+    {
+      title: "Сводка",
+      fields: [
+        ["Задач всего", tasks.total],
+        [
+          "По колонкам",
+          `inbox ${columns.inbox} · ready ${columns.ready} · in-progress ${columns["in-progress"]} · review ${columns.review} · done ${columns.done} · cancelled ${columns.cancelled}`,
+        ],
+        [
+          "Фактически выполнено",
+          `${tasks.completed}${tasks.doneWithOpenObligations ? ` · в done с невыполненными обязательствами ${tasks.doneWithOpenObligations}` : ""}`,
+        ],
+        ["Готовы к началу", tasks.readyToStart],
+        ["Заблокировано", tasks.blocked],
+        [
+          "Критерии приёмки",
+          tasks.criteria.total
+            ? `выполнено ${tasks.criteria.completed} из ${tasks.criteria.total} · не выполнено ${tasks.criteria.pending} в ${tasks.criteria.tasksWithPending} ${plural(tasks.criteria.tasksWithPending, ["задаче", "задачах", "задачах"])}`
+            : "нет",
+        ],
+        [
+          "Доски",
+          `${snapshot.boards.total} (продукт ${snapshot.boards.byKind.product} · приложения ${snapshot.boards.byKind.application} · инфраструктура ${snapshot.boards.byKind.infrastructure})`,
+        ],
+      ],
+    },
+    options,
+  );
+  const overlap = prose(
+    "Выполненные, готовые к началу, заблокированные и критерии пересекаются с колонками и не складываются в общее число.",
+    width,
+  );
+
+  const attention = [
+    prose("Требует внимания", width),
+    previewBlock(
+      "В работе",
+      snapshot.attention.inProgress,
+      (task) => taskLine(task, options),
+      "Задач в работе нет.",
+      commands.inProgress,
+      options,
+    ),
+    previewBlock(
+      "На проверке",
+      snapshot.attention.review,
+      (task) => taskLine(task, options),
+      "Задач на проверке нет.",
+      commands.review,
+      options,
+    ),
+    previewBlock(
+      "Заблокированы",
+      snapshot.attention.blocked,
+      (task) => taskLine(task, options),
+      "Заблокированных задач нет.",
+      commands.blocked,
+      options,
+    ),
+  ].join("\n\n");
+
+  const planning = [
     cardText(
       {
-        title: "Карта продукта",
+        title: "Планы",
         fields: [
-          ["Записей всего", data.total ?? data.items.length],
           [
-            "Готовых фич и сценариев",
-            `${ready} из ${data.readinessCounts?.total ?? data.readiness.length}`,
+            "Всего",
+            `${plans.total} (черновики ${plans.byStatus.draft} · в работе ${plans.byStatus.active} · завершены ${plans.byStatus.completed} · отменены ${plans.byStatus.cancelled})`,
           ],
+          ...(plans.completedNotReady
+            ? ([["Завершены по статусу, но состав не выполнен", plans.completedNotReady]] as const)
+            : []),
+        ],
+      },
+      options,
+    ),
+    previewBlock(
+      "Активные планы",
+      plans.active,
+      (plan) => planLine(plan, options),
+      plans.total ? "Активных планов нет. Все планы:" : "Планов пока нет.",
+      commands.activePlans,
+      options,
+      plans.total ? commands.plans : undefined,
+    ),
+    cardText(
+      {
+        title: "Релизы",
+        fields: [
           [
-            "Требуют переподтверждения",
-            data.readinessCounts?.stale ?? data.readiness.filter((item) => item.stale > 0).length,
+            "Всего",
+            `${releases.total} (запланированы ${releases.byStatus.planned} · выпущены ${releases.byStatus.released} · отменены ${releases.byStatus.cancelled})`,
           ],
         ],
       },
       options,
     ),
-    listing(items, options, data.readiness),
-    wrap(`Версия для изменения состава: ${data.version}`, options.width),
+    previewBlock(
+      "Ближайшие запланированные",
+      releases.upcoming,
+      (release) => releaseLine(release, options),
+      "Запланированных релизов нет.",
+      commands.plannedReleases,
+      options,
+    ),
+    previewBlock(
+      "Последние выпущенные",
+      releases.recent,
+      (release) => releaseLine(release, options),
+      "Выпущенных релизов нет.",
+      commands.releasedReleases,
+      options,
+    ),
+    prose(
+      "Собственный статус плана или релиза не равен фактической готовности состава: она считается по задачам.",
+      width,
+    ),
+  ].join("\n\n");
+
+  const implementations = (entry: Snapshot["knowledge"]["featureImplementations"]) =>
+    `действующих ${entry.active} (${statusSplit(entry.byStatus)})${entry.withdrawn ? ` · снято ${entry.withdrawn}` : ""}`;
+  const knowledgeText = cardText(
+    {
+      title: "Продуктовые знания",
+      fields: [
+        ["Фичи", `${knowledge.features.total} (${statusSplit(knowledge.features.byStatus)})`],
+        ["Сценарии", `${knowledge.scenarios.total} (${statusSplit(knowledge.scenarios.byStatus)})`],
+        [
+          "Приложения",
+          `${knowledge.applications.total} (фронтенд ${knowledge.applications.byType.frontend} · бэкенд ${knowledge.applications.byType.backend} · внутренние ${knowledge.applications.byType.internal})`,
+        ],
+        ["Реализации фич", implementations(knowledge.featureImplementations)],
+        ["Реализации сценариев", implementations(knowledge.scenarioImplementations)],
+      ],
+    },
+    options,
+  );
+  const boards = previewBlock(
+    "Доски",
+    snapshot.boards.catalog,
+    (board) =>
+      indent(
+        `${board.prefix} — ${board.name} · задач ${board.tasks.total}, открытых ${board.tasks.open}`,
+        width,
+      ),
+    "Досок нет.",
+    commands.boards,
+    options,
+  );
+  const documentsText = [
+    cardText(
+      {
+        title: "Документы",
+        fields: [
+          [
+            "Всего",
+            `${documents.total} (черновики ${documents.byStatus.draft} · действующие ${documents.byStatus.active} · архивные ${documents.byStatus.archived})`,
+          ],
+          ["Закреплено", documents.pinned],
+          [
+            "Разделы",
+            `${documents.sections.total}${documents.sections.unsectioned ? ` · без раздела ${documents.sections.unsectioned} док.` : ""}`,
+          ],
+        ],
+      },
+      options,
+    ),
+    previewBlock(
+      "Закреплённые действующие",
+      documents.pinnedActive,
+      (document) =>
+        [
+          indent(`${document.key ?? document.id} — ${document.name}`, width),
+          indent(
+            [document.documentKind, document.summary].filter(Boolean).join(" · "),
+            width,
+            "    ",
+          ),
+        ].join("\n"),
+      "Закреплённых действующих документов нет.",
+      commands.pinnedDocuments,
+      options,
+    ),
+  ].join("\n\n");
+
+  const shownFrom = data.items.length ? offset + 1 : 0;
+  const map = [
+    prose(
+      `Карта продукта · записи ${shownFrom}–${offset + data.items.length} из ${data.total}`,
+      width,
+    ),
+    prose(
+      `Готовых фич и сценариев: ${data.readinessCounts.ready} из ${data.readinessCounts.total} · требуют переподтверждения: ${data.readinessCounts.stale}`,
+      width,
+    ),
+    listing(
+      data.items,
+      options,
+      data.readiness,
+      "",
+      data.total ? "На этой странице записей нет." : "Записей продукта пока нет.",
+    ),
+    prose(`Версия для изменения состава: ${data.version}`, width),
+  ].join("\n\n");
+
+  const next = cardText(
+    {
+      title: "Дальнейшее чтение",
+      commands: [
+        { label: "Паспорт целиком", command: commands.passport },
+        { label: "Готовность фич", command: commands.progress },
+        { label: "Задачи в работе", command: commands.inProgress },
+        { label: "Задачи на проверке", command: commands.review },
+        { label: "Заблокированные задачи", command: commands.blocked },
+        { label: "Готовые к началу", command: commands.readyToStart },
+        { label: "Планы", command: commands.plans },
+        { label: "Релизы", command: commands.releases },
+        { label: "Документы", command: commands.documents },
+        { label: "Доски", command: commands.boards },
+      ],
+    },
+    options,
+  );
+
+  return [
+    head,
+    summary,
+    overlap,
+    attention,
+    planning,
+    knowledgeText,
+    boards,
+    documentsText,
+    map,
+    next,
   ]
     .filter(Boolean)
-    .join("\n\n");
+    .join(`\n\n`);
 }
 
 /** Компактные цели для выбора связи; полное описание читается отдельной командой get. */

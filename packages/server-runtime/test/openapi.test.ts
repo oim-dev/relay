@@ -363,7 +363,27 @@ for (const scoped of [false, true])
       ),
       missing,
     );
-    assert.equal(visited.size, 52);
+    const plan = await request("POST", "/api/v1/plans", undefined, {
+      title: "План схемы обзора",
+      requestId: "overview-plan",
+    });
+    await request("POST", "/api/v1/releases", undefined, {
+      title: "Релиз схемы обзора",
+      version: "1.0.0",
+      planIds: [plan.data.id],
+      requestId: "overview-release",
+    });
+    const overview = await request("GET", "/api/v1/product/overview");
+    assert.equal(overview.data.snapshot.plans.total, 1);
+    assert.equal(overview.data.snapshot.releases.total, 1);
+    assert.ok(overview.data.snapshot.tasks.total > 0);
+    const overviewSchema = document.components!.schemas!.ProductOverview as SchemaObject;
+    assert.equal(overviewSchema.additionalProperties, false);
+    for (const field of ["productId", "version", "items", "readiness"])
+      assert(overviewSchema.required!.includes(field), `Прежнее поле обзора ${field}`);
+    for (const field of ["snapshotVersion", "generatedAt", "snapshot"])
+      assert(overviewSchema.required!.includes(field), `Новое поле обзора ${field}`);
+    assert.equal(visited.size, 54);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
     assert(!("$ref" in sse) && sse.content?.["text/event-stream"]);
     const updateSchema = document.components!.schemas!.UpdateBoardTask as SchemaObject;

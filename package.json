@@ -41,6 +41,7 @@
     "test:mcp": "turbo run test --filter=@oim-dev/relay-mcp",
     "test:server": "turbo run test --filter=@oim-dev/relay-server --filter=@relay/server-runtime",
     "test:core": "turbo run test --filter=@relay/core",
+    "test:web:e2e": "turbo run build --filter=@oim-dev/relay-server --filter=@oim-dev/relay-cli && pnpm --filter @relay/web run test:e2e",
     "bench:graph": "node --conditions=tasks-source --import tsx scripts/graph-storage-benchmark.mts",
     "bench:storage": "node --conditions=tasks-source --import tsx scripts/entity-storage-benchmark.mts",
     "openapi:export": "tsx --tsconfig packages/server-runtime/tsconfig.json --conditions=tasks-source scripts/export-openapi.mts",

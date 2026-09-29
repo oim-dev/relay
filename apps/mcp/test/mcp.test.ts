@@ -1376,3 +1376,92 @@ test("параллельный первый доступ, размер отве�
     created[0]?.data?.id,
   );
 });
+
+test("MCP product_overview: прежняя форма без среза проекта укладывается в бюджет по умолчанию", async (t) => {
+  const app = await setup(t);
+  const server = await app.start(join(app.root, "a/.relay/config.json"));
+  const client = await app.connect(server.url);
+  const save = async (name: string, args: Record<string, unknown>) => {
+    const result = CallToolResultSchema.parse(await client.callTool({ name, arguments: args }));
+    assert.notEqual(result.isError, true, name);
+    return z.object({ data: z.object({ id: z.string() }) }).parse(result.structuredContent).data;
+  };
+  const description = "## Цель\n\n" + "Подробное описание поведения. ".repeat(40);
+  await save("product_application_save", {
+    actor: "agent",
+    action: "create",
+    requestId: "app",
+    name: "Web",
+    summary: "Интерфейс",
+    description,
+    slug: "web",
+    prefix: "WEB",
+    type: "frontend",
+  });
+  for (let index = 0; index < 8; index++) {
+    const feature = await save("product_feature_save", {
+      actor: "agent",
+      action: "create",
+      requestId: `feature-${index}`,
+      name: `Фича ${index} с длинным названием`,
+      summary: "Кратко\nВторая строка",
+      description,
+    });
+    await save("product_scenario_save", {
+      actor: "agent",
+      action: "create",
+      requestId: `scenario-${index}`,
+      featureId: feature.id,
+      name: `Сценарий ${index}`,
+      description,
+    });
+  }
+  for (let index = 0; index < 16; index++)
+    assert.equal(
+      (
+        await call(client, "board_task_create", {
+          board: index % 2 ? "product" : "web",
+          title: `Задача ${index} с довольно длинным заголовком для проверки`,
+          column: ["inbox", "ready", "in-progress", "review"][index % 4],
+          description,
+          actor: "agent",
+          requestId: `task-${index}`,
+          acceptanceCriteria: [{ title: "Критерий" }],
+        })
+      ).ok,
+      true,
+    );
+  const plan = await call(client, "plan_create", {
+    title: "План",
+    goal: "Результат",
+    actor: "agent",
+    requestId: "plan",
+  });
+  assert.equal(
+    (
+      await call(client, "release_create", {
+        title: "Релиз",
+        version: "1.0",
+        planIds: [plan.data?.id],
+        description,
+        actor: "agent",
+        requestId: "release",
+      })
+    ).ok,
+    true,
+  );
+  const result = CallToolResultSchema.parse(
+    await client.callTool({ name: "product_overview", arguments: {} }),
+  );
+  assert.notEqual(result.isError, true);
+  assert.ok(Buffer.byteLength(JSON.stringify(result)) <= defaultConfig.output.maxBytes);
+  const data = z
+    .object({ ok: z.literal(true), data: z.record(z.string(), z.unknown()) })
+    .parse(result.structuredContent).data;
+  assert.deepEqual(Object.keys(data).sort(), ["items", "productId", "readiness", "version"]);
+  assert.equal((data.items as unknown[]).length, 17);
+  assert.equal(
+    z.object({ text: z.string() }).parse(result.content[0]).text,
+    JSON.stringify(result.structuredContent),
+  );
+});

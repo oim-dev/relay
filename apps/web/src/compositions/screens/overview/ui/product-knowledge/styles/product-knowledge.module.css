@@ -1,0 +1,31 @@
+.root {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 0.75rem;
+  font-size: 0.8125rem;
+
+  & dt {
+    font-weight: 600;
+  }
+}
+
+.value {
+  margin: 0;
+  font-weight: 650;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}

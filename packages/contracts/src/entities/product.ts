@@ -10,6 +10,9 @@ import {
 } from "../primitives.js";
 import { applicationSlugSchema, boardPrefixSchema } from "./board.js";
 import { documentKindSchema, documentMetadataShape } from "./document-library.js";
+import { kanbanColumnSchema } from "./board-task.js";
+import { planStatusSchema, planningCountsSchema } from "../planning.js";
+import { releaseReadinessSchema, releaseStatusSchema } from "../releases.js";
 
 export const productIdSchema = z
   .string()
@@ -229,24 +232,450 @@ export const productListSchema = z.strictObject({
   items: z.array(productRecordSchema),
   nextOffset: z.number().nullable(),
 });
-export const productOverviewSchema = z.strictObject({
-  productId: z.string(),
-  version: z.string(),
-  items: z.array(
-    z.strictObject({
-      id: productIdSchema,
-      key: productKeySchema.optional(),
-      revision: z.number(),
-      kind: z.string(),
-      name: z.string(),
-      summary: z.string(),
-    }),
-  ),
-  readiness: z.array(productReadinessSchema),
-});
+/** Ограничение каждой обзорной подборки; полные числа передаются отдельно. */
+export const PRODUCT_OVERVIEW_PREVIEW_LIMIT = 5;
+/** Предел детерминированного фрагмента Markdown в символах Unicode. */
+export const PRODUCT_OVERVIEW_EXCERPT_LIMIT = 600;
+
+const overviewCount = (description: string) => z.number().int().nonnegative().describe(description);
+
+/** Ограниченная подборка: полный total и явный признак продолжения. */
+const overviewPreview = <T extends z.ZodType>(item: T, subject: string) =>
+  z
+    .strictObject({
+      total: overviewCount(
+        `Полное число ${subject} в проекте независимо от ограничения подборки; 0 — таких нет`,
+      ),
+      shown: overviewCount("Число элементов в items, не более 5"),
+      hasMore: z
+        .boolean()
+        .describe("true, если есть элементы сверх показанных; полный список читайте каталогом"),
+      items: z
+        .array(item)
+        .max(PRODUCT_OVERVIEW_PREVIEW_LIMIT)
+        .describe(`Первые ${subject} по порядку подборки; пустой массив — таких нет`),
+    })
+    .describe(`Краткая подборка: ${subject}`);
+
+const overviewExcerptSchema = z
+  .strictObject({
+    text: z
+      .string()
+      .describe(
+        "Начало исходного Markdown без изменения смысла: обрезанные края, не более 600 символов",
+      ),
+    truncated: z.boolean().describe("true, если исходный текст длиннее фрагмента"),
+  })
+  .describe("Детерминированный фрагмент сохранённого текста, не новое описание");
+
+const featureStatusCountsSchema = z
+  .strictObject({
+    none: overviewCount("Нет выполненных обязательств или работ"),
+    partial: overviewCount("Выполнена часть обязательств"),
+    done: overviewCount("Все обязательства фактически выполнены задачами"),
+  })
+  .describe("Разбиение по фактической готовности Core; все ключи присутствуют, включая нули");
+
+const implementationCountsSchema = (subject: string) =>
+  z
+    .strictObject({
+      total: overviewCount(`Все ${subject}, включая снятые`),
+      active: overviewCount(`Действующие ${subject}`),
+      withdrawn: overviewCount(
+        `Снятые ${subject}; сохраняются для истории и не влияют на готовность`,
+      ),
+      byStatus: featureStatusCountsSchema.describe(
+        `Готовность только действующих ${subject} по задачам`,
+      ),
+    })
+    .describe(`Реализации: ${subject}`);
+
+const overviewBoardSchema = z
+  .strictObject({
+    id: z.string().describe("Постоянный ID доски"),
+    prefix: boardPrefixSchema,
+    slug: z.string().describe("Адрес доски в выбранном проекте"),
+    kind: z
+      .enum(["product", "application", "infrastructure"])
+      .describe("Область ответственности доски"),
+    name: z.string().describe("Название доски; для приложения — его актуальное название"),
+    applicationId: productIdSchema
+      .nullable()
+      .describe("ID приложения доски; null у системных досок"),
+    tasks: z
+      .strictObject({
+        total: overviewCount("Все задачи доски, включая done и cancelled"),
+        open: overviewCount("Задачи доски вне колонок done и cancelled"),
+      })
+      .describe("Счётчики задач доски; пустая доска имеет нули"),
+  })
+  .describe("Доска проекта в обзоре");
+
+const taskColumnCountsSchema = z
+  .strictObject({
+    inbox: overviewCount("Задачи в колонке inbox"),
+    ready: overviewCount("Задачи в колонке ready"),
+    "in-progress": overviewCount("Задачи в колонке in-progress"),
+    review: overviewCount("Задачи в колонке review"),
+    done: overviewCount("Задачи в колонке done, независимо от фактического выполнения"),
+    cancelled: overviewCount("Отменённые задачи; отмена не является выполнением"),
+  })
+  .describe("Все шесть колонок, включая нулевые; сумма равна tasks.total");
+
+const overviewTaskRefSchema = z
+  .strictObject({
+    id: z.string().describe("Постоянный ID задачи"),
+    key: z.string().describe("Текущий ключ задачи с префиксом доски"),
+    title: z.string().describe("Однострочный заголовок задачи; может быть пустым"),
+    column: kanbanColumnSchema,
+  })
+  .describe("Краткий адрес задачи");
+
+const overviewTaskSchema = overviewTaskRefSchema
+  .extend({
+    board: z
+      .strictObject({
+        id: z.string().describe("Постоянный ID доски"),
+        prefix: boardPrefixSchema,
+        slug: z.string().describe("Адрес доски"),
+        name: z.string().describe("Название доски"),
+      })
+      .describe("Текущая доска задачи"),
+    updatedAt: timestampSchema.describe("Время последнего изменения задачи"),
+    completed: z
+      .boolean()
+      .describe("Фактически выполнена: done, все критерии и обязательства выполнены"),
+    acceptance: z
+      .strictObject({
+        total: overviewCount("Все критерии приёмки задачи"),
+        completed: overviewCount("Отмеченные выполненными критерии"),
+      })
+      .describe("Прогресс критериев приёмки"),
+    blockers: z
+      .strictObject({
+        total: overviewCount("Все невыполненные прямые зависимости и подзадачи; 0 — блокеров нет"),
+        items: z
+          .array(
+            overviewTaskRefSchema
+              .extend({
+                relation: z
+                  .enum(["dependency", "subtask"])
+                  .describe("Причина: невыполненная зависимость или подзадача"),
+              })
+              .describe("Невыполненное обязательство, блокирующее задачу"),
+          )
+          .max(PRODUCT_OVERVIEW_PREVIEW_LIMIT)
+          .describe("Первые причины блокировки по постоянному ID; не более 5"),
+      })
+      .describe("Причины блокировки из действующей модели обязательств"),
+  })
+  .describe("Задача, требующая внимания");
+
+const overviewDocumentSchema = z
+  .strictObject({
+    id: productIdSchema.describe("Постоянный ID документа"),
+    key: productKeySchema.nullable().describe("Читаемый ключ документа либо null"),
+    name: z.string().describe("Однострочное название документа"),
+    summary: z.string().describe("Краткое обычное описание; может быть пустым"),
+    documentKind: documentKindSchema,
+    sectionId: z
+      .string()
+      .nullable()
+      .describe("Раздел библиотеки; null — без раздела или раздел больше не настроен"),
+    updatedAt: timestampSchema.describe("Время последнего изменения документа"),
+  })
+  .describe("Закреплённый действующий документ");
+
+const overviewPlanSchema = z
+  .strictObject({
+    id: z.string().describe("Постоянный ID плана"),
+    key: z.string().describe("Читаемый ключ плана"),
+    title: z.string().describe("Название плана"),
+    summary: z.string().describe("Краткое описание плана; может быть пустым"),
+    goal: overviewExcerptSchema.describe(
+      "Начало цели плана в Markdown; пустой text — цель не задана",
+    ),
+    status: planStatusSchema,
+    updatedAt: timestampSchema.describe("Время последнего изменения плана"),
+    stages: z
+      .strictObject({
+        total: overviewCount("Все этапы плана"),
+        completed: overviewCount("Этапы с непустым и фактически выполненным составом"),
+      })
+      .describe("Прогресс этапов"),
+    nextStage: z
+      .strictObject({
+        id: z.string().describe("Внутренний ID этапа"),
+        title: z.string().describe("Название этапа"),
+      })
+      .nullable()
+      .describe("Первый незавершённый этап; null — все этапы выполнены или их нет"),
+    counts: planningCountsSchema.describe("Фактическое выполнение задач плана"),
+    ready: z.boolean().describe("Весь непустой состав фактически выполнен"),
+  })
+  .describe("Активный план работ");
+
+const overviewReleaseSchema = z
+  .strictObject({
+    id: z.string().describe("Постоянный ID релиза"),
+    key: z.string().describe("Читаемый ключ релиза"),
+    title: z.string().describe("Название релиза"),
+    version: z.string().describe("Пользовательское обозначение выпуска; не ревизия записи"),
+    status: releaseStatusSchema,
+    plannedFor: z.iso
+      .date()
+      .nullable()
+      .describe("Плановая дата YYYY-MM-DD либо null, если не задана"),
+    releasedAt: timestampSchema.nullable().describe("Фактическое время выпуска либо null"),
+    updatedAt: timestampSchema.describe("Время последнего изменения релиза"),
+    readiness: releaseReadinessSchema.describe(
+      "Фактическая готовность состава; не совпадает с собственным статусом релиза",
+    ),
+  })
+  .describe("Релиз проекта; не относится к отдельному приложению");
+
+const passportPresent = {
+  id: productIdSchema.describe("Постоянный ID паспорта"),
+  key: productKeySchema.nullable().describe("Читаемый ключ продукта либо null"),
+  revision: z.number().int().positive().describe("Ревизия паспорта"),
+  name: z.string().describe("Название продукта из паспорта"),
+  updatedAt: timestampSchema.describe("Время последнего изменения паспорта"),
+};
+
+export const productOverviewSnapshotSchema = z
+  .strictObject({
+    project: z
+      .strictObject({
+        id: z
+          .string()
+          .nullable()
+          .describe("Постоянный ID проекта; null только у прежней конфигурации без ID"),
+        name: z.string().describe("Отображаемое имя проекта; не подменяется названием продукта"),
+        slug: z.string().describe("Адрес проекта"),
+      })
+      .describe("Выбранный проект"),
+    passport: z
+      .discriminatedUnion("state", [
+        z
+          .strictObject({
+            state: z.literal("missing").describe("Паспорт ещё не создан"),
+          })
+          .describe("Паспорт отсутствует; это не ошибка чтения"),
+        z
+          .strictObject({
+            state: z.literal("filled").describe("Паспорт с краткой summary"),
+            ...passportPresent,
+            summary: z.string().min(1).describe("Сохранённая краткая summary паспорта"),
+          })
+          .describe("Заполненный паспорт"),
+        z
+          .strictObject({
+            state: z.literal("no-summary").describe("Паспорт есть, summary пустая"),
+            ...passportPresent,
+            excerpt: overviewExcerptSchema.describe(
+              "Фрагмент описания паспорта вместо пустой summary; сохранённый паспорт не меняется",
+            ),
+          })
+          .describe("Паспорт без summary"),
+      ])
+      .describe("Состояние паспорта продукта"),
+    knowledge: z
+      .strictObject({
+        features: z
+          .strictObject({
+            total: overviewCount("Все фичи продукта"),
+            byStatus: featureStatusCountsSchema,
+          })
+          .describe("Общие фичи"),
+        scenarios: z
+          .strictObject({
+            total: overviewCount("Все сценарии продукта"),
+            byStatus: featureStatusCountsSchema,
+          })
+          .describe("Сценарии фич"),
+        applications: z
+          .strictObject({
+            total: overviewCount("Все приложения проекта"),
+            byType: z
+              .strictObject({
+                frontend: overviewCount("Клиентские приложения"),
+                backend: overviewCount("Серверные приложения"),
+                internal: overviewCount("Внутренние приложения"),
+              })
+              .describe("Разбиение по назначению; все ключи присутствуют"),
+          })
+          .describe("Приложения-реализаторы"),
+        featureImplementations: implementationCountsSchema("реализации фич (FI)"),
+        scenarioImplementations: implementationCountsSchema("реализации сценариев (SI)"),
+      })
+      .describe("Продуктовые знания; технические составы scope не считаются сущностями"),
+    boards: z
+      .strictObject({
+        total: overviewCount("Все доски проекта, включая пустые"),
+        byKind: z
+          .strictObject({
+            product: overviewCount("Доска продукта"),
+            application: overviewCount("Доски приложений"),
+            infrastructure: overviewCount("Доска инфраструктуры"),
+          })
+          .describe("Разбиение досок по области; все ключи присутствуют"),
+        catalog: overviewPreview(
+          overviewBoardSchema,
+          "досок в порядке каталога: продукт, приложения по созданию, инфраструктура",
+        ),
+      })
+      .describe("Доски проекта"),
+    tasks: z
+      .strictObject({
+        total: overviewCount("Все задачи проекта на всех досках"),
+        byColumn: taskColumnCountsSchema,
+        completed: overviewCount(
+          "Фактически выполненные: done, все критерии и обязательства; пересекается с byColumn",
+        ),
+        doneWithOpenObligations: overviewCount(
+          "В колонке done, но критерии или обязательства сейчас не выполнены",
+        ),
+        readyToStart: overviewCount("Можно брать в работу: колонка ready и нет блокеров"),
+        blocked: overviewCount(
+          "Есть невыполненные прямые зависимости или подзадачи, в любой колонке",
+        ),
+        criteria: z
+          .strictObject({
+            total: overviewCount("Все критерии задач вне колонки cancelled"),
+            completed: overviewCount("Выполненные критерии задач вне cancelled"),
+            pending: overviewCount("Невыполненные критерии задач вне cancelled"),
+            tasksWithPending: overviewCount("Задачи вне cancelled с невыполненными критериями"),
+          })
+          .describe("Критерии приёмки; критерии отменённых задач не учитываются"),
+      })
+      .describe(
+        "Статистика задач; completed, readyToStart, blocked и критерии пересекаются и не складываются в total",
+      ),
+    attention: z
+      .strictObject({
+        inProgress: overviewPreview(
+          overviewTaskSchema,
+          "задач в колонке in-progress, новые изменения первыми",
+        ),
+        review: overviewPreview(
+          overviewTaskSchema,
+          "задач в колонке review, новые изменения первыми",
+        ),
+        blocked: overviewPreview(
+          overviewTaskSchema,
+          "заблокированных задач: in-progress, review, ready, inbox, done, cancelled, затем новые изменения",
+        ),
+      })
+      .describe("Требует внимания: только данные существующей модели, без приоритетов и сроков"),
+    documents: z
+      .strictObject({
+        total: overviewCount("Все документы, включая архивные"),
+        byStatus: z
+          .strictObject({
+            draft: overviewCount("Черновики"),
+            active: overviewCount("Действующие документы"),
+            archived: overviewCount("Архивные документы"),
+          })
+          .describe("Разбиение по состоянию публикации; все ключи присутствуют"),
+        pinned: overviewCount("Закреплённые документы в любом состоянии"),
+        sections: z
+          .strictObject({
+            total: overviewCount("Настроенные разделы библиотеки"),
+            unsectioned: overviewCount("Документы без раздела или с ненастроенным разделом"),
+            items: z
+              .array(
+                z
+                  .strictObject({
+                    id: z.string().describe("Постоянный ID раздела"),
+                    name: z.string().describe("Название раздела"),
+                    documents: overviewCount("Документы раздела, включая архивные"),
+                  })
+                  .describe("Раздел библиотеки"),
+              )
+              .max(100)
+              .describe("Все разделы в порядке настройки, включая пустые"),
+          })
+          .describe("Разделы библиотеки документов"),
+        pinnedActive: overviewPreview(
+          overviewDocumentSchema,
+          "закреплённых действующих документов, новые изменения первыми",
+        ),
+      })
+      .describe("Библиотека документов; прикрепление документа не меняет готовность"),
+    plans: z
+      .strictObject({
+        total: overviewCount("Все планы работ"),
+        byStatus: z
+          .strictObject({
+            draft: overviewCount("Черновики планов"),
+            active: overviewCount("Планы в работе"),
+            completed: overviewCount("Завершённые планы по собственному статусу"),
+            cancelled: overviewCount("Отменённые планы"),
+          })
+          .describe("Собственные статусы планов; все ключи присутствуют"),
+        completedNotReady: overviewCount(
+          "Завершённые по статусу планы, чей состав сейчас фактически не выполнен",
+        ),
+        active: overviewPreview(overviewPlanSchema, "активных планов, новые изменения первыми"),
+      })
+      .describe("Планы работ"),
+    releases: z
+      .strictObject({
+        total: overviewCount("Все релизы проекта"),
+        byStatus: z
+          .strictObject({
+            planned: overviewCount("Запланированные релизы"),
+            released: overviewCount("Выпущенные релизы"),
+            cancelled: overviewCount("Отменённые релизы"),
+          })
+          .describe("Собственные статусы релизов; все ключи присутствуют"),
+        upcoming: overviewPreview(
+          overviewReleaseSchema,
+          "запланированных релизов: ближайшая плановая дата, затем без даты",
+        ),
+        recent: overviewPreview(overviewReleaseSchema, "выпущенных релизов, последние первыми"),
+      })
+      .describe("Релизы проекта"),
+  })
+  .describe("Согласованный срез проекта из одного чтения");
+
+const productOverviewItemSchema = z
+  .strictObject({
+    id: productIdSchema.describe("Постоянный ID записи продукта"),
+    key: productKeySchema.optional().describe("Читаемый ключ записи, если назначен"),
+    revision: z.number().describe("Ревизия записи"),
+    kind: z
+      .string()
+      .describe("Вид записи: passport, feature, scenario, application, scope или document"),
+    name: z.string().describe("Название записи; для состава реализации — служебная подпись"),
+    summary: z.string().describe("Краткое описание; может быть пустым"),
+  })
+  .describe("Элемент карты продукта");
+
+export const productOverviewSchema = z
+  .strictObject({
+    productId: z.string().describe("Постоянный ID продукта хранилища"),
+    version: z
+      .string()
+      .describe("Версия продуктового состава: только записи продукта, без задач, планов и релизов"),
+    items: z
+      .array(productOverviewItemSchema)
+      .describe("Полная карта продуктовых записей; клиент может листать её отдельно"),
+    readiness: z.array(productReadinessSchema).describe("Готовность фич и сценариев по задачам"),
+    snapshotVersion: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .describe(
+        "Отпечаток всех данных среза: проект, паспорт, продукт, доски, задачи и критерии, документы, планы, релизы; не зависит от generatedAt",
+      ),
+    generatedAt: timestampSchema.describe("Время формирования ответа; не входит в snapshotVersion"),
+    snapshot: productOverviewSnapshotSchema,
+  })
+  .describe("Обзор продукта: прежняя карта и общий согласованный срез проекта");
 export type ProductListQuery = z.input<typeof productListQuerySchema>;
 export type ProductList = z.infer<typeof productListSchema>;
 export type ProductOverview = z.infer<typeof productOverviewSchema>;
+export type ProductOverviewSnapshot = z.infer<typeof productOverviewSnapshotSchema>;
 export type ProductRecord = z.infer<typeof productRecordSchema>;
 export type ProductFields = z.infer<typeof productFieldsSchema>;
 export type ProductMutation = z.infer<typeof productMutationSchema>;

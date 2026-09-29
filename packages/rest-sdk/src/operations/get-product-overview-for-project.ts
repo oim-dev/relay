@@ -28,6 +28,7 @@ export const getProductOverviewForProject = (
   http.request<
     {
       ok: GetProductOverviewForProjectOkEnum;
+      /** Обзор продукта: прежняя карта и общий согласованный срез проекта */
       data: ProductOverview;
     },
     ApiFailure

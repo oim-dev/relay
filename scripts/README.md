@@ -99,6 +99,7 @@ RELAY_PORT=3001 RELAY_API_URL=http://127.0.0.1:3001 RELAY_WEB_PORT=5174 pnpm run
 | `pnpm run lint` / `typecheck` / `test`                                            | Соответствующие Turbo-задачи workspaces с необходимыми сборками                 |
 | `pnpm run test:cli` / `test:mcp` / `test:server` / `test:core` / `test:contracts` | Адресные тесты; `test:server` включает server-runtime                           |
 | `pnpm run lint:web` / `typecheck:web`                                             | Адресные проверки Web                                                           |
+| `pnpm run test:web:e2e`                                                           | Сборку Server (с Web) и CLI, затем браузерные регрессии Web                     |
 | `pnpm run format:check`                                                           | Форматирование без записи                                                       |
 | `pnpm run docs:check`                                                             | Локальные ссылки, изображения и якоря Markdown, без запросов в сеть             |
 | `pnpm run check`                                                                  | Версию, release-тесты, формат, agents/skills, документацию, lint, типы и тесты  |
@@ -107,6 +108,11 @@ RELAY_PORT=3001 RELAY_API_URL=http://127.0.0.1:3001 RELAY_WEB_PORT=5174 pnpm run
 
 Для полной локальной проверки сохранённых результатов генерации сначала выполните
 `agents:check` и `skills:check`, затем `build` и `check`: сборка не должна скрывать drift.
+Браузерный suite `test:web:e2e` не входит в `test` и `check`: ему нужен Chrome, который
+ставится отдельно (`pnpm exec agent-browser install`, на Linux с `--with-deps`).
+Suite поднимает собственные Server, CLI и Vite на свободных портах с временными базами
+в `.artifacts/web-e2e-*`, не использует Playground и пользовательский профиль браузера;
+сценарии и helpers находятся в `apps/web/test/e2e`.
 Корневой `pnpm run check` — полная локальная команда с охватом из таблицы
 и параллельным выполнением Turbo-задач. Разделение CI на стадии не сокращает эту команду.
 Локальная проверка отдельной области не требует всех тяжёлых сценариев: выбирайте
@@ -161,11 +167,12 @@ Concurrency привязана к PR и отменяет его устаревш
 | `server`        | PR / Server и runtime         | Тесты Server и server-runtime                                                     |
 | `cli`           | PR / CLI                      | Тесты CLI на отдельном runner, без конкуренции с другими наборами за CPU          |
 | `mcp`           | PR / MCP                      | Тесты MCP                                                                         |
+| `web-e2e`       | PR / Web E2E                  | Установка Chrome for Testing, затем браузерные регрессии Web на готовых `dist`    |
 | `package-smoke` | PR / Установка пакетов        | Упаковка готовых dist и независимые npm-установки CLI, Server и MCP               |
 | `gate`          | **PR / Все проверки**         | Итоговый gate: каждая обязательная фаза должна завершиться с `success`            |
 
 После `build` его потребители выполняются отдельными job; `gate` собирает результат
-всех девяти обязательных стадий. Их команды и состав определяет внутренний
+всех десяти обязательных стадий. Их команды и состав определяет внутренний
 [helper CI](ci.mjs): `node scripts/ci.mjs <phase>`. Фаза `package-smoke` включает
 `pack` готовых `dist`, затем `package:smoke`, без повторной сборки. Она сохраняет
 установочный охват PR; полученные в PR архивы не становятся комплектом публикации.

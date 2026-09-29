@@ -1,0 +1,108 @@
+.root {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.stages {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 9rem) minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.stageLabel {
+  overflow-wrap: anywhere;
+}
+
+.track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--tasks-subtle);
+  overflow: hidden;
+}
+
+.bar {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: var(--mantine-color-gray-5);
+
+  .stage[data-column="ready"] & {
+    background: var(--mantine-color-blue-5);
+  }
+
+  .stage[data-column="in-progress"] & {
+    background: var(--mantine-color-violet-5);
+  }
+
+  .stage[data-column="review"] & {
+    background: var(--mantine-color-orange-5);
+  }
+
+  .stage[data-column="done"] & {
+    background: var(--mantine-color-teal-5);
+  }
+}
+
+.stageCount {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.facts {
+  container-type: inline-size;
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--tasks-border);
+}
+
+.factsNote {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+}
+
+.factList {
+  display: grid;
+  gap: 0.5rem 1.5rem;
+  margin: 0;
+
+  /* Две колонки только при достаточной ширине самой панели, а не окна. */
+  @container (min-width: 32rem) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.fact {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+
+  & dt {
+    min-width: 0;
+    color: var(--tasks-muted);
+    overflow-wrap: anywhere;
+  }
+
+  & dd {
+    flex: none;
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}

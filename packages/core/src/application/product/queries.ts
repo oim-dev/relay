@@ -13,6 +13,7 @@ import { ProductService } from "./service.js";
 import { productAddresses, resolveProductAddress } from "../../domain/product-addresses.js";
 import { assertProductKey } from "../../domain/product-addresses.js";
 import { productCatalog } from "./catalog.js";
+import { buildProductOverview, readOverviewSources } from "./overview.js";
 import { ProductRepository } from "../../storage/product.js";
 import {
   productEntitiesQuerySchema,
@@ -244,21 +245,15 @@ export class ProductQueries extends ProductService {
     });
   }
 
+  /**
+   * Прежняя карта продукта и общий срез проекта из одного чтения под блокировкой.
+   * Чтение не выполняет мутаций предметных данных; ошибка источника прерывает обзор.
+   */
   async overview(): Promise<ProductOverview> {
-    const state = await this.state();
-    return {
-      productId: state.productId,
-      version: state.version,
-      readiness: state.readiness,
-      items: state.records.map(({ id, key, revision, fields }) => ({
-        id,
-        ...(key ? { key } : {}),
-        revision,
-        kind: fields.kind,
-        name: "name" in fields ? fields.name : "Состав реализации",
-        summary: "summary" in fields ? fields.summary : "",
-      })),
-    };
+    return this.workspace.locked(async (owned) => {
+      const sources = await readOverviewSources(this.workspace, owned);
+      return buildProductOverview(sources, new Date().toISOString());
+    });
   }
 
   async list(input: ProductListQuery = {}): Promise<ProductList> {

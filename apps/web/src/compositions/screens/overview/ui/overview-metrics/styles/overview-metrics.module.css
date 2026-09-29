@@ -1,0 +1,48 @@
+.root {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tile {
+  display: grid;
+  gap: 0.25rem;
+  height: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--tasks-border);
+  border-radius: var(--mantine-radius-lg);
+  background: var(--tasks-surface);
+  box-shadow: var(--tasks-card-shadow);
+  color: var(--tasks-ink);
+  text-decoration: none;
+  transition:
+    box-shadow 150ms ease,
+    border-color 150ms ease;
+
+  &:hover {
+    border-color: var(--tasks-selected-border);
+    box-shadow: var(--tasks-card-hover);
+  }
+}
+
+.label {
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}

@@ -1,0 +1,86 @@
+.root {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+
+  @media (--md) {
+    font-size: 1.75rem;
+  }
+}
+
+.summary {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--tasks-ink);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 0.25rem;
+}
+
+.freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--tasks-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--mantine-color-teal-6);
+
+  .freshness[data-freshness="refreshing"] &,
+  .freshness[data-freshness="connecting"] & {
+    background: var(--mantine-color-blue-5);
+  }
+
+  .freshness[data-freshness="offline"] &,
+  .freshness[data-freshness="stale"] & {
+    background: var(--mantine-color-orange-6);
+  }
+
+  .freshness[data-freshness="storage-error"] & {
+    background: var(--mantine-color-red-6);
+  }
+}
+
+.received {
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}

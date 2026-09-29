@@ -19,6 +19,7 @@ import {
 } from "../command-kit.js";
 import { entitiesText, entityText, entitySavedText } from "../presentation/entities.js";
 import { productOverviewText, productLintText } from "../presentation/product.js";
+import type { ProductOverviewCommands, ProductOverviewView } from "../presentation/product.js";
 import { cardText } from "../presentation/common.js";
 import { registerEntityProgress } from "./progress.js";
 import { registerDocumentRelations, registerDocumentSections } from "./product-documents.js";
@@ -445,22 +446,52 @@ export function registerProduct(program: Command, runtime: Runtime): void {
 function registerProductReading(group: Command, runtime: Runtime) {
   registerCommand<{ limit?: number; cursor?: string }>(group, runtime, {
     name: "overview",
-    description: "Прочитать карту продукта",
-    details: "Постраничная карта; счётчики готовности относятся ко всему продукту.",
-    examples: [["npx @oim-dev/relay-cli product overview", "Познакомиться с продуктом"]],
+    description: "Обзор состояния продукта и проекта",
+    details:
+      "Одно чтение согласованного среза: проект, паспорт, задачи по всем шести колонкам, текущая работа, проверка и блокеры с причинами, планы и релизы (собственный статус отдельно от фактической готовности состава), фичи, приложения, реализации, доски и документы. Подборки содержат не более 5 элементов и сообщают полное число и команду полного чтения. Показатели задач пересекаются и не складываются. --limit и --cursor листают только карту продуктовых записей; итоги от них не зависят. Продолжение действительно, пока срез не изменился (snapshotVersion): изменение задачи, плана, релиза, документа или продукта требует начать заново без --cursor. Поле version — версия продуктового состава для participation replace, а не проверка продолжения. Обзор только читает и не решает, какую задачу начинать или завершать.",
+    examples: [
+      ["npx @oim-dev/relay-cli product overview", "Понять состояние продукта и выбрать чтение"],
+      [
+        "npx @oim-dev/relay-cli product overview --limit 20 --format json",
+        "Полный машинный срез и первые 20 записей карты",
+      ],
+    ],
     configure: paging,
     async run(context, input) {
       const command = ["product", "overview"];
       const query = offsetQuery(context, input.options, command, {});
       const overview = await context.backend.product.overview();
       invariant(
-        !query.version || query.version === overview.version,
+        !query.version || query.version === overview.snapshotVersion,
         "VERSION_CONFLICT",
-        "Продукт изменился. Начните overview без --cursor.",
+        "Срез проекта изменился после первой страницы: изменились задачи, планы, релизы, документы или продукт. Версия среза проверяет неизменность текущего состояния и не даёт доступа к историческому снимку. Начните product overview заново без --cursor.",
       );
       const next = query.offset + query.limit;
       const items = overview.items.slice(query.offset, next);
-      const data = {
+      const read = (...args: string[]) => commandInvocation(context, args);
+      const commands: ProductOverviewCommands = {
+        passport: read("product", "get"),
+        passportHelp: read("product", "create", "--help"),
+        progress: read("product", "progress"),
+        features: read("feature", "list"),
+        applications: read("application", "list"),
+        implementations: read("implementation", "list"),
+        boards: read("board", "list"),
+        tasks: read("task", "list"),
+        inProgress: read("task", "list", "--column", "in-progress"),
+        review: read("task", "list", "--column", "review"),
+        blocked: read("task", "list", "--readiness", "blocked"),
+        readyToStart: read("task", "list", "--readiness", "ready"),
+        plans: read("plan", "list"),
+        activePlans: read("plan", "list", "--status", "active"),
+        releases: read("release", "list"),
+        plannedReleases: read("release", "list", "--status", "planned"),
+        releasedReleases: read("release", "list", "--status", "released"),
+        documents: read("document", "list"),
+        pinnedDocuments: read("document", "list", "--pinned", "true", "--status", "active"),
+        sections: read("document", "section", "list"),
+      };
+      const data: ProductOverviewView = {
         ...overview,
         items,
         readiness: overview.readiness.filter((entry) => items.some((item) => item.id === entry.id)),
@@ -471,11 +502,18 @@ function registerProductReading(group: Command, runtime: Runtime) {
         },
         total: overview.items.length,
         nextOffset: next < overview.items.length ? next : null,
+        commands,
       };
       return {
         data,
-        page: pageResult(context, command, {}, query, data),
-        text: (options) => productOverviewText(data, options),
+        // Продолжение карты защищает полный срез; прежний version в data не подменяется.
+        page: pageResult(context, command, {}, query, {
+          items,
+          total: data.total,
+          nextOffset: data.nextOffset,
+          version: overview.snapshotVersion,
+        }),
+        text: (options) => productOverviewText(data, options, query.offset),
       };
     },
   });

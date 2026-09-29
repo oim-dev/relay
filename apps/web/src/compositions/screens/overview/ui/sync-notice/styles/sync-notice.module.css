@@ -1,0 +1,37 @@
+.root {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--mantine-color-orange-light-color);
+  border-left-width: 4px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-orange-light);
+
+  &[data-tone="danger"] {
+    border-color: var(--mantine-color-red-light-color);
+    background: var(--mantine-color-red-light);
+  }
+}
+
+.text {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.description {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

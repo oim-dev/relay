@@ -152,7 +152,11 @@ export function validateProduct(records: ProductRecord[]): void {
   }
 }
 
-/** Поднимает готовность задач через активные реализации и считает участие приложений. */
+/**
+ * Поднимает готовность задач через активные реализации и считает участие приложений.
+ * В возвращаемых составах `contracts[].status` (тип `ProductStatus`) — вычисленная по задачам
+ * готовность, а не сохранённое заявленное значение; снятые реализации получают `none`.
+ */
 export function productState(
   productId: string,
   records: ProductRecord[],
