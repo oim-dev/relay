@@ -9,6 +9,5 @@ if (process.env.RELAY_CONFIG) {
   );
 } else
   process.env.RELAY_CONFIG = fileURLToPath(
-    // new URL("../../playground/coffee-shop/.relay/config.json", import.meta.url),
-    new URL("../../playground/relay.workspace.json", import.meta.url),
+    new URL("../../playground/.relay/config.json", import.meta.url),
   );

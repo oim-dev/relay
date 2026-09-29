@@ -48,12 +48,14 @@ pnpm --filter <workspace> add -D <package>
 pnpm run dev
 ```
 
-Команда запускает Server и Web. Без `RELAY_CONFIG` выбирается
-`apps/playground/relay.workspace.json`; подготовка и сохранность его данных описаны
-в [Playground](../apps/playground/README.md). Явное окружение:
+Команда запускает Server и Web. Без `RELAY_CONFIG` команды `dev`, `dev:server` и `start`
+выбирают `apps/playground/.relay/config.json`: корень тестового проекта — `apps/playground`,
+не корень монорепозитория. Проект должен быть заранее инициализирован; запуск не создаёт
+и не сбрасывает его данные. Web получает тот же проект через API Server, отдельного
+корня проектных данных у Web нет. Явное окружение:
 
 ```bash
-RELAY_CONFIG=apps/playground/relay.workspace.json pnpm run dev
+RELAY_CONFIG=apps/playground/.relay/config.json pnpm run dev
 ```
 
 Относительный `RELAY_CONFIG` разрешается относительно `INIT_CWD` или текущего каталога
