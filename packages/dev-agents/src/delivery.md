@@ -6,9 +6,9 @@
 
 До исследования, изменения или ревью прочитай корневой `AGENTS.md` и применимые
 локальные инструкции, если они не переданы средой. По затронутым путям это
-`scripts/AGENTS.md`, `apps/playground/AGENTS.md`, `packages/typescript-config/AGENTS.md`,
-`packages/dev-agents/AGENTS.md`, а также инструкции владельцев изменяемого tooling.
-Уже загруженное не перечитывай. Начинай с README владельца; для механизма скилла —
+`scripts/AGENTS.md`, `packages/typescript-config/AGENTS.md`, `packages/dev-agents/AGENTS.md`,
+а также инструкции владельцев изменяемого tooling. Уже загруженное не перечитывай.
+Начинай с README владельца; для механизма скилла —
 `packages/relay-skill/README.md`, для общего выпуска — `scripts/release/README.md`.
 
 - Устанавливай действие команды по реальным scripts и конфигурациям, не по старому профилю.

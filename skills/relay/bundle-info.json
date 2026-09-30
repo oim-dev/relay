@@ -71,7 +71,7 @@
     "docs/ARCHITECTURE.md": "cb41160c8cbe82a1af7518b8417fe8e750783026898f5a6d0719cbab18364b73",
     "docs/CAPABILITIES.md": "a92e558902cd6ef0c59d059bdf264e8ac0cdf9fd6deaadd2a2e5341f8aab4b47",
     "docs/PRODUCT.md": "9d5f7205b6d4b9af5cf9cedaadfd536831218d1362b0a80379da59d8aaf82c0b",
-    "docs/README.md": "0457db31e6734255387580bf5402ca4ab3fc61204e724978e500d71984ae6c0a",
+    "docs/README.md": "9dba3ce3471c681e42e97cb7e5aad6876c3fad56292c54bf8a9d7e98a3a7c04e",
     "docs/domain/CONTEXT.md": "16da12eaf9e2e540f07f6e58105f28a2b1dfb313d246ce2236d61606907e48d9",
     "docs/domain/DOCUMENTS.md": "fc8eebb7ec582f5559a98a402c95f08c3281175fb1873af750aacad96d63ea7d",
     "docs/domain/PLANNING.md": "b04a932c62e593be80e24d544180bf9434938a3c1b34953802e57a53624b5ff9",
@@ -210,6 +210,6 @@
     "packages/relay-skill/src/skill.md": "15e3925176c9ee00bd862b9b5fc2eae423ee561abe57f481c21c48cde7ba8dcd",
     "packages/relay-skill/turbo.json": "26d8949a082f2c10ca635cfdd879d557ca49e9510d53f92590f1fc542179209a",
     "packages/server-runtime/docs/API.md": "0d766e694818591ec6b1313b9596d77abb9e1b98d4a72cf57f6e2070cc6950bf",
-    "pnpm-lock.yaml": "bbd4c930d56d8cf05e3bfed71b41dcadc58b4f25069a94ab298992c7a3bbe728"
+    "pnpm-lock.yaml": "9acb36167ffb3f831fd4e443bd53b53ffe7427b901c3b0491268b60576ceb85c"
   }
 }

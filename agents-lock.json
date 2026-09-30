@@ -16,7 +16,7 @@
     },
     {
       "path": ".claude/agents/relay-delivery.md",
-      "sha256": "e790e3e21845a7d3ed79f89ac3e31a4ec396736d6a0e97d5eb75c07cd168b164"
+      "sha256": "41436bb3b705b41ea012bda346585e85a5d1c9eae8939c8cf3ff01defde181bb"
     },
     {
       "path": ".claude/agents/relay-docs.md",
@@ -56,7 +56,7 @@
     },
     {
       "path": ".codex/agents/relay-delivery.toml",
-      "sha256": "77fad4cc60bc32c8ddf4185cba0af2eb79b80dd534a9a2dcfe5501110e61f33d"
+      "sha256": "e628c2c3076f7a94efac592896da5f75481905cddc3500a2e7464b88c47e7a4f"
     },
     {
       "path": ".codex/agents/relay-docs.toml",
@@ -92,7 +92,7 @@
     },
     {
       "path": ".opencode/agents/relay-delivery.md",
-      "sha256": "1f6ff7332d1fce5cdbe4d2d3453daf93bfe0100ca3a60541de838811c062fd1f"
+      "sha256": "9efc6d2d71a40e5ba58eba819e1b9ff9f84521613703ffdf80594d0eec52ad7c"
     },
     {
       "path": ".opencode/agents/relay-docs.md",
