@@ -46,9 +46,10 @@ let breadth;
 const q = (value) => JSON.stringify(value);
 const overviewUrl = (project) => `${web.url}/projects/${encodeURIComponent(project.slug)}`;
 
-/** Значение плитки сводных показателей. */
+/** Значение показателя: операционные числа и размер проекта. */
+const metricLists = `ul[aria-label="Операционные показатели"] li, ul[aria-label="Размер проекта"] li`;
 const metric = (label) =>
-  `(() => { const item = [...document.querySelectorAll('ul[aria-label="Сводные показатели"] li')].find((li) => li.querySelector('span')?.textContent === ${q(label)}); return item ? Number(item.querySelectorAll('span')[1].textContent) : null; })()`;
+  `(() => { const item = [...document.querySelectorAll(${q(metricLists)})].find((li) => li.querySelector('span')?.textContent === ${q(label)}); return item ? Number(item.querySelectorAll('span')[1].textContent) : null; })()`;
 /** Число задач колонки в распределении. */
 const stage = (label) =>
   `(() => { const item = [...document.querySelectorAll('ul[aria-label="Задачи по колонкам"] li')].find((li) => li.querySelector('span')?.textContent === ${q(label)}); return item ? Number(item.children[2].textContent) : null; })()`;
@@ -452,7 +453,7 @@ test("O-16: поздний ответ, A → B → A, освобождение �
 
   await browser.command("pushstate", `/projects/${encodeURIComponent(alpha.slug)}/plans`);
   await browser.waitFor(
-    `location.pathname.endsWith('/plans') && !document.querySelector('ul[aria-label="Сводные показатели"]')`,
+    `location.pathname.endsWith('/plans') && !document.querySelector('ul[aria-label="Размер проекта"]')`,
   );
   const leftAt = await settledReads(alpha);
   await createTask("Изменение вне обзора");
@@ -498,7 +499,7 @@ const assertStableFailure = async (project, expression) => {
 };
 
 test("O-17: ошибки REST и невалидный DTO не показываются нулями, retry восстанавливает", async () => {
-  const noMetrics = `!document.querySelector('ul[aria-label="Сводные показатели"]')`;
+  const noMetrics = `!document.querySelector('ul[aria-label="Размер проекта"]')`;
   proxy.failOverview(alpha.id, 500, {
     ok: false,
     error: { code: "IO_ERROR", message: "Диск недоступен" },
@@ -584,7 +585,7 @@ test("O-19: ширины, темы, длинные названия, досту�
         `document.documentElement.getAttribute('data-mantine-color-scheme') === ${q(scheme)} && ${metric("Задачи")} !== null`,
       );
       const layout = await browser.eval(
-        `(() => { const root = document.documentElement; const small = [...document.querySelectorAll('main a, main button')].filter((el) => !el.closest('p')).map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height < 24).length; const overflow = [...document.querySelectorAll('main *')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1).length; const containers = [...document.querySelectorAll('main section[aria-labelledby], main header, main [role="alert"], ul[aria-label="Сводные показатели"] a')]; const escaped = []; for (const container of containers) { const box = container.getBoundingClientRect(); for (const child of container.querySelectorAll('*')) { const rect = child.getBoundingClientRect(); if (rect.width === 0 || rect.height === 0) continue; if (rect.right > box.right + 1 || rect.left < box.left - 1) escaped.push((container.querySelector('h2, h3, span')?.textContent ?? container.tagName) + ': ' + (child.textContent ?? '').trim().slice(0, 40) + ' +' + Math.round(Math.max(rect.right - box.right, box.left - rect.left)) + 'px'); } } return { scroll: root.scrollWidth, width: innerWidth, small, overflow, escaped: [...new Set(escaped)] }; })()`,
+        `(() => { const root = document.documentElement; const small = [...document.querySelectorAll('main a, main button')].filter((el) => !el.closest('p')).map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height < 24).length; const overflow = [...document.querySelectorAll('main *')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1).length; const containers = [...document.querySelectorAll('main section[aria-labelledby], main header, main [role="alert"], ul[aria-label="Операционные показатели"] a, ul[aria-label="Размер проекта"] li')]; const escaped = []; for (const container of containers) { const box = container.getBoundingClientRect(); for (const child of container.querySelectorAll('*')) { const rect = child.getBoundingClientRect(); if (rect.width === 0 || rect.height === 0) continue; if (rect.right > box.right + 1 || rect.left < box.left - 1) escaped.push((container.querySelector('h2, h3, span')?.textContent ?? container.tagName) + ': ' + (child.textContent ?? '').trim().slice(0, 40) + ' +' + Math.round(Math.max(rect.right - box.right, box.left - rect.left)) + 'px'); } } return { scroll: root.scrollWidth, width: innerWidth, small, overflow, escaped: [...new Set(escaped)] }; })()`,
       );
       const audit = await browser.command("a11y", "--selector", "main");
       const violations = audit.violations.map((item) => `${item.id}(${item.nodeCount})`);
@@ -609,7 +610,7 @@ test("O-19: ширины, темы, длинные названия, досту�
 
   await browser.media("light", "reduced-motion");
   const motion = await browser.eval(
-    `getComputedStyle(document.querySelector('ul[aria-label="Сводные показатели"] a')).transitionDuration`,
+    `getComputedStyle(document.querySelector('ul[aria-label="Операционные показатели"] a')).transitionDuration`,
   );
   assert.match(motion, /^(0s|1e-05s|0\.00001s)/);
 
@@ -814,8 +815,34 @@ test("O-07/F2: доски раскрываются до полного ката�
   await browser.open(overviewUrl(gamma));
   await browser.waitFor(`${metric("Доски")} === 8`);
   const base = `/projects/${encodeURIComponent(gamma.slug)}`;
+  // Операционные числа ведут к своим группам, а не на одну доску.
+  const pulse = await browser.eval(
+    `[...document.querySelectorAll('ul[aria-label="Операционные показатели"] a')].map((a) => ({ label: a.querySelector('span').textContent, value: Number(a.querySelectorAll('span')[1].textContent), href: a.getAttribute('href') }))`,
+  );
+  assert.deepEqual(
+    pulse.map((tile) => [tile.label, tile.href]),
+    [
+      ["В работе", "#overview-attention-in-progress"],
+      ["На проверке", "#overview-attention-review"],
+      ["Готовы к началу", "#overview-task-facts"],
+      ["Заблокированы", "#overview-attention-blocked"],
+    ],
+  );
+  // Верхние числа — те же значения среза, что в распределении и группах внимания.
+  assert.equal(pulse[0].value, await browser.eval(stage("В работе")));
+  assert.equal(pulse[1].value, await browser.eval(stage("На проверке")));
+  const blockedTotal = await browser.eval(
+    `Number(document.querySelector('#overview-attention-blocked > h3 span').textContent)`,
+  );
+  assert.equal(pulse[3].value, blockedTotal);
+  for (const tile of pulse)
+    assert.equal(
+      await browser.eval(`Boolean(document.getElementById(${q(tile.href.slice(1))}))`),
+      true,
+      `нет цели ${tile.href}`,
+    );
   const tiles = await browser.eval(
-    `[...document.querySelectorAll('ul[aria-label="Сводные показатели"] a')].map((a) => ({ label: a.querySelector('span').textContent, href: a.getAttribute('href') }))`,
+    `[...document.querySelectorAll('ul[aria-label="Размер проекта"] a')].map((a) => ({ label: a.querySelector('span').textContent, href: a.getAttribute('href') }))`,
   );
   assert.deepEqual(
     tiles.map((tile) => [tile.label, tile.href]),
@@ -823,7 +850,8 @@ test("O-07/F2: доски раскрываются до полного ката�
       ["Задачи", "#overview-tasks"],
       ["Доски", "#overview-boards"],
       ["Документы", `${base}/documents`],
-      ["Фичи продукта", `${base}/product/features`],
+      ["Фичи", `${base}/product/features`],
+      ["Приложения", `${base}/product/applications`],
     ],
   );
   const before = await browser.eval(boardLinks);
@@ -851,12 +879,21 @@ test("O-07/F2: доски раскрываются до полного ката�
 
   // Плитка «Доски» не уводит на одну доску, а прокручивает к блоку с полным каталогом.
   await browser.eval("scrollTo(0, 0); true");
-  await browser.command("click", `ul[aria-label="Сводные показатели"] a[href="#overview-boards"]`);
+  await browser.command("click", `ul[aria-label="Размер проекта"] a[href="#overview-boards"]`);
   await browser.waitFor(
     `location.hash === '#overview-boards' && location.pathname === ${q(base)} && (() => { const box = document.getElementById('overview-boards').getBoundingClientRect(); return box.top >= 0 && box.top < innerHeight; })()`,
   );
-  await browser.command("click", `ul[aria-label="Сводные показатели"] a[href="#overview-tasks"]`);
+  await browser.command("click", `ul[aria-label="Размер проекта"] a[href="#overview-tasks"]`);
   await browser.waitFor(`location.hash === '#overview-tasks' && location.pathname === ${q(base)}`);
+  // Показатель «Заблокированы» прокручивает к своей группе «Требует внимания».
+  await browser.eval("scrollTo(0, 0); true");
+  await browser.command(
+    "click",
+    `ul[aria-label="Операционные показатели"] a[href="#overview-attention-blocked"]`,
+  );
+  await browser.waitFor(
+    `location.hash === '#overview-attention-blocked' && (() => { const box = document.getElementById('overview-attention-blocked').getBoundingClientRect(); return box.top >= 0 && box.top < innerHeight; })()`,
+  );
 });
 
 test("O-18/F3: SSE сохраняет вторую страницу досок, фокус и прокрутку; новая версия дочитывается", async () => {
@@ -1119,6 +1156,65 @@ test("O-19: раскрытые подборки без переполнения 
   measurements.breadthLayout = report;
   await browser.viewport(1440, 1000);
   await browser.media("light");
+  await browser.open(overviewUrl(alpha));
+  await browser.waitFor(`${metric("Задачи")} !== null`);
+});
+
+test("O-01/O-19: длинная summary ограничена по высоте и раскрывается с клавиатуры, SSE её не сворачивает", async () => {
+  const betaApi = relayApi(() => server.url, beta.id);
+  const passport = (await betaApi.get("/product/state")).records.find(
+    (record) => record.fields.kind === "passport",
+  );
+  const paragraphs = [
+    "Бета хранит общий контекст продукта для людей и агентов: паспорт, фичи, сценарии, доски, планы и релизы.",
+    "Команда видит не только список задач, но и фактическое выполнение: критерии приёмки, обязательства и готовность состава.",
+    "Обзор отвечает на вопрос «что происходит» за один взгляд и ведёт к полным разделам.",
+    "Последний абзац длинной summary виден только после раскрытия.",
+  ];
+  await betaApi.post("/product/records", {
+    action: "update",
+    id: passport.id,
+    ifRevision: passport.revision,
+    fields: { ...passport.fields, summary: paragraphs.join("\n") },
+  });
+  await browser.viewport(1024, 900);
+  await browser.media("light");
+  await browser.open(overviewUrl(beta));
+  const toggle = `document.querySelector('main header button[aria-controls]')`;
+  const summary = `document.getElementById(${toggle}?.getAttribute('aria-controls'))`;
+  await browser.waitFor(
+    `${heading} === 'Бета' && ${toggle}?.getAttribute('aria-expanded') === 'false'`,
+  );
+  assert.equal(await browser.eval(`${summary}.scrollHeight > ${summary}.clientHeight + 1`), true);
+  await browser.eval("document.activeElement?.blur(); scrollTo(0, 0); true");
+  for (let count = 0; count < 60; count += 1) {
+    await browser.command("press", "Tab");
+    if (await browser.eval(`document.activeElement === ${toggle}`)) break;
+  }
+  assert.equal(
+    await browser.eval(`document.activeElement === ${toggle}`),
+    true,
+    "Tab не дошёл до раскрытия",
+  );
+  await browser.command("press", "Enter");
+  await browser.waitFor(`${toggle}.getAttribute('aria-expanded') === 'true'`);
+  assert.equal(await browser.eval(`${summary}.scrollHeight <= ${summary}.clientHeight + 1`), true);
+  assert.match(await browser.eval(`${summary}.innerText`), /Последний абзац длинной summary/);
+
+  // Обновление по SSE не сворачивает раскрытый текст и не уводит фокус.
+  const total = await browser.eval(metric("Задачи"));
+  await betaApi.post("/board-tasks", {
+    board: "product",
+    title: "Бета: новая задача",
+    column: "inbox",
+  });
+  await browser.waitFor(`${metric("Задачи")} === ${total + 1}`);
+  assert.equal(await browser.eval(`${toggle}.getAttribute('aria-expanded')`), "true");
+  assert.equal(await browser.eval(`document.activeElement === ${toggle}`), true);
+  await browser.command("press", "Enter");
+  await browser.waitFor(`${toggle}.getAttribute('aria-expanded') === 'false'`);
+  assert.equal(await browser.eval(`document.activeElement === ${toggle}`), true);
+  await browser.viewport(1440, 1000);
   await browser.open(overviewUrl(alpha));
   await browser.waitFor(`${metric("Задачи")} !== null`);
 });

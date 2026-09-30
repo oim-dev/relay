@@ -13,7 +13,7 @@
 
 .link {
   display: grid;
-  grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+  grid-template-columns: 4.75rem minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 0.5rem;
   padding-block: 0.5rem;
@@ -23,15 +23,17 @@
   text-decoration: none;
 
   &:hover .name {
+    color: var(--tasks-accent-ink);
     text-decoration: underline;
   }
 }
 
 .prefix {
+  min-width: 0;
   color: var(--tasks-muted);
-  font-family: var(--mantine-font-family-monospace);
   font-size: 0.75rem;
-  overflow-wrap: anywhere;
+  font-weight: 550;
+  overflow-wrap: break-word;
 }
 
 .name {
@@ -67,10 +69,19 @@
 
 .actions {
   display: flex;
+  margin-left: -0.5rem;
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
 
   &:empty {
     display: none;
+  }
+}
+
+.action {
+  color: var(--tasks-accent-ink);
+
+  &:hover {
+    color: var(--tasks-accent-hover);
   }
 }

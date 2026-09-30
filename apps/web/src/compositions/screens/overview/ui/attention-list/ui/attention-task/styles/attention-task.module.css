@@ -1,10 +1,8 @@
 .root {
   display: grid;
   gap: 0.125rem;
-  padding: 0.5rem 0.625rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
-  background: var(--tasks-raised);
+  padding: 0.5rem 0 0.5625rem;
+  border-top: 1px solid var(--tasks-border);
 }
 
 .link {
@@ -15,10 +13,11 @@
   min-height: 1.5rem;
   padding-block: 0.125rem;
   color: var(--tasks-ink);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   text-decoration: none;
 
   &:hover .title {
+    color: var(--tasks-accent-ink);
     text-decoration: underline;
   }
 }
@@ -26,8 +25,9 @@
 .key {
   flex: none;
   color: var(--tasks-muted);
-  font-family: var(--mantine-font-family-monospace);
   font-size: 0.75rem;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
 }
 
 .title {
@@ -47,8 +47,13 @@
 }
 
 .blockers {
-  margin: 0;
-  color: var(--tasks-warning-ink);
+  justify-self: start;
+  margin: 0.25rem 0 0;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--tasks-warning-surface);
+  color: var(--tasks-warning);
   font-size: 0.75rem;
+  font-weight: 550;
   overflow-wrap: anywhere;
 }

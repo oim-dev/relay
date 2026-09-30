@@ -14,6 +14,8 @@ export type AttentionGroupParams = {
   filters: TaskFilters;
   /** Группа объединяет разные колонки, поэтому полный список показывает колонку задачи. */
   shouldShowColumn?: boolean;
+  /** Смысл группы для оформления счётчика: заблокированные задачи выделяются. */
+  tone?: "neutral" | "blocked";
   /** Базовый адрес проекта. */
   basePath: string;
 };

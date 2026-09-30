@@ -6,18 +6,53 @@
   padding: 1.5rem var(--tasks-page-gutter) 4rem;
 
   @media (--md) {
+    gap: 1.5rem;
     padding-top: 2rem;
   }
 }
 
-.work,
-.progress {
+/*
+ * Работа и прогресс. На широком экране «Требует внимания» занимает правую колонку
+ * на всю высоту, а задачи, планы и релизы идут слева друг за другом: длинная группа
+ * внимания не оставляет пустоту под распределением задач. Порядок DOM и Tab прежний —
+ * задачи, внимание, планы, релизы; избыток высоты уходит в конец левой колонки.
+ */
+.main {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
   align-items: start;
 
   @media (--lg) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "tasks attention"
+      "plans attention"
+      "releases attention";
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+  }
+}
+
+.tasks {
+  @media (--lg) {
+    grid-area: tasks;
+  }
+}
+
+.attention {
+  @media (--lg) {
+    grid-area: attention;
+  }
+}
+
+.plans {
+  @media (--lg) {
+    grid-area: plans;
+  }
+}
+
+.releases {
+  @media (--lg) {
+    grid-area: releases;
   }
 }
 

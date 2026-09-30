@@ -47,8 +47,12 @@ export const BOARD_KIND_LABELS: Record<OverviewBoard["kind"], string> = {
 /** Резервный заголовок записи без названия. */
 export const UNTITLED = "Без названия";
 
-/** Якоря блоков обзора, к которым ведут сводные плитки без собственного раздела. */
+/** Якоря блоков обзора, к которым ведут показатели без собственного раздела. */
 export const OVERVIEW_SECTION_IDS = {
   tasks: "overview-tasks",
+  taskFacts: "overview-task-facts",
+  attentionInProgress: "overview-attention-in-progress",
+  attentionReview: "overview-attention-review",
+  attentionBlocked: "overview-attention-blocked",
   boards: "overview-boards",
 } as const;

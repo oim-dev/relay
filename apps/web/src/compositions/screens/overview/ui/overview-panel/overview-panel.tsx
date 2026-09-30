@@ -8,18 +8,33 @@ import styles from "./styles/overview-panel.module.css";
 
 /**
  * Оформляет самостоятельную область обзора с заголовком, полным числом и переходом к разделу.
+ * Уровень поверхности отделяет срочную работу от справочного контекста проекта.
  *
  * Используется для:
- *  - блоков задач, планов, релизов, досок и документов
+ *  - блоков задач, внимания, планов, релизов, досок, знаний и документов
  *  - обозначения ограниченной подборки и способа полного чтения
  */
 export const OverviewPanel = (props: OverviewPanelProps) => {
-  const { title, total, link, preview, children, className, ...rootAttrs } = props;
+  const {
+    title,
+    total,
+    link,
+    preview,
+    tone = "primary",
+    children,
+    className,
+    ...rootAttrs
+  } = props;
   const titleId = useId();
   const hasMore = isDefined(preview) && preview.shown < preview.total;
   const previewNote = hasMore ? `Показано ${preview.shown} из ${preview.total}` : null;
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)} aria-labelledby={titleId}>
+    <section
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      data-tone={tone}
+      aria-labelledby={titleId}
+    >
       <header className={styles.header}>
         <h2 id={titleId} className={styles.title}>
           {title}

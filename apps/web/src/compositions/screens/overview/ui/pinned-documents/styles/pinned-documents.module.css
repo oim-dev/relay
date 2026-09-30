@@ -26,6 +26,7 @@
   text-decoration: none;
 
   &:hover .name {
+    color: var(--tasks-accent-ink);
     text-decoration: underline;
   }
 }
@@ -53,6 +54,6 @@
   font-size: 0.8125rem;
 
   & a {
-    color: var(--tasks-ink);
+    color: var(--tasks-accent-ink);
   }
 }

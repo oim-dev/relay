@@ -20,6 +20,8 @@ export type OverviewPanelParams = {
     /** Все записи проекта. */
     total: number;
   };
+  /** Уровень области: срочная работа или справочный контекст проекта. */
+  tone?: "primary" | "quiet";
   /** Содержимое области. */
   children: ReactNode;
 };

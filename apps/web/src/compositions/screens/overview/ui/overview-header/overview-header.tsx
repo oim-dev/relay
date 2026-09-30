@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { formatDateTime } from "infra/date-time";
 import { isDefined } from "shared/value-predicates";
 import { FRESHNESS_LABELS } from "../../config/overview.config";
+import { PassportSummary } from "./ui/passport-summary/passport-summary";
 import type { OverviewHeaderProps } from "./types/overview-header-props.type";
 import styles from "./styles/overview-header.module.css";
 
@@ -30,40 +31,40 @@ export const OverviewHeader = (props: OverviewHeaderProps) => {
   const passportLabel = isMissing ? "Заполнить паспорт" : "Открыть паспорт";
   const passportTarget = isMissing ? `${passportPath}/edit` : passportPath;
   const PassportIcon = isMissing ? Plus : FileText;
-  const projectLabel = `Проект ${project.name} · ${project.slug}`;
   const freshnessLabel = FRESHNESS_LABELS[freshness];
   const receivedLabel = `Срез от ${formatDateTime(generatedAt)}`;
   return (
     <header {...rootAttrs} className={clsx(styles.root, className)}>
-      <p className={styles.eyebrow}>{projectLabel}</p>
-      <h1 className={styles.title}>{title}</h1>
-      {hasSummary && (
-        <p className={styles.summary}>
-          {summaryText}
-          {summarySuffix}
+      <div className={styles.identity}>
+        <p className={styles.project}>
+          <span>Проект {project.name}</span>
+          <span className={styles.slug}>{project.slug}</span>
         </p>
-      )}
-      {isDefined(excerptNote) && <p className={styles.hint}>{excerptNote}</p>}
-      {isMissing && (
-        <p className={styles.summary}>
-          Паспорт продукта ещё не заполнен: опишите назначение, пользователей и границы продукта.
-        </p>
-      )}
-      <div className={styles.meta}>
-        <Button
-          component={Link}
-          to={passportTarget}
-          variant="default"
-          size="xs"
-          leftSection={<PassportIcon size={14} aria-hidden="true" />}
-        >
-          {passportLabel}
-        </Button>
+        <h1 className={styles.title}>{title}</h1>
+        {hasSummary && <PassportSummary text={`${summaryText}${summarySuffix}`} />}
+        {isDefined(excerptNote) && <p className={styles.hint}>{excerptNote}</p>}
+        {isMissing && (
+          <p className={styles.summary}>
+            Паспорт продукта ещё не заполнен: опишите назначение, пользователей и границы продукта.
+          </p>
+        )}
+      </div>
+      <div className={styles.status}>
         <span className={styles.freshness} data-freshness={freshness}>
           <span className={styles.dot} aria-hidden="true" />
           <span role="status">{freshnessLabel}</span>
         </span>
         <span className={styles.received}>{receivedLabel}</span>
+        <Button
+          component={Link}
+          to={passportTarget}
+          variant="default"
+          size="xs"
+          className={styles.passport}
+          leftSection={<PassportIcon size={14} aria-hidden="true" />}
+        >
+          {passportLabel}
+        </Button>
       </div>
     </header>
   );

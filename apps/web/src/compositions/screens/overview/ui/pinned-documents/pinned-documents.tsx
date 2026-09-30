@@ -17,7 +17,7 @@ export const PinnedDocuments = (props: PinnedDocumentsProps) => {
     countLabel("Закреплено", documents.pinned),
     countLabel("разделов", documents.sections.total),
     countLabel("без\u00A0раздела", documents.sections.unsectioned),
-  ].join(" · ");
+  ].join(", ");
   const documentItems = documents.pinnedActive.items.map((document) => ({
     ...document,
     path: `${basePath}/documents/${encodeURIComponent(document.id)}`,

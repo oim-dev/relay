@@ -14,13 +14,16 @@ import { OverviewPanel } from "./ui/overview-panel/overview-panel";
 import { PinnedDocuments } from "./ui/pinned-documents/pinned-documents";
 import { PlanSummaries } from "./ui/plan-summaries/plan-summaries";
 import { ProductKnowledge } from "./ui/product-knowledge/product-knowledge";
+import { ProjectSize } from "./ui/project-size/project-size";
 import { ReleaseSummaries } from "./ui/release-summaries/release-summaries";
 import { SyncNotice } from "./ui/sync-notice/sync-notice";
 import { TaskStages } from "./ui/task-stages/task-stages";
 import styles from "./styles/overview.module.css";
 
 /**
- * Показывает согласованный срез проекта: продукт, работу, внимание, планы, релизы и документы.
+ * Показывает согласованный срез проекта в порядке чтения: продукт и актуальность,
+ * операционные числа, распределение задач и внимание, планы и релизы, затем размер
+ * проекта и справочный контекст — доски, знания и документы.
  *
  * Используется для:
  *  - входа в проект и ориентации «что это и что происходит»
@@ -76,29 +79,23 @@ export const OverviewScreen = () => {
         isRetrying={isValidating}
         onRetry={retry}
       />
-      <OverviewMetrics
-        tasks={data.tasks}
-        boards={boards}
-        documents={documents}
-        knowledge={data.knowledge}
-        basePath={basePath}
-      />
-      <div className={styles.work}>
+      <OverviewMetrics tasks={data.tasks} />
+      <div className={styles.main}>
         <OverviewPanel
           id={OVERVIEW_SECTION_IDS.tasks}
-          title="Задачи по стадиям"
+          className={styles.tasks}
+          title="Задачи по колонкам"
           total={data.tasks.total}
           link={{ to: `${basePath}/boards/product`, label: "Доска продукта" }}
         >
           <TaskStages tasks={data.tasks} />
         </OverviewPanel>
-        <OverviewPanel title="Требует внимания">
+        <OverviewPanel title="Требует внимания" className={styles.attention}>
           <AttentionList attention={data.attention} basePath={basePath} />
         </OverviewPanel>
-      </div>
-      <div className={styles.progress}>
         <OverviewPanel
           title="Планы"
+          className={styles.plans}
           total={plans.total}
           link={{ to: `${basePath}/plans`, label: "Все планы" }}
           preview={{ shown: plans.active.items.length, total: plans.active.total }}
@@ -107,21 +104,35 @@ export const OverviewScreen = () => {
         </OverviewPanel>
         <OverviewPanel
           title="Релизы"
+          className={styles.releases}
           total={releases.total}
           link={{ to: `${basePath}/releases`, label: "Все релизы" }}
         >
           <ReleaseSummaries releases={releases} basePath={basePath} />
         </OverviewPanel>
       </div>
+      <ProjectSize
+        tasks={data.tasks}
+        boards={boards}
+        documents={documents}
+        knowledge={data.knowledge}
+        basePath={basePath}
+      />
       <div className={styles.context}>
+        <OverviewPanel
+          id={OVERVIEW_SECTION_IDS.boards}
+          title="Доски"
+          total={boards.total}
+          tone="quiet"
+        >
+          <BoardList catalog={boards.catalog} basePath={basePath} />
+        </OverviewPanel>
         <OverviewPanel
           title="Продуктовые знания"
           link={{ to: `${basePath}/product/features`, label: "Все фичи" }}
+          tone="quiet"
         >
           <ProductKnowledge knowledge={data.knowledge} />
-        </OverviewPanel>
-        <OverviewPanel id={OVERVIEW_SECTION_IDS.boards} title="Доски" total={boards.total}>
-          <BoardList catalog={boards.catalog} basePath={basePath} />
         </OverviewPanel>
         <OverviewPanel
           title="Документы"
@@ -131,6 +142,7 @@ export const OverviewScreen = () => {
             shown: documents.pinnedActive.items.length,
             total: documents.pinnedActive.total,
           }}
+          tone="quiet"
         >
           <PinnedDocuments documents={documents} basePath={basePath} />
         </OverviewPanel>

@@ -94,6 +94,7 @@ export const BoardList = (props: BoardListProps) => {
           <Button
             size="compact-sm"
             variant="subtle"
+            className={styles.action}
             loading={boards.isValidating}
             onClick={handleMore}
           >
@@ -104,6 +105,7 @@ export const BoardList = (props: BoardListProps) => {
           <Button
             size="compact-sm"
             variant="subtle"
+            className={styles.action}
             aria-expanded={isExpanded}
             aria-controls={listId}
             leftSection={<ToggleIcon size={14} aria-hidden="true" />}

@@ -5,14 +5,15 @@
   justify-content: space-between;
   gap: 0.75rem 1rem;
   padding: 0.75rem 1rem;
-  border: 1px solid var(--mantine-color-orange-light-color);
+  border: 1px solid var(--tasks-warning-border);
   border-left-width: 4px;
-  border-radius: var(--mantine-radius-md);
-  background: var(--mantine-color-orange-light);
+  border-radius: var(--mantine-radius-lg);
+  background: var(--tasks-warning-surface);
+  color: var(--tasks-ink);
 
   &[data-tone="danger"] {
-    border-color: var(--mantine-color-red-light-color);
-    background: var(--mantine-color-red-light);
+    border-color: var(--tasks-danger-border);
+    background: var(--tasks-danger-surface);
   }
 }
 
@@ -25,8 +26,13 @@
 
 .title {
   margin: 0;
+  color: var(--tasks-warning);
   font-size: 0.875rem;
   font-weight: 650;
+
+  .root[data-tone="danger"] & {
+    color: var(--tasks-danger);
+  }
 }
 
 .description {

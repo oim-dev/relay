@@ -10,7 +10,7 @@ const formatReadiness = (counts: OverviewKnowledge["features"]["byStatus"]): str
     countLabel(READINESS_LABELS.done, counts.done),
     countLabel(READINESS_LABELS.partial, counts.partial),
     countLabel(READINESS_LABELS.none, counts.none),
-  ].join(" · ");
+  ].join(", ");
 
 const formatImplementations = (
   implementations: OverviewKnowledge["featureImplementations"],
@@ -19,7 +19,7 @@ const formatImplementations = (
     countLabel("действующих", implementations.active),
     countLabel("снятых", implementations.withdrawn),
     countLabel("готовы", implementations.byStatus.done),
-  ].join(" · ");
+  ].join(", ");
 
 /**
  * Показывает объём продукта и фактическую готовность требований и реализаций.
@@ -34,7 +34,7 @@ export const ProductKnowledge = (props: ProductKnowledgeProps) => {
     countLabel("клиентских", byType.frontend),
     countLabel("серверных", byType.backend),
     countLabel("внутренних", byType.internal),
-  ].join(" · ");
+  ].join(", ");
   return (
     <dl {...rootAttrs} className={clsx(styles.root, className)}>
       <div className={styles.row}>

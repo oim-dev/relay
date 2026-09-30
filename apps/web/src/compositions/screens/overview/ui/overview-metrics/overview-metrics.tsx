@@ -1,69 +1,77 @@
 import clsx from "clsx";
-import { Link } from "react-router-dom";
+import { Lock } from "lucide-react";
 import { OVERVIEW_SECTION_IDS } from "../../config/overview.config";
-import { countLabel } from "../../helpers/count-label";
 import type { OverviewMetricsProps } from "./types/overview-metrics-props.type";
 import styles from "./styles/overview-metrics.module.css";
 
 /**
- * Показывает компактные полные числа проекта с переходом к соответствующим разделам.
- * Задачи и доски не имеют общего раздела проекта, поэтому их плитки ведут к блокам обзора
- * с полным распределением и каталогом досок.
+ * Показывает четыре операционных числа задач проекта с переходом к их группам на экране.
+ * Числа берутся из среза обзора без пересчёта; блокировка выделяется только при наличии.
  *
  * Используется для:
- *  - быстрой оценки объёма задач, досок, документов и продуктовых знаний
+ *  - первого ответа на вопрос «что сейчас в работе и что мешает»
+ *  - перехода к группам «Требует внимания» и показателям выполнения
  */
 export const OverviewMetrics = (props: OverviewMetricsProps) => {
-  const { tasks, boards, documents, knowledge, basePath, className, ...rootAttrs } = props;
-  const taskDetail = [
-    countLabel("в работе", tasks.byColumn["in-progress"]),
-    countLabel("на проверке", tasks.byColumn.review),
-    countLabel("готово", tasks.byColumn.done),
-  ].join(" · ");
-  const boardDetail = [
-    countLabel("продукт", boards.byKind.product),
-    countLabel("приложения", boards.byKind.application),
-    countLabel("инфраструктура", boards.byKind.infrastructure),
-  ].join(" · ");
-  const documentDetail = [
-    countLabel("действующих", documents.byStatus.active),
-    countLabel("черновиков", documents.byStatus.draft),
-    countLabel("в\u00A0архиве", documents.byStatus.archived),
-  ].join(" · ");
-  const knowledgeDetail = [
-    countLabel("сценариев", knowledge.scenarios.total),
-    countLabel("приложений", knowledge.applications.total),
-  ].join(" · ");
+  const { tasks, className, ...rootAttrs } = props;
+  const hasBlocked = tasks.blocked > 0;
+  const metricItems = [
+    {
+      key: "in-progress",
+      label: "В работе",
+      value: tasks.byColumn["in-progress"],
+      hint: "задачи в колонке «В\u00A0работе»",
+      target: OVERVIEW_SECTION_IDS.attentionInProgress,
+      isAlert: false,
+    },
+    {
+      key: "review",
+      label: "На проверке",
+      value: tasks.byColumn.review,
+      hint: "ждут решения проверяющего",
+      target: OVERVIEW_SECTION_IDS.attentionReview,
+      isAlert: false,
+    },
+    {
+      key: "ready",
+      label: "Готовы к началу",
+      value: tasks.readyToStart,
+      hint: "можно брать в работу",
+      target: OVERVIEW_SECTION_IDS.taskFacts,
+      isAlert: false,
+    },
+    {
+      key: "blocked",
+      label: "Заблокированы",
+      value: tasks.blocked,
+      hint: hasBlocked ? "ждут зависимостей или подзадач" : "блокировок нет",
+      target: OVERVIEW_SECTION_IDS.attentionBlocked,
+      isAlert: hasBlocked,
+    },
+  ].map((item) => ({ ...item, href: `#${item.target}`, alertMark: item.isAlert ? "" : undefined }));
   return (
-    <ul {...rootAttrs} className={clsx(styles.root, className)} aria-label="Сводные показатели">
-      <li>
-        <a href={`#${OVERVIEW_SECTION_IDS.tasks}`} className={styles.tile}>
-          <span className={styles.label}>Задачи</span>
-          <span className={styles.value}>{tasks.total}</span>
-          <span className={styles.detail}>{taskDetail}</span>
-        </a>
-      </li>
-      <li>
-        <a href={`#${OVERVIEW_SECTION_IDS.boards}`} className={styles.tile}>
-          <span className={styles.label}>Доски</span>
-          <span className={styles.value}>{boards.total}</span>
-          <span className={styles.detail}>{boardDetail}</span>
-        </a>
-      </li>
-      <li>
-        <Link to={`${basePath}/documents`} className={styles.tile}>
-          <span className={styles.label}>Документы</span>
-          <span className={styles.value}>{documents.total}</span>
-          <span className={styles.detail}>{documentDetail}</span>
-        </Link>
-      </li>
-      <li>
-        <Link to={`${basePath}/product/features`} className={styles.tile}>
-          <span className={styles.label}>Фичи продукта</span>
-          <span className={styles.value}>{knowledge.features.total}</span>
-          <span className={styles.detail}>{knowledgeDetail}</span>
-        </Link>
-      </li>
+    <ul
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      aria-label="Операционные показатели"
+    >
+      {metricItems.map((item) => (
+        <li key={item.key} className={styles.item}>
+          <a
+            href={item.href}
+            className={styles.tile}
+            data-metric={item.key}
+            data-alert={item.alertMark}
+          >
+            <span className={styles.label}>{item.label}</span>
+            <span className={styles.value}>{item.value}</span>
+            <span className={styles.hint}>
+              {item.isAlert && <Lock size={13} className={styles.icon} aria-hidden="true" />}
+              {item.hint}
+            </span>
+          </a>
+        </li>
+      ))}
     </ul>
   );
 };

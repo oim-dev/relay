@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { OVERVIEW_SECTION_IDS } from "../../config/overview.config";
 import { AttentionGroup } from "./ui/attention-group/attention-group";
 import type { AttentionListProps } from "./types/attention-list-props.type";
 import styles from "./styles/attention-list.module.css";
@@ -16,6 +17,7 @@ export const AttentionList = (props: AttentionListProps) => {
   return (
     <div {...rootAttrs} className={clsx(styles.root, className)}>
       <AttentionGroup
+        id={OVERVIEW_SECTION_IDS.attentionInProgress}
         title="В работе"
         emptyText="Сейчас нет задач в работе."
         preview={attention.inProgress}
@@ -23,6 +25,7 @@ export const AttentionList = (props: AttentionListProps) => {
         basePath={basePath}
       />
       <AttentionGroup
+        id={OVERVIEW_SECTION_IDS.attentionReview}
         title="На проверке"
         emptyText="Нет задач, ожидающих проверки."
         preview={attention.review}
@@ -30,11 +33,13 @@ export const AttentionList = (props: AttentionListProps) => {
         basePath={basePath}
       />
       <AttentionGroup
+        id={OVERVIEW_SECTION_IDS.attentionBlocked}
         title="Заблокированы"
         emptyText="Заблокированных задач нет."
         preview={attention.blocked}
         filters={{ readiness: "blocked" }}
         shouldShowColumn
+        tone="blocked"
         basePath={basePath}
       />
     </div>

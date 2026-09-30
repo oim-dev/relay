@@ -22,6 +22,7 @@ export const AttentionGroup = (props: AttentionGroupProps) => {
     preview,
     filters,
     shouldShowColumn = false,
+    tone = "neutral",
     basePath,
     className,
     ...rootAttrs
@@ -37,8 +38,15 @@ export const AttentionGroup = (props: AttentionGroupProps) => {
     !isExpanded && preview.hasMore ? `Показано ${taskItems.length} из ${preview.total}` : null;
   const toggleLabel = isExpanded ? "Свернуть до подборки" : `Показать все ${preview.total}`;
   const ToggleIcon = isExpanded ? ChevronUp : ChevronDown;
+  const emptyMark = preview.total === 0 ? "" : undefined;
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)} aria-labelledby={headingId}>
+    <section
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      data-tone={tone}
+      data-empty={emptyMark}
+      aria-labelledby={headingId}
+    >
       <h3 id={headingId} className={styles.title}>
         {title}
         <span className={styles.count}>{preview.total}</span>
