@@ -4,6 +4,7 @@ import { useProjectBasePath, useProjectId } from "domains/project";
 import { useProductOverview } from "domains/product-overview";
 import { StatePanel } from "ui/state-panel";
 import { isDefined } from "shared/value-predicates";
+import { OVERVIEW_SECTION_IDS } from "./config/overview.config";
 import { getOverviewErrorMessage } from "./helpers/overview-error";
 import { AttentionList } from "./ui/attention-list/attention-list";
 import { BoardList } from "./ui/board-list/board-list";
@@ -84,6 +85,7 @@ export const OverviewScreen = () => {
       />
       <div className={styles.work}>
         <OverviewPanel
+          id={OVERVIEW_SECTION_IDS.tasks}
           title="Задачи по стадиям"
           total={data.tasks.total}
           link={{ to: `${basePath}/boards/product`, label: "Доска продукта" }}
@@ -118,12 +120,8 @@ export const OverviewScreen = () => {
         >
           <ProductKnowledge knowledge={data.knowledge} />
         </OverviewPanel>
-        <OverviewPanel
-          title="Доски"
-          total={boards.total}
-          preview={{ shown: boards.catalog.items.length, total: boards.catalog.total }}
-        >
-          <BoardList boards={boards.catalog.items} basePath={basePath} />
+        <OverviewPanel id={OVERVIEW_SECTION_IDS.boards} title="Доски" total={boards.total}>
+          <BoardList catalog={boards.catalog} basePath={basePath} />
         </OverviewPanel>
         <OverviewPanel
           title="Документы"

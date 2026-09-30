@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { createBrowser } from "./helpers/browser.mjs";
 import { CLEAR_FAULT_PATH, startControlProxy } from "./helpers/proxy.mjs";
-import { seedProject } from "./helpers/seed.mjs";
+import { seedBreadth, seedProject } from "./helpers/seed.mjs";
 import {
   assertBuilt,
   createWorkspace,
@@ -34,8 +34,12 @@ let web;
 let browser;
 let alpha;
 let beta;
+let gamma;
+let delta;
 let alphaApi;
+let gammaApi;
 let seeded;
+let breadth;
 
 const q = (value) => JSON.stringify(value);
 const overviewUrl = (project) => `${web.url}/projects/${encodeURIComponent(project.slug)}`;
@@ -91,7 +95,7 @@ const createTask = (title, column = "inbox") =>
 before(async () => {
   await assertBuilt();
   await mkdir(screenshots, { recursive: true });
-  workspace = await createWorkspace();
+  workspace = await createWorkspace(["alpha", "beta", "gamma", "delta"]);
   webPort = await freePort();
   serverPort = await freePort();
   server = await startRelayServer({
@@ -106,6 +110,10 @@ before(async () => {
   const byKey = Object.fromEntries(registry.data.projects.map((project) => [project.key, project]));
   alpha = byKey.alpha;
   beta = byKey.beta;
+  gamma = byKey.gamma;
+  delta = byKey.delta;
+  gammaApi = relayApi(() => server.url, gamma.id);
+  breadth = await seedBreadth(gammaApi);
   alphaApi = relayApi(() => server.url, alpha.id);
   seeded = await seedProject(alphaApi, { name: "Альфа", long: true });
   await relayApi(() => server.url, beta.id).post("/product/records", {
@@ -569,6 +577,376 @@ test("O-19: ширины, темы, длинные названия, досту�
     `[...document.querySelectorAll('main section')].every((section) => section.getAttribute('aria-labelledby') && document.getElementById(section.getAttribute('aria-labelledby'))?.textContent)`,
   );
   assert.equal(labels, true, "область без доступного названия");
+});
+
+/** Текст и ссылки группы «Требует внимания» по заголовку. */
+const attentionGroup = (title) =>
+  `(() => { const section = [...document.querySelectorAll('main section')].find((item) => item.querySelector(':scope > h3')?.firstChild?.textContent === ${q(title)}); if (!section) return null; return { text: section.innerText, links: [...section.querySelectorAll('a')].map((a) => a.getAttribute('href')), expanded: section.querySelector('button[aria-expanded]')?.getAttribute('aria-expanded') ?? null }; })()`;
+/** Ссылки блока «Доски». */
+const boardLinks = `[...document.querySelectorAll('#overview-boards a')].map((a) => a.getAttribute('href'))`;
+const activeText = `(document.activeElement?.textContent ?? '')`;
+
+test("O-07/F1: каждая группа внимания раскрывается до полного набора проекта со всех досок", async () => {
+  await browser.viewport(1440, 1000);
+  await browser.media("light");
+  await browser.open(overviewUrl(gamma));
+  await browser.waitFor(`${metric("Задачи")} === 24 && ${metric("Доски")} === 8`);
+  const base = `/projects/${encodeURIComponent(gamma.slug)}`;
+  const groups = [
+    { title: "В работе", tasks: breadth.groups.progress },
+    { title: "На проверке", tasks: breadth.groups.review },
+    { title: "Заблокированы", tasks: breadth.groups.blocked },
+  ];
+  for (const group of groups) {
+    const total = group.tasks.length;
+    assert(total > 5, `${group.title}: фикстура больше подборки`);
+    const hidden = group.tasks.find((task) => task.board === "app1");
+    const hiddenHref = `${base}/boards/app1/${hidden.id}`;
+    const before = await browser.eval(attentionGroup(group.title));
+    assert.equal(before.links.length, 5, `${group.title}: подборка из пяти`);
+    assert.match(before.text, new RegExp(`Показано 5 из ${total}`));
+    assert.equal(before.expanded, "false");
+    assert(!before.links.includes(hiddenHref), `${group.title}: задача app1 уже в подборке`);
+
+    await browser.command(
+      "click",
+      `main button[aria-label=${q(`Показать все ${total}: ${group.title}`)}]`,
+    );
+    await browser.waitFor(
+      `(() => { const group = ${attentionGroup(group.title)}; return group?.expanded === 'true' && group.links.length === ${total}; })()`,
+    );
+    const after = await browser.eval(attentionGroup(group.title));
+    for (const task of group.tasks)
+      assert(
+        after.links.includes(`${base}/boards/${task.board}/${task.id}`),
+        `${group.title}: нет ${task.key}`,
+      );
+    assert.match(after.text, new RegExp(`Показано ${total} из ${total}`));
+    // Порядок: доски в порядке каталога (продукт, приложения), внутри доски — по рангу.
+    const catalogOrder = ["product", "app1", "app2", "app3", "app4", "app5", "app6"];
+    const boardSequence = after.links.map((href) =>
+      catalogOrder.indexOf(href.split("/boards/")[1].split("/")[0]),
+    );
+    assert.deepEqual(
+      boardSequence,
+      [...boardSequence].sort((left, right) => left - right),
+      `${group.title}: доски перемешаны`,
+    );
+    assert.doesNotMatch(after.text, new RegExp(`Показано 5 из ${total}`));
+  }
+
+  // Раскрытие блокеров сохраняет адресные причины: у задач подборки — ключ и вид связи.
+  const blockedText = (await browser.eval(attentionGroup("Заблокированы"))).text;
+  for (const board of ["product", "app6", "app5"])
+    assert.match(
+      blockedText,
+      new RegExp(`Ждёт: ${board.toUpperCase()}-1 \\(зависимость\\)`),
+      `нет причины ${board}`,
+    );
+  assert.doesNotMatch(blockedText, /Ждёт задач:/);
+  // Смешанная группа показывает колонку у каждой задачи, включая карточки подборки.
+  assert.equal(blockedText.match(/К выполнению/g)?.length, 7, "колонка показана не у всех");
+
+  // Переход к ранее скрытой задаче другой доски открывает её окно на фактической доске.
+  const hidden = breadth.groups.progress.find((task) => task.board === "app1");
+  await browser.command("click", `main a[href$=${q(`/boards/app1/${hidden.id}`)}]`);
+  await browser.waitFor(`location.pathname === ${q(`${base}/boards/app1/${hidden.id}`)}`);
+  await browser.waitFor(`document.body.innerText.includes('Гамма: в работе app1')`);
+  await browser.back();
+  await browser.waitFor(`${metric("Задачи")} === 24`);
+
+  // Раскрытый список остаётся живым: новая задача другой доски появляется без перезагрузки.
+  await browser.command("click", `main button[aria-label="Показать все 8: В работе"]`);
+  await browser.waitFor(`${attentionGroup("В работе")}?.links.length === 8`);
+  const added = await gammaApi.post("/board-tasks", {
+    board: "app3",
+    title: "Гамма: новая задача в работе",
+    column: "in-progress",
+  });
+  await browser.waitFor(
+    `${metric("Задачи")} === 25 && ${attentionGroup("В работе")}?.links.includes(${q(`${base}/boards/app3/${added.id}`)})`,
+  );
+  assert.equal(await browser.eval(`${attentionGroup("В работе")}.expanded`), "true");
+});
+
+test("O-07/F1: полный список читается по действию, продолжается, сворачивается и переживает ошибку", async () => {
+  for (let index = 0; index < 36; index += 1)
+    await gammaApi.post("/board-tasks", {
+      board: `app${(index % 6) + 1}`,
+      title: `Гамма: проверка ${index}`,
+      column: "review",
+    });
+  // Раскрытый список прежней страницы дочитывает изменения по SSE: ждём затихания его запросов.
+  let lastReads = proxy.taskListReads(gamma.id, 0).length;
+  let quietSince = Date.now();
+  await until(
+    () => {
+      const current = proxy.taskListReads(gamma.id, 0).length;
+      if (current !== lastReads) {
+        lastReads = current;
+        quietSince = Date.now();
+      }
+      return Date.now() - quietSince >= 1_500;
+    },
+    { timeout: 30_000, message: "затихание чтений списка прежней страницы" },
+  );
+  await browser.command("network", "requests", "--clear");
+  await browser.open(overviewUrl(gamma));
+  await browser.waitFor(`${attentionGroup("На проверке")}?.text.includes('Показано 5 из 43')`);
+  await settledReads(gamma);
+  // Запросы считаются по журналу сети браузера после очистки перед открытием страницы.
+  const pageTaskReads = async () => {
+    const data = await browser.command("network", "requests", "--filter", "board-tasks");
+    return (data.requests ?? data ?? []).filter((item) =>
+      String(item.url).includes("/board-tasks?"),
+    );
+  };
+  assert.deepEqual(await pageTaskReads(), [], "список задач прочитан до раскрытия");
+
+  // Ошибка чтения: подборка остаётся видна, текст говорит о чтении, а не о записи.
+  proxy.failTaskList(gamma.id, 500, {
+    ok: false,
+    error: { code: "IO_ERROR", message: "Диск недоступен" },
+  });
+  const failedAt = Date.now();
+  await browser.command("click", `main button[aria-label="Показать все 43: На проверке"]`);
+  await browser.waitFor(
+    `${attentionGroup("На проверке")}?.text.includes('Не удалось прочитать полный список задач')`,
+  );
+  // Дожидаемся исчерпания автоматических повторов SWR, чтобы восстановление дало только кнопка.
+  await until(() => proxy.taskListReads(gamma.id, failedAt).length >= 3, {
+    timeout: 30_000,
+    message: "повторы чтения списка",
+  });
+  await settledReads(gamma);
+  const failed = await browser.eval(attentionGroup("На проверке"));
+  assert.equal(failed.links.length, 5, "подборка пропала при ошибке");
+  assert.equal(failed.expanded, "true");
+  assert.doesNotMatch(failed.text, /отправляли изменения/);
+  assert(proxy.taskListReads(gamma.id, failedAt).every((item) => item.faulted));
+  proxy.restoreTaskList(gamma.id);
+  const retryAt = Date.now();
+  await browser.command("find", "role", "button", "click", "--name", "Перечитать список");
+  await browser.waitFor(
+    `${attentionGroup("На проверке")}?.links.length === 40 && ${attentionGroup("На проверке")}.text.includes('Показано 40 из 43')`,
+  );
+  assert(
+    proxy.taskListReads(gamma.id, retryAt).some((item) => !item.faulted),
+    "список восстановлен не чтением после нажатия",
+  );
+  assert.doesNotMatch(
+    (await browser.eval(attentionGroup("На проверке"))).text,
+    /Не удалось прочитать/,
+  );
+
+  assert((await pageTaskReads()).length > 0, "проверка запросов страницы не видит список");
+
+  // Продолжение: вторая страница той же версии, без дублей и пропусков.
+  const firstPage = await browser.eval(attentionGroup("На проверке"));
+  await browser.command("find", "role", "button", "click", "--name", "Загрузить ещё");
+  await browser.waitFor(`${attentionGroup("На проверке")}?.links.length === 43`);
+  const full = await browser.eval(attentionGroup("На проверке"));
+  assert.equal(new Set(full.links).size, 43, "дубли в полном списке");
+  // Уже показанные задачи остаются на местах, новая порция добавлена в конец.
+  assert.deepEqual(full.links.slice(0, 40), firstPage.links, "первые 40 задач переместились");
+  assert.equal(full.links.slice(40).filter((href) => firstPage.links.includes(href)).length, 0);
+  assert.match(full.text, /Показано 43 из 43/);
+  assert.doesNotMatch(full.text, /Загрузить ещё/);
+  const pages = proxy
+    .taskListReads(gamma.id, retryAt)
+    .map((item) => new URLSearchParams(item.query));
+  assert(pages.some((query) => query.get("offset") === "40" && query.get("version")));
+
+  // Свёртка возвращает подборку обзора.
+  await browser.command("click", `main button[aria-label="Свернуть до подборки: На проверке"]`);
+  await browser.waitFor(
+    `${attentionGroup("На проверке")}?.expanded === 'false' && ${attentionGroup("На проверке")}.links.length === 5`,
+  );
+  assert.match((await browser.eval(attentionGroup("На проверке"))).text, /Показано 5 из 43/);
+});
+
+test("O-07/F2: доски раскрываются до полного каталога, плитки ведут к своим блокам", async () => {
+  await browser.open(overviewUrl(gamma));
+  await browser.waitFor(`${metric("Доски")} === 8`);
+  const base = `/projects/${encodeURIComponent(gamma.slug)}`;
+  const tiles = await browser.eval(
+    `[...document.querySelectorAll('ul[aria-label="Сводные показатели"] a')].map((a) => ({ label: a.querySelector('span').textContent, href: a.getAttribute('href') }))`,
+  );
+  assert.deepEqual(
+    tiles.map((tile) => [tile.label, tile.href]),
+    [
+      ["Задачи", "#overview-tasks"],
+      ["Доски", "#overview-boards"],
+      ["Документы", `${base}/documents`],
+      ["Фичи продукта", `${base}/product/features`],
+    ],
+  );
+  const before = await browser.eval(boardLinks);
+  assert.equal(before.length, 5);
+  assert.match(
+    await browser.eval(`document.getElementById('overview-boards').innerText`),
+    /Показано 5 из 8/,
+  );
+  for (const slug of ["app5", "app6", "infrastructure"])
+    assert(!before.includes(`${base}/boards/${slug}`), `${slug} уже в подборке`);
+
+  await browser.command("click", `#overview-boards button[aria-expanded="false"]`);
+  await browser.waitFor(`${boardLinks}.length === 8`);
+  const all = await browser.eval(boardLinks);
+  for (const slug of ["product", "app1", "app2", "app3", "app4", "app5", "app6", "infrastructure"])
+    assert(all.includes(`${base}/boards/${slug}`), `в каталоге нет ${slug}`);
+  const boardsText = await browser.eval(`document.getElementById('overview-boards').innerText`);
+  assert.match(boardsText, /инфраструктура/);
+  assert.match(boardsText, /Показано 8 из 8/);
+
+  await browser.command("click", `#overview-boards a[href$="/boards/infrastructure"]`);
+  await browser.waitFor(`location.pathname === ${q(`${base}/boards/infrastructure`)}`);
+  await browser.back();
+  await browser.waitFor(`${metric("Доски")} === 8`);
+
+  // Плитка «Доски» не уводит на одну доску, а прокручивает к блоку с полным каталогом.
+  await browser.eval("scrollTo(0, 0); true");
+  await browser.command("click", `ul[aria-label="Сводные показатели"] a[href="#overview-boards"]`);
+  await browser.waitFor(
+    `location.hash === '#overview-boards' && location.pathname === ${q(base)} && (() => { const box = document.getElementById('overview-boards').getBoundingClientRect(); return box.top >= 0 && box.top < innerHeight; })()`,
+  );
+  await browser.command("click", `ul[aria-label="Сводные показатели"] a[href="#overview-tasks"]`);
+  await browser.waitFor(`location.hash === '#overview-tasks' && location.pathname === ${q(base)}`);
+});
+
+test("O-05/O-06: архив, закрытые планы, completedNotReady и закрытые релизы видны в Web", async () => {
+  await browser.open(overviewUrl(gamma));
+  await browser.waitFor(`${metric("Документы")} === 1`);
+  const text = await browser.eval(mainText);
+  assert.match(text, /в\sархиве\s1/);
+  assert.match(text, /действующих\s0/);
+  const plans = await browser.eval(planStatuses);
+  assert.match(plans, /Завершены\s*2/);
+  assert.match(plans, /Отменены\s*1/);
+  assert.match(plans, /В работе\s*0/);
+  assert.match(text, /Завершены по статусу, но состав фактически не выполнен: 1/);
+  assert.match(text, /Активных планов нет/);
+  const releases = await browser.eval(
+    `document.querySelector('ul[aria-label="Релизы по статусам"]')?.innerText ?? ''`,
+  );
+  assert.match(releases, /Выпущены\s*1/);
+  assert.match(releases, /Отменены\s*1/);
+  assert.match(releases, /Запланированы\s*0/);
+  assert.match(text, /Гамма: выпущенный релиз/);
+  assert.match(text, /Запланированных релизов нет/);
+  assert.doesNotMatch(text, /Гамма: отменённый релиз/);
+});
+
+test("O-01: проект без паспорта предлагает заполнить паспорт", async () => {
+  await browser.open(overviewUrl(delta));
+  await browser.waitFor(`${mainText}.includes('Паспорт продукта ещё не заполнен')`);
+  assert.equal(await browser.eval(heading), delta.name);
+  const text = await browser.eval(mainText);
+  assert.match(text, /Сейчас нет задач в работе/);
+  assert.equal(await browser.eval(metric("Задачи")), 0);
+  assert.equal(await browser.eval(metric("Доски")), 2);
+  await browser.command("click", `main header a[href$="/product/passport/edit"]`);
+  await browser.waitFor(
+    `location.pathname === ${q(`/projects/${encodeURIComponent(delta.slug)}/product/passport/edit`)}`,
+  );
+  await browser.waitFor(`!!document.querySelector('main form, main textarea, main input')`);
+  await browser.back();
+  await browser.waitFor(`${mainText}.includes('Паспорт продукта ещё не заполнен')`);
+});
+
+test("O-19: клавиатура — Tab/Enter по плитке, раскрытию и ссылке блока", async () => {
+  await browser.viewport(1440, 900);
+  await browser.open(overviewUrl(gamma));
+  await browser.waitFor(`${metric("Доски")} === 8`);
+  const base = `/projects/${encodeURIComponent(gamma.slug)}`;
+  const press = (key) => browser.command("press", key);
+  /** Нажимает Tab, пока фокус не удовлетворит условию; возвращает число нажатий. */
+  const tabUntil = async (expression, limit = 80) => {
+    for (let count = 1; count <= limit; count += 1) {
+      await press("Tab");
+      if (await browser.eval(`Boolean(${expression})`)) return count;
+    }
+    throw new Error(`Tab не довёл фокус до: ${expression}`);
+  };
+  await browser.eval("document.activeElement?.blur(); scrollTo(0, 0); true");
+  await tabUntil(`document.activeElement?.getAttribute('href') === '#overview-boards'`);
+  const outline = await browser.eval(`getComputedStyle(document.activeElement).outlineStyle`);
+  assert.notEqual(outline, "none", "фокус плитки не виден");
+  await press("Enter");
+  await browser.waitFor(`location.hash === '#overview-boards'`);
+  // Следующий Tab продолжает с блока досок, а не с начала страницы.
+  await press("Tab");
+  assert.equal(
+    await browser.eval(`Boolean(document.activeElement?.closest('#overview-boards'))`),
+    true,
+    "фокус после перехода плитки не в блоке досок",
+  );
+  await tabUntil(
+    `document.activeElement?.getAttribute('aria-expanded') === 'false' && document.activeElement.closest('#overview-boards')`,
+  );
+  await press("Enter");
+  await browser.waitFor(`${boardLinks}.length === 8`);
+  assert.equal(await browser.eval(`document.activeElement?.getAttribute('aria-expanded')`), "true");
+  await press("Shift+Tab");
+  assert.match(
+    await browser.eval(`document.activeElement?.getAttribute('href') ?? ''`),
+    /\/boards\/infrastructure$/,
+  );
+  await press("Enter");
+  await browser.waitFor(`location.pathname === ${q(`${base}/boards/infrastructure`)}`);
+  await browser.back();
+  await browser.waitFor(`${metric("Доски")} === 8`);
+
+  // Старт с последнего элемента блока внимания: следующий Tab ведёт к ссылке блока планов.
+  await browser.command("focus", `main button[aria-label$=": Заблокированы"]`);
+  await tabUntil(
+    `document.activeElement?.tagName === 'A' && ${activeText}.includes('Все планы')`,
+    3,
+  );
+  await press("Enter");
+  await browser.waitFor(`location.pathname === ${q(`${base}/plans`)}`);
+  await browser.back();
+  await browser.waitFor(`${metric("Доски")} === 8`);
+});
+
+test("O-19: раскрытые подборки без переполнения в обеих темах на 1440 и 390", async () => {
+  const report = [];
+  for (const scheme of ["light", "dark"]) {
+    for (const width of [1440, 390]) {
+      await browser.viewport(width, 900);
+      await browser.media(scheme);
+      await browser.open(overviewUrl(gamma));
+      await browser.waitFor(
+        `document.documentElement.getAttribute('data-mantine-color-scheme') === ${q(scheme)} && ${metric("Доски")} === 8`,
+      );
+      await browser.command(
+        "click",
+        `main button[aria-label^="Показать все"][aria-label$=": Заблокированы"]`,
+      );
+      // Каждое раскрытие дожидается своего результата: сдвиг вёрстки не уводит следующий клик.
+      await browser.waitFor(`${attentionGroup("Заблокированы")}?.links.length === 7`);
+      await browser.command("click", `#overview-boards button[aria-expanded="false"]`);
+      await browser.waitFor(
+        `${boardLinks}.length === 8 && location.pathname === ${q(`/projects/${encodeURIComponent(gamma.slug)}`)}`,
+      );
+      const layout = await browser.eval(
+        `(() => ({ scroll: document.documentElement.scrollWidth, width: innerWidth, overflow: [...document.querySelectorAll('main *')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1).length }))()`,
+      );
+      const audit = await browser.command("a11y", "--selector", "main");
+      const violations = audit.violations.map((item) => `${item.id}(${item.nodeCount})`);
+      await browser.eval("scrollTo(0, 0); true");
+      await browser.screenshot(join(screenshots, `overview-breadth-${scheme}-${width}.png`));
+      report.push({ scheme, width, ...layout, violations });
+      assert(layout.scroll <= layout.width, `${scheme} ${width}: горизонтальная прокрутка`);
+      assert.equal(layout.overflow, 0, `${scheme} ${width}: элементы за пределами экрана`);
+      assert.deepEqual(violations, [], `${scheme} ${width}: нарушения доступности`);
+    }
+  }
+  measurements.breadthLayout = report;
+  await browser.viewport(1440, 1000);
+  await browser.media("light");
+  await browser.open(overviewUrl(alpha));
+  await browser.waitFor(`${metric("Задачи")} !== null`);
 });
 
 test("O-20: чтение обзора не пишет в базу, потоки освобождаются после закрытия", async () => {

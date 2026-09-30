@@ -5,6 +5,8 @@ import type { OverviewTask } from "domains/product-overview";
 export type AttentionTaskParams = {
   /** Задача из подборки обзора. */
   task: OverviewTask;
+  /** Колонка задачи, если группа объединяет разные колонки. */
+  columnLabel?: string;
   /** Базовый адрес проекта. */
   basePath: string;
 };

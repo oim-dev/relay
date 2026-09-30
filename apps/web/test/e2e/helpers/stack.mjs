@@ -73,15 +73,16 @@ export async function until(check, { timeout = 20_000, interval = 50, message = 
 }
 
 /**
- * Создаёт временный workspace из двух независимых проектов во временном каталоге репозитория.
+ * Создаёт временный workspace из независимых проектов во временном каталоге репозитория.
  * Пользовательские базы и `apps/playground/.relay` не затрагиваются.
+ * @param {string[]} keys Ключи регистрации проектов; по умолчанию `alpha` и `beta`.
  */
-export async function createWorkspace() {
+export async function createWorkspace(keys = ["alpha", "beta"]) {
   const base = join(repositoryRoot, ".artifacts");
   await mkdir(base, { recursive: true });
   const root = await realpath(await mkdtemp(join(base, "web-e2e-")));
   const projects = {};
-  for (const key of ["alpha", "beta"]) {
+  for (const key of keys) {
     const directory = join(root, key);
     await mkdir(directory);
     await run(process.execPath, [cliBinary, "init"], { cwd: directory, env: isolatedEnv() });
@@ -90,7 +91,10 @@ export async function createWorkspace() {
   const config = join(root, "relay.workspace.json");
   await writeFile(
     config,
-    JSON.stringify({ version: 1, projects: { alpha: { path: "alpha" }, beta: { path: "beta" } } }),
+    JSON.stringify({
+      version: 1,
+      projects: Object.fromEntries(keys.map((key) => [key, { path: key }])),
+    }),
   );
   return {
     root,

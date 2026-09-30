@@ -1,4 +1,5 @@
 import type {
+  OverviewBoard,
   OverviewPlans,
   OverviewReleases,
   ProductOverviewFreshness,
@@ -36,5 +37,18 @@ export const READINESS_LABELS: Record<"done" | "partial" | "none", string> = {
   none: "впереди",
 };
 
+/** Область ответственности доски вместо счётчиков, которых нет в полном каталоге. */
+export const BOARD_KIND_LABELS: Record<OverviewBoard["kind"], string> = {
+  product: "продукт",
+  application: "приложение",
+  infrastructure: "инфраструктура",
+};
+
 /** Резервный заголовок записи без названия. */
 export const UNTITLED = "Без названия";
+
+/** Якоря блоков обзора, к которым ведут сводные плитки без собственного раздела. */
+export const OVERVIEW_SECTION_IDS = {
+  tasks: "overview-tasks",
+  boards: "overview-boards",
+} as const;

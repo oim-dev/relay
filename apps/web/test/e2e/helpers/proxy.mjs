@@ -39,6 +39,10 @@ export async function startControlProxy(target) {
   const faultClearedAt = new Map();
   /** @type {{project: string, at: number, event?: string}[]} */
   const readLog = [];
+  /** @type {{project: string, at: number, query: string, referer: string, faulted: boolean}[]} */
+  const taskListReads = [];
+  /** @type {Map<string, {status: number, body: unknown}>} */
+  const taskListFaults = new Map();
   /** @type {Set<import("node:net").Socket>} */
   const sockets = new Set();
 
@@ -122,6 +126,23 @@ export async function startControlProxy(target) {
       forward(incoming, outgoing);
       return;
     }
+    if (project !== null && incoming.method === "GET" && rest === "board-tasks") {
+      const fault = taskListFaults.get(project);
+      taskListReads.push({
+        project,
+        at: Date.now(),
+        query: url.search,
+        referer: incoming.headers.referer ?? "",
+        faulted: fault !== undefined,
+      });
+      if (fault) {
+        outgoing.writeHead(fault.status, { "content-type": "application/json" });
+        outgoing.end(JSON.stringify(fault.body));
+        return;
+      }
+      forward(incoming, outgoing);
+      return;
+    }
     if (project !== null && incoming.method === "GET" && rest === "events") {
       forward(incoming, outgoing, (response) => {
         if ((response.statusCode ?? 0) !== 200) return;
@@ -195,6 +216,13 @@ export async function startControlProxy(target) {
     faultClearedAt: (project) => faultClearedAt.get(project) ?? null,
     /** Возвращает чтение обзора серверу. */
     restoreOverview: (project) => overviewFaults.delete(project),
+    /** Чтения списка задач проекта (`GET board-tasks`) с указанного момента; `referer` — страница. */
+    taskListReads: (project, since) =>
+      taskListReads.filter((item) => item.project === project && item.at >= since),
+    /** Отвечает на чтение списка задач проекта заданным статусом и телом вместо сервера. */
+    failTaskList: (project, status, body) => taskListFaults.set(project, { status, body }),
+    /** Возвращает чтение списка задач серверу. */
+    restoreTaskList: (project) => taskListFaults.delete(project),
     /** Отправляет heartbeat во все открытые потоки проекта. */
     heartbeat: (project) => {
       for (const stream of streams.get(project) ?? [])

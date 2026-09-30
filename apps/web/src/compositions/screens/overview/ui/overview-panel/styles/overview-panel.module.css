@@ -8,6 +8,8 @@
   border-radius: var(--mantine-radius-lg);
   background: var(--tasks-surface);
   box-shadow: var(--tasks-card-shadow);
+  /* Переход плитки к блоку не прячет заголовок под закреплённой шапкой проекта. */
+  scroll-margin-top: 5rem;
 
   @media (--md) {
     padding: 1.25rem;

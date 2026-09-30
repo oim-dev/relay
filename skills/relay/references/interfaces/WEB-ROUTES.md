@@ -65,9 +65,13 @@
 reload и Back/Forward без предшествующей истории. Его переходы ведут на канонические адреса:
 `P/product/passport` или `P/product/passport/edit` при отсутствии паспорта,
 `P/product/features`, `P/boards/product` и `P/boards/:boardSlug`,
-`P/boards/:boardSlug/:taskId` для задач раздела «Требует внимания», `P/plans` и
+`P/boards/:boardSlug/:taskId` фактической доски задачи для подборок и раскрытых
+списков раздела «Требует внимания», `P/plans` и
 `P/plans/:planId`, `P/releases` и `P/releases/:releaseId`, `P/documents`,
 `P/documents/:documentId` и `P/documents?view=pinned`.
+Плитки «Задачи» и «Доски» не открывают отдельный маршрут: это якоря `#overview-tasks`
+и `#overview-boards` блоков этого же экрана. Раскрытие групп внимания и каталога досок
+не меняет адрес и не сохраняется при reload.
 
 ## Совместимость и канонизация
 

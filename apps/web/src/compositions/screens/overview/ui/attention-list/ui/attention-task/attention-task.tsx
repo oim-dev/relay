@@ -14,7 +14,7 @@ const RELATION_LABELS = { dependency: "зависимость", subtask: "под
  *  - перехода из обзора к окну задачи на её доске
  */
 export const AttentionTask = (props: AttentionTaskProps) => {
-  const { task, basePath, className, ...rootAttrs } = props;
+  const { task, columnLabel, basePath, className, ...rootAttrs } = props;
   const taskPath = `${basePath}/boards/${encodeURIComponent(task.board.slug)}/${encodeURIComponent(task.id)}`;
   const title = task.title === "" ? UNTITLED : task.title;
   const criteriaLabel =
@@ -35,6 +35,7 @@ export const AttentionTask = (props: AttentionTaskProps) => {
       </Link>
       <p className={styles.meta}>
         <span>{task.board.name}</span>
+        {isDefined(columnLabel) && <span>{columnLabel}</span>}
         {isDefined(criteriaLabel) && <span>{criteriaLabel}</span>}
       </p>
       {isDefined(blockersLabel) && <p className={styles.blockers}>{blockersLabel}</p>}
