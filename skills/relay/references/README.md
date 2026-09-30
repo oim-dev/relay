@@ -43,7 +43,6 @@ Relay — рабочая память проекта: требования, за
 | Интерфейс человека    | [Web](https://github.com/oim-dev/relay/blob/main/apps/web/README.md)                                                                                                                 | Пользовательские действия, маршруты и архитектура Web          |
 | Команды агента        | [CLI](https://github.com/oim-dev/relay/blob/main/apps/cli/README.md)                                                                                                                 | Команды, параметры, вывод и добавление операций                |
 | Инструменты агента    | [MCP](https://github.com/oim-dev/relay/blob/main/apps/mcp/README.md)                                                                                                                 | Подключение, инструменты, аргументы и разработка сервиса       |
-| Примеры               | [Playground](https://github.com/oim-dev/relay/blob/main/apps/playground/README.md)                                                                                                   | Использование Relay на демонстрационных проектах               |
 | Разработка и поставка | [Инструменты репозитория](https://github.com/oim-dev/relay/blob/main/scripts/README.md)                                                                                              | Окружение, сборка, проверки и выпуск Relay                     |
 
 Точный пользовательский синтаксис: [CLI](interfaces/CLI.md),

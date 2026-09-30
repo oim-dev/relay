@@ -13,8 +13,6 @@ pnpm-lock.yaml
 **/.relay/product/
 .agents/
 .npmrc
-# Точная копия внешнего ТЗ; форматирование исходного документа сохраняется.
-apps/playground/p2p-rental/product-spec.md
 apps/ui/reference/
 apps/server/reference/
 apps/web/.templates/

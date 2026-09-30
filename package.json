@@ -21,7 +21,7 @@
     "dev:ui": "pnpm run dev:web",
     "dev:cli": "node --conditions=tasks-source apps/cli/scripts/dev.mjs",
     "dev:mcp": "pnpm run build:mcp && node --import tsx apps/mcp/src/main.ts",
-    "playground": "pnpm --filter @relay/playground --silent run tasks",
+    "playground": "node --import ./apps/server/scripts/environment.mjs --conditions=tasks-source apps/cli/scripts/dev.mjs",
     "start": "node --import ./apps/server/scripts/environment.mjs ./node_modules/turbo/bin/turbo run start --filter=@oim-dev/relay-server",
     "start:cli": "node apps/cli/dist/cli/main.js",
     "start:mcp": "node apps/mcp/dist/main.js",

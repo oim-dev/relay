@@ -73,16 +73,16 @@ RELAY_PORT=3001 RELAY_API_URL=http://127.0.0.1:3001 RELAY_WEB_PORT=5174 pnpm run
 
 Это альтернативный запуск, не второй сервер поверх уже работающего окружения.
 
-| Команда                               | Действие                                                         |
-| ------------------------------------- | ---------------------------------------------------------------- |
-| `pnpm run dev:server`                 | Только Server с наблюдением за исходниками                       |
-| `pnpm run dev:web`                    | Только Web; его dev-скрипт готовит SDK, API запускается отдельно |
-| `pnpm --silent run dev:cli <args>`    | CLI из исходников с сохранением каталога вызова                  |
-| `pnpm --silent run playground <args>` | CLI с явным конфигом Playground                                  |
-| `pnpm run dev:mcp <args>`             | Сборка MCP и зависимостей, затем запуск точки входа через tsx    |
-| `pnpm run start`                      | Сборка и запуск Server с Web                                     |
-| `pnpm --silent run start:cli <args>`  | Собранный CLI; предварительно нужен `build:cli`                  |
-| `pnpm run start:mcp <args>`           | Собранный MCP; предварительно нужен `build:mcp`                  |
+| Команда                               | Действие                                                              |
+| ------------------------------------- | --------------------------------------------------------------------- |
+| `pnpm run dev:server`                 | Только Server с наблюдением за исходниками                            |
+| `pnpm run dev:web`                    | Только Web; его dev-скрипт готовит SDK, API запускается отдельно      |
+| `pnpm --silent run dev:cli <args>`    | CLI из исходников с сохранением каталога вызова                       |
+| `pnpm --silent run playground <args>` | CLI из исходников с конфигом Playground, если не задан `RELAY_CONFIG` |
+| `pnpm run dev:mcp <args>`             | Сборка MCP и зависимостей, затем запуск точки входа через tsx         |
+| `pnpm run start`                      | Сборка и запуск Server с Web                                          |
+| `pnpm --silent run start:cli <args>`  | Собранный CLI; предварительно нужен `build:cli`                       |
+| `pnpm run start:mcp <args>`           | Собранный MCP; предварительно нужен `build:mcp`                       |
 
 Аргументы `pnpm run` передавайте сразу после имени script, без дополнительного `--`.
 `--silent` убирает сообщения pnpm из машинного вывода CLI. MCP требует отдельно
