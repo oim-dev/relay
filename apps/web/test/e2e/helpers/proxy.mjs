@@ -43,6 +43,8 @@ export async function startControlProxy(target) {
   const taskListReads = [];
   /** @type {Map<string, {status: number, body: unknown}>} */
   const taskListFaults = new Map();
+  /** @type {{project: string, at: number, query: URLSearchParams, status: number | null, doneAt: number | null}[]} */
+  const boardReads = [];
   /** @type {Set<import("node:net").Socket>} */
   const sockets = new Set();
 
@@ -143,6 +145,16 @@ export async function startControlProxy(target) {
       forward(incoming, outgoing);
       return;
     }
+    if (project !== null && incoming.method === "GET" && rest === "boards") {
+      const read = { project, at: Date.now(), query: url.searchParams, status: null, doneAt: null };
+      boardReads.push(read);
+      outgoing.once("close", () => {
+        read.status = outgoing.statusCode;
+        read.doneAt = Date.now();
+      });
+      forward(incoming, outgoing);
+      return;
+    }
     if (project !== null && incoming.method === "GET" && rest === "events") {
       forward(incoming, outgoing, (response) => {
         if ((response.statusCode ?? 0) !== 200) return;
@@ -223,6 +235,9 @@ export async function startControlProxy(target) {
     failTaskList: (project, status, body) => taskListFaults.set(project, { status, body }),
     /** Возвращает чтение списка задач серверу. */
     restoreTaskList: (project) => taskListFaults.delete(project),
+    /** Чтения страниц каталога досок проекта с указанного момента; `doneAt` — конец ответа. */
+    boardReads: (project, since) =>
+      boardReads.filter((item) => item.project === project && item.at >= since),
     /** Отправляет heartbeat во все открытые потоки проекта. */
     heartbeat: (project) => {
       for (const stream of streams.get(project) ?? [])

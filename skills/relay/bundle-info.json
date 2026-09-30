@@ -67,7 +67,7 @@
     "apps/mcp/src/tools.ts": "add40c26d549ddacb25f04220b866b3a619673de6d2025b1082b006d92b83ec0",
     "apps/server/docs/USAGE.md": "81492193ed33d302de5354d3fd6eed5e2a2056f827099548bf1a0203a20edf1c",
     "apps/web/docs/ROUTING.md": "613c8a6e51403d1999195f280d96eb5800876954d4f2043a25d0f147358468aa",
-    "apps/web/docs/USAGE.md": "4a3c764b7f62c253aa313ad35a98f5e3923e9df8392d3274384c5d6545ff6bfe",
+    "apps/web/docs/USAGE.md": "b7b00ba32110f6bcb46f4d01e084c8e97551d856d32d6e4698e758387377720a",
     "docs/ARCHITECTURE.md": "cb41160c8cbe82a1af7518b8417fe8e750783026898f5a6d0719cbab18364b73",
     "docs/CAPABILITIES.md": "3f398f9ea5a07d5c7444c8d44103273dc275a00597de0c93096ac9fa0c834fdf",
     "docs/PRODUCT.md": "9d5f7205b6d4b9af5cf9cedaadfd536831218d1362b0a80379da59d8aaf82c0b",
@@ -211,6 +211,6 @@
     "packages/relay-skill/src/skill.md": "5de831c834b3e5b5523af2ce6e91003ce7072018d49cfe0997c18cd8f08b3024",
     "packages/relay-skill/turbo.json": "26d8949a082f2c10ca635cfdd879d557ca49e9510d53f92590f1fc542179209a",
     "packages/server-runtime/docs/API.md": "f55fa2e6246560c9da01fa4796d1a27a8a3a72789e1a869bd5edd9a2c2f48791",
-    "pnpm-lock.yaml": "9acb36167ffb3f831fd4e443bd53b53ffe7427b901c3b0491268b60576ceb85c"
+    "pnpm-lock.yaml": "bbd4c930d56d8cf05e3bfed71b41dcadc58b4f25069a94ab298992c7a3bbe728"
   }
 }

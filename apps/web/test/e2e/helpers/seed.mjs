@@ -215,3 +215,31 @@ export async function seedBreadth(api) {
   });
   return { groups };
 }
+
+/**
+ * Паспорт и каталог досок больше одной страницы (50): продуктовая, `count` приложений
+ * `catalog1…` и инфраструктурная доски.
+ */
+export async function seedCatalog(api, { name, count }) {
+  await api.post("/product/records", {
+    action: "create",
+    fields: {
+      kind: "passport",
+      name,
+      summary: "Каталог из нескольких страниц.",
+      description: "Описание каталога.",
+    },
+  });
+  for (let index = 1; index <= count; index += 1)
+    await api.post("/product/records", {
+      action: "create",
+      fields: {
+        kind: "application",
+        name: `Каталог ${index}`,
+        slug: `catalog${index}`,
+        summary: "",
+        description: "Проверка второй страницы каталога досок",
+        type: "frontend",
+      },
+    });
+}

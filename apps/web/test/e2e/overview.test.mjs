@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { createBrowser } from "./helpers/browser.mjs";
 import { CLEAR_FAULT_PATH, startControlProxy } from "./helpers/proxy.mjs";
-import { seedBreadth, seedProject } from "./helpers/seed.mjs";
+import { seedBreadth, seedCatalog, seedProject } from "./helpers/seed.mjs";
 import {
   assertBuilt,
   createWorkspace,
@@ -36,6 +36,7 @@ let alpha;
 let beta;
 let gamma;
 let delta;
+let epsilon;
 let alphaApi;
 let gammaApi;
 let seeded;
@@ -95,7 +96,7 @@ const createTask = (title, column = "inbox") =>
 before(async () => {
   await assertBuilt();
   await mkdir(screenshots, { recursive: true });
-  workspace = await createWorkspace(["alpha", "beta", "gamma", "delta"]);
+  workspace = await createWorkspace(["alpha", "beta", "gamma", "delta", "epsilon"]);
   webPort = await freePort();
   serverPort = await freePort();
   server = await startRelayServer({
@@ -112,6 +113,7 @@ before(async () => {
   beta = byKey.beta;
   gamma = byKey.gamma;
   delta = byKey.delta;
+  epsilon = byKey.epsilon;
   gammaApi = relayApi(() => server.url, gamma.id);
   breadth = await seedBreadth(gammaApi);
   alphaApi = relayApi(() => server.url, alpha.id);
@@ -812,6 +814,135 @@ test("O-07/F2: доски раскрываются до полного ката�
   );
   await browser.command("click", `ul[aria-label="Сводные показатели"] a[href="#overview-tasks"]`);
   await browser.waitFor(`location.hash === '#overview-tasks' && location.pathname === ${q(base)}`);
+});
+
+test("O-18/F3: SSE сохраняет вторую страницу досок, фокус и прокрутку; новая версия дочитывается", async () => {
+  const api = relayApi(() => server.url, epsilon.id);
+  await seedCatalog(api, { name: "Эпсилон", count: 51 });
+  const base = `/projects/${encodeURIComponent(epsilon.slug)}`;
+  const boardsBlock = `document.getElementById('overview-boards')`;
+  const navigationBoards = `[...document.querySelectorAll('[role="group"][aria-label="Доски и задачи"] a')].map((a) => a.getAttribute('href'))`;
+  const snapshot = `({ links: ${boardLinks}, text: ${boardsBlock}.innerText, focus: document.activeElement?.getAttribute('href') ?? document.activeElement?.tagName, scrollY: Math.round(scrollY), top: Math.round(${boardsBlock}.querySelector('a[href$="/boards/infrastructure"]').getBoundingClientRect().top) })`;
+  /**
+   * Ждёт, пока после изменения каталог перечитан целиком: начатое позже `since` чтение
+   * второй страницы завершено и ни одно чтение досок проекта не выполняется.
+   */
+  const boardsRereadAfter = (since) =>
+    until(
+      () => {
+        const reads = proxy.boardReads(epsilon.id, since);
+        return (
+          reads.some((read) => read.query.get("offset") === "50" && read.doneAt !== null) &&
+          reads.every((read) => read.doneAt !== null)
+        );
+      },
+      { timeout: 20_000, message: "перечитывание второй страницы досок" },
+    );
+
+  await browser.viewport(1440, 1000);
+  await browser.open(overviewUrl(epsilon));
+  await browser.waitFor(
+    `${mainText}.includes('Показать все доски: 53') && ${freshness} === 'live'`,
+  );
+  await browser.command("click", `#overview-boards button[aria-expanded="false"]`);
+  await browser.waitFor(`${boardLinks}.length === 50`);
+  await browser.command("find", "role", "button", "click", "--name", "Загрузить ещё доски");
+  await browser.waitFor(
+    `${boardLinks}.length === 53 && ${boardsBlock}.innerText.includes('Показано 53 из 53')`,
+  );
+  const target = `#overview-boards a[href$="/boards/infrastructure"]`;
+  await browser.eval(
+    `(() => { const link = document.querySelector(${q(target)}); link.scrollIntoView({ block: 'center' }); link.focus(); return true; })()`,
+  );
+  const initial = await browser.eval(snapshot);
+  assert.equal(initial.focus, `${base}/boards/infrastructure`);
+  assert.equal(new Set(initial.links).size, 53, "дубли в каталоге");
+  // Навигация проекта читает тот же кеш и видит обе страницы.
+  assert.equal((await browser.eval(navigationBoards)).length, 53);
+
+  /** Состояние раскрытого каталога не изменилось после фонового обновления. */
+  const assertPreserved = async (label, expectedLinks) => {
+    const current = await browser.eval(snapshot);
+    assert.deepEqual(current.links, expectedLinks, `${label}: состав или порядок досок`);
+    assert.match(
+      current.text,
+      new RegExp(`Показано ${expectedLinks.length} из ${expectedLinks.length}`),
+    );
+    assert.equal(current.focus, initial.focus, `${label}: фокус`);
+    assert(
+      Math.abs(current.scrollY - initial.scrollY) <= 2,
+      `${label}: прокрутка ${initial.scrollY} → ${current.scrollY}`,
+    );
+    assert(
+      Math.abs(current.top - initial.top) <= 2,
+      `${label}: положение ссылки ${initial.top} → ${current.top}`,
+    );
+  };
+
+  // Изменение только паспорта: каталог и его версия прежние, обе страницы перечитаны.
+  const passport = (await api.get("/product/state")).records.find(
+    (record) => record.fields.kind === "passport",
+  );
+  const passportAt = Date.now();
+  await api.post("/product/records", {
+    action: "update",
+    id: passport.id,
+    ifRevision: passport.revision,
+    fields: { ...passport.fields, summary: "Паспорт обновлён во время чтения каталога" },
+  });
+  await browser.waitFor(`${mainText}.includes('Паспорт обновлён во время чтения каталога')`);
+  await boardsRereadAfter(passportAt);
+  await assertPreserved("паспорт", initial.links);
+
+  // Изменение задачи на доске второй страницы.
+  const taskAt = Date.now();
+  await api.post("/board-tasks", {
+    board: "catalog51",
+    title: "Эпсилон: задача",
+    column: "review",
+  });
+  await browser.waitFor(`${metric("Задачи")} === 1`);
+  await boardsRereadAfter(taskAt);
+  await assertPreserved("задача", initial.links);
+
+  // Новая версия каталога: страницы перечитываются от первой с новой версией, без дублей и пропусков.
+  const catalogAt = Date.now();
+  await api.post("/product/records", {
+    action: "create",
+    fields: {
+      kind: "application",
+      name: "Каталог 52",
+      slug: "catalog52",
+      summary: "",
+      description: "Новая доска после раскрытия",
+      type: "frontend",
+    },
+  });
+  await browser.waitFor(`${boardLinks}.length === 54`);
+  await boardsRereadAfter(catalogAt);
+  const reads = proxy.boardReads(epsilon.id, catalogAt);
+  assert(
+    reads.every((read) => read.status === 200),
+    "продолжение прочитано с несовместимой версией",
+  );
+  const expected = [...initial.links];
+  expected.splice(expected.indexOf(`${base}/boards/infrastructure`), 0, `${base}/boards/catalog52`);
+  const updated = await browser.eval(snapshot);
+  assert.deepEqual(
+    [...updated.links].sort(),
+    [...expected].sort(),
+    "дубли или пропуски после смены версии",
+  );
+  assert.match(updated.text, /Показано 54 из 54/);
+  assert.equal(updated.focus, initial.focus, "фокус после смены версии");
+  assert(
+    Math.abs(updated.top - initial.top) <= 60,
+    `положение ссылки ${initial.top} → ${updated.top}`,
+  );
+  // Второй потребитель общего кеша видит актуальный каталог.
+  await browser.waitFor(`${navigationBoards}.includes(${q(`${base}/boards/catalog52`)})`);
+  assert.equal((await browser.eval(navigationBoards)).length, 54);
+  assert.deepEqual(await browser.errors().then((data) => data.errors ?? []), []);
 });
 
 test("O-05/O-06: архив, закрытые планы, completedNotReady и закрытые релизы видны в Web", async () => {
