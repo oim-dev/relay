@@ -30,8 +30,21 @@ const isolatedEnv = (overrides = {}) => {
   const env = { ...process.env };
   for (const key of ["RELAY_CONFIG", "RELAY_SERVER_URL", "RELAY_PORT", "RELAY_API_URL", "INIT_CWD"])
     delete env[key];
-  return { ...env, RELAY_ACTOR: "web-e2e", ...overrides };
+  // В CI (`CI` в окружении) Vite и другие утилиты раскрашивают вывод; строки готовности
+  // и диагностика должны оставаться простым текстом.
+  delete env.FORCE_COLOR;
+  return { ...env, NO_COLOR: "1", RELAY_ACTOR: "web-e2e", ...overrides };
 };
+
+/** Удаляет ANSI-последовательности, если процесс всё же раскрасил вывод. */
+const stripAnsi = (text) => text.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "");
+
+/** Хвост вывода процесса для диагностики. */
+const tail = (text, limit = 4_000) =>
+  text.length > limit ? `…${text.slice(text.length - limit)}` : text;
+
+/** Предел ожидания готовности процесса; на CI с 2 vCPU запуск занимает секунды. */
+const startTimeout = 60_000;
 
 /** Проверяет наличие сборок Server и CLI, без которых harness не запускается. */
 export async function assertBuilt() {
@@ -135,47 +148,96 @@ process.once("exit", () => {
   for (const child of children) child.kill("SIGKILL");
 });
 
-/** Запускает процесс и ожидает строку готовности в stdout. */
-const spawnReady = (command, args, options, isReady) => {
+/** Останавливает процесс: SIGTERM, затем SIGKILL через 10 с; ждёт фактического выхода. */
+const stopChild = async (child, exit) => {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
+  await exit;
+  clearTimeout(timer);
+};
+
+/**
+ * Останавливает все ещё живые процессы harness, в том числе не дошедшие до готовности.
+ * Вызывается в `after` последним шагом, чтобы `node --test` мог завершиться.
+ */
+export async function stopAllProcesses() {
+  await Promise.all([...children].map(({ child, exit }) => stopChild(child, exit)));
+}
+
+/**
+ * Запускает процесс и ожидает готовности по stdout.
+ * При сбое процесс останавливается, а ошибка содержит команду, код выхода и хвосты вывода.
+ * @param {string} name Название шага для диагностики.
+ */
+const spawnReady = (name, command, args, options, isReady) => {
   const child = spawn(command, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
-  children.add(child);
-  child.once("exit", () => children.delete(child));
+  const exit = new Promise((resolve) => {
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+    child.once("error", (error) => resolve({ code: null, signal: null, error }));
+  });
+  const entry = { child, exit };
+  children.add(entry);
+  void exit.then(() => children.delete(entry));
   let output = "";
   let errors = "";
-  const exit = new Promise((resolve) =>
-    child.once("exit", (code, signal) => resolve({ code, signal })),
-  );
+  const describe = (reason) =>
+    new Error(
+      [
+        `${name}: ${reason}`,
+        `команда: ${[command, ...args].join(" ")}`,
+        `cwd: ${options.cwd}`,
+        `stdout (хвост):\n${tail(output) || "<пусто>"}`,
+        `stderr (хвост):\n${tail(errors) || "<пусто>"}`,
+      ].join("\n"),
+    );
   const ready = new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void stopChild(child, exit).then(() => reject(error));
+    };
     const timer = setTimeout(
-      () => reject(new Error(`Процесс не запустился\n${output}\n${errors}`)),
-      60_000,
+      () => fail(describe(`нет готовности за ${startTimeout / 1000} с`)),
+      startTimeout,
     );
     child.stdout.setEncoding("utf8").on("data", (text) => {
-      output += text;
-      const value = isReady(output);
+      output += stripAnsi(text);
+      if (settled) return;
+      let value;
+      try {
+        value = isReady(output);
+      } catch (error) {
+        fail(describe(`неразборчивая строка готовности: ${error.message}`));
+        return;
+      }
       if (value !== undefined) {
+        settled = true;
         clearTimeout(timer);
         resolve(value);
       }
     });
     child.stderr.setEncoding("utf8").on("data", (text) => {
-      errors += text;
+      errors += stripAnsi(text);
     });
-    child.once("exit", () => {
-      clearTimeout(timer);
-      reject(new Error(`Процесс завершился до готовности\n${output}\n${errors}`));
-    });
+    void exit.then(({ code, signal, error }) =>
+      fail(
+        describe(
+          error
+            ? `не запустился: ${error.message}`
+            : `завершился до готовности (код ${code}, сигнал ${signal})`,
+        ),
+      ),
+    );
   });
   return {
     child,
     ready,
-    async stop() {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      child.kill("SIGTERM");
-      const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
-      await exit;
-      clearTimeout(timer);
-    },
+    /** Текущие хвосты вывода для диагностики упавшего теста. */
+    logs: () => `stdout:\n${tail(output)}\nstderr:\n${tail(errors)}`,
+    stop: () => stopChild(child, exit),
   };
 };
 
@@ -185,6 +247,7 @@ const spawnReady = (command, args, options, isReady) => {
  */
 export async function startRelayServer({ config, cwd, port, webPort }) {
   const processHandle = spawnReady(
+    "Relay Server",
     process.execPath,
     [serverBinary, "--config", config, "--port", String(port), "--format", "json"],
     { cwd, env: isolatedEnv({ RELAY_WEB_PORT: String(webPort) }) },
@@ -195,7 +258,7 @@ export async function startRelayServer({ config, cwd, port, webPort }) {
     },
   );
   const url = await processHandle.ready;
-  return { url, stop: processHandle.stop };
+  return { url, stop: processHandle.stop, logs: processHandle.logs };
 }
 
 /**
@@ -204,6 +267,7 @@ export async function startRelayServer({ config, cwd, port, webPort }) {
  */
 export async function startWeb({ port, apiUrl }) {
   const processHandle = spawnReady(
+    "Vite",
     process.execPath,
     [
       viteBinary,
@@ -220,8 +284,13 @@ export async function startWeb({ port, apiUrl }) {
   );
   await processHandle.ready;
   const url = `http://127.0.0.1:${port}`;
-  await until(async () => (await fetch(url)).ok, { message: "Vite отвечает" });
-  return { url, stop: processHandle.stop };
+  try {
+    await until(async () => (await fetch(url)).ok, { message: "Vite отвечает" });
+  } catch (error) {
+    await processHandle.stop();
+    throw new Error(`${error.message}\n${processHandle.logs()}`);
+  }
+  return { url, stop: processHandle.stop, logs: processHandle.logs };
 }
 
 /** Клиент REST собственного сервера для подготовки и изменения данных проекта. */

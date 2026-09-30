@@ -15,6 +15,7 @@ import {
   runLocalCli,
   startRelayServer,
   startWeb,
+  stopAllProcesses,
   until,
 } from "./helpers/stack.mjs";
 
@@ -93,51 +94,93 @@ const moveTask = async (id, column) =>
 const createTask = (title, column = "inbox") =>
   alphaApi.post("/board-tasks", { board: "product", title, column });
 
+/**
+ * Шаг подъёма стенда: сбой сразу печатается в stderr с названием шага и выводом процессов,
+ * не дожидаясь итоговой сводки `node --test`.
+ */
+const setupStep = async (name, action) => {
+  try {
+    return await action();
+  } catch (error) {
+    const logs = [
+      server?.logs && `Relay Server:\n${server.logs()}`,
+      web?.logs && `Vite:\n${web.logs()}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    console.error(
+      `\n[web-e2e] Стенд не поднят на шаге «${name}»:\n${error?.stack ?? error}${logs ? `\n${logs}` : ""}\n`,
+    );
+    throw error;
+  }
+};
+
 before(async () => {
-  await assertBuilt();
+  await setupStep("проверка сборок", assertBuilt);
   await mkdir(screenshots, { recursive: true });
-  workspace = await createWorkspace(["alpha", "beta", "gamma", "delta", "epsilon"]);
+  workspace = await setupStep("временный workspace", () =>
+    createWorkspace(["alpha", "beta", "gamma", "delta", "epsilon"]),
+  );
   webPort = await freePort();
   serverPort = await freePort();
-  server = await startRelayServer({
-    config: workspace.config,
-    cwd: workspace.root,
-    port: serverPort,
-    webPort,
-  });
-  proxy = await startControlProxy(server.url);
-  web = await startWeb({ port: webPort, apiUrl: proxy.url });
-  const registry = await (await fetch(`${server.url}/api/v1/projects`)).json();
-  const byKey = Object.fromEntries(registry.data.projects.map((project) => [project.key, project]));
-  alpha = byKey.alpha;
-  beta = byKey.beta;
-  gamma = byKey.gamma;
-  delta = byKey.delta;
-  epsilon = byKey.epsilon;
-  gammaApi = relayApi(() => server.url, gamma.id);
-  breadth = await seedBreadth(gammaApi);
-  alphaApi = relayApi(() => server.url, alpha.id);
-  seeded = await seedProject(alphaApi, { name: "Альфа", long: true });
-  await relayApi(() => server.url, beta.id).post("/product/records", {
-    action: "create",
-    fields: {
-      kind: "passport",
-      name: "Бета",
-      summary: "",
-      description: "Описание беты без краткой summary.",
-    },
+  server = await setupStep("запуск Relay Server", () =>
+    startRelayServer({
+      config: workspace.config,
+      cwd: workspace.root,
+      port: serverPort,
+      webPort,
+    }),
+  );
+  proxy = await setupStep("управляющий прокси", () => startControlProxy(server.url));
+  web = await setupStep("запуск Vite", () => startWeb({ port: webPort, apiUrl: proxy.url }));
+  await setupStep("данные проектов", async () => {
+    const registry = await (await fetch(`${server.url}/api/v1/projects`)).json();
+    const byKey = Object.fromEntries(
+      registry.data.projects.map((project) => [project.key, project]),
+    );
+    alpha = byKey.alpha;
+    beta = byKey.beta;
+    gamma = byKey.gamma;
+    delta = byKey.delta;
+    epsilon = byKey.epsilon;
+    gammaApi = relayApi(() => server.url, gamma.id);
+    breadth = await seedBreadth(gammaApi);
+    alphaApi = relayApi(() => server.url, alpha.id);
+    seeded = await seedProject(alphaApi, { name: "Альфа", long: true });
+    await relayApi(() => server.url, beta.id).post("/product/records", {
+      action: "create",
+      fields: {
+        kind: "passport",
+        name: "Бета",
+        summary: "",
+        description: "Описание беты без краткой summary.",
+      },
+    });
   });
   browser = createBrowser(`tasks-web-overview-${process.pid}`);
-  await browser.viewport(1440, 1000);
-  await browser.media("light");
+  await setupStep("запуск браузера agent-browser", async () => {
+    await browser.viewport(1440, 1000);
+    await browser.media("light");
+  });
 });
 
 after(async () => {
-  await browser?.close().catch(() => undefined);
-  await web?.stop();
-  await proxy?.close();
-  await server?.stop();
-  await workspace?.remove();
+  // Каждый шаг уборки независим: сбой одного не оставляет живыми остальные ресурсы.
+  const cleanup = [
+    ["сессия agent-browser", () => browser?.close()],
+    ["Vite", () => web?.stop()],
+    ["прокси", () => proxy?.close()],
+    ["Relay Server", () => server?.stop()],
+    ["оставшиеся процессы", stopAllProcesses],
+    ["временный workspace", () => workspace?.remove()],
+  ];
+  for (const [name, action] of cleanup) {
+    try {
+      await action();
+    } catch (error) {
+      console.error(`[web-e2e] Уборка «${name}» не удалась: ${error?.message ?? error}`);
+    }
+  }
   console.log(`Измерения: ${JSON.stringify(measurements)}`);
 });
 
