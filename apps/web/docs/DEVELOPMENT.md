@@ -29,8 +29,10 @@ RELAY_CONFIG=/absolute/path/to/project/.relay/config.json pnpm run dev
 ```
 
 Для workspace передайте путь к `relay.workspace.json`. Без `RELAY_CONFIG`
-корневые `dev` и `dev:server` используют `apps/playground/relay.workspace.json`:
-работа в UI меняет подключённые проектные данные, а не изолированный мок.
+корневые `dev` и `dev:server` используют локальный тестовый проект
+`apps/playground/.relay/config.json`; его нужно заранее инициализировать, запуск
+не создаёт данные. Работа в UI меняет подключённые проектные данные, а не изолированный мок.
+Подробнее — в [инструкции разработки](../../../scripts/README.md#запуск-из-корня-репозитория).
 Инициализация и подключение проекта — в [начале работы](../../../docs/guides/GETTING_STARTED.md),
 параметры — в [конфигурации runtime](../../../packages/project-runtime/docs/CONFIGURATION.md).
 
