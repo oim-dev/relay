@@ -105,6 +105,10 @@ project-runtime, Web). Новое обязательное поле резуль
 `blocker` у `blocker-affected` — адрес раскрытого блокера, у остальных метрик — `null`.
 Схема не проверяет связь `blocker` с метрикой и действительность курсора: это делает Core
 (`INVALID_ARGUMENT`, `UNKNOWN_METRIC`, `INVALID_CURSOR`, `VERSION_CONFLICT`, `NOT_FOUND`).
+Отсутствующая задача-блокер возвращает `NOT_FOUND` (exit 3) с `details`
+`{ parameter: "blocker", reference: "<переданный ID или ключ>" }`: по ним клиент отличает
+её от других `NOT_FOUND` — неизвестного маршрута или ресурса. `ApiFailure.error.details`
+остаётся `unknown` в общей схеме; форма гарантирована только для этого случая.
 
 `ApiSuccess<T>` допускает необязательное `meta`, но это не универсальное правило страниц.
 Общие сущности возвращают `offset`-продолжение через `nextOffset`/`version`, другие сценарии

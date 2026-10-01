@@ -3,6 +3,7 @@ export const OVERVIEW_METRIC_ERROR_CODE = {
   UNSUPPORTED: "OVERVIEW_METRIC_UNSUPPORTED",
   SNAPSHOT_CHANGED: "OVERVIEW_METRIC_SNAPSHOT_CHANGED",
   BLOCKER_NOT_FOUND: "OVERVIEW_METRIC_BLOCKER_NOT_FOUND",
+  PROJECT_UNAVAILABLE: "OVERVIEW_METRIC_PROJECT_UNAVAILABLE",
   STORAGE_FAILURE: "OVERVIEW_METRIC_STORAGE_FAILURE",
   INVALID_RESPONSE: "OVERVIEW_METRIC_INVALID_RESPONSE",
   TEMPORARILY_UNAVAILABLE: "OVERVIEW_METRIC_TEMPORARILY_UNAVAILABLE",
@@ -13,6 +14,7 @@ export type OverviewMetricErrorDetails =
   | Readonly<{ code: typeof OVERVIEW_METRIC_ERROR_CODE.UNSUPPORTED }>
   | Readonly<{ code: typeof OVERVIEW_METRIC_ERROR_CODE.SNAPSHOT_CHANGED }>
   | Readonly<{ code: typeof OVERVIEW_METRIC_ERROR_CODE.BLOCKER_NOT_FOUND }>
+  | Readonly<{ code: typeof OVERVIEW_METRIC_ERROR_CODE.PROJECT_UNAVAILABLE }>
   | Readonly<{
       code: typeof OVERVIEW_METRIC_ERROR_CODE.STORAGE_FAILURE;
       payload: Readonly<{ message: string }>;
@@ -45,6 +47,10 @@ export const createSnapshotChangedError = (): GetOverviewMetricError =>
 /** Задача-блокер больше не найдена: удалена или перенесена из проекта. */
 export const createBlockerNotFoundError = (): GetOverviewMetricError =>
   new OverviewMetricDomainError({ code: OVERVIEW_METRIC_ERROR_CODE.BLOCKER_NOT_FOUND });
+
+/** Проект не найден на сервере: отключён от workspace или удалён. */
+export const createMetricProjectUnavailableError = (): GetOverviewMetricError =>
+  new OverviewMetricDomainError({ code: OVERVIEW_METRIC_ERROR_CODE.PROJECT_UNAVAILABLE });
 
 /** Сервер не смог прочитать хранилище проекта. */
 export const createMetricStorageFailureError = (message: string): GetOverviewMetricError =>

@@ -748,8 +748,11 @@ test("M-T12: продолжение связано с метрикой, блок
   await assert.rejects(p.metric({ metric: "board-work", blocker: f.T6 }), {
     code: "INVALID_ARGUMENT",
   });
+  // details отличают отсутствующий блокер от NOT_FOUND маршрута и проекта.
   await assert.rejects(p.metric({ metric: "blocker-affected", blocker: "ZZZ-404" }), {
     code: "NOT_FOUND",
+    exitCode: 3,
+    details: { parameter: "blocker", reference: "ZZZ-404" },
   });
   await assert.rejects(p.metric({ metric: "board-work", cursor: "не курсор" }), {
     code: "INVALID_CURSOR",
@@ -915,7 +918,10 @@ test("M-T12: продолжение после удаления блокера �
     );
   }
   // Без курсора и версии удалённый блокер — обычная ошибка поиска задачи.
-  await assert.rejects(p.metric({ metric: "blocker-affected", blocker }), { code: "NOT_FOUND" });
+  await assert.rejects(p.metric({ metric: "blocker-affected", blocker }), {
+    code: "NOT_FOUND",
+    details: { parameter: "blocker", reference: blocker },
+  });
   // Блокер, которого не было в срезе курсора, при той же версии — чужой курсор.
   const other = await p.task("infrastructure", "ready");
   await p.task("product", "inbox", { dependencies: [other] });

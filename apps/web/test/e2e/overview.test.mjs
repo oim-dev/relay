@@ -1679,7 +1679,29 @@ test("M-T15: блокер удалён, пока видны прежние ст�
           .some((read) => read.metric === "blocker-affected" && read.status === 404),
       { message: "чтение затронутых задач удалённого блокера" },
     );
+    const notFoundRead = proxy
+      .metricReads(theta.id, deletedAt)
+      .find((read) => read.metric === "blocker-affected" && read.status === 404);
+    assert.equal(notFoundRead.query.get("blocker"), blocker.id);
     await browser.waitFor(`${affected}?.includes('Задача-блокер больше не найдена')`);
+    // Сообщение показано после обработки ответа 404: отсюда SWR отсчитывал бы retry.
+    const shownAt = Date.now();
+    // Сообщение — спокойное обновление состояния (status), а не тревога.
+    assert.equal(
+      await browser.eval(
+        `[...(document.getElementById([...document.querySelectorAll('main button')].find((item) => item.getAttribute('aria-label')?.endsWith(${q(` — ${blockerKey}`)}))?.getAttribute('aria-controls') ?? '')?.querySelectorAll('[role="status"]') ?? [])].some((item) => item.innerText.includes('Задача-блокер больше не найдена'))`,
+      ),
+      true,
+      "нет role=status с сообщением об исчезнувшем блокере",
+    );
+    // Отказ перечитывает обзор: после ответа 404 есть новое чтение обзора.
+    await until(
+      () =>
+        proxy
+          .overviewResponses(theta.id, notFoundRead.doneAt ?? notFoundRead.at)
+          .some((item) => !item.faulted),
+      { message: "перечитывание обзора после исчезновения блокера" },
+    );
     assert.doesNotMatch(await browser.eval(mainText), /не умеет раскрывать/);
     assert.equal(
       await browser.eval(
@@ -1687,6 +1709,26 @@ test("M-T15: блокер удалён, пока видны прежние ст�
       ),
       null,
       "исчезнувший блокер сообщён как сбой",
+    );
+    // Пока список затронутых задач смонтирован, повтора запроса нет на всём окне
+    // первого retry SWR: errorRetryInterval 3 с (DataProvider) × множитель до 2 = 6 с.
+    const RETRY_WINDOW_MS = 6_000 + 2_000;
+    const readsOfDeleted = () =>
+      proxy
+        .metricReads(theta.id, deletedAt)
+        .filter(
+          (read) => read.metric === "blocker-affected" && read.query.get("blocker") === blocker.id,
+        ).length;
+    const windowEnd = shownAt + RETRY_WINDOW_MS;
+    await until(() => readsOfDeleted() > 1 || Date.now() >= windowEnd, {
+      timeout: RETRY_WINDOW_MS + 5_000,
+      message: "окно retry SWR",
+    });
+    assert.equal(readsOfDeleted(), 1, "повторный запрос затронутых задач удалённого блокера");
+    assert.notEqual(
+      await browser.eval(affected),
+      null,
+      "список затронутых задач размонтирован раньше проверки",
     );
   } finally {
     proxy.releaseMetric(theta.id, "blocker-impact");
@@ -1700,7 +1742,82 @@ test("M-T15: блокер удалён, пока видны прежние ст�
   const text = await browser.eval(mainText);
   assert.doesNotMatch(text, /не умеет раскрывать/);
   assert.doesNotMatch(text, /Задача-блокер больше не найдена/);
+  // Исчезнувший блокер не запрашивается повторно: ровно одно чтение после удаления.
+  await settledReads(theta);
+  const affectedReads = proxy
+    .metricReads(theta.id, deletedAt)
+    .filter(
+      (read) => read.metric === "blocker-affected" && read.query.get("blocker") === blocker.id,
+    );
+  assert.equal(affectedReads.length, 1, "повторные чтения затронутых задач удалённого блокера");
   assert.deepEqual(await browser.errors().then((data) => data.errors ?? []), []);
+});
+
+test("M-T15: иной 404 списка затронутых задач не выдаётся за исчезнувший блокер", async () => {
+  const { tasks: t } = focusFixture;
+  await browser.viewport(1440, 1000);
+  await browser.media("light");
+  await browser.open(overviewUrl(theta));
+  const title = "Что задерживает работу";
+  await browser.waitFor(`${disclosure(title)}?.count >= 1 && ${freshness} === 'live'`);
+  // Оба блокера должны быть видны: подборка показывает не больше пяти.
+  const count = (await browser.eval(disclosure(title))).count;
+  if (count > 5) await expandFully(title, count);
+  const keyOf = (id) =>
+    browser.eval(
+      `[...document.querySelectorAll('main a')].find((a) => a.getAttribute('href')?.endsWith(${q(`/${id}`)}) && a.closest('section')?.querySelector(':scope > h3 > span')?.textContent === ${q(title)})?.querySelector('span')?.textContent`,
+    );
+  const affectedText = (key) =>
+    `(() => { const button = [...document.querySelectorAll('main button')].find((item) => item.getAttribute('aria-label')?.endsWith(${q(` — ${key}`)})); const list = document.getElementById(button?.getAttribute('aria-controls') ?? ''); return list ? list.innerText : null; })()`;
+  const cases = [
+    {
+      blocker: t.T9,
+      body: {
+        ok: false,
+        error: { code: "PROJECT_NOT_FOUND", message: "Проект не найден", exitCode: 3 },
+      },
+      expected: /Проект недоступен на сервере/,
+    },
+    {
+      // Отказ маршрутизации: тот же код NOT_FOUND, но без details блокера.
+      blocker: t.T11,
+      body: { ok: false, error: { code: "NOT_FOUND", message: "Маршрут или ресурс не найден" } },
+      expected: /не умеет раскрывать полные списки/,
+    },
+    {
+      // NOT_FOUND с деталями другого параметра — тоже не исчезнувший блокер.
+      blocker: t.T12,
+      body: {
+        ok: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "Не найдено",
+          exitCode: 3,
+          details: { parameter: "cursor", reference: "x" },
+        },
+      },
+      expected: /не умеет раскрывать полные списки/,
+    },
+  ];
+  try {
+    for (const { blocker, body, expected } of cases) {
+      const key = await keyOf(blocker);
+      assert(key, "блокер в подборке");
+      proxy.failMetric(theta.id, "blocker-affected", 404, body);
+      await clickVisible(
+        `main button[aria-label^=${q("Показать затронутые: ")}][aria-label$=${q(` — ${key}`)}]`,
+      );
+      await browser.waitFor(`new RegExp(${q(expected.source)}).test(${affectedText(key)} ?? '')`);
+      const text = await browser.eval(affectedText(key));
+      assert.match(text, expected, body.error.code);
+      assert.doesNotMatch(text, /Задача-блокер больше не найдена/, body.error.code);
+      proxy.restoreMetric(theta.id, "blocker-affected");
+      await clickVisible(`main button[aria-label=${q(`Скрыть затронутые задачи — ${key}`)}]`);
+    }
+  } finally {
+    proxy.restoreMetric(theta.id, "blocker-affected");
+  }
+  assert.doesNotMatch(await browser.eval(mainText), /Задача-блокер больше не найдена/);
 });
 
 test("M-T11/M-T15: без возможности сервера список не читается и объясняет несовместимость", async () => {

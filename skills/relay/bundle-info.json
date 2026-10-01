@@ -125,7 +125,7 @@
     "packages/core/src/application/product/catalog.ts": "2c88e489799355518c12a3483c1937fe5bf47acf52f4b1ad881d307e1e4e6ffe",
     "packages/core/src/application/product/content.ts": "3d0a1136e88a4f60d332ecd9cccc5109a849de664fb310e4766fc4ac5e27d113",
     "packages/core/src/application/product/model.ts": "04aa566cf29d5ad6bc2d81ebbe3fcbdd0a289ef62d31e432f1f9a1af21b5a068",
-    "packages/core/src/application/product/operator.ts": "93435a2d9b581028efbf5993c96e196d1b0e426d482b9cfc269cf47c5d78e072",
+    "packages/core/src/application/product/operator.ts": "a0879207336f26c063f3a61689e108e82c691f4d8807f90a16afcfea993f7551",
     "packages/core/src/application/product/overview.ts": "a72557a1f9e631089863643917a962b7d50448d90eb442faf74a19b09c0d7ea5",
     "packages/core/src/application/product/queries.ts": "3a40e2bd61d4a9a33a605e4d9592f4b7de34b9329a9eb713ef96c51b55a77516",
     "packages/core/src/application/product/service.ts": "d207f16056c0a4430bceb28d36754aa1ed7185cc34575356b498e8be1f0bcb98",

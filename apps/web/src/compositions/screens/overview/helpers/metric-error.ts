@@ -35,6 +35,12 @@ export const getMetricErrorMessage = (error: GetOverviewMetricError): MetricErro
         canRetry: false,
         isUpdate: true,
       };
+    case OVERVIEW_METRIC_ERROR_CODE.PROJECT_UNAVAILABLE:
+      return {
+        text: "Проект недоступен на сервере. Проверьте подключение проекта или выберите другой.",
+        canRetry: true,
+        isUpdate: false,
+      };
     case OVERVIEW_METRIC_ERROR_CODE.STORAGE_FAILURE:
       return {
         text: `Сервер не смог прочитать хранилище проекта: ${details.payload.message}`,

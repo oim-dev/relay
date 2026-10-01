@@ -10,8 +10,8 @@ export const CLEAR_FAULT_PATH = "/api/__e2e/overview-fault/clear";
  * Управляемый прокси между Vite и собственным Relay Server.
  *
  * Считает чтения обзора и открытые SSE-потоки по проектам, удерживает ответы обзора
- * и полных списков метрик до явного освобождения, подменяет ответы для проверки ошибок, вставляет heartbeat
- * и обрывает потоки. Недоступный upstream отвечает 502, как прокси разработки.
+ * и полных списков метрик до явного освобождения, подменяет ответы обзора, списка задач
+ * и метрик для проверки ошибок, вставляет heartbeat и обрывает потоки. Недоступный upstream отвечает 502, как прокси разработки.
  *
  * @param {string} target Адрес собственного сервера.
  */
@@ -50,6 +50,9 @@ export async function startControlProxy(target) {
   /** Удерживаемые метрики: `project metric` → доставки ответов, ждущие освобождения. */
   /** @type {Map<string, (() => void)[]>} */
   const heldMetrics = new Map();
+  /** Подменённые ответы метрик: `project metric` → статус и тело. */
+  /** @type {Map<string, {status: number, body: unknown}>} */
+  const metricFaults = new Map();
   /** Проекты, для которых контекст притворяется прежним сервером без метрик оператора. */
   const legacyContexts = new Set();
   /** @type {Set<import("node:net").Socket>} */
@@ -200,6 +203,12 @@ export async function startControlProxy(target) {
         read.doneAt = Date.now();
       });
       const holdKey = `${project} ${read.metric}`;
+      const metricFault = metricFaults.get(holdKey);
+      if (metricFault) {
+        outgoing.writeHead(metricFault.status, { "content-type": "application/json" });
+        outgoing.end(JSON.stringify(metricFault.body));
+        return;
+      }
       if (heldMetrics.has(holdKey)) {
         // Сервер отвечает сразу, удерживается только доставка ответа браузеру.
         forward(incoming, outgoing, undefined, (deliver) => {
@@ -309,6 +318,11 @@ export async function startControlProxy(target) {
       heldMetrics.delete(key);
       for (const deliver of queue) deliver();
     },
+    /** Отвечает на чтение полного списка метрики проекта заданным статусом и телом. */
+    failMetric: (project, metric, status, body) =>
+      metricFaults.set(`${project} ${metric}`, { status, body }),
+    /** Возвращает чтение полного списка метрики серверу. */
+    restoreMetric: (project, metric) => metricFaults.delete(`${project} ${metric}`),
     /** Чтения полных списков метрик оператора проекта: метрика, query, статус ответа. */
     metricReads: (project, since = 0) =>
       metricReads.filter((read) => read.project === project && read.at >= since),

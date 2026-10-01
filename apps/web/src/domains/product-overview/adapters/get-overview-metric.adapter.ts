@@ -4,6 +4,7 @@ import { ApiError, getProjectApi } from "infra/tasks-api";
 import {
   createBlockerNotFoundError,
   createMetricInvalidResponseError,
+  createMetricProjectUnavailableError,
   createMetricStorageFailureError,
   createMetricTemporarilyUnavailableError,
   createMetricUnsupportedError,
@@ -17,8 +18,15 @@ const METRICS_CAPABILITY = "relay-overview-metrics-v1";
 /** Размер страницы полного списка. */
 const PAGE_SIZE = 20;
 
-/** Форма отказа сервера: код и сообщение для человека. */
-const FAILURE_SCHEMA = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+/** Форма отказа сервера: код, сообщение для человека и необязательные детали. */
+const FAILURE_SCHEMA = z.object({
+  error: z.object({ code: z.string(), message: z.string(), details: z.unknown().optional() }),
+});
+/**
+ * Детали `NOT_FOUND`, которыми Core отличает отсутствующую задачу-блокер
+ * `blocker-affected` от других отказов с тем же кодом (маршрут, проект).
+ */
+const MISSING_BLOCKER_DETAILS_SCHEMA = z.object({ parameter: z.literal("blocker") });
 /** Объявленные возможности сервера; прежний сервер их не перечисляет. */
 const CONTEXT_SCHEMA = z.object({ capabilities: z.array(z.string()).optional() });
 
@@ -33,11 +41,13 @@ const toMetricError = (error: unknown, request: OverviewMetricRequest | null) =>
   const code = failure.success ? failure.data.error.code : null;
   // Продолжение прежнего среза больше недействительно: список перечитывается целиком.
   if (code === "VERSION_CONFLICT" || code === "INVALID_CURSOR") return createSnapshotChangedError();
-  // Маршрут метрики подтверждён возможностью сервера до запроса, поэтому 404 списка
-  // затронутых задач означает исчезнувший блокер (Core: NOT_FOUND), а не прежний сервер.
-  const isAffected = request?.metric === "blocker-affected";
-  if (code === "TASK_NOT_FOUND" || (isAffected && (code === "NOT_FOUND" || error.status === 404)))
-    return createBlockerNotFoundError();
+  if (code === "PROJECT_NOT_FOUND") return createMetricProjectUnavailableError();
+  // Несуществующий блокер Core сообщает как NOT_FOUND с details.parameter = "blocker".
+  const isMissingBlocker =
+    request?.metric === "blocker-affected" &&
+    code === "NOT_FOUND" &&
+    MISSING_BLOCKER_DETAILS_SCHEMA.safeParse(failure.data?.error.details).success;
+  if (isMissingBlocker) return createBlockerNotFoundError();
   if (code === "UNKNOWN_METRIC" || error.status === 404) return createMetricUnsupportedError();
   // Сбой хранилища сервер сообщает только как 500 с телом отказа. 502–504 отвечает
   // посредник (прокси, шлюз), когда сервер недоступен: это отсутствие связи.

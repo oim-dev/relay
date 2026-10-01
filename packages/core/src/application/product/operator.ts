@@ -339,7 +339,11 @@ export function operatorIndex(
       task = tasksById.get(resolved.ref.id)!;
     } catch (error) {
       if (error instanceof AppError && error.code === "ENTITY_NOT_FOUND")
-        throw new AppError("NOT_FOUND", "Задача-блокер не найдена в выбранном проекте", 3);
+        // details отличают отсутствующий блокер от других NOT_FOUND (маршрут, проект).
+        throw new AppError("NOT_FOUND", "Задача-блокер не найдена в выбранном проекте", 3, {
+          parameter: "blocker",
+          reference,
+        });
       throw error;
     }
     return { ...cards.taskRef(task), board: cards.boardRef(task) };
