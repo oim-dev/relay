@@ -62,8 +62,8 @@ export const TASK_SAVED_SCHEMA = z.object({
 /** Колонки новой модели отделены от настроек прежнего числового канбана. */
 export const KANBAN_COLUMNS = [
   { value: "inbox", label: "Входящие", color: "gray" },
-  { value: "ready", label: "К выполнению", color: "blue" },
-  { value: "in-progress", label: "В работе", color: "violet" },
+  { value: "ready", label: "К выполнению", color: "grape" },
+  { value: "in-progress", label: "В работе", color: "ultramarine" },
   { value: "review", label: "На проверке", color: "orange" },
   { value: "done", label: "Готово", color: "teal" },
 ] as const;
