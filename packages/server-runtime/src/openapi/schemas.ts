@@ -107,6 +107,9 @@ import {
   productContextSchema,
   productContextQuerySchema,
   productOverviewSchema,
+  productOverviewMetricSchema,
+  productOverviewMetricPageSchema,
+  productOverviewMetricPageQuerySchema,
   productListSchema,
   productListQuerySchema,
 } from "@relay/core/domain/product";
@@ -260,6 +263,10 @@ export const schemas = {
   ProductContext: productContextSchema,
   ProductContextQuery: productContextQuerySchema,
   ProductOverview: productOverviewSchema,
+  // Имя совпадает с enumName параметра пути metric: Swagger ссылается на эту схему.
+  ProductOverviewMetric: productOverviewMetricSchema,
+  ProductOverviewMetricPage: productOverviewMetricPageSchema,
+  ProductOverviewMetricPageQuery: productOverviewMetricPageQuerySchema,
   ProductList: productListSchema,
   ProductListQuery: productListQuerySchema,
   ValidationData: z.object({

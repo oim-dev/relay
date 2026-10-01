@@ -39,7 +39,7 @@ for (const scoped of [false, true])
           );
       }
     }
-    assert.equal(operations.size, 149);
+    assert.equal(operations.size, 151);
     for (const path of [
       "/api/v1/tasks",
       "/api/v1/board",
@@ -363,7 +363,66 @@ for (const scoped of [false, true])
       ),
       missing,
     );
-    assert.equal(visited.size, 52);
+    const plan = await request("POST", "/api/v1/plans", undefined, {
+      title: "План схемы обзора",
+      requestId: "overview-plan",
+    });
+    await request("POST", "/api/v1/releases", undefined, {
+      title: "Релиз схемы обзора",
+      version: "1.0.0",
+      planIds: [plan.data.id],
+      requestId: "overview-release",
+    });
+    const overview = await request("GET", "/api/v1/product/overview");
+    assert.equal(overview.data.snapshot.plans.total, 1);
+    assert.equal(overview.data.snapshot.releases.total, 1);
+    assert.ok(overview.data.snapshot.tasks.total > 0);
+    const overviewSchema = document.components!.schemas!.ProductOverview as SchemaObject;
+    assert.equal(overviewSchema.additionalProperties, false);
+    for (const field of ["productId", "version", "items", "readiness"])
+      assert(overviewSchema.required!.includes(field), `Прежнее поле обзора ${field}`);
+    for (const field of ["snapshotVersion", "generatedAt", "snapshot"])
+      assert(overviewSchema.required!.includes(field), `Новое поле обзора ${field}`);
+    const metricPath = "/api/v1/product/overview/metrics/{metric}";
+    const metrics = `/api/v1/product/overview/metrics`;
+    const unplanned = await request(
+      "GET",
+      metricPath,
+      `${metrics}/unplanned-work?limit=1&version=${overview.data.snapshotVersion}`,
+    );
+    assert.equal(unplanned.data.metric, "unplanned-work");
+    assert.equal(unplanned.data.snapshotVersion, overview.data.snapshotVersion);
+    const boardWork = await request("GET", metricPath, `${metrics}/board-work?limit=1`);
+    assert.ok(boardWork.data.total > 1 && boardWork.data.nextCursor);
+    await request(
+      "GET",
+      metricPath,
+      `${metrics}/board-work?limit=1&cursor=${encodeURIComponent(boardWork.data.nextCursor)}`,
+    );
+    const affected = await request(
+      "GET",
+      metricPath,
+      `${metrics}/blocker-affected?blocker=${otherCard.data.id}`,
+    );
+    assert.equal(affected.data.blocker.id, otherCard.data.id);
+    for (const [url, status, code] of [
+      [`${metrics}/unknown`, 400, "UNKNOWN_METRIC"],
+      [`${metrics}/board-work?blocker=${otherCard.data.id}`, 400, "INVALID_ARGUMENT"],
+      [`${metrics}/blocker-affected?blocker=TASK-MISSING-1`, 404, "NOT_FOUND"],
+      [`${metrics}/board-work?version=${"0".repeat(64)}`, 409, "VERSION_CONFLICT"],
+    ] as const)
+      assert.equal((await request("GET", metricPath, url, undefined, status)).error.code, code);
+    const metricParameter = operations
+      .get(
+        `GET ${scoped ? metricPath.replace("/api/v1/", "/api/v1/projects/{project}/") : metricPath}`,
+      )!
+      .parameters!.find((item) => !("$ref" in item) && item.name === "metric");
+    assert.deepEqual(metricParameter && "schema" in metricParameter && metricParameter.schema, {
+      $ref: "#/components/schemas/ProductOverviewMetric",
+    });
+    const metricSchema = document.components!.schemas!.ProductOverviewMetricPage as SchemaObject;
+    assert.equal(metricSchema.oneOf?.length, 9);
+    assert.equal(visited.size, 55);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
     assert(!("$ref" in sse) && sse.content?.["text/event-stream"]);
     const updateSchema = document.components!.schemas!.UpdateBoardTask as SchemaObject;

@@ -7,7 +7,40 @@ import { subscribeWorkspace } from "infra/workspace-events";
 import { getBoard, getBoards } from "../adapters/boards.adapter";
 import type { Board, BoardsPage } from "../types/boards.type";
 
-/** Изолирует страницы каталога по проекту и перечитывает после внешних изменений. */
+/** Окно объединения соседних уведомлений SSE. */
+const REFRESH_DELAY = 100;
+
+/**
+ * Перечитывает данные после внешних изменений и восстановления связи.
+ * Первый сигнал подписки отражает уже известное состояние: первичную загрузку выполняет SWR.
+ * Соседние уведомления объединяются в одно перечитывание.
+ */
+const useWorkspaceRefresh = (projectId: string, refresh: () => Promise<unknown>): void => {
+  useEffect(() => {
+    let isFirst = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeWorkspace(projectId, (signal) => {
+      if (isFirst) {
+        isFirst = false;
+        return;
+      }
+      if (signal.state !== "connected") return;
+      clearTimeout(timer);
+      timer = setTimeout(() => void refresh().catch(() => undefined), REFRESH_DELAY);
+    });
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [projectId, refresh]);
+};
+
+/**
+ * Изолирует страницы каталога по проекту и перечитывает после внешних изменений.
+ * Число загруженных страниц общее для всех потребителей проекта и при обновлении не сбрасывается:
+ * все страницы перечитываются заново от первой, продолжение берёт версию только что прочитанной
+ * предыдущей страницы, поэтому страницы разных версий не склеиваются.
+ */
 export const useBoards = (projectId: string): SWRInfiniteResponse<BoardsPage, Error> => {
   const query = useSWRInfinite<BoardsPage, Error>(
     (index: number, previous: BoardsPage | null) => {
@@ -18,17 +51,7 @@ export const useBoards = (projectId: string): SWRInfiniteResponse<BoardsPage, Er
       getBoards(project, offset, version),
     { revalidateAll: true, persistSize: false },
   );
-  const { mutate, setSize } = query;
-  useEffect(
-    () =>
-      subscribeWorkspace(projectId, (signal) => {
-        if (signal.state === "connected")
-          void setSize(1)
-            .then(() => mutate())
-            .catch(() => undefined);
-      }),
-    [projectId, mutate, setSize],
-  );
+  useWorkspaceRefresh(projectId, query.mutate);
   return query;
 };
 
@@ -37,13 +60,6 @@ export const useBoard = (projectId: string, slug: string): SWRResponse<Board, Er
   const query = useSWR<Board, Error>(slug ? ["board-info", projectId, slug] : null, () =>
     getBoard(projectId, slug),
   );
-  const { mutate } = query;
-  useEffect(
-    () =>
-      subscribeWorkspace(projectId, (signal) => {
-        if (signal.state === "connected") void mutate().catch(() => undefined);
-      }),
-    [projectId, mutate],
-  );
+  useWorkspaceRefresh(projectId, query.mutate);
   return query;
 };

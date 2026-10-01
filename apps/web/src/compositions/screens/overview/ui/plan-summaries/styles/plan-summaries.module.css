@@ -1,0 +1,64 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+
+  & li {
+    padding: 0.1875rem 0.625rem;
+    border-radius: 999px;
+    background: var(--tasks-tile);
+    white-space: nowrap;
+  }
+
+  & strong {
+    margin-left: 0.125rem;
+    color: var(--tasks-ink);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.warning {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--tasks-warning-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--tasks-warning-surface);
+  color: var(--tasks-warning);
+  font-size: 0.8125rem;
+  font-weight: 550;
+}
+
+.list {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Пустое состояние занимает свободную высоту карточки. */
+.empty {
+  flex: 1;
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border: 1px dashed var(--tasks-border-strong);
+  border-radius: 0.875rem;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+
+  & a {
+    color: var(--tasks-accent-ink);
+  }
+}

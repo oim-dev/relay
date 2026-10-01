@@ -1,0 +1,35 @@
+.root {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.125rem 0.75rem;
+  padding: 0.5625rem 0.875rem 0.625rem;
+  border-radius: 0.875rem;
+  background: var(--tasks-tile);
+  font-size: 0.8125rem;
+
+  & dt {
+    font-weight: 600;
+  }
+}
+
+.value {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}

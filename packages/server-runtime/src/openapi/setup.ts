@@ -88,6 +88,7 @@ export function setupOpenApi(app: INestApplication): void {
           "MoveBoardTask",
           "LinkBoardTask",
           "BoardTasksQuery",
+          "ProductOverviewMetricPageQuery",
         ].includes(name)
           ? "input"
           : "output",

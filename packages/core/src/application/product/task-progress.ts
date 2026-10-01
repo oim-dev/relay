@@ -1,7 +1,11 @@
 import type { BoardTaskRecord } from "../../domain/board-task.js";
 import type { ProductContract, ProductStatus } from "../../domain/product.js";
 import type { EntityRef } from "../../domain/entity-graph.js";
-import { taskCompletions, type CompletionTask } from "../board-tasks/completion.js";
+import {
+  taskCompletions,
+  type CompletionTask,
+  type TaskCompletion,
+} from "../board-tasks/completion.js";
 
 /** Минимальные сведения для подъёма готовности от реализации к её требованию. */
 type ImplementationTarget = Pick<ProductContract, "id" | "featureId" | "scenarioId" | "active"> & {
@@ -84,9 +88,10 @@ export function productTaskStatuses(
   tasks: (CompletionTask & Pick<BoardTaskRecord, "productLinks">)[],
   implementations: ImplementationTarget[] = [],
   scenarios: ScenarioTarget[] = [],
+  /** Уже посчитанное выполнение тех же задач в этом чтении; иначе считается здесь. */
+  completion: Map<string, TaskCompletion> = taskCompletions(tasks, "blocked"),
 ): Map<string, ProductStatus> {
   const directStatuses = new Map<string, ProductStatus>();
-  const completion = taskCompletions(tasks, "blocked");
   for (const task of tasks) {
     for (const link of task.productLinks) {
       const address = `${link.kind}:${link.id}`;

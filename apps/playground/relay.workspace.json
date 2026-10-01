@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "mode": "workspace",
-  "server": { "port": 4700, "url": "http://127.0.0.1:4700" },
-  "projects": {
-    "coffee-shop": { "path": "./coffee-shop" },
-    "p2p-rental": { "path": "./p2p-rental" }
-  }
-}

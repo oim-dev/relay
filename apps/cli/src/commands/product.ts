@@ -16,9 +16,24 @@ import {
   offsetQuery,
   pageResult,
   commandInvocation,
+  nativeQuery,
+  nativePageResult,
+  cursorType,
 } from "../command-kit.js";
 import { entitiesText, entityText, entitySavedText } from "../presentation/entities.js";
-import { productOverviewText, productLintText } from "../presentation/product.js";
+import {
+  productOverviewText,
+  productOverviewMetricText,
+  productLintText,
+} from "../presentation/product.js";
+import type {
+  ProductOverviewCommands,
+  ProductOverviewMetricCommands,
+  ProductOverviewMetricView,
+  ProductOverviewView,
+} from "../presentation/product.js";
+import { productOverviewMetrics } from "@relay/contracts/entities/product";
+import type { ProductOverviewMetric } from "@relay/contracts/entities/product";
 import { cardText } from "../presentation/common.js";
 import { registerEntityProgress } from "./progress.js";
 import { registerDocumentRelations, registerDocumentSections } from "./product-documents.js";
@@ -442,25 +457,132 @@ export function registerProduct(program: Command, runtime: Runtime): void {
   }
 }
 
+type OverviewOptions = { limit?: number; cursor?: string; metric?: string; blocker?: string };
+const overviewMetricsText = productOverviewMetrics.join(", ");
+
+/** Детализация метрики оператора: native cursor Backend связан с командой, метрикой, блокером и проектом. */
+async function overviewMetric(context: CommandContext, options: OverviewOptions) {
+  const command = ["product", "overview"];
+  const filters: { metric?: string | undefined; blocker?: string | undefined } = {
+    metric: options.metric,
+    blocker: options.blocker,
+  };
+  const controls = nativeQuery(context, options, command, filters, "snapshot");
+  const page = await context.backend.product.overviewMetric({
+    // Неизвестную метрику и лишний/отсутствующий блокер отклоняет Backend одинаково в local и HTTP.
+    metric: filters.metric as ProductOverviewMetric,
+    ...(filters.blocker === undefined ? {} : { blocker: filters.blocker }),
+    limit: controls.limit,
+    ...(controls.cursor === undefined ? {} : { cursor: controls.cursor }),
+  });
+  const read = (...args: string[]) => commandInvocation(context, args);
+  const commands: ProductOverviewMetricCommands = { overview: read("product", "overview") };
+  if (page.metric === "blocker-affected" && page.blocker)
+    commands.blocker = read("task", "get", page.blocker.id);
+  if (page.metric === "blocker-impact")
+    commands.affected = Object.fromEntries(
+      page.items.map((blocker) => [
+        blocker.id,
+        read("product", "overview", "--metric", "blocker-affected", "--blocker", blocker.id),
+      ]),
+    );
+  const data: ProductOverviewMetricView = { ...page, commands };
+  return {
+    data,
+    page: nativePageResult(context, command, filters, controls, page, "snapshot"),
+    text: (format: Parameters<typeof productOverviewMetricText>[1]) =>
+      productOverviewMetricText(data, format),
+  };
+}
+
 function registerProductReading(group: Command, runtime: Runtime) {
-  registerCommand<{ limit?: number; cursor?: string }>(group, runtime, {
+  registerCommand<OverviewOptions>(group, runtime, {
     name: "overview",
-    description: "Прочитать карту продукта",
-    details: "Постраничная карта; счётчики готовности относятся ко всему продукту.",
-    examples: [["npx @oim-dev/relay-cli product overview", "Познакомиться с продуктом"]],
-    configure: paging,
+    description: "Обзор состояния продукта и проекта",
+    details:
+      "Одно чтение согласованного среза: проект, паспорт, задачи по всем шести колонкам, текущая работа, проверка и блокеры с причинами, показатели работы, планы и релизы (собственный статус отдельно от фактической готовности состава), фичи, приложения, реализации, доски и документы. Подборки содержат не более 5 элементов и сообщают полное число и команду полного чтения. Показатели задач пересекаются и не складываются. Без --metric: --limit и --cursor листают только карту продуктовых записей; итоги от них не зависят. Продолжение действительно, пока срез не изменился (snapshotVersion): изменение задачи, плана, релиза, документа или продукта требует начать заново без --cursor. Поле version — версия продуктового состава для participation replace, а не проверка продолжения. Обзор только читает и не решает, какую задачу начинать или завершать.\n\n" +
+      "Показатели работы: очередь проверки по выполненным и оставшимся обязательствам, прямые блокеры незавершённой работы, работа in-progress и review вне открытых планов, незавершённая работа по доскам, открытые планы с выполненным составом, запланированные релизы с готовым составом и готовые завершённые планы вне релизов. Готовность обязательств позволяет рассмотреть завершение и не является внешней проверкой; работа вне открытых планов — сигнал, а не ошибка; блокеры считаются только напрямую.\n\n" +
+      `--metric <метрика> переключает команду на полный постраничный список одного показателя: ${overviewMetricsText}. Для blocker-affected обязателен --blocker с ID или ключом задачи-блокера; для остальных метрик --blocker запрещён. В этом режиме --limit (1–100, по умолчанию из настроек вывода) и --cursor листают элементы метрики; total от размера страницы не зависит. Курсор сохраняет проект, подключение, метрику, блокер и размер страницы; достаточно передать только --cursor. Изменение задачи, плана, релиза, доски, документа или продукта между страницами даёт VERSION_CONFLICT — начните заново без --cursor.`,
+    examples: [
+      ["npx @oim-dev/relay-cli product overview", "Понять состояние продукта и выбрать чтение"],
+      [
+        "npx @oim-dev/relay-cli product overview --limit 20 --format json",
+        "Полный машинный срез и первые 20 записей карты",
+      ],
+      [
+        "npx @oim-dev/relay-cli product overview --metric review-obligations-met",
+        "Все задачи на проверке, завершение которых можно рассмотреть",
+      ],
+      [
+        "npx @oim-dev/relay-cli product overview --metric blocker-impact --limit 10 --format json",
+        "Прямые блокеры: точные счётчики и команды состава",
+      ],
+      [
+        "npx @oim-dev/relay-cli product overview --metric blocker-affected --blocker PRODUCT-1",
+        "Все задачи, которые PRODUCT-1 задерживает напрямую",
+      ],
+    ],
+    configure: (command) =>
+      paging(command)
+        .option("--metric <metric>", `Полный список показателя: ${overviewMetricsText}`)
+        .option(
+          "--blocker <task>",
+          "ID или ключ задачи-блокера; только с --metric blocker-affected",
+        ),
     async run(context, input) {
+      // Курсор детализации сам восстанавливает метрику и блокер: достаточно одного --cursor.
+      if (input.options.metric !== undefined || cursorType(input.options.cursor) === "native")
+        return overviewMetric(context, input.options);
+      invariant(
+        input.options.blocker === undefined,
+        "INVALID_ARGUMENT",
+        "--blocker применяется только вместе с --metric blocker-affected",
+      );
       const command = ["product", "overview"];
       const query = offsetQuery(context, input.options, command, {});
       const overview = await context.backend.product.overview();
       invariant(
-        !query.version || query.version === overview.version,
+        !query.version || query.version === overview.snapshotVersion,
         "VERSION_CONFLICT",
-        "Продукт изменился. Начните overview без --cursor.",
+        "Срез проекта изменился после первой страницы: изменились задачи, планы, релизы, документы или продукт. Версия среза проверяет неизменность текущего состояния и не даёт доступа к историческому снимку. Начните product overview заново без --cursor.",
       );
       const next = query.offset + query.limit;
       const items = overview.items.slice(query.offset, next);
-      const data = {
+      const read = (...args: string[]) => commandInvocation(context, args);
+      const commands: ProductOverviewCommands = {
+        passport: read("product", "get"),
+        passportHelp: read("product", "create", "--help"),
+        progress: read("product", "progress"),
+        features: read("feature", "list"),
+        applications: read("application", "list"),
+        implementations: read("implementation", "list"),
+        boards: read("board", "list"),
+        tasks: read("task", "list"),
+        inProgress: read("task", "list", "--column", "in-progress"),
+        review: read("task", "list", "--column", "review"),
+        blocked: read("task", "list", "--readiness", "blocked"),
+        readyToStart: read("task", "list", "--readiness", "ready"),
+        plans: read("plan", "list"),
+        activePlans: read("plan", "list", "--status", "active"),
+        releases: read("release", "list"),
+        plannedReleases: read("release", "list", "--status", "planned"),
+        releasedReleases: read("release", "list", "--status", "released"),
+        documents: read("document", "list"),
+        pinnedDocuments: read("document", "list", "--pinned", "true", "--status", "active"),
+        sections: read("document", "section", "list"),
+        metrics: Object.fromEntries(
+          productOverviewMetrics
+            .filter((metric) => metric !== "blocker-affected")
+            .map((metric) => [metric, read("product", "overview", "--metric", metric)]),
+        ) as ProductOverviewCommands["metrics"],
+        blockerAffected: Object.fromEntries(
+          overview.snapshot.operator.blockerImpact.items.map((blocker) => [
+            blocker.id,
+            read("product", "overview", "--metric", "blocker-affected", "--blocker", blocker.id),
+          ]),
+        ),
+      };
+      const data: ProductOverviewView = {
         ...overview,
         items,
         readiness: overview.readiness.filter((entry) => items.some((item) => item.id === entry.id)),
@@ -471,11 +593,18 @@ function registerProductReading(group: Command, runtime: Runtime) {
         },
         total: overview.items.length,
         nextOffset: next < overview.items.length ? next : null,
+        commands,
       };
       return {
         data,
-        page: pageResult(context, command, {}, query, data),
-        text: (options) => productOverviewText(data, options),
+        // Продолжение карты защищает полный срез; прежний version в data не подменяется.
+        page: pageResult(context, command, {}, query, {
+          items,
+          total: data.total,
+          nextOffset: data.nextOffset,
+          version: overview.snapshotVersion,
+        }),
+        text: (options) => productOverviewText(data, options, query.offset),
       };
     },
   });

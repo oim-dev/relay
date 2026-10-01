@@ -13,6 +13,19 @@ import { ProductService } from "./service.js";
 import { productAddresses, resolveProductAddress } from "../../domain/product-addresses.js";
 import { assertProductKey } from "../../domain/product-addresses.js";
 import { productCatalog } from "./catalog.js";
+import { buildProductOverview, overviewSnapshotVersion, readOverviewSources } from "./overview.js";
+import { memoizedPlanning, operatorIndex, overviewCompletion } from "./operator.js";
+import { decodeCursor, encodeCursor, peekCursor } from "../../shared/cursor.js";
+import {
+  productOverviewMetricPageSchema,
+  productOverviewMetricQuerySchema,
+  productOverviewMetricSchema,
+} from "@relay/contracts/entities/product";
+import type {
+  ProductOverviewMetricPage,
+  ProductOverviewMetricQuery,
+} from "@relay/contracts/entities/product";
+import { z } from "zod";
 import { ProductRepository } from "../../storage/product.js";
 import {
   productEntitiesQuerySchema,
@@ -244,21 +257,99 @@ export class ProductQueries extends ProductService {
     });
   }
 
+  /**
+   * Прежняя карта продукта и общий срез проекта из одного чтения под блокировкой.
+   * Чтение не выполняет мутаций предметных данных; ошибка источника прерывает обзор.
+   */
   async overview(): Promise<ProductOverview> {
-    const state = await this.state();
-    return {
-      productId: state.productId,
-      version: state.version,
-      readiness: state.readiness,
-      items: state.records.map(({ id, key, revision, fields }) => ({
-        id,
-        ...(key ? { key } : {}),
-        revision,
-        kind: fields.kind,
-        name: "name" in fields ? fields.name : "Состав реализации",
-        summary: "summary" in fields ? fields.summary : "",
-      })),
-    };
+    return this.workspace.locked(async (owned) => {
+      const sources = await readOverviewSources(this.workspace, owned);
+      return buildProductOverview(sources, new Date().toISOString());
+    });
+  }
+
+  /**
+   * Страница полной выборки метрики оператора. Классификация та же, что в snapshot.operator;
+   * продолжение связано с проектом, метрикой, блокером и версией полного среза.
+   */
+  async overviewMetric(input: ProductOverviewMetricQuery): Promise<ProductOverviewMetricPage> {
+    const metric = (input as { metric?: unknown } | undefined)?.metric;
+    invariant(
+      productOverviewMetricSchema.safeParse(metric).success,
+      "UNKNOWN_METRIC",
+      `Неизвестная метрика обзора: ${String(metric)}. Допустимы: ${productOverviewMetricSchema.options.join(", ")}`,
+      2,
+    );
+    const query = parse(productOverviewMetricQuerySchema, input, "детализация метрики обзора");
+    invariant(
+      (query.metric === "blocker-affected") === (query.blocker !== undefined),
+      "INVALID_ARGUMENT",
+      query.metric === "blocker-affected"
+        ? "Для blocker-affected укажите blocker: ID или ключ задачи-блокера"
+        : `Параметр blocker применяется только к blocker-affected, а не к ${query.metric}`,
+      2,
+    );
+    return this.workspace.locked(async (owned) => {
+      const sources = await readOverviewSources(this.workspace, owned);
+      const snapshotVersion = overviewSnapshotVersion(sources);
+      const conflict = () =>
+        new AppError(
+          "VERSION_CONFLICT",
+          "Срез проекта изменился: изменились задачи, планы, релизы, доски, документы или продукт. Перечитайте обзор и начните детализацию с первой страницы.",
+          4,
+          { snapshotVersion },
+        );
+      if (query.version !== undefined && query.version !== snapshotVersion) throw conflict();
+      const index = operatorIndex(
+        sources,
+        overviewCompletion(sources),
+        memoizedPlanning(sources.planning),
+      );
+      const positionSchema = z.strictObject({
+        offset: z.number().int().positive(),
+        snapshotVersion: z.string(),
+      });
+      let blocker: ReturnType<typeof index.resolveTask> | null = null;
+      if (query.blocker !== undefined)
+        try {
+          blocker = index.resolveTask(query.blocker);
+        } catch (error) {
+          // Продолжение по курсору сначала сверяет версию среза: удалённый или
+          // переименованный блокер означает изменённый срез, а не неизвестную ссылку.
+          if (!(error instanceof AppError) || error.code !== "NOT_FOUND" || !query.cursor)
+            throw error;
+          const peeked = peekCursor(query.cursor, positionSchema);
+          if (peeked && peeked.snapshotVersion !== snapshotVersion) throw conflict();
+          throw new AppError("INVALID_CURSOR", "Курсор повреждён или относится к другому запросу");
+        }
+      const scope = {
+        op: "product-overview-metric",
+        projectId: sources.projectId ?? sources.settings.slug,
+        metric: query.metric,
+        blockerId: blocker?.id ?? null,
+      };
+      let offset = 0;
+      if (query.cursor !== undefined) {
+        const position = decodeCursor(query.cursor, scope, positionSchema);
+        if (position.snapshotVersion !== snapshotVersion) throw conflict();
+        offset = position.offset;
+      }
+      const items: unknown[] =
+        query.metric === "blocker-affected"
+          ? (index.affected.get(blocker!.id) ?? [])
+          : index.lists[query.metric];
+      const next = offset + query.limit;
+      return productOverviewMetricPageSchema.parse({
+        metric: query.metric,
+        blocker,
+        snapshotVersion,
+        generatedAt: new Date().toISOString(),
+        total: items.length,
+        items: items.slice(offset, next),
+        nextCursor:
+          next < items.length ? encodeCursor(scope, { offset: next, snapshotVersion }) : null,
+      });
+    });
   }
 
   async list(input: ProductListQuery = {}): Promise<ProductList> {

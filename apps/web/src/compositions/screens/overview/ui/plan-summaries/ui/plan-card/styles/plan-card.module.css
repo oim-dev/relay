@@ -1,0 +1,67 @@
+.root {
+  display: grid;
+  gap: 0.4375rem;
+  padding: 0.75rem 0.875rem 0.875rem;
+  border-radius: 1rem;
+  background: var(--tasks-tile);
+}
+
+.link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 1.5rem;
+  padding-block: 0.125rem;
+  color: var(--tasks-ink);
+  font-size: 0.9375rem;
+  text-decoration: none;
+
+  &:hover .title {
+    color: var(--tasks-accent-ink);
+    text-decoration: underline;
+  }
+}
+
+.key {
+  flex: none;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  font-weight: 550;
+}
+
+.title {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.description {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.ready {
+  margin: 0;
+  color: var(--tasks-success);
+  font-size: 0.75rem;
+  font-weight: 600;
+}

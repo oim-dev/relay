@@ -1,0 +1,119 @@
+.root {
+  display: grid;
+  gap: 1rem 2rem;
+  min-width: 0;
+
+  @media (--lg) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+}
+
+.identity {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.project {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.125rem 0.625rem;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.slug {
+  color: var(--tasks-soft);
+  font-weight: 400;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+
+  @media (--md) {
+    font-size: 2rem;
+  }
+}
+
+.summary {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--tasks-ink);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.875rem;
+
+  @media (--lg) {
+    flex-direction: column;
+    align-items: flex-end;
+    padding-top: 1.375rem;
+  }
+}
+
+.freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem 0.25rem 0.625rem;
+  border-radius: 999px;
+  background: var(--tasks-surface);
+  box-shadow: var(--tasks-card-shadow);
+  color: var(--tasks-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--tasks-success);
+
+  .freshness[data-freshness="refreshing"] &,
+  .freshness[data-freshness="connecting"] & {
+    background: var(--tasks-info);
+  }
+
+  .freshness[data-freshness="offline"] &,
+  .freshness[data-freshness="stale"] & {
+    background: var(--tasks-warning);
+  }
+
+  .freshness[data-freshness="storage-error"] & {
+    background: var(--tasks-danger);
+  }
+}
+
+.received {
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.passport {
+  flex: none;
+}

@@ -143,16 +143,17 @@ REST-удаление есть, но прямого метода удалени�
 Правила: [продукт](../domain/PRODUCT.md),
 [библиотека документов](../domain/DOCUMENTS.md).
 
-| Метод и путь                    | Действие; вход → данные ответа                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------- |
-| `GET /product/state`            | Полное согласованное состояние и готовность → `ProductState`                          |
-| `GET /product/overview`         | Компактная карта без полных текстов → `ProductOverview`                               |
-| `GET /product/records`          | Поиск записей; `ProductListQuery` → `ProductList`                                     |
-| `GET /product/entities`         | Карточки целей и реализаций; `ProductEntitiesQuery` → `ProductEntities`               |
-| `GET /product/entity`           | Одна продуктовая сущность с полным содержанием по `ref` → `ProductEntity`             |
-| `GET /product/context`          | Предметная подборка по `id`/`applicationId`; `ProductContextQuery` → `ProductContext` |
-| `POST /product/records`         | Создать/изменить запись; `ProductMutation` → `ProductSaved`                           |
-| `POST /product/implementations` | Изменить отдельную реализацию по её ревизии; `UpdateImplementation` → `ProductSaved`  |
+| Метод и путь                            | Действие; вход → данные ответа                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `GET /product/state`                    | Полное согласованное состояние и готовность → `ProductState`                               |
+| `GET /product/overview`                 | Обзор: карта продукта и согласованный срез проекта → `ProductOverview`                     |
+| `GET /product/overview/metrics/:metric` | Страница метрики оператора; `ProductOverviewMetricPageQuery` → `ProductOverviewMetricPage` |
+| `GET /product/records`                  | Поиск записей; `ProductListQuery` → `ProductList`                                          |
+| `GET /product/entities`                 | Карточки целей и реализаций; `ProductEntitiesQuery` → `ProductEntities`                    |
+| `GET /product/entity`                   | Одна продуктовая сущность с полным содержанием по `ref` → `ProductEntity`                  |
+| `GET /product/context`                  | Предметная подборка по `id`/`applicationId`; `ProductContextQuery` → `ProductContext`      |
+| `POST /product/records`                 | Создать/изменить запись; `ProductMutation` → `ProductSaved`                                |
+| `POST /product/implementations`         | Изменить отдельную реализацию по её ревизии; `UpdateImplementation` → `ProductSaved`       |
 
 `ProductMutation` содержит `action=create|update`, вариант `fields`, идентификатор
 обновляемой записи, проверку ревизии/версии согласно действию и метаданные запроса.
@@ -165,6 +166,75 @@ REST-удаление есть, но прямого метода удалени�
 `scope` заменяет выбранный состав одного приложения,
 а не отдельное диагностическое ребро; снятые реализации сохраняют адреса.
 Совместимые ручные отметки `status` не переопределяют вычисляемую готовность.
+
+`GET /product/overview` (scoped: `GET /projects/:project/product/overview`,
+operationId `getProductOverview` / `getProductOverviewForProject`) не принимает
+query-параметров. Смысл показателей, подборок и версий задан в
+[обзоре продукта](../domain/PRODUCT.md#обзор-состояния-продукта).
+Ответ `ProductOverview`:
+
+- `productId`, `version`, `items`, `readiness` — прежняя карта. `items` содержит все
+  записи продукта без полных текстов и без страниц; `version` — версия продуктового
+  состава, которую не меняют задачи, планы и релизы;
+- `snapshotVersion` — sha256 всех данных среза; не зависит от `generatedAt`;
+- `generatedAt` — время формирования ответа;
+- `snapshot` — `project`, `passport` (`state`: `missing`, `filled` или `no-summary`
+  с `excerpt`), `knowledge`, `boards`, `tasks`, `attention`, `documents`, `plans`,
+  `releases`, `operator`. Подборки имеют форму `{total, shown, hasMore, items}`,
+  `items` — не более 5. `operator` — метрики оператора M-01…M-06 (очередь проверки,
+  влияние блокеров, работа вне планов, доски, планы и подготовка выпуска).
+
+Все части ответа читаются одним согласованным чтением Core без записи. Ошибка любого
+источника возвращается ошибкой запроса, а не нулевыми счётчиками. Ответ не версионирует
+продолжение: клиент, который листает `items` частями, сам сравнивает `snapshotVersion`
+первого и повторного чтения. Local и scoped-путь возвращают одинаковый результат.
+
+`ProductOverview` дополнен обязательными полями `snapshotVersion`, `generatedAt`, `snapshot`
+и `snapshot.operator`. Для клиентов со строгой проверкой ответа это согласованное
+несовместимое изменение: Server, CLI, MCP и Web выпускаются и обновляются одной версией
+монорепозитория. Прежний клиент на новом сервере получает `INVALID_SERVER_RESPONSE`.
+Если HTTP Backend CLI/MCP получает обзор прежнего сервера без `snapshot` или без
+`snapshot.operator`, он возвращает `SERVER_INCOMPATIBLE` (exit 5) с просьбой обновить
+и перезапустить Relay Server той же версии.
+
+### Детализация метрик оператора
+
+`GET /product/overview/metrics/:metric` (scoped:
+`GET /projects/:project/product/overview/metrics/:metric`, operationId
+`getProductOverviewMetric` / `getProductOverviewMetricForProject`) возвращает страницу
+полной выборки той же классификации, что и подборки `snapshot.operator`. Сервер
+объявляет её возможностью `relay-overview-metrics-v1` в `GET /context`; клиент проверяет
+её до вызова и без неё сообщает `SERVER_INCOMPATIBLE`, а не 404 маршрута.
+
+`:metric` — `ProductOverviewMetric`: `review-obligations-met`, `review-obligations-open`,
+`blocker-impact`, `blocker-affected`, `unplanned-work`, `board-work`,
+`open-plans-complete`, `ready-releases`, `plans-outside-releases`. Query
+`ProductOverviewMetricPageQuery`:
+
+- `limit` — 1…100, по умолчанию 20;
+- `cursor` — `nextCursor` предыдущей страницы без изменений;
+- `version` — `snapshotVersion` отображаемого обзора, чтобы первая страница не
+  смешивалась с другим срезом;
+- `blocker` — ID или ключ задачи-блокера: обязателен для `blocker-affected` и запрещён
+  для остальных метрик.
+
+Ответ `ProductOverviewMetricPage` — вариант по `metric` с полями `blocker` (адрес
+блокера либо `null`), `snapshotVersion`, `generatedAt`, `total`, `items` в порядке
+метрики и `nextCursor` (`null` в конце). Пустая выборка — обычный ответ с `total: 0`;
+блокер, который больше ничего не задерживает, тоже даёт `total: 0`. В пустом проекте
+`board-work` перечисляет системные доски с нулевой работой.
+
+Продолжение защищено версией полного среза, а не продуктовой `version`. Курсор связан
+с проектом, метрикой и блокером. Если между страницами изменились задачи, этапы, планы,
+релизы, доски, документы или продукт либо `version` не совпадает с текущим срезом,
+ответ — `VERSION_CONFLICT` (409, exit 4): перечитайте обзор и начните детализацию
+с первой страницы. Ошибки: `UNKNOWN_METRIC` и `INVALID_ARGUMENT` (неуместный или
+отсутствующий `blocker`) — 400, `VALIDATION_ERROR` для неверного query, `INVALID_CURSOR`
+для чужого или повреждённого курсора — 400, `NOT_FOUND` для несуществующего блокера — 404.
+
+Актуальность обзора поддерживается [SSE](#sse): событие только сообщает об изменении,
+источником данных остаётся повторный `GET /product/overview`. Воспроизведения пропущенных
+событий нет; после переподключения обзор перечитывают целиком.
 
 Документ не требует отдельного `/documents`: создавайте/меняйте его через generic
 entities или `product/records`, читайте полное содержание через `entities/get`.
@@ -304,8 +374,10 @@ Core согласует документ и связи одной операци
 - `product/records` и `product/entities` возвращают `version`, **но не принимают её
   для продолжения**. Их offset-страницы не гарантируют общий снимок; строгая схема
   отклоняет лишний `version`. Перед записью перечитайте выбранную запись.
-- Полный `graph/context`, состояние продукта и компактный overview не нужно трактовать
+- Полный `graph/context`, состояние продукта и `product/overview` не нужно трактовать
   как первую страницу универсального списка.
+- `product/overview/metrics/:metric` использует непрозрачный `cursor`/`nextCursor`
+  и `version` полного среза; при `VERSION_CONFLICT` начинайте с первой страницы.
 
 При `ENTITIES_CHANGED`, `BOARD_CHANGED`, `PLANNING_CHANGED`, `PROGRESS_CHANGED` или
 `GRAPH_CHANGED` начинайте соответствующее чтение заново. Не склеивайте несовместимые страницы.
@@ -332,7 +404,7 @@ Core согласует документ и связи одной операци
 
 | HTTP | Типичный случай                                                                               | Следующее действие                                                    |
 | ---- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| 400  | Неверный ввод, `VALIDATION_ERROR`, `INVALID_CURSOR`, `RESPONSE_TOO_LARGE`                     | Исправить параметры; для большого ответа выбрать другой способ чтения |
+| 400  | Неверный ввод, `VALIDATION_ERROR`, `INVALID_CURSOR`, `UNKNOWN_METRIC`, `RESPONSE_TOO_LARGE`   | Исправить параметры; для большого ответа выбрать другой способ чтения |
 | 403  | Недопустимый Host/Origin                                                                      | Использовать разрешённый локальный адрес                              |
 | 404  | `ENTITY_NOT_FOUND`, `TASK_NOT_FOUND`, `PROJECT_NOT_FOUND`, неизвестный маршрут                | Проверить проект и адрес, не создавать замену автоматически           |
 | 409  | Ревизия/версия изменилась, предметный запрет, `RELATION_MANAGED`, `PLANNING_REFERENCE_IN_USE` | Перечитать данные и выполнить действие владельца                      |

@@ -107,18 +107,9 @@ for (const configuration of ["default", "relative"] as const)
           "packages/server-runtime/src/bootstrap.ts",
         ].map((path) => pathToFileURL(join(root, path)).href),
       );
-      const workspace = configuration === "default" ? "apps/playground/local" : "custom tasks";
-      const initialized = await initialize(join(root, workspace), "tasks");
-      if (configuration === "default") {
-        await writeFile(
-          join(root, "apps/playground/relay.workspace.json"),
-          JSON.stringify({ version: 1, mode: "workspace", projects: { local: { path: "local" } } }),
-        );
-      }
-      const apiPrefix =
-        configuration === "default"
-          ? `/api/v1/projects/${initialized.config.projectId}`
-          : "/api/v1";
+      const workspace = configuration === "default" ? "apps/playground" : "custom tasks";
+      await initialize(join(root, workspace), "tasks");
+      const apiPrefix = "/api/v1";
       const executable = process.env.npm_execpath;
       assert(executable, "Запускайте тест через pnpm run test:server");
       let pnpmCli = await realpath(executable);

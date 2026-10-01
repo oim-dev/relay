@@ -63,7 +63,7 @@ select,
 }
 
 ::selection {
-  background: var(--tasks-selected);
+  background: var(--tasks-selection);
   color: var(--tasks-ink);
 }
 

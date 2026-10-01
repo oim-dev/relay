@@ -29,7 +29,7 @@ Allowlist и разрешение orphan planning больше не нужны. 
 Проверка неизменности пользовательской базы и сохранности данных **на временной копии**:
 
 ```sh
-RELAY_MIGRATION_SOURCE=apps/playground/p2p-rental/.relay \
+RELAY_MIGRATION_SOURCE=/absolute/path/to/project/.relay \
   node --conditions=tasks-source --import tsx --test packages/core/test/playground-history-removal.test.ts
 ```
 

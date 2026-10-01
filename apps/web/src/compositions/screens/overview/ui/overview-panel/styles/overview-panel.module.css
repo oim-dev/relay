@@ -1,0 +1,87 @@
+.root {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1.125rem 1rem 1.25rem;
+  border-radius: 1.5rem;
+  background: var(--tasks-card);
+  /* Переход показателя к блоку не прячет заголовок под закреплённой шапкой проекта. */
+  scroll-margin-top: 5rem;
+
+  /* Главная карточка: градиент от тона акцента к холодному бирюзовому. */
+  &[data-tone="feature"] {
+    background: var(--tasks-card-feature);
+  }
+
+  @media (--md) {
+    padding: 1.375rem 1.5rem 1.5rem;
+  }
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.625rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
+
+  @media (--md) {
+    font-size: 1.25rem;
+  }
+}
+
+.total {
+  min-width: 1.875rem;
+  padding: 0.0625rem 0.5625rem;
+  border-radius: 999px;
+  background: var(--tasks-tile);
+  color: var(--tasks-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.5rem;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2rem;
+  margin-left: auto;
+  padding-inline: 0.75rem;
+  border-radius: 999px;
+  background: var(--tasks-tile);
+  color: var(--tasks-accent-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--tasks-accent-hover);
+    text-decoration: underline;
+  }
+}
+
+.description {
+  max-width: 44rem;
+  margin: -0.5rem 0 0;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.note {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+}

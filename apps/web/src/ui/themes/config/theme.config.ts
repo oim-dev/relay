@@ -16,6 +16,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import type { CSSVariablesResolver } from "@mantine/core";
+import progressClasses from "../styles/progress.module.css";
 
 /**
  * Согласует поверхности Mantine с графитовой палитрой и контрастом нейтральных действий.
@@ -72,30 +73,33 @@ export const theme = createTheme({
   headings: { fontFamily: "Inter Variable, Inter, system-ui, sans-serif", fontWeight: "650" },
   fontSizes: { xs: "0.75rem", sm: "0.8125rem", md: "0.875rem", lg: "1rem", xl: "1.125rem" },
   radius: { xs: "0.25rem", sm: "0.375rem", md: "0.5rem", lg: "0.75rem", xl: "1rem" },
+  // Единственный источник примитивных палитр: семантические роли в styles/variables.css
+  // ссылаются на них через --mantine-color-*, компоненты используют только роли --tasks-*.
   colors: {
+    // Нейтральная светлая шкала с лёгким розовым оттенком холста.
     gray: [
-      "#f7f7f5",
-      "#ededeb",
-      "#deded9",
-      "#c6c6c0",
-      "#b3b3ac",
-      "#96968f",
-      "#6e6e68",
-      "#53534f",
-      "#343432",
-      "#20201e",
+      "#f7f5f6",
+      "#f2f0f1",
+      "#e5e2e4",
+      "#d0cccf",
+      "#b1adb2",
+      "#8e8a8f",
+      "#6e6b71",
+      "#626166",
+      "#343236",
+      "#191919",
     ],
     dark: [
-      "#ededeb",
-      "#d1d1cd",
-      "#a3a3a0",
-      "#858580",
-      "#52524f",
-      "#333333",
-      "#292929",
-      "#202020",
-      "#1a1a1a",
-      "#161616",
+      "#f6f4f5",
+      "#d9d6da",
+      "#b8b5bb",
+      "#9d9aa2",
+      "#5c5a60",
+      "#3a383d",
+      "#2a292d",
+      "#202023",
+      "#1a1a1d",
+      "#141416",
     ],
     teal: [
       "#f1f8f3",
@@ -109,6 +113,32 @@ export const theme = createTheme({
       "#34503f",
       "#293e32",
     ],
+    // Акцент Relay — ультрамарин: светлая тема использует оттенок 6 (#3e5bff), тёмная — 4.
+    ultramarine: [
+      "#eef1ff",
+      "#dfe4ff",
+      "#bdc8ff",
+      "#98a9ff",
+      "#7a8fff",
+      "#5d75ff",
+      "#3e5bff",
+      "#2f47e0",
+      "#2537b3",
+      "#1b2a85",
+    ],
+    // Положительное состояние и фактическое выполнение.
+    jade: [
+      "#eef8f2",
+      "#d9efe2",
+      "#b3dfc6",
+      "#8ad1ab",
+      "#6bc59b",
+      "#44a67a",
+      "#328b64",
+      "#287754",
+      "#1f5e42",
+      "#164431",
+    ],
   },
   components: {
     Button: Button.extend({ defaultProps: { size: "sm", fw: 550 } }),
@@ -121,7 +151,14 @@ export const theme = createTheme({
     NativeSelect: NativeSelect.extend({ defaultProps: { size: "sm" } }),
     NumberInput: NumberInput.extend({ defaultProps: { size: "sm" } }),
     Autocomplete: Autocomplete.extend({ defaultProps: { size: "sm" } }),
-    Progress: Progress.extend({ defaultProps: { color: "var(--tasks-muted)" } }),
+    Progress: Progress.extend({
+      defaultProps: { color: "var(--tasks-muted)" },
+      // Акцентный вариант: общий вид полос прогресса и величин на ролях темы.
+      classNames: (_theme, props) =>
+        props.variant === "accent"
+          ? { root: progressClasses.accentRoot, section: progressClasses.accentSection }
+          : {},
+    }),
     Tooltip: Tooltip.extend({ defaultProps: { withArrow: true, openDelay: 400 } }),
     Modal: Modal.extend({
       defaultProps: {

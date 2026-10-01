@@ -1,0 +1,281 @@
+.root {
+  container: stages / inline-size;
+  display: grid;
+  gap: 1rem;
+}
+
+/*
+ * Вертикальная столбиковая диаграмма колонок на любой ширине. Широкая карточка
+ * показывает шесть столбцов в ряд, узкая — сетку 3×2, чтобы подписи оставались
+ * в одну строку. Слоты одной высоты: шкала общая для обоих рядов. Подпись и число
+ * у каждого столбца заменяют легенду.
+ */
+.chart {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.875rem 0.625rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @container stages (min-width: 33rem) {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.stage {
+  --stage-color: var(--tasks-column-inbox);
+
+  display: grid;
+  grid-template-areas:
+    "count"
+    "column"
+    "label";
+  grid-template-rows: auto auto 1fr;
+  gap: 0.375rem;
+  min-width: 0;
+  /* Ширина столбца — основа размера числа над ним. */
+  container: stage / inline-size;
+
+  &[data-column="ready"] {
+    --stage-color: var(--tasks-column-ready);
+  }
+
+  &[data-column="in-progress"] {
+    --stage-color: var(--tasks-column-in-progress);
+  }
+
+  &[data-column="review"] {
+    --stage-color: var(--tasks-column-review);
+  }
+
+  &[data-column="done"] {
+    --stage-color: var(--tasks-column-done);
+  }
+
+  &[data-column="cancelled"] {
+    --stage-color: var(--tasks-column-cancelled);
+  }
+}
+
+/* Подпись в одну строку; она занимает и половину промежутка с каждой стороны. */
+.stageLabel {
+  grid-area: label;
+  min-width: 0;
+  margin-inline: -0.3125rem;
+  color: var(--tasks-ink);
+  font-size: 0.75rem;
+  font-weight: 550;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+
+  @container stages (min-width: 44rem) {
+    font-size: 0.8125rem;
+  }
+}
+
+.stageCount {
+  --count-size: 1.25rem;
+
+  grid-area: count;
+  /* Высота строки числа одинакова у всех столбцов: слоты стоят на одной линии. */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: calc(var(--count-size) * 1.2);
+  /* Длинное число уменьшается по ширине слота и читается целиком, без переноса. */
+  font-size: min(var(--count-size), calc(100cqi / (var(--digits) * 0.72)));
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+
+  /* Ноль остаётся читаемым числом, но не спорит с заполненными колонками. */
+  .stage[data-empty] & {
+    color: var(--tasks-muted);
+    font-weight: 550;
+  }
+
+  @container stages (min-width: 33rem) {
+    --count-size: 1.5rem;
+  }
+}
+
+/* Светлый слот столбца: иконка колонки и цветная заливка по доле. */
+.column {
+  grid-area: column;
+  display: flex;
+  flex-direction: column;
+  height: 8rem;
+  padding: 0.3125rem;
+  border-radius: 1rem;
+  background: var(--tasks-tile);
+
+  @container stages (min-width: 33rem) {
+    height: 10rem;
+  }
+}
+
+.stageIcon {
+  flex: none;
+  box-sizing: content-box;
+  align-self: center;
+  padding: 0.375rem 0.3125rem 0.25rem;
+  color: var(--stage-color);
+}
+
+.fill {
+  height: calc((100% - 2.25rem) * var(--share));
+  min-height: 0.5rem;
+  margin-top: auto;
+  border-radius: 0.75rem;
+  background: var(--stage-color);
+  transition: height 300ms ease;
+
+  /* Отменённые: бледная сплошная заливка с рамкой цвета колонки, а не только оттенок. */
+  .stage[data-column="cancelled"] & {
+    background: var(--tasks-column-cancelled-fill);
+    box-shadow: inset 0 0 0 2px var(--stage-color);
+  }
+
+  /* Пустая колонка: пунктирная отметка нуля вместо заливки. */
+  .stage[data-empty] & {
+    border: 2px dashed var(--tasks-border-strong);
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+.sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.875rem;
+  background: var(--tasks-tile-translucent);
+  color: var(--tasks-ink);
+  font-size: 0.8125rem;
+}
+
+.sumValue {
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.facts {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+  /* Переход показателя к блоку не прячет заголовок под закреплённой шапкой проекта. */
+  scroll-margin-top: 5rem;
+}
+
+.factsHeader {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.factsTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.factsNote {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.leads {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+
+  @container stages (min-width: 26rem) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.lead {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  border-radius: 1rem;
+  background: var(--tasks-tile);
+
+  & dt {
+    min-width: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  & dd {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &[data-fact="completed"] dd {
+    color: var(--tasks-completed);
+  }
+}
+
+.meter {
+  margin-top: 0.5rem;
+}
+
+.rest {
+  display: grid;
+  gap: 0 1.5rem;
+  margin: 0;
+  padding: 0.375rem 1rem;
+  border-radius: 1rem;
+  background: var(--tasks-tile);
+
+  /* Две колонки только при достаточной ширине самой карточки, а не окна. */
+  @container stages (min-width: 32rem) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.fact {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding-block: 0.5rem;
+  border-bottom: 1px solid var(--tasks-tile-border);
+  font-size: 0.8125rem;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  & dt {
+    min-width: 0;
+    color: var(--tasks-muted);
+    overflow-wrap: anywhere;
+  }
+
+  & dd {
+    flex: none;
+    margin: 0;
+    font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}

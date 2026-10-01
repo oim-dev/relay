@@ -68,6 +68,8 @@ export { getProductEntities } from "./get-product-entities.js";
 export { getProductEntityForProject } from "./get-product-entity-for-project.js";
 export { getProductEntity } from "./get-product-entity.js";
 export { getProductOverviewForProject } from "./get-product-overview-for-project.js";
+export { getProductOverviewMetricForProject } from "./get-product-overview-metric-for-project.js";
+export { getProductOverviewMetric } from "./get-product-overview-metric.js";
 export { getProductOverview } from "./get-product-overview.js";
 export { getProductProgressForProject } from "./get-product-progress-for-project.js";
 export { getProductProgress } from "./get-product-progress.js";

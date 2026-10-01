@@ -395,6 +395,21 @@ export function pageResult(
   );
 }
 
+/**
+ * Тип курсора без проверки: позволяет команде с двумя режимами выбрать режим по одному --cursor.
+ * Полная проверка контекста выполняется при декодировании выбранным режимом.
+ */
+export function cursorType(token: string | undefined): Cursor["type"] | undefined {
+  if (token === undefined || token.length > CURSOR_LIMIT || !/^[A-Za-z0-9_-]+$/.test(token))
+    return undefined;
+  try {
+    const type: unknown = JSON.parse(Buffer.from(token, "base64url").toString("utf8"))?.type;
+    return type === "native" || type === "offset" ? type : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Восстанавливает CLI-фильтры (например, by) и limit; opaque token Backend передаётся без изменений. */
 export function nativeQuery(
   context: CommandContext,

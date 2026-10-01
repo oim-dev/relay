@@ -1,17 +1,11 @@
 import useSWRSubscription from "swr/subscription";
 import type { SWRSubscriptionOptions, SWRSubscriptionResponse } from "swr/subscription";
 import { subscribeWorkspace } from "infra/workspace-events";
+import type { WorkspaceSignal } from "infra/workspace-events";
 import { useGetProject } from "./use-get-project/use-get-project.hook";
 
 /** Состояние синхронизации рабочего проекта. */
-export type ProjectConnection = {
-  /** Доступна актуализация задач. */
-  state: "connecting" | "connected" | "reconnecting" | "disconnected" | "storage-error";
-  /** Последовательность уведомлений для повторной сверки REST. */
-  sequence: number;
-  /** Причина временной недоступности данных. */
-  message?: string;
-};
+export type ProjectConnection = WorkspaceSignal;
 
 /**
  * Разделяет подписку проекта и публикует состояние совместной работы.

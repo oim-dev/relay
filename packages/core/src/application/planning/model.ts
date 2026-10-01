@@ -1,18 +1,27 @@
 import type { PlanningCounts, WorkPlan } from "@relay/contracts/planning";
 import { BoardTaskRepository } from "../../storage/board-tasks.js";
+import type { BoardTaskRecord } from "../../domain/board-task.js";
 import { planningRecords, planningSession } from "../../storage/planning.js";
 import type { Workspace } from "../../storage/workspace.js";
 import { taskCompletions } from "../board-tasks/completion.js";
 import { invariant } from "../../shared/errors.js";
 
-/** Согласованный предметный снимок; граф и число загруженных строк не определяют состав. */
-export async function readPlanningState(workspace: Workspace) {
+/** Непустой состав, все задачи которого фактически выполнены; общее правило этапа и плана. */
+export function planningCountsCompleted(counts: Pick<PlanningCounts, "total" | "completed">) {
+  return counts.total > 0 && counts.completed === counts.total;
+}
+
+/**
+ * Согласованный предметный снимок; граф и число загруженных строк не определяют состав.
+ * Уже прочитанные в той же сессии задачи можно передать, чтобы не читать их повторно.
+ */
+export async function readPlanningState(workspace: Workspace, preloaded?: BoardTaskRecord[]) {
   planningSession(workspace);
   const plans = await planningRecords(workspace, "work-plan");
   const stages = plans.flatMap((plan) =>
     plan.stages.map((stage) => ({ ...stage, planId: plan.id })),
   );
-  const tasks = await new BoardTaskRepository(workspace).all();
+  const tasks = preloaded ?? (await new BoardTaskRepository(workspace).all());
   const byTask = new Map(tasks.map((task) => [task.id, task]));
   const current = new Map<string, { planId: string; stageId: string }>();
   const scopeLabels = new Map<string, string>();
@@ -90,7 +99,7 @@ export async function readPlanningState(workspace: Workspace) {
     const progress = counts(selected.flatMap((stage) => stage.taskIds));
     const next = selected.find((stage) => {
       const progress = counts(stage.taskIds);
-      return progress.total === 0 || progress.completed !== progress.total;
+      return !planningCountsCompleted(progress);
     });
     return {
       ...fields,
@@ -105,10 +114,10 @@ export async function readPlanningState(workspace: Workspace) {
         const progress = counts(stage.taskIds);
         return {
           id: stage.id,
-          completed: progress.total > 0 && progress.completed === progress.total,
+          completed: planningCountsCompleted(progress),
         };
       }),
-      ready: progress.total > 0 && progress.completed === progress.total,
+      ready: planningCountsCompleted(progress),
     };
   };
   return { plans, stages, tasks, byTask, current, completion, counts, summary };

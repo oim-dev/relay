@@ -37,6 +37,7 @@ import {
 } from "@relay/core/domain/board-task";
 import type { BoardTaskSaved } from "@relay/core/domain/board-task";
 import { requestIdSchema } from "@relay/contracts/primitives";
+import { productOverviewSchema } from "@relay/contracts/entities/product";
 import {
   productMutationSchema,
   productContextQuerySchema,
@@ -71,6 +72,10 @@ const selector = {
     .optional(),
 };
 const boardTask = { reference: boardTaskReferenceSchema };
+/** Прежняя форма обзора в MCP: срез проекта не отдаётся, чтобы ответ помещался в бюджет. */
+const mcpProductOverviewSchema = productOverviewSchema
+  .pick({ productId: true, version: true, items: true, readiness: true })
+  .strip();
 
 /** Результат текущего вызова без сохранения для повторных запросов. */
 async function changedBoardTask(operation: Promise<BoardTaskSaved>): Promise<Result> {
@@ -461,7 +466,7 @@ export function createTools(projects: Projects): Server {
     "Компактная карта продукта и вычисленная готовность",
     { ...selector },
     true,
-    async (backend) => ({ data: await backend.product.overview() }),
+    async (backend) => ({ data: mcpProductOverviewSchema.parse(await backend.product.overview()) }),
   );
   projectTool(
     "product_entities",

@@ -2,7 +2,7 @@ import { progressQuerySchema, workPlanProgressSchema } from "@relay/contracts/pr
 import type { ProgressQuery, ProgressReason } from "@relay/contracts/progress";
 import type { Workspace } from "../../storage/workspace.js";
 import { planningRecord, planningPage } from "../../storage/planning.js";
-import { readPlanningState } from "../planning/model.js";
+import { planningCountsCompleted, readPlanningState } from "../planning/model.js";
 
 /** Расчёт плана и проверка перехода используют одно фактическое выполнение задач. */
 export async function workPlanProgress(workspace: Workspace, input: ProgressQuery) {
@@ -67,7 +67,7 @@ export async function workPlanProgress(workspace: Workspace, input: ProgressQuer
           id: stage.id,
           title: stage.title,
           counts,
-          completed: counts.total > 0 && counts.completed === counts.total,
+          completed: planningCountsCompleted(counts),
         };
       }),
     ),

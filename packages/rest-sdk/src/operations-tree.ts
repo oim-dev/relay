@@ -68,6 +68,8 @@ import { getProductEntities } from "./operations/get-product-entities.js";
 import { getProductEntityForProject } from "./operations/get-product-entity-for-project.js";
 import { getProductEntity } from "./operations/get-product-entity.js";
 import { getProductOverviewForProject } from "./operations/get-product-overview-for-project.js";
+import { getProductOverviewMetricForProject } from "./operations/get-product-overview-metric-for-project.js";
+import { getProductOverviewMetric } from "./operations/get-product-overview-metric.js";
 import { getProductOverview } from "./operations/get-product-overview.js";
 import { getProductProgressForProject } from "./operations/get-product-progress-for-project.js";
 import { getProductProgress } from "./operations/get-product-progress.js";
@@ -184,6 +186,7 @@ export const operationsTree = {
     updateProductImplementation: updateProductImplementation,
     getProductState: getProductState,
     getProductOverview: getProductOverview,
+    getProductOverviewMetric: getProductOverviewMetric,
     getProductRecords: getProductRecords,
     mutateProduct: mutateProduct,
     getProductContext: getProductContext,
@@ -193,6 +196,7 @@ export const operationsTree = {
       updateProductImplementationForProject,
     getProductStateForProject: getProductStateForProject,
     getProductOverviewForProject: getProductOverviewForProject,
+    getProductOverviewMetricForProject: getProductOverviewMetricForProject,
     getProductRecordsForProject: getProductRecordsForProject,
     mutateProductForProject: mutateProductForProject,
     getProductContextForProject: getProductContextForProject,

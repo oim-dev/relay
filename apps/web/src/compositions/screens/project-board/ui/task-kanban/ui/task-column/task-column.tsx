@@ -88,10 +88,7 @@ export const TaskColumn = (props: TaskColumnProps) => {
     <Paper radius="lg" p={0} className={styles.root} data-active={drop.isOver}>
       <Group justify="space-between" gap="xs" wrap="nowrap" className={styles.header}>
         <Group gap="xs">
-          <span
-            className={styles.dot}
-            style={{ color: `var(--mantine-color-${column.color}-6)` }}
-          />
+          <span className={styles.dot} style={{ color: `var(--tasks-column-${column.value})` }} />
           <Title order={2} size="sm">
             {column.label}
           </Title>
