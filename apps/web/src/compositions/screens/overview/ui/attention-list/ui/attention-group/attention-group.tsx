@@ -7,6 +7,7 @@ import { AttentionTask } from "../attention-task/attention-task";
 import { AttentionFullList } from "./ui/attention-full-list/attention-full-list";
 import type { AttentionGroupProps } from "./types/attention-group-props.type";
 import styles from "./styles/attention-group.module.css";
+import listAction from "../../../../styles/list-action.module.css";
 
 /**
  * Показывает одну подборку задач, требующих внимания, с полным числом и пустым состоянием.
@@ -74,6 +75,7 @@ export const AttentionGroup = (props: AttentionGroupProps) => {
       {isDefined(moreNote) && <p className={styles.note}>{moreNote}</p>}
       {canExpand && (
         <Button
+          classNames={{ root: listAction.root, label: listAction.label }}
           size="compact-sm"
           variant="subtle"
           className={styles.toggle}

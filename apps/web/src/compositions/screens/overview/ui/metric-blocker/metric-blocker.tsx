@@ -12,6 +12,7 @@ import { MetricFrame } from "../metric-frame/metric-frame";
 import { MetricTask } from "../metric-task/metric-task";
 import type { MetricBlockerProps } from "./types/metric-blocker-props.type";
 import styles from "./styles/metric-blocker.module.css";
+import listAction from "../../styles/list-action.module.css";
 
 /**
  * Показывает задачу, которая напрямую задерживает незавершённую работу, и сколько
@@ -61,6 +62,7 @@ export const MetricBlocker = (props: MetricBlockerProps) => {
       <p className={styles.impact}>{impactLabel}</p>
       {count > 0 && (
         <Button
+          classNames={{ root: listAction.root, label: listAction.label }}
           ref={toggleRef}
           size="compact-sm"
           variant="subtle"

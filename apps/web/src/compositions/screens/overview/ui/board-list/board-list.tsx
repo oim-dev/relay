@@ -9,6 +9,7 @@ import { isDefined } from "shared/value-predicates";
 import { BOARD_KIND_LABELS } from "../../config/overview.config";
 import type { BoardListProps } from "./types/board-list-props.type";
 import styles from "./styles/board-list.module.css";
+import listAction from "../../styles/list-action.module.css";
 
 /**
  * Показывает доски проекта с числом открытых и всех задач, включая пустые доски.
@@ -78,6 +79,7 @@ export const BoardList = (props: BoardListProps) => {
         <div className={styles.error} role="alert">
           <p>Не удалось загрузить каталог досок. Проверьте соединение и повторите.</p>
           <Button
+            classNames={{ root: listAction.root, label: listAction.label }}
             size="compact-sm"
             variant="default"
             leftSection={<RefreshCw size={14} aria-hidden="true" />}
@@ -92,6 +94,7 @@ export const BoardList = (props: BoardListProps) => {
       <div className={styles.actions}>
         {hasMorePages && (
           <Button
+            classNames={{ root: listAction.root, label: listAction.label }}
             size="compact-sm"
             variant="subtle"
             className={styles.action}
@@ -103,6 +106,7 @@ export const BoardList = (props: BoardListProps) => {
         )}
         {canExpand && (
           <Button
+            classNames={{ root: listAction.root, label: listAction.label }}
             size="compact-sm"
             variant="subtle"
             className={styles.action}

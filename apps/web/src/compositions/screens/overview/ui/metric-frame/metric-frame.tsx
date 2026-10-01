@@ -6,6 +6,7 @@ import { isDefined, isNonEmptyArray } from "shared/value-predicates";
 import { useEntryFocus } from "./hooks/use-entry-focus.hook";
 import type { MetricFrameProps } from "./types/metric-frame-props.type";
 import styles from "./styles/metric-frame.module.css";
+import listAction from "../../styles/list-action.module.css";
 
 /**
  * Показывает записи метрики одним списком с состоянием чтения: ход загрузки,
@@ -59,6 +60,7 @@ export const MetricFrame = (props: MetricFrameProps) => {
           <p>{error.text}</p>
           {canRetry && (
             <Button
+              classNames={{ root: listAction.root, label: listAction.label }}
               size="compact-sm"
               variant="default"
               leftSection={<RefreshCw size={14} aria-hidden="true" />}
@@ -71,6 +73,7 @@ export const MetricFrame = (props: MetricFrameProps) => {
       )}
       {shouldShowMore && (
         <Button
+          classNames={{ root: listAction.root, label: listAction.label }}
           size="compact-sm"
           variant="subtle"
           className={styles.more}

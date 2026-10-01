@@ -8,6 +8,7 @@ import { MetricEntry } from "../metric-entry/metric-entry";
 import { MetricFrame } from "../metric-frame/metric-frame";
 import type { MetricDisclosureProps } from "./types/metric-disclosure-props.type";
 import styles from "./styles/metric-disclosure.module.css";
+import listAction from "../../styles/list-action.module.css";
 
 /**
  * Показывает показатель оператора: полное число, его смысл и, по действию, весь состав
@@ -123,6 +124,7 @@ export const MetricDisclosure = (props: MetricDisclosureProps) => {
       {isDefined(previewNote) && <p className={styles.note}>{previewNote}</p>}
       {canExpand && (
         <Button
+          classNames={{ root: listAction.root, label: listAction.label }}
           size="compact-sm"
           variant="subtle"
           className={styles.toggle}

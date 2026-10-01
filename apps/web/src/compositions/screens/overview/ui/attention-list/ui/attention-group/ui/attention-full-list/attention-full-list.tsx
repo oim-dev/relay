@@ -10,6 +10,7 @@ import { UNTITLED } from "../../../../../../config/overview.config";
 import { AttentionTask } from "../../../attention-task/attention-task";
 import type { AttentionFullListProps } from "./types/attention-full-list-props.type";
 import styles from "./styles/attention-full-list.module.css";
+import listAction from "../../../../../../styles/list-action.module.css";
 
 const RELATION_LABELS = { dependency: "зависимость", subtask: "подзадача" } as const;
 const READ_ERROR =
@@ -155,6 +156,7 @@ export const AttentionFullList = (props: AttentionFullListProps) => {
         <div className={styles.error} role="alert">
           <p>{errorText}</p>
           <Button
+            classNames={{ root: listAction.root, label: listAction.label }}
             size="compact-sm"
             variant="default"
             leftSection={<RefreshCw size={14} aria-hidden="true" />}
@@ -166,6 +168,7 @@ export const AttentionFullList = (props: AttentionFullListProps) => {
       )}
       {hasMore && !hasError && (
         <Button
+          classNames={{ root: listAction.root, label: listAction.label }}
           size="compact-sm"
           variant="subtle"
           className={styles.more}
