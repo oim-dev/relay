@@ -144,3 +144,19 @@
     grid-area: documents;
   }
 }
+
+/* Каталог досок — вторая часть блока «Доски» после распределения незавершённой работы. */
+.boardCatalog {
+  display: grid;
+  gap: 0.625rem;
+  min-width: 0;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--tasks-border);
+  scroll-margin-top: 5rem;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+}

@@ -18,6 +18,7 @@ export const OverviewPanel = (props: OverviewPanelProps) => {
   const {
     title,
     total,
+    totalLabel,
     link,
     preview,
     description,
@@ -29,6 +30,7 @@ export const OverviewPanel = (props: OverviewPanelProps) => {
   const titleId = useId();
   const hasMore = isDefined(preview) && preview.shown < preview.total;
   const previewNote = hasMore ? `Показано ${preview.shown} из ${preview.total}` : null;
+  const totalText = isDefined(totalLabel) ? `${totalLabel}: ${total}` : total;
   return (
     <section
       {...rootAttrs}
@@ -40,7 +42,7 @@ export const OverviewPanel = (props: OverviewPanelProps) => {
         <h2 id={titleId} className={styles.title}>
           {title}
         </h2>
-        {isDefined(total) && <span className={styles.total}>{total}</span>}
+        {isDefined(total) && <span className={styles.total}>{totalText}</span>}
         {isDefined(link) && (
           <Link to={link.to} className={styles.link}>
             {link.label}

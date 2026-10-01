@@ -182,6 +182,18 @@ test("help: product overview объясняет срез, подборки, --li
     /Поле version — версия продуктового состава/,
     /не решает, какую задачу начинать или завершать/,
     /product overview \\ --limit 20 \\ --format json/,
+    // Детализация показателей оператора.
+    /--metric <metric>/,
+    /--blocker <task>/,
+    /review-obligations-met, review-obligations-open, blocker-impact, blocker-affected, unplanned-work, board-work, open-plans-complete, ready-releases, plans-outside-releases/,
+    /Для blocker-affected обязателен --blocker/,
+    /не является внешней проверкой/,
+    /работа вне открытых планов — сигнал, а не ошибка/,
+    /total от размера страницы не зависит/,
+    /достаточно передать только --cursor/,
+    /VERSION_CONFLICT/,
+    /product overview \\ --metric review-obligations-met/,
+    /--metric blocker-affected \\ --blocker PRODUCT-1/,
   ])
     assert.match(text, expected);
   assert.doesNotMatch(result.stdout, /\x1b/);

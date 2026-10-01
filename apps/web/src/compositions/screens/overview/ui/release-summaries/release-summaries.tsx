@@ -1,17 +1,19 @@
 import clsx from "clsx";
 import { RELEASE_STATUS_COUNT_LABELS } from "../../config/overview.config";
 import { ReleaseGroup } from "./ui/release-group/release-group";
+import { ReleasePreparation } from "./ui/release-preparation/release-preparation";
 import type { ReleaseSummariesProps } from "./types/release-summaries-props.type";
 import styles from "./styles/release-summaries.module.css";
 
 /**
- * Показывает статусы релизов, ближайшие запланированные и последние выпущенные релизы.
+ * Показывает статусы релизов, ближайшие запланированные и последние выпущенные релизы,
+ * а также подготовку выпуска: что можно готовить к выпуску и что ещё не включено в релиз.
  *
  * Используется для:
  *  - оценки выпусков проекта и фактической готовности их состава
  */
 export const ReleaseSummaries = (props: ReleaseSummariesProps) => {
-  const { releases, basePath, className, ...rootAttrs } = props;
+  const { releases, preparation, snapshotVersion, basePath, className, ...rootAttrs } = props;
   const statusItems = Object.entries(RELEASE_STATUS_COUNT_LABELS).map(([status, label]) => ({
     status,
     label,
@@ -36,6 +38,11 @@ export const ReleaseSummaries = (props: ReleaseSummariesProps) => {
         title="Недавно выпущены"
         emptyText="Выпущенных релизов пока нет."
         preview={releases.recent}
+        basePath={basePath}
+      />
+      <ReleasePreparation
+        preparation={preparation}
+        snapshotVersion={snapshotVersion}
         basePath={basePath}
       />
     </div>

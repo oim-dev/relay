@@ -243,3 +243,228 @@ export async function seedCatalog(api, { name, count }) {
       },
     });
 }
+
+/** Ревизия задачи для оптимистичной записи. */
+const revisionOf = async (api, id) => (await api.get(`/board-tasks/${id}`)).revision;
+
+/** План с этапами из явных списков задач; при необходимости запускается, завершается или отменяется. */
+async function stagedPlan(api, title, stages, finalState = "draft") {
+  const plan = await api.post("/plans", { title, summary: "", goal: `Цель: ${title}` });
+  let revision = plan.revision;
+  for (const taskIds of stages) {
+    const stage = await api.post(`/plans/${plan.id}/stages`, {
+      ifRevision: revision,
+      action: "create",
+      fields: { title: "Этап" },
+    });
+    revision = stage.revision;
+    if (taskIds.length > 0)
+      revision = (
+        await api.post(`/plans/${plan.id}/tasks`, {
+          ifRevision: revision,
+          stage: stage.stageId,
+          add: taskIds,
+        })
+      ).revision;
+  }
+  if (finalState === "active")
+    await api.post(`/plans/${plan.id}/transition`, { ifRevision: revision, action: "start" });
+  if (finalState === "completed" || finalState === "cancelled")
+    await api.post(`/plans/${plan.id}/transition`, {
+      ifRevision: revision,
+      action: finalState === "completed" ? "complete" : "cancel",
+      result: "Итог",
+    });
+  return plan.id;
+}
+
+/**
+ * Малая fixture показателей оператора: та же раскладка, что в тесте Core
+ * `packages/core/test/product-overview-operator.test.ts`, но через REST собственного сервера.
+ * Ожидаемые числа выписаны в браузерной регрессии вручную, а не вычисляются.
+ * Доски: product, web, infrastructure и пустая empty.
+ * @param {ReturnType<import("./stack.mjs").relayApi>} api
+ */
+export async function seedOperator(api) {
+  await api.post("/product/records", {
+    action: "create",
+    fields: {
+      kind: "passport",
+      name: "Дзета",
+      summary: "Показатели оператора на малой fixture.",
+      description: "Описание",
+    },
+  });
+  for (const slug of ["web", "empty"])
+    await api.post("/product/records", {
+      action: "create",
+      fields: {
+        kind: "application",
+        slug,
+        name: slug,
+        summary: "",
+        description: `Приложение ${slug}`,
+        type: "frontend",
+      },
+    });
+  const task = async (board, column, title, extra = {}) =>
+    (await api.post("/board-tasks", { board, column, title, ...extra })).id;
+  const move = async (id, column, board) =>
+    api.post(`/board-tasks/${id}/move`, {
+      column,
+      ...(board ? { board } : {}),
+      ifRevision: await revisionOf(api, id),
+    });
+  const completeCriterion = async (id, index) => {
+    const criteria = await api.get(`/board-tasks/${id}/criteria`);
+    await api.post(`/board-tasks/${id}/criteria`, {
+      action: "complete",
+      criterionId: criteria.items[index].id,
+      completed: true,
+      ifRevision: await revisionOf(api, id),
+    });
+  };
+  const link = async (id, target, relation) =>
+    api.post(`/board-tasks/${id}/links`, {
+      target,
+      relation,
+      ifRevision: await revisionOf(api, id),
+    });
+  const release = async (title, planIds, plannedFor = "", action) => {
+    const created = await api.post("/releases", { title, version: title, planIds, plannedFor });
+    if (action)
+      await api.post(`/releases/${created.id}/transition`, {
+        action,
+        ifRevision: created.revision,
+      });
+    return created.id;
+  };
+
+  const T14 = await task("web", "done", "Дзета: отменённый блокер T14");
+  const T15 = await task("web", "done", "Дзета: ждёт отменённую T15", { dependencies: [T14] });
+  const T17 = await task("infrastructure", "done", "Дзета: инфраструктура T17");
+  const done = [];
+  for (const index of [19, 20, 21, 22, 23, 24])
+    done.push(await task("infrastructure", "done", `Дзета: выполнена T${index}`));
+  const [T19, T20, T21, T22, T23, T24] = done;
+  const T18 = await task("web", "done", "Дзета: вернулась в работу T18");
+  const T6 = await task("web", "in-progress", "Дзета: общий блокер T6");
+  const T3 = await task("web", "review", "Дзета: ждёт T6 на проверке T3", { dependencies: [T6] });
+  const T4 = await task("web", "review", "Дзета: родитель на проверке T4");
+  const T7 = await task("web", "ready", "Дзета: подзадача T7", { parentId: T4 });
+  const T1 = await task("product", "review", "Дзета: критерий выполнен T1", {
+    acceptanceCriteria: [{ title: "Проверено" }],
+  });
+  await completeCriterion(T1, 0);
+  const T2 = await task("product", "review", "Дзета: критерий не выполнен T2", {
+    acceptanceCriteria: [{ title: "Первый" }, { title: "Второй" }],
+  });
+  await completeCriterion(T2, 0);
+  const T5 = await task("web", "review", "Дзета: без критериев T5");
+  const T9 = await task("web", "in-progress", "Дзета: подзадача и зависимость T9");
+  const T8 = await task("product", "inbox", "Дзета: ждёт T6 и T9 T8", { dependencies: [T6, T9] });
+  await link(T9, T8, "parent");
+  const T12 = await task("product", "ready", "Дзета: конец цепочки T12");
+  const T11 = await task("product", "ready", "Дзета: середина цепочки T11", {
+    dependencies: [T12],
+  });
+  const T10 = await task("product", "inbox", "Дзета: начало цепочки T10", { dependencies: [T11] });
+  const T13 = await task("product", "ready", "Дзета: related T13", { related: [T6] });
+  const T16 = await task("web", "inbox", "Дзета: отменённый потребитель T16", {
+    dependencies: [T6],
+  });
+  await move(T16, "cancelled");
+  await move(T14, "cancelled");
+
+  const PL3 = await stagedPlan(api, "Дзета PL3", [[T18, T17]], "completed");
+  await move(T18, "in-progress");
+  const PL1 = await stagedPlan(api, "Дзета PL1", [[T6, T8], []], "active");
+  await stagedPlan(api, "Дзета PL2", [[T1]]);
+  await stagedPlan(api, "Дзета PL4", [[T2]], "cancelled");
+  const PL5 = await stagedPlan(api, "Дзета PL5", [[T19]], "active");
+  await stagedPlan(api, "Дзета PL6", []);
+  const PL7 = await stagedPlan(api, "Дзета PL7", [[T20], []]);
+  const PL8 = await stagedPlan(api, "Дзета PL8", [[T21]], "completed");
+  const PL9 = await stagedPlan(api, "Дзета PL9", [[T22]], "completed");
+  const PL10 = await stagedPlan(api, "Дзета PL10", [[T23]], "completed");
+  const PL11 = await stagedPlan(api, "Дзета PL11", [[T24]], "completed");
+
+  const R1 = await release("R1", [PL8], "2026-10-10");
+  await release("R2", [PL9], "", "release");
+  const R3 = await release("R3", [PL9]);
+  await release("R4", [PL10], "", "cancel");
+  await release("R5", [PL3]);
+  await release("R6", [PL1]);
+  return {
+    tasks: { T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T18, T21 },
+    plans: { PL5, PL7, PL10, PL11 },
+    releases: { R1, R3 },
+  };
+}
+
+/**
+ * Большая fixture: каждая выборка показателей оператора длиннее подборки (5) и страницы
+ * полного списка (20) — по `count` записей в каждой группе.
+ * @param {ReturnType<import("./stack.mjs").relayApi>} api
+ * @param {{count: number}} options
+ */
+export async function seedOperatorBreadth(api, { count }) {
+  await api.post("/product/records", {
+    action: "create",
+    fields: {
+      kind: "passport",
+      name: "Эта",
+      summary: "Полные списки показателей оператора.",
+      description: "Описание",
+    },
+  });
+  const boards = [];
+  for (let index = 1; index <= count; index += 1) {
+    const slug = `work${index}`;
+    await api.post("/product/records", {
+      action: "create",
+      fields: {
+        kind: "application",
+        slug,
+        name: `Работа ${index}`,
+        summary: "",
+        description: "Доска большой fixture",
+        type: "frontend",
+      },
+    });
+    boards.push(slug);
+  }
+  const task = async (board, column, title, extra = {}) =>
+    (await api.post("/board-tasks", { board, column, title, ...extra })).id;
+  const hub = await task("product", "in-progress", "Эта: общий блокер проверки");
+  const groups = { met: [], open: [], blockers: [] };
+  for (let index = 0; index < count; index += 1) {
+    const board = boards[index];
+    groups.met.push(await task(board, "review", `Эта: обязательства выполнены ${index}`));
+    groups.open.push(
+      await task(board, "review", `Эта: ждёт общий блокер ${index}`, { dependencies: [hub] }),
+    );
+    const blocker = await task(board, "ready", `Эта: блокер ${index}`);
+    groups.blockers.push(blocker);
+    await task(board, "inbox", `Эта: ждёт блокер ${index}`, { dependencies: [blocker] });
+  }
+  const plans = { open: [], outside: [], released: [] };
+  for (let index = 0; index < count; index += 1) {
+    const finished = await task("infrastructure", "done", `Эта: выполнена для плана ${index}`);
+    plans.open.push(await stagedPlan(api, `Эта: открытый выполненный ${index}`, [[finished]]));
+    const outside = await task("infrastructure", "done", `Эта: вне релизов ${index}`);
+    plans.outside.push(
+      await stagedPlan(api, `Эта: завершённый вне релизов ${index}`, [[outside]], "completed"),
+    );
+    const shipped = await task("infrastructure", "done", `Эта: в релизе ${index}`);
+    const plan = await stagedPlan(api, `Эта: в релизе ${index}`, [[shipped]], "completed");
+    plans.released.push(plan);
+    await api.post("/releases", {
+      title: `Эта: релиз ${index}`,
+      version: `0.${index}.0`,
+      planIds: [plan],
+      plannedFor: "",
+    });
+  }
+  return { hub, groups, plans, boards };
+}

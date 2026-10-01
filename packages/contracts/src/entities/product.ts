@@ -10,7 +10,7 @@ import {
 } from "../primitives.js";
 import { applicationSlugSchema, boardPrefixSchema } from "./board.js";
 import { documentKindSchema, documentMetadataShape } from "./document-library.js";
-import { kanbanColumnSchema } from "./board-task.js";
+import { boardTaskReferenceSchema, kanbanColumnSchema } from "./board-task.js";
 import { planStatusSchema, planningCountsSchema } from "../planning.js";
 import { releaseReadinessSchema, releaseStatusSchema } from "../releases.js";
 
@@ -240,16 +240,18 @@ export const PRODUCT_OVERVIEW_EXCERPT_LIMIT = 600;
 const overviewCount = (description: string) => z.number().int().nonnegative().describe(description);
 
 /** Ограниченная подборка: полный total и явный признак продолжения. */
-const overviewPreview = <T extends z.ZodType>(item: T, subject: string) =>
+const overviewPreview = <T extends z.ZodType>(
+  item: T,
+  subject: string,
+  continuation = "полный список читайте каталогом",
+) =>
   z
     .strictObject({
       total: overviewCount(
         `Полное число ${subject} в проекте независимо от ограничения подборки; 0 — таких нет`,
       ),
       shown: overviewCount("Число элементов в items, не более 5"),
-      hasMore: z
-        .boolean()
-        .describe("true, если есть элементы сверх показанных; полный список читайте каталогом"),
+      hasMore: z.boolean().describe(`true, если есть элементы сверх показанных; ${continuation}`),
       items: z
         .array(item)
         .max(PRODUCT_OVERVIEW_PREVIEW_LIMIT)
@@ -365,7 +367,9 @@ const overviewTaskSchema = overviewTaskRefSchema
               .describe("Невыполненное обязательство, блокирующее задачу"),
           )
           .max(PRODUCT_OVERVIEW_PREVIEW_LIMIT)
-          .describe("Первые причины блокировки по постоянному ID; не более 5"),
+          .describe(
+            "Первые причины блокировки, не более 5: сначала зависимости в сохранённом порядке, затем подзадачи",
+          ),
       })
       .describe("Причины блокировки из действующей модели обязательств"),
   })
@@ -433,6 +437,185 @@ const overviewReleaseSchema = z
     ),
   })
   .describe("Релиз проекта; не относится к отдельному приложению");
+
+/** Дополнительное пояснение продолжения у подборок метрик оператора. */
+const metricContinuation = "полный список читайте детализацией метрики product overview";
+
+const overviewTaskBoardSchema = z
+  .strictObject({
+    id: z.string().describe("Постоянный ID доски"),
+    prefix: boardPrefixSchema,
+    slug: z.string().describe("Адрес доски"),
+    name: z.string().describe("Название доски"),
+  })
+  .describe("Текущая доска задачи");
+
+export const overviewObligationReasonSchema = z
+  .enum(["CRITERION_INCOMPLETE", "DEPENDENCY_INCOMPLETE", "CHILD_INCOMPLETE"])
+  .describe(
+    "Причина невыполненных обязательств: невыполненный критерий, прямая зависимость или подзадача",
+  );
+
+const overviewOperatorTaskSchema = overviewTaskSchema
+  .extend({
+    reasons: z
+      .array(overviewObligationReasonSchema)
+      .max(3)
+      .describe(
+        "Все причины, по которым обязательства задачи сейчас не выполнены, без повторов; пустой массив — обязательства выполнены",
+      ),
+  })
+  .describe("Задача метрики оператора с основанием включения");
+
+const overviewAffectedTaskSchema = overviewTaskRefSchema
+  .extend({
+    board: overviewTaskBoardSchema,
+    updatedAt: timestampSchema.describe("Время последнего изменения задачи"),
+    relations: z
+      .array(z.enum(["dependency", "subtask"]))
+      .min(1)
+      .max(2)
+      .describe(
+        "Прямая связь с блокером: зависимость, подзадача или обе; задача учитывается один раз",
+      ),
+  })
+  .describe("Незавершённая задача, которую блокер задерживает напрямую");
+
+const overviewBlockerImpactSchema = overviewTaskRefSchema
+  .extend({
+    board: overviewTaskBoardSchema,
+    updatedAt: timestampSchema.describe("Время последнего изменения блокера"),
+    affected: z
+      .strictObject({
+        total: overviewCount(
+          "Число различных незавершённых задач, у которых эта задача — прямой невыполненный блокер",
+        ),
+        items: z
+          .array(overviewAffectedTaskSchema)
+          .max(PRODUCT_OVERVIEW_PREVIEW_LIMIT)
+          .describe(
+            "Первые затронутые задачи: новые изменения первыми, затем ID; полный список — метрика blocker-affected",
+          ),
+      })
+      .describe("Прямо затронутые незавершённые задачи; не транзитивное влияние"),
+  })
+  .describe(
+    "Прямой блокер незавершённой работы; может находиться в любой колонке, включая cancelled",
+  );
+
+const overviewBoardWorkSchema = overviewBoardSchema
+  .omit({ tasks: true })
+  .extend({
+    tasks: z
+      .strictObject({
+        total: overviewCount("Все задачи доски, включая done и cancelled"),
+        byColumn: taskColumnCountsSchema,
+        completed: overviewCount("Фактически выполненные задачи доски"),
+        remaining: overviewCount(
+          "Незавершённые: не cancelled и фактически не выполнены, включая done с открытыми обязательствами; не оценка трудозатрат",
+        ),
+        blockedRemaining: overviewCount(
+          "Незавершённые задачи с прямыми блокерами; пересекается с колонками и remaining",
+        ),
+        readyToStart: overviewCount("Колонка ready без блокеров"),
+      })
+      .describe("Распределение задач доски; показатели пересекаются и не складываются"),
+  })
+  .describe("Доска с распределением незавершённой работы");
+
+const overviewOperatorPlanSchema = z
+  .strictObject({
+    id: z.string().describe("Постоянный ID плана"),
+    key: z.string().describe("Читаемый ключ плана"),
+    title: z.string().describe("Название плана"),
+    status: planStatusSchema,
+    updatedAt: timestampSchema.describe("Время последнего изменения плана"),
+    stages: z
+      .strictObject({
+        total: overviewCount("Все этапы плана"),
+        completed: overviewCount("Этапы с непустым и фактически выполненным составом"),
+      })
+      .describe("Прогресс этапов"),
+    counts: planningCountsSchema.describe("Фактическое выполнение задач плана"),
+  })
+  .describe("План с фактически выполненным непустым составом");
+
+const overviewTaskColumnsWorkSchema = z
+  .strictObject({
+    "in-progress": overviewCount("Задачи в колонке in-progress"),
+    review: overviewCount("Задачи в колонке review"),
+  })
+  .describe("Разбиение по колонкам исполняемой работы; сумма равна total");
+
+export const productOverviewOperatorSchema = z
+  .strictObject({
+    review: z
+      .strictObject({
+        total: overviewCount("Все задачи в колонке review; равно сумме двух групп"),
+        obligationsMet: overviewPreview(
+          overviewOperatorTaskSchema,
+          "задач review, чьи критерии и прямые обязательства выполнены, новые изменения первыми",
+          metricContinuation,
+        ).describe(
+          "Обязательства выполнены: завершение можно рассмотреть; это не внешняя проверка результата",
+        ),
+        obligationsOpen: overviewPreview(
+          overviewOperatorTaskSchema,
+          "задач review с невыполненными критериями или прямыми обязательствами, новые изменения первыми",
+          metricContinuation,
+        ).describe("Остались обязательства: причины указаны в reasons и blockers"),
+      })
+      .describe("M-01. Очередь проверки, разделённая по готовности обязательств"),
+    blockerImpact: overviewPreview(
+      overviewBlockerImpactSchema,
+      "прямых блокеров незавершённой работы: больше затронутых задач первыми, затем ID",
+      metricContinuation,
+    ).describe("M-02. Влияние прямых блокеров: не критический путь и не рекомендация приоритета"),
+    unplannedWork: overviewPreview(
+      overviewOperatorTaskSchema,
+      "задач in-progress и review вне открытых планов, новые изменения первыми",
+      metricContinuation,
+    )
+      .extend({ byColumn: overviewTaskColumnsWorkSchema })
+      .describe(
+        "M-03. Исполняемая работа вне явного состава планов draft и active; сигнал, а не ошибка",
+      ),
+    boardWork: z
+      .strictObject({
+        remaining: overviewCount("Все незавершённые задачи проекта; сумма remaining по доскам"),
+        blockedRemaining: overviewCount("Незавершённые задачи проекта с прямыми блокерами"),
+        boards: overviewPreview(
+          overviewBoardWorkSchema,
+          "досок: больше незавершённых задач первыми, затем ID; включая пустые",
+          metricContinuation,
+        ),
+      })
+      .describe("M-04. Распределение работы по доскам; не загрузка людей"),
+    openPlansComplete: overviewPreview(
+      overviewOperatorPlanSchema,
+      "планов draft и active с выполненным непустым составом, новые изменения первыми",
+      metricContinuation,
+    ).describe(
+      "M-05. Состав выполнен, план открыт; завершение плана дополнительно требует итог и ревизию",
+    ),
+    releasePreparation: z
+      .strictObject({
+        readyReleases: overviewPreview(
+          overviewReleaseSchema,
+          "запланированных релизов с готовым составом: ближайшая дата, без даты в конце, затем ID",
+          metricContinuation,
+        ).describe("Можно рассмотреть явную фиксацию выпуска; не подтверждение CI или публикации"),
+        completedPlansOutsideReleases: overviewPreview(
+          overviewOperatorPlanSchema,
+          "завершённых готовых планов вне релизов planned и released, новые изменения первыми",
+          metricContinuation,
+        ).describe("Готовые планы, ещё не включённые в запланированный или выпущенный релиз"),
+      })
+      .describe("M-06. Подготовка выпуска; чтение не меняет статусы планов и релизов"),
+  })
+  .describe(
+    "Показатели оператора: полные счётчики и подборки; показатели пересекаются и не складываются",
+  );
 
 const passportPresent = {
   id: productIdSchema.describe("Постоянный ID паспорта"),
@@ -636,6 +819,7 @@ export const productOverviewSnapshotSchema = z
         recent: overviewPreview(overviewReleaseSchema, "выпущенных релизов, последние первыми"),
       })
       .describe("Релизы проекта"),
+    operator: productOverviewOperatorSchema,
   })
   .describe("Согласованный срез проекта из одного чтения");
 
@@ -672,10 +856,113 @@ export const productOverviewSchema = z
     snapshot: productOverviewSnapshotSchema,
   })
   .describe("Обзор продукта: прежняя карта и общий согласованный срез проекта");
+
+/** Детализация метрик оператора: та же классификация, что в snapshot.operator. */
+export const productOverviewMetrics = [
+  "review-obligations-met",
+  "review-obligations-open",
+  "blocker-impact",
+  "blocker-affected",
+  "unplanned-work",
+  "board-work",
+  "open-plans-complete",
+  "ready-releases",
+  "plans-outside-releases",
+] as const;
+export const productOverviewMetricSchema = z
+  .enum(productOverviewMetrics)
+  .describe(
+    "Метрика обзора: review-obligations-met/open — группы проверки (M-01); blocker-impact — прямые блокеры, blocker-affected — задачи одного блокера (M-02); unplanned-work — работа вне открытых планов (M-03); board-work — доски (M-04); open-plans-complete — открытые планы с выполненным составом (M-05); ready-releases и plans-outside-releases — подготовка выпуска (M-06)",
+  );
+/** Размер страницы детализации по умолчанию. */
+export const PRODUCT_OVERVIEW_METRIC_DEFAULT_LIMIT = 20;
+/** Query детализации без метрики: метрика передаётся сегментом пути REST. */
+export const productOverviewMetricPageQuerySchema = z.strictObject({
+  blocker: boardTaskReferenceSchema
+    .optional()
+    .describe(
+      "ID или ключ задачи-блокера; обязателен только для blocker-affected и запрещён для остальных метрик",
+    ),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(PRODUCT_OVERVIEW_METRIC_DEFAULT_LIMIT)
+    .describe("Размер страницы: 20 по умолчанию, максимум 100"),
+  cursor: z
+    .string()
+    .min(1)
+    .max(4096)
+    .optional()
+    .describe(
+      "Непрозрачное продолжение из nextCursor; действует только для той же метрики, проекта, блокера и неизменного среза",
+    ),
+  version: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional()
+    .describe(
+      "snapshotVersion отображаемого обзора; при несовпадении с текущим срезом — VERSION_CONFLICT",
+    ),
+});
+export const productOverviewMetricQuerySchema = productOverviewMetricPageQuerySchema.extend({
+  metric: productOverviewMetricSchema,
+});
+
+const overviewBlockerAddressSchema = overviewTaskRefSchema
+  .extend({ board: overviewTaskBoardSchema })
+  .describe("Блокер, чей состав затронутых задач раскрыт");
+
+const noBlockerSchema = z.null().describe("Блокер не применяется к этой метрике");
+const metricPage = <
+  M extends (typeof productOverviewMetrics)[number],
+  T extends z.ZodType,
+  B extends z.ZodType = typeof noBlockerSchema,
+>(
+  metric: M,
+  item: T,
+  blocker: B = noBlockerSchema as unknown as B,
+) =>
+  z
+    .strictObject({
+      metric: z.literal(metric).describe("Раскрытая метрика"),
+      blocker,
+      snapshotVersion: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .describe("Версия полного среза, на котором построена страница"),
+      generatedAt: timestampSchema.describe("Время формирования ответа"),
+      total: overviewCount("Полное число элементов метрики независимо от страницы"),
+      items: z.array(item).max(100).describe("Элементы страницы в порядке метрики"),
+      nextCursor: z
+        .string()
+        .nullable()
+        .describe("Продолжение того же неизменного среза либо null в конце"),
+    })
+    .describe(`Страница метрики ${metric}`);
+
+export const productOverviewMetricPageSchema = z
+  .discriminatedUnion("metric", [
+    metricPage("review-obligations-met", overviewOperatorTaskSchema),
+    metricPage("review-obligations-open", overviewOperatorTaskSchema),
+    metricPage("blocker-impact", overviewBlockerImpactSchema),
+    metricPage("blocker-affected", overviewAffectedTaskSchema, overviewBlockerAddressSchema),
+    metricPage("unplanned-work", overviewOperatorTaskSchema),
+    metricPage("board-work", overviewBoardWorkSchema),
+    metricPage("open-plans-complete", overviewOperatorPlanSchema),
+    metricPage("ready-releases", overviewReleaseSchema),
+    metricPage("plans-outside-releases", overviewOperatorPlanSchema),
+  ])
+  .describe("Постраничная детализация метрики оператора обзора");
 export type ProductListQuery = z.input<typeof productListQuerySchema>;
 export type ProductList = z.infer<typeof productListSchema>;
 export type ProductOverview = z.infer<typeof productOverviewSchema>;
 export type ProductOverviewSnapshot = z.infer<typeof productOverviewSnapshotSchema>;
+export type ProductOverviewOperator = z.infer<typeof productOverviewOperatorSchema>;
+export type ProductOverviewMetric = z.infer<typeof productOverviewMetricSchema>;
+export type ProductOverviewMetricQuery = z.input<typeof productOverviewMetricQuerySchema>;
+export type ProductOverviewMetricPage = z.infer<typeof productOverviewMetricPageSchema>;
 export type ProductRecord = z.infer<typeof productRecordSchema>;
 export type ProductFields = z.infer<typeof productFieldsSchema>;
 export type ProductMutation = z.infer<typeof productMutationSchema>;

@@ -101,10 +101,17 @@ import {
   productStateSchema,
   productSavedSchema,
   productOverviewSchema,
+  productOverviewMetricSchema,
+  productOverviewMetricPageSchema,
+  productOverviewMetricPageQuerySchema,
   productListSchema,
   productListQuerySchema,
   productContextSchema,
 } from "@relay/core/domain/product";
+import type { ProductOverviewMetric } from "@relay/core/domain/product";
+
+/** Возможность сервера: snapshot.operator и детализация метрик оператора обзора. */
+export const OVERVIEW_METRICS_CAPABILITY = "relay-overview-metrics-v1";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -134,16 +141,25 @@ function decode<T>(schema: z.ZodType<T>, value: unknown): T {
  * Ответ сервера прежней версии без этих полей — рассинхронизация версий, а не повреждение.
  */
 function decodeOverview(value: unknown, url: string) {
+  const record = typeof value === "object" && value !== null ? value : undefined;
   const legacy =
-    typeof value === "object" &&
-    value !== null &&
-    "items" in value &&
-    !("snapshot" in value) &&
-    !("snapshotVersion" in value);
+    record !== undefined &&
+    "items" in record &&
+    !("snapshot" in record) &&
+    !("snapshotVersion" in record);
   if (legacy)
     throw new AppError(
       "SERVER_INCOMPATIBLE",
       "Сервер Relay вернул обзор продукта прежнего формата без согласованного среза (snapshot, snapshotVersion). Обновите и перезапустите Relay Server той же версии, что и клиент.",
+      5,
+      { url },
+    );
+  // Срез без метрик оператора — сервер предыдущей версии, а не повреждённый ответ.
+  const snapshot = record && "snapshot" in record ? record.snapshot : undefined;
+  if (typeof snapshot === "object" && snapshot !== null && !("operator" in snapshot))
+    throw new AppError(
+      "SERVER_INCOMPATIBLE",
+      "Сервер Relay вернул обзор продукта без метрик оператора (snapshot.operator). Обновите и перезапустите Relay Server той же версии, что и клиент.",
       5,
       { url },
     );
@@ -776,6 +792,36 @@ export async function createHttpBackend(url: string, project?: string): Promise<
       state: async () =>
         decode(productStateSchema, await call(() => api.product.getProductState())),
       overview: async () => decodeOverview(await call(() => api.product.getProductOverview()), url),
+      overviewMetric: async (input) => {
+        // Проверка до запроса: прежний сервер ответил бы неинформативным 404 маршрута.
+        if (!context.capabilities?.includes(OVERVIEW_METRICS_CAPABILITY))
+          throw new AppError(
+            "SERVER_INCOMPATIBLE",
+            `Детализация метрик обзора требует Relay Server с ${OVERVIEW_METRICS_CAPABILITY}. Обновите и перезапустите сервер той же версии, что и клиент.`,
+            5,
+            { url },
+          );
+        const { metric, ...query } = input;
+        // Метрика попадает в сегмент пути: только значение enum, иначе `..`/`/`
+        // увели бы запрос из закреплённого проекта. Ошибка та же, что у local Core.
+        const parsedMetric = productOverviewMetricSchema.safeParse(metric);
+        if (!parsedMetric.success)
+          throw new AppError(
+            "UNKNOWN_METRIC",
+            `Неизвестная метрика обзора: ${String(metric)}. Допустимы: ${productOverviewMetricSchema.options.join(", ")}`,
+            2,
+          );
+        return decode(
+          productOverviewMetricPageSchema,
+          await call(() =>
+            api.product.getProductOverviewMetric({
+              // Generated SDK не кодирует сегменты пути; enum-значение кодируем явно.
+              metric: encodeURIComponent(parsedMetric.data) as ProductOverviewMetric,
+              ...defined(productOverviewMetricPageQuerySchema.parse(query)),
+            }),
+          ),
+        );
+      },
       list: async (input = {}) =>
         decode(
           productListSchema,

@@ -10,7 +10,7 @@ export const CLEAR_FAULT_PATH = "/api/__e2e/overview-fault/clear";
  * Управляемый прокси между Vite и собственным Relay Server.
  *
  * Считает чтения обзора и открытые SSE-потоки по проектам, удерживает ответы обзора
- * до явного освобождения, подменяет ответы для проверки ошибок, вставляет heartbeat
+ * и полных списков метрик до явного освобождения, подменяет ответы для проверки ошибок, вставляет heartbeat
  * и обрывает потоки. Недоступный upstream отвечает 502, как прокси разработки.
  *
  * @param {string} target Адрес собственного сервера.
@@ -45,6 +45,13 @@ export async function startControlProxy(target) {
   const taskListFaults = new Map();
   /** @type {{project: string, at: number, query: URLSearchParams, status: number | null, doneAt: number | null}[]} */
   const boardReads = [];
+  /** @type {{project: string, at: number, metric: string, query: URLSearchParams, status: number | null, doneAt: number | null}[]} */
+  const metricReads = [];
+  /** Удерживаемые метрики: `project metric` → доставки ответов, ждущие освобождения. */
+  /** @type {Map<string, (() => void)[]>} */
+  const heldMetrics = new Map();
+  /** Проекты, для которых контекст притворяется прежним сервером без метрик оператора. */
+  const legacyContexts = new Set();
   /** @type {Set<import("node:net").Socket>} */
   const sockets = new Set();
 
@@ -155,6 +162,56 @@ export async function startControlProxy(target) {
       forward(incoming, outgoing);
       return;
     }
+    if (
+      project !== null &&
+      incoming.method === "GET" &&
+      rest === "context" &&
+      legacyContexts.has(project)
+    ) {
+      // Прежний сервер не объявляет relay-overview-metrics-v1; остальной контекст тот же.
+      fetch(new URL(incoming.url ?? "/", upstream))
+        .then((response) => response.json())
+        .then((body) => {
+          const capabilities = (body.data?.capabilities ?? []).filter(
+            (item) => item !== "relay-overview-metrics-v1",
+          );
+          outgoing.writeHead(200, { "content-type": "application/json" });
+          outgoing.end(JSON.stringify({ ...body, data: { ...body.data, capabilities } }));
+        })
+        .catch(() => outgoing.writeHead(502).end());
+      return;
+    }
+    if (
+      project !== null &&
+      incoming.method === "GET" &&
+      rest.startsWith("product/overview/metrics/")
+    ) {
+      const read = {
+        project,
+        at: Date.now(),
+        metric: rest.slice("product/overview/metrics/".length),
+        query: url.searchParams,
+        status: null,
+        doneAt: null,
+      };
+      metricReads.push(read);
+      outgoing.once("close", () => {
+        read.status = outgoing.statusCode;
+        read.doneAt = Date.now();
+      });
+      const holdKey = `${project} ${read.metric}`;
+      if (heldMetrics.has(holdKey)) {
+        // Сервер отвечает сразу, удерживается только доставка ответа браузеру.
+        forward(incoming, outgoing, undefined, (deliver) => {
+          const queue = heldMetrics.get(holdKey);
+          if (queue === undefined) deliver();
+          else queue.push(deliver);
+        });
+        return;
+      }
+      forward(incoming, outgoing);
+      return;
+    }
     if (project !== null && incoming.method === "GET" && rest === "events") {
       forward(incoming, outgoing, (response) => {
         if ((response.statusCode ?? 0) !== 200) return;
@@ -236,6 +293,25 @@ export async function startControlProxy(target) {
     /** Возвращает чтение списка задач серверу. */
     restoreTaskList: (project) => taskListFaults.delete(project),
     /** Чтения страниц каталога досок проекта с указанного момента; `doneAt` — конец ответа. */
+    /** Контекст проекта без возможности полных списков метрик, как у прежнего сервера. */
+    hideMetricsCapability: (project) => legacyContexts.add(project),
+    /** Возвращает настоящий контекст проекта. */
+    restoreMetricsCapability: (project) => legacyContexts.delete(project),
+    /** Удерживает доставку ответов полного списка метрики проекта до `releaseMetric`. */
+    holdMetric: (project, metric) => {
+      const key = `${project} ${metric}`;
+      if (!heldMetrics.has(key)) heldMetrics.set(key, []);
+    },
+    /** Отпускает удержанные ответы метрики в порядке поступления и прекращает удержание. */
+    releaseMetric: (project, metric) => {
+      const key = `${project} ${metric}`;
+      const queue = heldMetrics.get(key) ?? [];
+      heldMetrics.delete(key);
+      for (const deliver of queue) deliver();
+    },
+    /** Чтения полных списков метрик оператора проекта: метрика, query, статус ответа. */
+    metricReads: (project, since = 0) =>
+      metricReads.filter((read) => read.project === project && read.at >= since),
     boardReads: (project, since) =>
       boardReads.filter((item) => item.project === project && item.at >= since),
     /** Отправляет heartbeat во все открытые потоки проекта. */
@@ -255,6 +331,7 @@ export async function startControlProxy(target) {
     async close() {
       for (const project of held.keys()) holding.delete(project);
       held.clear();
+      heldMetrics.clear();
       for (const socket of sockets) socket.destroy();
       server.close();
       await once(server, "close");

@@ -18,6 +18,21 @@ export function encodeCursor(scope: unknown, position: unknown): string {
   );
 }
 
+/**
+ * Позиция курсора без проверки привязки к запросу; null — курсор повреждён.
+ * Только для диагностики причины отказа, не для продолжения выборки.
+ */
+export function peekCursor<T>(token: string, schema: z.ZodType<T>): T | null {
+  try {
+    if (token.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(token)) return null;
+    const cursor = cursorSchema.parse(JSON.parse(Buffer.from(token, "base64url").toString("utf8")));
+    const position = schema.safeParse(cursor.position);
+    return position.success ? position.data : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Привязка к запросу исключает случайное продолжение страницы с другими фильтрами. */
 export function decodeCursor<T>(token: string, scope: unknown, schema: z.ZodType<T>): T {
   try {

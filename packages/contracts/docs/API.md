@@ -94,6 +94,17 @@ project-runtime, Web). Новое обязательное поле резуль
 со старым сервером: так, `productOverviewSchema` требует `snapshotVersion`, `generatedAt`
 и `snapshot`. Такое изменение согласуется как выпуск клиента и Server одной версией;
 потребитель, которому нужна прежняя форма, выбирает поля явно, как MCP `product_overview`.
+То же относится к обязательному блоку `snapshot.operator`: старый строгий клиент отклоняет
+ответ нового сервера, поэтому Server, CLI, MCP и Web обновляются одной версией.
+
+Детализация метрик оператора описана в `entities/product.ts`: `productOverviewMetricSchema`
+(перечень метрик), `productOverviewMetricPageQuerySchema` (query без метрики: `blocker`,
+`limit`, `cursor`, `version`), `productOverviewMetricQuerySchema` (вход Core с `metric`) и
+`productOverviewMetricPageSchema` — discriminated union по `metric`, где элементы каждой
+метрики имеют ту же схему, что элементы соответствующей подборки `snapshot.operator`.
+`blocker` у `blocker-affected` — адрес раскрытого блокера, у остальных метрик — `null`.
+Схема не проверяет связь `blocker` с метрикой и действительность курсора: это делает Core
+(`INVALID_ARGUMENT`, `UNKNOWN_METRIC`, `INVALID_CURSOR`, `VERSION_CONFLICT`, `NOT_FOUND`).
 
 `ApiSuccess<T>` допускает необязательное `meta`, но это не универсальное правило страниц.
 Общие сущности возвращают `offset`-продолжение через `nextOffset`/`version`, другие сценарии

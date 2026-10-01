@@ -230,6 +230,158 @@ export type OverviewReleases = {
   recent: OverviewPreview<OverviewRelease>;
 };
 
+/** Причина, по которой обязательства задачи сейчас не выполнены. */
+export type OverviewObligationReason = "criterion" | "dependency" | "child";
+
+/** Доска задачи метрики оператора. */
+export type OverviewTaskBoard = {
+  /** Адрес доски в проекте. */
+  slug: string;
+  /** Название доски. */
+  name: string;
+};
+
+/** Задача метрики оператора с основанием включения. */
+export type OverviewOperatorTask = OverviewTask & {
+  /** Все причины невыполненных обязательств без повторов; пусто — обязательства выполнены. */
+  reasons: OverviewObligationReason[];
+};
+
+/** Незавершённая задача, которую блокер задерживает напрямую. */
+export type OverviewAffectedTask = OverviewTaskRef & {
+  /** Текущая доска задачи. */
+  board: OverviewTaskBoard;
+  /** Прямая связь с блокером: зависимость, подзадача или обе сразу. */
+  relations: ("dependency" | "subtask")[];
+};
+
+/** Прямой блокер незавершённой работы; может быть в любой колонке, включая «Отменено». */
+export type OverviewBlockerImpact = OverviewTaskRef & {
+  /** Текущая доска блокера. */
+  board: OverviewTaskBoard;
+  /** Прямо затронутые незавершённые задачи: полный счётчик и первые записи. */
+  affected: {
+    /** Число различных незавершённых задач, которые блокер задерживает напрямую. */
+    total: number;
+    /** Первые затронутые задачи, не более пяти. */
+    items: OverviewAffectedTask[];
+  };
+};
+
+/** Доска с распределением незавершённой работы; показатели пересекаются. */
+export type OverviewBoardWork = Omit<OverviewBoard, "taskCount" | "openTaskCount"> & {
+  /** Задачи доски по смыслу показателей. */
+  tasks: {
+    /** Все задачи доски, включая «Готово» и «Отменено». */
+    total: number;
+    /** Число задач в каждой из шести колонок. */
+    byColumn: Record<OverviewTaskColumn, number>;
+    /** Фактически выполненные задачи. */
+    completed: number;
+    /** Незавершённые: не отменены и фактически не выполнены. */
+    remaining: number;
+    /** Незавершённые задачи с прямыми блокерами; пересекается с remaining. */
+    blockedRemaining: number;
+    /** Можно брать в работу. */
+    readyToStart: number;
+  };
+};
+
+/** План метрики оператора: статус и фактическое выполнение состава. */
+export type OverviewOperatorPlan = {
+  /** Постоянный ID плана. */
+  id: string;
+  /** Читаемый ключ плана. */
+  key: string;
+  /** Название плана. */
+  title: string;
+  /** Собственный статус плана. */
+  status: OverviewPlanStatus;
+  /** Прогресс этапов. */
+  stages: { total: number; completed: number };
+  /** Фактическое выполнение задач состава. */
+  tasks: { total: number; completed: number; percent: number };
+};
+
+/**
+ * Показатели оператора из того же среза: полные счётчики и подборки до пяти записей.
+ * Показатели пересекаются и не складываются; общего балла нет.
+ */
+export type OverviewOperator = {
+  /** M-01. Задачи на проверке, разделённые по готовности обязательств. */
+  review: {
+    /** Все задачи на проверке; равно сумме двух групп. */
+    total: number;
+    /** Обязательства выполнены: завершение можно рассмотреть. */
+    obligationsMet: OverviewPreview<OverviewOperatorTask>;
+    /** Остались невыполненные критерии или прямые обязательства. */
+    obligationsOpen: OverviewPreview<OverviewOperatorTask>;
+  };
+  /** M-02. Прямые блокеры незавершённой работы; больше затронутых задач первыми. */
+  blockerImpact: OverviewPreview<OverviewBlockerImpact>;
+  /** M-03. Задачи «В работе» и «На проверке» вне состава черновых и активных планов. */
+  unplannedWork: OverviewPreview<OverviewOperatorTask> & {
+    /** Разбиение по колонкам исполняемой работы. */
+    byColumn: { inProgress: number; review: number };
+  };
+  /** M-04. Распределение незавершённой работы по доскам. */
+  boardWork: {
+    /** Все незавершённые задачи проекта. */
+    remaining: number;
+    /** Незавершённые задачи проекта с прямыми блокерами. */
+    blockedRemaining: number;
+    /** Доски: больше незавершённых задач первыми, включая пустые. */
+    boards: OverviewPreview<OverviewBoardWork>;
+  };
+  /** M-05. Черновые и активные планы с выполненным непустым составом. */
+  openPlansComplete: OverviewPreview<OverviewOperatorPlan>;
+  /** M-06. Подготовка выпуска. */
+  releasePreparation: {
+    /** Запланированные релизы с готовым составом. */
+    readyReleases: OverviewPreview<OverviewRelease>;
+    /** Завершённые готовые планы вне запланированных и выпущенных релизов. */
+    completedPlansOutsideReleases: OverviewPreview<OverviewOperatorPlan>;
+  };
+};
+
+/** Полный список метрики оператора, раскрываемый постранично. */
+export type OverviewMetric =
+  | "review-obligations-met"
+  | "review-obligations-open"
+  | "blocker-impact"
+  | "blocker-affected"
+  | "unplanned-work"
+  | "board-work"
+  | "open-plans-complete"
+  | "ready-releases"
+  | "plans-outside-releases";
+
+/** Что раскрыть: метрика и для затронутых задач — постоянный ID блокера. */
+export type OverviewMetricRequest =
+  | { metric: Exclude<OverviewMetric, "blocker-affected"> }
+  | { metric: "blocker-affected"; blocker: string };
+
+/** Запись полного списка метрики; вид записи определяет её отображение. */
+export type OverviewMetricEntry =
+  | { kind: "task"; id: string; task: OverviewOperatorTask }
+  | { kind: "affected"; id: string; task: OverviewAffectedTask }
+  | { kind: "blocker"; id: string; blocker: OverviewBlockerImpact }
+  | { kind: "board"; id: string; board: OverviewBoardWork }
+  | { kind: "plan"; id: string; plan: OverviewOperatorPlan }
+  | { kind: "release"; id: string; release: OverviewRelease };
+
+/** Страница полного списка метрики, построенная на одном неизменном срезе. */
+export type OverviewMetricPage = {
+  /** Версия среза, на котором построена страница. */
+  snapshotVersion: string;
+  /** Полное число записей метрики независимо от страницы. */
+  total: number;
+  /** Записи страницы в порядке метрики. */
+  entries: OverviewMetricEntry[];
+  /** Продолжение того же среза либо null в конце. */
+  nextCursor: string | null;
+};
+
 /** Согласованный срез состояния проекта из одного чтения сервера. */
 export type ProductOverview = {
   /** Отпечаток данных среза; меняется при любом изменении показанных данных. */
@@ -268,6 +420,8 @@ export type ProductOverview = {
   plans: OverviewPlans;
   /** Релизы. */
   releases: OverviewReleases;
+  /** Показатели оператора. */
+  operator: OverviewOperator;
 };
 
 /**

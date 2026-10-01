@@ -5,6 +5,7 @@ import { subscribeWorkspace } from "infra/workspace-events";
 import type { WorkspaceSignal } from "infra/workspace-events";
 import { getProductOverview } from "../adapters/get-product-overview.adapter";
 import type { GetProductOverviewError } from "../errors/product-overview.error";
+import { getProductOverviewKey } from "../helpers/get-product-overview-key";
 import type {
   ProductOverview,
   ProductOverviewFreshness,
@@ -131,7 +132,7 @@ export const useProductOverview = (
   projectId: string,
 ): SWRResponse<ProductOverview, GetProductOverviewError> & ProductOverviewSync => {
   const query = useSWR<ProductOverview, GetProductOverviewError>(
-    ["product-overview", projectId],
+    getProductOverviewKey(projectId),
     () => getProductOverview(projectId),
   );
   const sync = useProductOverviewSync(projectId, query.mutate);

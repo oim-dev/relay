@@ -3,8 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { productOverviewSchema } from "@relay/core/domain/product";
-import type { ProductOverview } from "@relay/core/domain/product";
+import {
+  productOverviewMetricPageSchema,
+  productOverviewMetrics,
+  productOverviewSchema,
+} from "@relay/core/domain/product";
+import type { ProductOverview, ProductOverviewMetricPage } from "@relay/core/domain/product";
 import { ProductQueries } from "@relay/core/application/product/queries";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import { initialize } from "@relay/core/storage/workspace";
@@ -182,4 +186,227 @@ test("HTTP обзора продукта: проектные маршруты и
     (await server.app.inject("/api/v1/projects/missing/product/overview")).statusCode,
     404,
   );
+});
+
+/** Страница детализации без времени формирования ответа. */
+function pageWithoutGeneratedAt(page: ProductOverviewMetricPage) {
+  const { generatedAt, ...rest } = page;
+  assert.ok(!Number.isNaN(Date.parse(generatedAt)));
+  return rest;
+}
+
+test("HTTP детализации метрик обзора: пусто, страницы, scoped, ошибки и VERSION_CONFLICT", async (t) => {
+  const { app, root, workspace } = await fixture(t);
+  const projectId = workspace.config.projectId!;
+  const scoped = `/api/v1/projects/${projectId}`;
+  const core = new ProductQueries(workspace);
+  const get = async (path: string, status = 200, base = scoped) => {
+    const response = await app.inject(`${base}/product/overview/metrics/${path}`);
+    assert.equal(response.statusCode, status, response.body);
+    return response.json();
+  };
+  const page = async (path: string, base = scoped) =>
+    productOverviewMetricPageSchema.parse((await get(path, 200, base)).data);
+  const failure = async (path: string, status: number, code: string) => {
+    const body = await get(path, status);
+    assert.equal(body.ok, false);
+    assert.equal(body.error.code, code, JSON.stringify(body));
+    return body.error;
+  };
+  const write = async (url: string, payload: object) => {
+    const response = await app.inject({ method: "POST", url: `${scoped}${url}`, payload });
+    assert.equal(response.statusCode, 200, response.body);
+    return response.json().data;
+  };
+
+  // Пустой проект: каждая метрика — нормальный ответ с нулём и без продолжения.
+  const empty = productOverviewSchema.parse(
+    (await app.inject(`${scoped}/product/overview`)).json().data,
+  );
+  for (const metric of productOverviewMetrics.filter((entry) => entry !== "blocker-affected")) {
+    const result = await page(`${metric}?version=${empty.snapshotVersion}`);
+    assert.equal(result.metric, metric);
+    assert.equal(result.blocker, null);
+    assert.equal(result.nextCursor, null);
+    // Системные доски существуют и в пустом проекте; остальные выборки пусты.
+    if (metric === "board-work") {
+      assert.equal(result.total, empty.snapshot.operator.boardWork.boards.total);
+      assert.ok(result.items.every((board) => "tasks" in board && board.tasks.remaining === 0));
+      continue;
+    }
+    assert.equal(result.total, 0);
+    assert.deepEqual(result.items, []);
+    assert.equal(result.snapshotVersion, empty.snapshotVersion);
+  }
+
+  // Пять задач в review без обязательств и одна работа, заблокированная задачей-блокером.
+  for (let index = 0; index < 5; index++)
+    await write("/board-tasks", {
+      board: "product",
+      column: "review",
+      title: `Проверка ${index}`,
+      requestId: `review-${index}`,
+    });
+  const blocker = await write("/board-tasks", {
+    board: "infrastructure",
+    column: "ready",
+    title: "Блокер",
+    requestId: "blocker",
+  });
+  const blocked = await write("/board-tasks", {
+    board: "product",
+    column: "in-progress",
+    title: "Заблокированная работа",
+    requestId: "blocked",
+  });
+  await write(`/board-tasks/${blocked.id}/links`, {
+    target: blocker.id,
+    relation: "depends-on",
+    ifRevision: blocked.revision,
+    requestId: "blocked-link",
+  });
+  const plan = await write("/plans", { title: "План детализации", requestId: "metric-plan" });
+  const release = await write("/releases", {
+    title: "Релиз детализации",
+    version: "1.0.0",
+    planIds: [plan.id],
+    requestId: "metric-release",
+  });
+
+  const overview = productOverviewSchema.parse(
+    (await app.inject(`${scoped}/product/overview`)).json().data,
+  );
+  const version = overview.snapshotVersion;
+  assert.equal(overview.snapshot.operator.review.obligationsMet.total, 5);
+
+  // Пагинация: три страницы того же среза равны полной выборке Core и подборке обзора.
+  const collected: unknown[] = [];
+  let cursor: string | null = null;
+  let pages = 0;
+  do {
+    const query = new URLSearchParams({ limit: "2", version });
+    if (cursor) query.set("cursor", cursor);
+    const current = await page(`review-obligations-met?${query}`);
+    assert.equal(current.total, 5);
+    assert.equal(current.snapshotVersion, version);
+    collected.push(...current.items);
+    cursor = current.nextCursor;
+    pages++;
+  } while (cursor);
+  assert.equal(pages, 3);
+  const full = await core.overviewMetric({ metric: "review-obligations-met", limit: 100 });
+  assert.deepEqual(collected, full.items);
+  assert.deepEqual(
+    collected.slice(0, overview.snapshot.operator.review.obligationsMet.shown),
+    overview.snapshot.operator.review.obligationsMet.items,
+  );
+
+  // Local и scoped адреса дают одинаковый результат, равный Core.
+  const local = await page("blocker-impact", "/api/v1");
+  assert.deepEqual(
+    pageWithoutGeneratedAt(await page("blocker-impact")),
+    pageWithoutGeneratedAt(local),
+  );
+  assert.deepEqual(
+    pageWithoutGeneratedAt(local),
+    pageWithoutGeneratedAt(await core.overviewMetric({ metric: "blocker-impact" })),
+  );
+  assert.equal(local.total, 1);
+  assert.equal(local.items[0]!.id, blocker.id);
+
+  // blocker-affected принимает ключ блокера и возвращает прямо затронутую задачу.
+  const affected = await page(`blocker-affected?blocker=${blocker.key}`);
+  assert.equal(affected.metric, "blocker-affected");
+  assert.equal(affected.blocker?.id, blocker.id);
+  assert.equal(affected.total, 1);
+  assert.equal(affected.items[0]!.id, blocked.id);
+  assert.deepEqual(affected.metric === "blocker-affected" && affected.items[0]!.relations, [
+    "dependency",
+  ]);
+
+  // Предметные ошибки транспорта.
+  await failure("unknown-metric", 400, "UNKNOWN_METRIC");
+  // Сегмент пути не уводит запрос в другой маршрут или проект.
+  for (const path of ["..%2F..%2Fboard-work", "board-work%2F..", "%2F"])
+    await failure(path, 400, "UNKNOWN_METRIC");
+  // `..` и `%2E%2E` нормализуются клиентом до отправки и не находит маршрута — не 200.
+  for (const path of ["..", "%2E%2E"]) {
+    const dotted = await app.inject(`${scoped}/product/overview/metrics/${path}`);
+    assert.equal(dotted.statusCode, 404, dotted.body);
+  }
+  const nested = await app.inject(`${scoped}/product/overview/metrics/board-work/extra`);
+  assert.equal(nested.statusCode, 404, nested.body);
+  await failure("blocker-affected?blocker=TASK-MISSING-404", 404, "NOT_FOUND");
+  await failure(`review-obligations-met?blocker=${blocker.id}`, 400, "INVALID_ARGUMENT");
+  await failure("blocker-affected", 400, "INVALID_ARGUMENT");
+  await failure("review-obligations-met?limit=101", 400, "VALIDATION_ERROR");
+  await failure("review-obligations-met?unexpected=1", 400, "VALIDATION_ERROR");
+  await failure("review-obligations-met?cursor=broken", 400, "INVALID_CURSOR");
+  const firstPage = await page(`review-obligations-met?limit=2&version=${version}`);
+  await failure(
+    `review-obligations-open?cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
+    400,
+    "INVALID_CURSOR",
+  );
+
+  // Изменение задачи, плана или релиза между страницами — конфликт продолжения.
+  const changes: [string, () => Promise<unknown>][] = [
+    [
+      "задача",
+      async () =>
+        write(`/board-tasks/${blocker.id}/update`, {
+          title: "Блокер, уточнённый",
+          ifRevision: (await app.inject(`${scoped}/board-tasks/${blocker.id}`)).json().data
+            .revision,
+          requestId: "change-task",
+        }),
+    ],
+    [
+      "план",
+      () =>
+        write(`/plans/${plan.id}/update`, {
+          title: "План детализации, уточнённый",
+          ifRevision: plan.revision,
+          requestId: "change-plan",
+        }),
+    ],
+    [
+      "релиз",
+      () =>
+        write(`/releases/${release.id}/transition`, {
+          action: "cancel",
+          ifRevision: release.revision,
+          requestId: "change-release",
+        }),
+    ],
+  ];
+  for (const [subject, change] of changes) {
+    const before = productOverviewSchema.parse(
+      (await app.inject(`${scoped}/product/overview`)).json().data,
+    ).snapshotVersion;
+    const first = await page(`review-obligations-met?limit=2&version=${before}`);
+    await change();
+    const continued = await get(
+      `review-obligations-met?limit=2&cursor=${encodeURIComponent(first.nextCursor!)}`,
+      409,
+    );
+    assert.equal(continued.error.code, "VERSION_CONFLICT", subject);
+    assert.equal(continued.error.exitCode, 4, subject);
+    const stale = await get(`review-obligations-met?version=${before}`, 409);
+    assert.equal(stale.error.code, "VERSION_CONFLICT", subject);
+  }
+
+  // HTTP Backend (CLI/MCP) и local Backend читают одинаковую страницу.
+  await app.listen({ host: "127.0.0.1", port: 0 });
+  const http = await createHttpBackend(await app.getUrl(), projectId);
+  const direct = await createLocalBackend(root);
+  const query = { metric: "blocker-affected", blocker: blocker.key, limit: 1 } as const;
+  const [remote, same] = await Promise.all([
+    http.product.overviewMetric(query),
+    direct.product.overviewMetric(query),
+  ]);
+  assert.deepEqual(pageWithoutGeneratedAt(remote), pageWithoutGeneratedAt(same));
+  await assert.rejects(http.product.overviewMetric({ metric: "nope" as "board-work" }), {
+    code: "UNKNOWN_METRIC",
+  });
 });

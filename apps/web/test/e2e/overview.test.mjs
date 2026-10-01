@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { createBrowser } from "./helpers/browser.mjs";
 import { CLEAR_FAULT_PATH, startControlProxy } from "./helpers/proxy.mjs";
-import { seedBreadth, seedCatalog, seedProject } from "./helpers/seed.mjs";
+import {
+  seedBreadth,
+  seedCatalog,
+  seedOperator,
+  seedOperatorBreadth,
+  seedProject,
+} from "./helpers/seed.mjs";
 import {
   assertBuilt,
   createWorkspace,
@@ -42,6 +48,18 @@ let alphaApi;
 let gammaApi;
 let seeded;
 let breadth;
+let zeta;
+let eta;
+let zetaApi;
+let etaApi;
+let operatorFixture;
+let operatorBreadth;
+/** Отдельная копия малой fixture оператора: регрессии фокуса меняют её состав. */
+let theta;
+let thetaApi;
+let focusFixture;
+/** Записей в каждой группе большой fixture: больше подборки (5) и страницы списка (20). */
+const OPERATOR_COUNT = 21;
 
 const q = (value) => JSON.stringify(value);
 const overviewUrl = (project) => `${web.url}/projects/${encodeURIComponent(project.slug)}`;
@@ -92,6 +110,12 @@ const settledReads = async (project, quiet = 1_500) => {
 const taskRevision = async (id) => (await alphaApi.get(`/board-tasks/${id}`)).revision;
 const moveTask = async (id, column) =>
   alphaApi.post(`/board-tasks/${id}/move`, { ifRevision: await taskRevision(id), column });
+/** Переносит задачу проекта в колонку с актуальной ревизией. */
+const moveTaskIn = async (api, id, column) =>
+  api.post(`/board-tasks/${id}/move`, {
+    ifRevision: (await api.get(`/board-tasks/${id}`)).revision,
+    column,
+  });
 const createTask = (title, column = "inbox") =>
   alphaApi.post("/board-tasks", { board: "product", title, column });
 
@@ -120,7 +144,7 @@ before(async () => {
   await setupStep("проверка сборок", assertBuilt);
   await mkdir(screenshots, { recursive: true });
   workspace = await setupStep("временный workspace", () =>
-    createWorkspace(["alpha", "beta", "gamma", "delta", "epsilon"]),
+    createWorkspace(["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"]),
   );
   webPort = await freePort();
   serverPort = await freePort();
@@ -144,6 +168,18 @@ before(async () => {
     gamma = byKey.gamma;
     delta = byKey.delta;
     epsilon = byKey.epsilon;
+    zeta = byKey.zeta;
+    eta = byKey.eta;
+    theta = byKey.theta;
+    zetaApi = relayApi(() => server.url, zeta.id);
+    etaApi = relayApi(() => server.url, eta.id);
+    thetaApi = relayApi(() => server.url, theta.id);
+    // Проекты независимы: наполнение показателей оператора идёт параллельно с остальными.
+    const operatorSeeds = Promise.all([
+      seedOperator(zetaApi),
+      seedOperatorBreadth(etaApi, { count: OPERATOR_COUNT }),
+      seedOperator(thetaApi),
+    ]);
     gammaApi = relayApi(() => server.url, gamma.id);
     breadth = await seedBreadth(gammaApi);
     alphaApi = relayApi(() => server.url, alpha.id);
@@ -157,6 +193,7 @@ before(async () => {
         description: "Описание беты без краткой summary.",
       },
     });
+    [operatorFixture, operatorBreadth, focusFixture] = await operatorSeeds;
   });
   browser = createBrowser(`tasks-web-overview-${process.pid}`);
   await setupStep("запуск браузера agent-browser", async () => {
@@ -1214,6 +1251,541 @@ test("O-01/O-19: длинная summary ограничена по высоте �
   await browser.command("press", "Enter");
   await browser.waitFor(`${toggle}.getAttribute('aria-expanded') === 'false'`);
   assert.equal(await browser.eval(`document.activeElement === ${toggle}`), true);
+  await browser.viewport(1440, 1000);
+  await browser.open(overviewUrl(alpha));
+  await browser.waitFor(`${metric("Задачи")} !== null`);
+});
+
+/**
+ * Показатель оператора по названию: число, разбиение, текст, ссылки записей своего
+ * списка (без вложенных списков блокеров) и состояние раскрытия.
+ */
+/**
+ * Нажимает кнопку, предварительно прокрутив её в видимую область: длинный блок
+ * «Требует внимания» прокручивается внутри карточки, и обычный клик попал бы мимо.
+ */
+const clickVisible = (selector) =>
+  browser.eval(
+    `(() => { const element = document.querySelector(${q(selector)}); element.scrollIntoView({ block: 'center' }); element.click(); return true; })()`,
+  );
+const disclosure = (title) =>
+  `(() => { const section = [...document.querySelectorAll('main section')].find((item) => item.querySelector(':scope > h3 > span, :scope > h4 > span')?.textContent === ${q(title)}); if (!section) return null; const spans = section.querySelector(':scope > h3, :scope > h4').querySelectorAll(':scope > span'); const list = section.querySelector(':scope > div > ul'); return { count: Number(spans[1].textContent), summary: spans[2]?.textContent ?? null, text: section.innerText, links: list ? [...list.querySelectorAll(':scope > li > div > a')].map((a) => a.getAttribute('href')) : [], expanded: section.querySelector(':scope > button[aria-expanded]')?.getAttribute('aria-expanded') ?? null }; })()`;
+/** Нажимает кнопку внутри показателя по началу её текста. */
+const pressIn = (title, label) =>
+  browser.eval(
+    `(() => { const section = [...document.querySelectorAll('main section')].find((item) => item.querySelector(':scope > h3 > span, :scope > h4 > span')?.textContent === ${q(title)}); const button = [...section.querySelectorAll(':scope > button, :scope > div > button')].find((item) => item.textContent.startsWith(${q(label)})); button.click(); return true; })()`,
+  );
+/** ID записи из адреса её ссылки. */
+const idOf = (href) => decodeURIComponent(href.split("/").at(-1));
+const sortedIds = (hrefs) => hrefs.map(idOf).sort();
+/** Число раздела «Обязательства задач на проверке». */
+const reviewObligationsTotal = `Number([...document.querySelectorAll('main h3')].find((item) => item.firstChild?.textContent === 'Обязательства задач на проверке')?.querySelector('span')?.textContent ?? NaN)`;
+
+/** Раскрывает показатель до полного списка и дочитывает все страницы. */
+const expandFully = async (title, total) => {
+  await clickVisible(`main button[aria-label=${q(`Показать все ${total}: ${title}`)}]`);
+  await browser.waitFor(
+    `${disclosure(title)}?.links.length === ${Math.min(total, 20)} && ${disclosure(title)}.text.includes('Показано ${Math.min(total, 20)} из ${total}')`,
+  );
+  let shown = Math.min(total, 20);
+  while (shown < total) {
+    await pressIn(title, "Загрузить ещё");
+    const next = Math.min(total, shown + 20);
+    await browser.waitFor(`${disclosure(title)}?.links.length === ${next}`);
+    shown = next;
+  }
+  const state = await browser.eval(disclosure(title));
+  assert.equal(new Set(state.links).size, total, `${title}: дубли в полном списке`);
+  assert.match(state.text, new RegExp(`Показано ${total} из ${total}`), `${title}: итог списка`);
+  assert.doesNotMatch(state.text, /Загрузить ещё/, `${title}: продолжение после конца`);
+  return state;
+};
+
+test("M-01…M-06: числа Web совпадают с fixture Core и ведут к записям", async () => {
+  const { tasks: t, plans: pl, releases: r } = operatorFixture;
+  await browser.viewport(1440, 1000);
+  await browser.media("light");
+  await browser.open(overviewUrl(zeta));
+  await browser.waitFor(`${metric("Задачи")} === 24 && ${freshness} === 'live'`);
+  const base = `/projects/${encodeURIComponent(zeta.slug)}`;
+
+  // M-01: 5 задач на проверке = 2 с выполненными обязательствами + 3 с открытыми.
+  assert.equal(await browser.eval(stage("На проверке")), 5);
+  assert.equal(await browser.eval(reviewObligationsTotal), 5);
+  assert.equal((await browser.eval(disclosure("Обязательства выполнены"))).count, 2);
+  assert.equal((await browser.eval(disclosure("Остались обязательства"))).count, 3);
+  const met = await expandFully("Обязательства выполнены", 2);
+  assert.deepEqual(sortedIds(met.links), [t.T1, t.T5].sort());
+  const open = await expandFully("Остались обязательства", 3);
+  assert.deepEqual(sortedIds(open.links), [t.T2, t.T3, t.T4].sort());
+  assert.match(open.text, /Не выполнено: критерии приёмки/);
+  assert.match(open.text, /Не выполнено: зависимость\. Ждёт: WEB-\d+ \(зависимость\)/);
+  assert.match(open.text, /Не выполнено: подзадача\. Ждёт: WEB-\d+ \(подзадача\)/);
+  for (const href of open.links) assert.match(href, new RegExp(`^${base}/boards/(web|product)/`));
+
+  // M-02: шесть прямых блокеров; T6 задерживает две задачи, отменённый T14 остаётся в списке.
+  const impact = await browser.eval(disclosure("Что задерживает работу"));
+  assert.equal(impact.count, 6);
+  assert.equal(impact.links.length, 5, "подборка блокеров видна без раскрытия");
+  assert.equal(idOf(impact.links[0]), t.T6, "больше затронутых задач — первым");
+  assert.match(impact.text, /Блокирует 2 незавершённые задачи напрямую/);
+  const blockers = await expandFully("Что задерживает работу", 6);
+  assert.deepEqual(sortedIds(blockers.links), [t.T6, t.T7, t.T9, t.T11, t.T12, t.T14].sort());
+  assert.equal(blockers.text.match(/Блокирует 1 незавершённую задачу напрямую/g)?.length, 5);
+  assert.match(blockers.text, /отменённый блокер T14\n+web\nОтменено/);
+  // Затронутые задачи T6 — T3 и T8; T9 задерживает T8 и зависимостью, и как подзадача — один раз.
+  const affectedOf = (key) =>
+    `(() => { const button = [...document.querySelectorAll('main button')].find((item) => item.getAttribute('aria-label')?.endsWith(${q(` — ${key}`)})); const list = document.getElementById(button?.getAttribute('aria-controls') ?? ''); return list ? { links: [...list.querySelectorAll('li a')].map((a) => a.getAttribute('href')), text: list.innerText } : null; })()`;
+  const blockerKey = async (id) =>
+    browser.eval(
+      `[...document.querySelectorAll('main a')].find((a) => a.getAttribute('href')?.endsWith(${q(`/${id}`)}) && a.closest('section')?.querySelector(':scope > h3 > span')?.textContent === 'Что задерживает работу')?.querySelector('span')?.textContent`,
+    );
+  const t6 = await blockerKey(t.T6);
+  const t9 = await blockerKey(t.T9);
+  await clickVisible(`main button[aria-label=${q(`Показать затронутые: 2 — ${t6}`)}]`);
+  await browser.waitFor(`${affectedOf(t6)}?.text.includes('Показано 2 из 2')`);
+  assert.deepEqual(sortedIds((await browser.eval(affectedOf(t6))).links), [t.T3, t.T8].sort());
+  await clickVisible(`main button[aria-label=${q(`Показать затронутые: 1 — ${t9}`)}]`);
+  await browser.waitFor(`${affectedOf(t9)}?.text.includes('Показано 1 из 1')`);
+  const ofT9 = await browser.eval(affectedOf(t9));
+  assert.deepEqual(ofT9.links.map(idOf), [t.T8]);
+  assert.match(ofT9.text, /Связь: зависимость и подзадача/);
+
+  // M-03: исполняемая работа вне открытых планов — 6 (в работе 2, на проверке 4).
+  const unplanned = await browser.eval(disclosure("Вне открытых планов"));
+  assert.equal(unplanned.count, 6);
+  assert.equal(unplanned.summary, "в работе 2 · на проверке 4");
+  const unplannedFull = await expandFully("Вне открытых планов", 6);
+  assert.deepEqual(sortedIds(unplannedFull.links), [t.T9, t.T18, t.T2, t.T3, t.T4, t.T5].sort());
+
+  // M-04: незавершённая работа по доскам — web 8, product 7, пустые доски в конце; сумма 15.
+  const work = await browser.eval(disclosure("Незавершённая работа"));
+  assert.equal(work.count, 4);
+  assert.equal(work.summary, "всего 15 · из них с блокерами 6");
+  // Больше незавершённых — первой; при равенстве (пустые доски) — по постоянному ID доски.
+  const workSlugs = work.links.map((href) => href.split("/boards/")[1]);
+  assert.deepEqual(workSlugs.slice(0, 2), ["web", "product"]);
+  assert.deepEqual([...workSlugs.slice(2)].sort(), ["empty", "infrastructure"]);
+  assert.match(
+    work.text,
+    /web\n8 незавершённых\n+в работе 3\nна проверке 3\nс блокерами 3 из 8 незавершённых\nвсего задач 10/,
+  );
+  assert.match(
+    work.text,
+    /Продукт\n7 незавершённых\n+в работе 0\nна проверке 2\nс блокерами 3 из 7 незавершённых\nвсего задач 7/,
+  );
+  assert.match(work.text, /не трудозатраты и не загрузка людей/);
+  // Прежний каталог досок не изменил смысла «открыто».
+  assert.match(
+    await browser.eval(`document.getElementById('overview-boards').innerText`),
+    /открыто 7 из 10/,
+  );
+
+  // M-05 и M-06.
+  const openPlans = await expandFully("Состав выполнен, план открыт", 2);
+  assert.deepEqual(sortedIds(openPlans.links), [pl.PL5, pl.PL7].sort());
+  assert.match(openPlans.text, /Статус: Запланирован/);
+  assert.match(openPlans.text, /Статус: В работе/);
+  const ready = await expandFully("Запланированные релизы с готовым составом", 2);
+  assert.deepEqual(
+    ready.links.map(idOf),
+    [r.R1, r.R3],
+    "ближайшая дата первой, без даты — в конце",
+  );
+  const outside = await expandFully("Готовые завершённые планы вне релизов", 2);
+  assert.deepEqual(sortedIds(outside.links), [pl.PL10, pl.PL11].sort());
+  // Каждое число ведёт к записи: план открывается по ссылке показателя.
+  await clickVisible(`main a[href=${q(`${base}/plans/${encodeURIComponent(pl.PL5)}`)}]`);
+  await browser.waitFor(`location.pathname === ${q(`${base}/plans/${pl.PL5}`)}`);
+  await browser.back();
+  await browser.waitFor(`${metric("Задачи")} === 24`);
+
+  // Повторное открытие задачи плана убирает R1 из готовых и добавляет задачу на проверку.
+  await expandFully("Запланированные релизы с готовым составом", 2);
+  await moveTaskIn(zetaApi, t.T21, "review");
+  await browser.waitFor(
+    `${disclosure("Запланированные релизы с готовым составом")}?.count === 1 && ${disclosure("Запланированные релизы с готовым составом")}.links.length === 1 && ${reviewObligationsTotal} === 6`,
+  );
+  const reopened = await browser.eval(disclosure("Запланированные релизы с готовым составом"));
+  assert.deepEqual(reopened.links.map(idOf), [r.R3]);
+  assert.equal(reopened.expanded, "true", "раскрытие сохранено после SSE");
+  assert.equal((await browser.eval(disclosure("Обязательства выполнены"))).count, 3);
+  const reads = proxy.metricReads(zeta.id);
+  assert(reads.length > 0 && reads.every((read) => read.status === 200), "отказ чтения списка");
+  assert(reads.every((read) => /^[a-f0-9]{64}$/.test(read.query.get("version") ?? "")));
+});
+
+test("M-T09/M-T16: полные списки каждой группы больше подборки и страницы, без дублей", async () => {
+  await browser.viewport(1440, 1000);
+  await browser.media("light");
+  await browser.open(overviewUrl(eta));
+  await browser.waitFor(`${disclosure("Остались обязательства")}?.count === ${OPERATOR_COUNT}`);
+  const since = Date.now();
+  const groups = [
+    ["Обязательства выполнены", OPERATOR_COUNT],
+    ["Остались обязательства", OPERATOR_COUNT],
+    ["Что задерживает работу", OPERATOR_COUNT + 1],
+    ["Вне открытых планов", OPERATOR_COUNT * 2 + 1],
+    ["Незавершённая работа", OPERATOR_COUNT + 2],
+    ["Состав выполнен, план открыт", OPERATOR_COUNT],
+    ["Запланированные релизы с готовым составом", OPERATOR_COUNT],
+    ["Готовые завершённые планы вне релизов", OPERATOR_COUNT],
+  ];
+  for (const [title, total] of groups) {
+    const before = await browser.eval(disclosure(title));
+    assert.equal(before.count, total, `${title}: полное число`);
+    await expandFully(title, total);
+  }
+  // Блокер с затронутыми задачами больше страницы: продолжение вложенного списка.
+  const hubKey = await browser.eval(
+    `[...document.querySelectorAll('main a')].find((a) => a.getAttribute('href')?.endsWith(${q(`/${operatorBreadth.hub}`)}) && a.closest('section')?.querySelector(':scope > h3 > span')?.textContent === 'Что задерживает работу')?.querySelector('span')?.textContent`,
+  );
+  const affected = `(() => { const button = document.querySelector(${q(`main button[aria-label="Скрыть затронутые задачи — ${hubKey}"], main button[aria-label="Показать затронутые: ${OPERATOR_COUNT} — ${hubKey}"]`)}); const list = document.getElementById(button?.getAttribute('aria-controls') ?? ''); return list ? { links: [...list.querySelectorAll('li a')].map((a) => a.getAttribute('href')), text: list.innerText, more: [...list.querySelectorAll('button')].find((item) => item.textContent === 'Загрузить ещё') ?? null } : null; })()`;
+  await clickVisible(
+    `main button[aria-label=${q(`Показать затронутые: ${OPERATOR_COUNT} — ${hubKey}`)}]`,
+  );
+  await browser.waitFor(`${affected}?.links.length === 20`);
+  await browser.eval(`${affected}.more.click(); true`);
+  await browser.waitFor(`${affected}?.links.length === ${OPERATOR_COUNT}`);
+  const affectedState = await browser.eval(affected);
+  assert.equal(new Set(affectedState.links).size, OPERATOR_COUNT);
+  assert.match(affectedState.text, new RegExp(`Показано ${OPERATOR_COUNT} из ${OPERATOR_COUNT}`));
+
+  // Продолжение читается тем же срезом: курсор и версия, все ответы успешны.
+  const reads = proxy.metricReads(eta.id, since);
+  assert(
+    reads.every((read) => read.status === 200),
+    "отказ при чтении страниц",
+  );
+  const versions = new Set(reads.map((read) => read.query.get("version")));
+  assert.equal(versions.size, 1, "страницы разных версий среза");
+  for (const metricName of [
+    "review-obligations-met",
+    "review-obligations-open",
+    "blocker-impact",
+    "blocker-affected",
+    "unplanned-work",
+    "board-work",
+    "open-plans-complete",
+    "ready-releases",
+    "plans-outside-releases",
+  ])
+    assert(
+      reads.some((read) => read.metric === metricName && read.query.has("cursor")),
+      `${metricName}: нет продолжения`,
+    );
+});
+
+test("M-T14/M-T15: SSE обновляет раскрытый список того же объёма, фокус, удаление и конфликт версии", async () => {
+  await browser.viewport(1440, 1000);
+  await browser.media("light");
+  await browser.open(overviewUrl(eta));
+  const title = "Остались обязательства";
+  await browser.waitFor(
+    `${disclosure(title)}?.count >= ${OPERATOR_COUNT} && ${freshness} === 'live'`,
+  );
+  const total = (await browser.eval(disclosure(title))).count;
+  await expandFully(title, total);
+  /** Последняя запись списка получает фокус; запоминаем её адрес и положение. */
+  const focusState = `(() => { const active = document.activeElement; return { href: active?.getAttribute('href') ?? null, top: Math.round(active?.getBoundingClientRect().top ?? -1), index: ${disclosure(title)}.links.indexOf(active?.getAttribute('href')) }; })()`;
+  await browser.eval(
+    `(() => { const link = [...document.querySelectorAll('main a')].filter((a) => a.closest('section')?.querySelector(':scope > h4 > span')?.textContent === ${q(title)}).at(-1); link.scrollIntoView({ block: 'center' }); link.focus(); return true; })()`,
+  );
+  const initial = await browser.eval(focusState);
+  assert.equal(initial.index, total - 1);
+
+  // Новая задача на проверке с открытым обязательством: число и список того же объёма.
+  const changedAt = Date.now();
+  await etaApi.post("/board-tasks", {
+    board: "product",
+    title: "Эта: появилась во время просмотра",
+    column: "review",
+    dependencies: [operatorBreadth.hub],
+  });
+  await browser.waitFor(
+    `${disclosure(title)}?.count === ${total + 1} && ${disclosure(title)}.links.length === ${total + 1} && !${disclosure(title)}.text.includes('Обновляем')`,
+  );
+  const updated = await browser.eval(focusState);
+  assert.equal(updated.href, initial.href, "фокус после SSE");
+  assert(Math.abs(updated.top - initial.top) <= 2, `положение ${initial.top} → ${updated.top}`);
+  assert.equal((await browser.eval(disclosure(title))).expanded, "true");
+  const reread = proxy
+    .metricReads(eta.id, changedAt)
+    .filter((read) => read.metric === "review-obligations-open");
+  assert.equal(reread.length, 2, "перечитан не весь загруженный объём");
+  assert(reread.every((read) => read.status === 200));
+  assert.equal(new Set(reread.map((read) => read.query.get("version"))).size, 1);
+  assert(reread[1].query.has("cursor"));
+
+  // Сфокусированная запись исчезла из группы: фокус переходит на вставшую на её место.
+  const focusedId = idOf(initial.href);
+  await moveTaskIn(etaApi, focusedId, "inbox");
+  await browser.waitFor(`${disclosure(title)}?.links.length === ${total}`);
+  const replaced = await browser.eval(focusState);
+  assert.notEqual(replaced.href, initial.href);
+  assert.equal(replaced.index, total - 1, "фокус не перешёл на соседнюю запись");
+
+  // Конфликт версии: обзор задержан, продолжение прежнего среза даёт VERSION_CONFLICT,
+  // страницы разных состояний не смешиваются, после чтения обзора список дочитан заново.
+  const metTitle = "Обязательства выполнены";
+  const metTotal = (await browser.eval(disclosure(metTitle))).count;
+  await clickVisible(`main button[aria-label=${q(`Показать все ${metTotal}: ${metTitle}`)}]`);
+  await browser.waitFor(`${disclosure(metTitle)}?.links.length === 20`);
+  proxy.hold(eta.id);
+  const heldAt = Date.now();
+  await etaApi.post("/board-tasks", { board: "product", title: "Эта: конфликт", column: "review" });
+  await until(() => proxy.heldCount(eta.id) > 0, { message: "удержанное чтение обзора" });
+  await pressIn(metTitle, "Загрузить ещё");
+  await browser.waitFor(`${disclosure(metTitle)}?.text.includes('Данные проекта изменились')`);
+  assert(
+    proxy.metricReads(eta.id, heldAt).some((read) => read.status === 409),
+    "продолжение прежнего среза не отклонено",
+  );
+  assert.equal((await browser.eval(disclosure(metTitle))).links.length, 20, "смешаны страницы");
+  const releasedAt = Date.now();
+  proxy.release(eta.id);
+  await browser.waitFor(
+    `${disclosure(metTitle)}?.count === ${metTotal + 1} && ${disclosure(metTitle)}.links.length === ${metTotal + 1} && !${disclosure(metTitle)}.text.includes('Данные проекта изменились')`,
+  );
+  const after = proxy
+    .metricReads(eta.id, releasedAt)
+    .filter((read) => read.metric === "review-obligations-met");
+  assert(after.length >= 2 && after.every((read) => read.status === 200));
+  assert.equal(new Set(after.map((read) => read.query.get("version"))).size, 1);
+  assert.equal(new Set((await browser.eval(disclosure(metTitle))).links).size, metTotal + 1);
+
+  // A → B → A: обзор другого проекта не показывает списки первого.
+  await browser.command("pushstate", `/projects/${encodeURIComponent(zeta.slug)}`);
+  // Числа Дзеты, а не Эты: «Остались обязательства» малой fixture — три задачи, список свёрнут.
+  await browser.waitFor(`${heading} === 'Дзета' && ${disclosure(title)}?.count === 3`);
+  assert.equal((await browser.eval(disclosure(title))).links.length, 0, "список Эты в Дзете");
+  await browser.back();
+  await browser.waitFor(`${heading} === 'Эта' && ${disclosure(title)}?.count === ${total}`);
+  assert.deepEqual(await browser.errors().then((data) => data.errors ?? []), []);
+});
+
+test("M-T15: фокус внутри затронутых задач и после вставок выше переходит на соседа по актуальному порядку", async () => {
+  const { tasks: t } = focusFixture;
+  await browser.viewport(1440, 1000);
+  await browser.media("light");
+  await browser.open(overviewUrl(theta));
+  const impactTitle = "Что задерживает работу";
+  await browser.waitFor(`${disclosure(impactTitle)}?.count === 6 && ${freshness} === 'live'`);
+  /** Адрес ссылки с фокусом или имя элемента, если фокус не на ссылке. */
+  const activeHref = `(document.activeElement?.getAttribute('href') ?? document.activeElement?.tagName ?? null)`;
+
+  // D1: фокус во вложенном списке затронутых задач блокера; блокер выполнен и исчез.
+  const impact = await browser.eval(disclosure(impactTitle));
+  assert.equal(idOf(impact.links[0]), t.T6, "T6 — первый блокер подборки");
+  const t6Key = await browser.eval(
+    `[...document.querySelectorAll('main a')].find((a) => a.getAttribute('href') === ${q(impact.links[0])})?.querySelector('span')?.textContent`,
+  );
+  const affectedLinks = `(() => { const button = [...document.querySelectorAll('main button')].find((item) => item.getAttribute('aria-label')?.endsWith(${q(` — ${t6Key}`)})); const list = document.getElementById(button?.getAttribute('aria-controls') ?? ''); return list ? [...list.querySelectorAll('li a')] : []; })()`;
+  await clickVisible(`main button[aria-label=${q(`Показать затронутые: 2 — ${t6Key}`)}]`);
+  await browser.waitFor(`${affectedLinks}.length === 2`);
+  await browser.eval(
+    `(() => { const link = ${affectedLinks}[0]; link.scrollIntoView({ block: 'center' }); link.focus(); return true; })()`,
+  );
+  assert.equal(await browser.eval(`${affectedLinks}[0] === document.activeElement`), true);
+  await moveTaskIn(thetaApi, t.T6, "done");
+  await browser.waitFor(
+    `${disclosure(impactTitle)}?.count === 5 && !${disclosure(impactTitle)}.links.includes(${q(impact.links[0])})`,
+  );
+  assert.equal(
+    await browser.eval(activeHref),
+    impact.links[1],
+    "фокус не перешёл на блокер, вставший на место выполненного",
+  );
+
+  // D2: фокус в полном списке; выше вставлена новая запись, затем запись с фокусом исчезла.
+  const title = "Вне открытых планов";
+  const full = await expandFully(title, 6);
+  const focusedHref = full.links.find((href) => idOf(href) === t.T2);
+  const focusedIndex = full.links.indexOf(focusedHref);
+  assert(focusedIndex > 0 && focusedIndex < full.links.length - 1, "T2 не в середине списка");
+  await browser.eval(
+    `(() => { const link = [...document.querySelectorAll('main a')].find((a) => a.getAttribute('href') === ${q(focusedHref)} && a.closest('section')?.querySelector(':scope > h4 > span, :scope > h3 > span')?.textContent === ${q(title)}); link.scrollIntoView({ block: 'center' }); link.focus(); return true; })()`,
+  );
+  assert.equal(await browser.eval(activeHref), focusedHref);
+  await thetaApi.post("/board-tasks", {
+    board: "web",
+    title: "Тэта: новая работа вне планов",
+    column: "in-progress",
+  });
+  await browser.waitFor(`${disclosure(title)}?.links.length === 7`);
+  const inserted = await browser.eval(disclosure(title));
+  assert.equal(inserted.links.indexOf(focusedHref), focusedIndex + 1, "вставка не выше фокуса");
+  assert.equal(await browser.eval(activeHref), focusedHref, "фокус после вставки");
+  const expectedHref = inserted.links[focusedIndex + 2];
+  await moveTaskIn(thetaApi, t.T2, "inbox");
+  await browser.waitFor(
+    `${disclosure(title)}?.links.length === 6 && !${disclosure(title)}.links.includes(${q(focusedHref)})`,
+  );
+  assert.equal(
+    await browser.eval(activeHref),
+    expectedHref,
+    "фокус не перешёл на запись, вставшую на место исчезнувшей",
+  );
+  assert.deepEqual(await browser.errors().then((data) => data.errors ?? []), []);
+});
+
+test("M-T15: блокер удалён, пока видны прежние страницы блокеров — без несовместимости, запись уходит", async () => {
+  await browser.viewport(1440, 1000);
+  await browser.media("light");
+  await browser.open(overviewUrl(theta));
+  const title = "Что задерживает работу";
+  await browser.waitFor(`${disclosure(title)}?.count >= 1 && ${freshness} === 'live'`);
+  const before = (await browser.eval(disclosure(title))).count;
+  const blocker = await thetaApi.post("/board-tasks", {
+    board: "web",
+    title: "Тэта: блокер, который удалят",
+    column: "in-progress",
+  });
+  await thetaApi.post("/board-tasks", {
+    board: "product",
+    title: "Тэта: ждёт удаляемый блокер",
+    column: "inbox",
+    dependencies: [blocker.id],
+  });
+  const total = before + 1;
+  await browser.waitFor(`${disclosure(title)}?.count === ${total}`);
+  const full = await expandFully(title, total);
+  const blockerHref = full.links.find((href) => idOf(href) === blocker.id);
+  assert(blockerHref, "новый блокер в полном списке");
+  const blockerKey = await browser.eval(
+    `[...document.querySelectorAll('main a')].find((a) => a.getAttribute('href') === ${q(blockerHref)})?.querySelector('span')?.textContent`,
+  );
+  const affected = `(() => { const button = [...document.querySelectorAll('main button')].find((item) => item.getAttribute('aria-label')?.endsWith(${q(` — ${blockerKey}`)})); const list = document.getElementById(button?.getAttribute('aria-controls') ?? ''); return list ? list.innerText : null; })()`;
+  await clickVisible(`main button[aria-label=${q(`Показать затронутые: 1 — ${blockerKey}`)}]`);
+  await browser.waitFor(`${affected}?.includes('Показано 1 из 1')`);
+
+  // Новый срез уже без блокера, а прежние страницы списка блокеров ещё показаны:
+  // раскрытый список затронутых задач читается по новой версии и получает NOT_FOUND.
+  proxy.holdMetric(theta.id, "blocker-impact");
+  const deletedAt = Date.now();
+  try {
+    const preview = await thetaApi.get(
+      `/entities/deletion-preview?ref=${encodeURIComponent(blocker.id)}&kind=task`,
+    );
+    await thetaApi.post("/entities/delete", {
+      ref: blocker.id,
+      kind: "task",
+      ifVersion: preview.version,
+    });
+    await until(
+      () =>
+        proxy
+          .metricReads(theta.id, deletedAt)
+          .some((read) => read.metric === "blocker-affected" && read.status === 404),
+      { message: "чтение затронутых задач удалённого блокера" },
+    );
+    await browser.waitFor(`${affected}?.includes('Задача-блокер больше не найдена')`);
+    assert.doesNotMatch(await browser.eval(mainText), /не умеет раскрывать/);
+    assert.equal(
+      await browser.eval(
+        `document.getElementById([...document.querySelectorAll('main button')].find((item) => item.getAttribute('aria-label')?.endsWith(${q(` — ${blockerKey}`)}))?.getAttribute('aria-controls') ?? '')?.querySelector('[role="alert"]') ?? null`,
+      ),
+      null,
+      "исчезнувший блокер сообщён как сбой",
+    );
+  } finally {
+    proxy.releaseMetric(theta.id, "blocker-impact");
+  }
+
+  // Список блокеров дочитан по новому срезу: удалённого блокера и его списка больше нет.
+  await browser.waitFor(
+    `${disclosure(title)}?.count === ${before} && ${disclosure(title)}.links.length === ${before} && !${disclosure(title)}.links.includes(${q(blockerHref)})`,
+  );
+  assert.equal(await browser.eval(affected), null, "список затронутых задач удалённого блокера");
+  const text = await browser.eval(mainText);
+  assert.doesNotMatch(text, /не умеет раскрывать/);
+  assert.doesNotMatch(text, /Задача-блокер больше не найдена/);
+  assert.deepEqual(await browser.errors().then((data) => data.errors ?? []), []);
+});
+
+test("M-T11/M-T15: без возможности сервера список не читается и объясняет несовместимость", async () => {
+  proxy.hideMetricsCapability(zeta.id);
+  try {
+    await browser.open(overviewUrl(zeta));
+    // Число берётся из среза: предыдущий сценарий вернул задачу на проверку.
+    const title = "Вне открытых планов";
+    await browser.waitFor(`${disclosure(title)}?.count >= 6`);
+    const total = (await browser.eval(disclosure(title))).count;
+    const since = Date.now();
+    await clickVisible(`main button[aria-label=${q(`Показать все ${total}: ${title}`)}]`);
+    await browser.waitFor(
+      `${disclosure(title)}?.text.includes('Сервер не умеет раскрывать полные списки')`,
+    );
+    const state = await browser.eval(disclosure(title));
+    assert.equal(state.links.length, 5, "подборка обзора остаётся видна");
+    assert.doesNotMatch(state.text, /Показано \d+ из/);
+    assert.equal(
+      proxy.metricReads(zeta.id, since).length,
+      0,
+      "детализация запрошена без возможности",
+    );
+  } finally {
+    proxy.restoreMetricsCapability(zeta.id);
+  }
+});
+
+test("M-T16: показатели в обеих темах на 1440/1024/768/390 без переполнения и с клавиатуры", async () => {
+  const report = [];
+  for (const scheme of ["light", "dark"]) {
+    for (const width of [1440, 1024, 768, 390]) {
+      await browser.viewport(width, 900);
+      await browser.media(scheme);
+      await browser.open(overviewUrl(eta));
+      await browser.waitFor(
+        `document.documentElement.getAttribute('data-mantine-color-scheme') === ${q(scheme)} && ${disclosure("Незавершённая работа")}?.links.length === 5`,
+      );
+      // Числа берутся из показанного среза: предыдущие сценарии меняли данные проекта.
+      for (const title of [
+        "Что задерживает работу",
+        "Незавершённая работа",
+        "Вне открытых планов",
+      ]) {
+        const total = (await browser.eval(disclosure(title))).count;
+        await clickVisible(`main button[aria-label=${q(`Показать все ${total}: ${title}`)}]`);
+        await browser.waitFor(`${disclosure(title)}?.links.length === ${Math.min(total, 20)}`);
+      }
+      const layout = await browser.eval(
+        `(() => ({ scroll: document.documentElement.scrollWidth, width: innerWidth, overflow: [...document.querySelectorAll('main *')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1).length }))()`,
+      );
+      const audit = await browser.command("a11y", "--selector", "main");
+      const violations = audit.violations.map((item) => `${item.id}(${item.nodeCount})`);
+      await browser.eval("scrollTo(0, 0); true");
+      await browser.screenshot(join(screenshots, `overview-metrics-${scheme}-${width}.png`));
+      report.push({ scheme, width, ...layout, violations });
+      assert(layout.scroll <= layout.width, `${scheme} ${width}: горизонтальная прокрутка`);
+      assert.equal(layout.overflow, 0, `${scheme} ${width}: элементы за пределами экрана`);
+      assert.deepEqual(violations, [], `${scheme} ${width}: нарушения доступности`);
+    }
+  }
+  measurements.metricsLayout = report;
+
+  // Клавиатура: Enter раскрывает список, фокус остаётся на кнопке, Shift+Tab — к последней записи.
+  await browser.viewport(1440, 900);
+  await browser.media("light");
+  await browser.open(overviewUrl(eta));
+  const title = "Состав выполнен, план открыт";
+  await browser.waitFor(`${disclosure(title)}?.count === ${OPERATOR_COUNT}`);
+  const toggle = `main button[aria-label=${q(`Показать все ${OPERATOR_COUNT}: ${title}`)}]`;
+  await browser.command("focus", toggle);
+  await browser.command("press", "Enter");
+  await browser.waitFor(`${disclosure(title)}?.links.length === 20`);
+  assert.equal(await browser.eval(`document.activeElement?.getAttribute('aria-expanded')`), "true");
+  await browser.command("press", "Shift+Tab");
+  assert.equal(await browser.eval(`document.activeElement?.textContent`), "Загрузить ещё");
+  await browser.command("press", "Enter");
+  await browser.waitFor(`${disclosure(title)}?.links.length === ${OPERATOR_COUNT}`);
+  await browser.command("press", "Shift+Tab");
+  const href = await browser.eval(`document.activeElement?.getAttribute('href') ?? ''`);
+  assert.match(href, /\/plans\//, "Shift+Tab не привёл к записи списка");
+  await browser.command("press", "Enter");
+  await browser.waitFor(`location.pathname === ${q(href)}`);
+  await browser.back();
+  await browser.waitFor(`${disclosure(title)}?.count === ${OPERATOR_COUNT}`);
   await browser.viewport(1440, 1000);
   await browser.open(overviewUrl(alpha));
   await browser.waitFor(`${metric("Задачи")} !== null`);

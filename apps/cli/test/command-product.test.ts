@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { startServer } from "@relay/server-runtime";
+import { productOverviewMetrics } from "@relay/contracts/entities/product";
+import type {
+  ProductOverviewMetric,
+  ProductOverviewMetricPage,
+  ProductOverviewOperator,
+} from "@relay/contracts/entities/product";
 import {
   binary,
   cliEnv,
@@ -389,7 +395,8 @@ type Overview = {
   items: { id: string }[];
   total: number;
   nextOffset: number | null;
-  commands: Record<string, string>;
+  // Плоские команды и вложенные группы metrics/blockerAffected.
+  commands: Record<string, any>;
   snapshot: {
     project: { id: string | null; name: string; slug: string };
     passport: { state: string };
@@ -429,6 +436,12 @@ type Overview = {
     };
   };
 };
+
+/** Все исполняемые подсказки, включая вложенные группы команд метрик. */
+const hintList = (commands: object): string[] =>
+  Object.values(commands).flatMap((value: unknown) =>
+    typeof value === "string" ? [value] : hintList(value as object),
+  );
 
 /** Сравнение транспортов: время среза и команды подключения различаются законно. */
 const comparable = (data: Overview) => {
@@ -818,7 +831,7 @@ test("product overview: срез проекта, подборки, страни�
       return body.meta?.page?.total as number | undefined;
     };
     const commands = full.data.commands;
-    for (const command of Object.values(commands))
+    for (const command of hintList(commands))
       assert.match(command, /^npx @oim-dev\/relay-cli --local --config /);
     assert.equal(await total(commands.inProgress!), snapshot.attention.inProgress.total);
     assert.equal(await total(commands.review!), snapshot.attention.review.total);
@@ -890,7 +903,7 @@ test("product overview: срез проекта, подборки, страни�
       assert.deepEqual(comparable(remote.data), comparable(local.data));
       assert.equal(remote.meta?.page?.total, local.meta?.page?.total);
       const run = await hintRunner(t);
-      for (const command of Object.values(remote.data.commands)) {
+      for (const command of hintList(remote.data.commands)) {
         assert.match(command, new RegExp(`^npx @oim-dev/relay-cli --server-url ${server.url} `));
         if (!command.endsWith("--help"))
           assert.equal(JSON.parse(await run(command)).ok, true, command);
@@ -908,4 +921,555 @@ test("product overview: срез проекта, подборки, страни�
       );
     },
   );
+});
+
+type OverviewWithOperator = Overview & {
+  snapshot: Overview["snapshot"] & { operator: ProductOverviewOperator };
+};
+type MetricView = ProductOverviewMetricPage & {
+  commands: { overview: string; blocker?: string; affected?: Record<string, string> };
+};
+type App = { root: string; run: Awaited<ReturnType<typeof fixture>>["run"] };
+
+/** Проект в каталоге с пробелом и кавычкой: подсказки обязаны экранировать --config. */
+async function quotedFixture(t: TestContext): Promise<App> {
+  const root = join(await tempDirectory(t), "проект с 'кавычкой'");
+  await mkdir(root);
+  successful(await invoke(root, ["init"]));
+  return { root, run: (args, options) => invoke(root, args, options) };
+}
+
+/**
+ * Небольшая fixture показателей оператора с заранее выписанными ожиданиями:
+ * review: R1, R2 без обязательств; R3 — невыполненный критерий; R4 зависит от A и B.
+ * C1 зависит от A; K — подзадача P и одновременно его зависимость (одна задача, две связи).
+ * Открытые планы: O1 (draft, D1), O2 (active, D2) выполнены; W (active) включает A и R2.
+ * Завершённые F1, F2 вне релизов; L1, L2 в запланированных релизах без даты и с датой.
+ */
+async function operatorProject(app: App) {
+  const data = async <T = { key: string; revision: number }>(args: Array<string | number>) =>
+    successful(await app.run<T>(args)).data;
+  const task = async (title: string, column: string, extra: string[] = [], board = "product") =>
+    (
+      await data([
+        "task",
+        "create",
+        "--board",
+        board,
+        "--title",
+        title,
+        "--column",
+        column,
+        ...extra,
+      ])
+    ).key;
+  const A = await task("Блокер А", "in-progress");
+  const B = await task("Блокер Б", "ready", [], "infrastructure");
+  const R1 = await task("Готово к завершению 1", "review");
+  const R2 = await task("Готово к завершению 2", "review");
+  const R3 = await task("Критерий не выполнен", "review", ["--criterion-title", "a=Проверить"]);
+  const R4 = await task("Ждёт блокеров", "review", ["--dependencies", A, B]);
+  const C1 = await task("Ждёт А", "ready", ["--dependencies", A]);
+  const P = await task("Родитель", "in-progress");
+  const K = await task("Подзадача 世界 🧭", "inbox", ["--parent", P]);
+  const parent = await data(["task", "get", P]);
+  await data(["task", "dependency", "add", P, K, "--if-revision", parent.revision]);
+  const D: string[] = [];
+  for (let index = 1; index <= 6; index++) D.push(await task(`Выполнено ${index}`, "done"));
+  const plan = async (title: string, status: string, tasks: string[]) => {
+    const created = await data(["plan", "create", "--title", title, "--goal", "Цель"]);
+    const stage = await data<{ revision: number; stageId: string }>([
+      "plan",
+      "stage",
+      "create",
+      created.key,
+      "--title",
+      "Этап",
+      "--if-revision",
+      created.revision,
+    ]);
+    let { revision } = await data([
+      "plan",
+      "stage",
+      "task",
+      "add",
+      created.key,
+      stage.stageId,
+      "--tasks",
+      ...tasks,
+      "--if-revision",
+      stage.revision,
+    ]);
+    if (status === "active")
+      ({ revision } = await data(["plan", "start", created.key, "--if-revision", revision]));
+    if (status === "completed")
+      await data(["plan", "complete", created.key, "--result", "Итог", "--if-revision", revision]);
+    return created.key;
+  };
+  const O1 = await plan("Открытый готовый 1", "draft", [D[0]!]);
+  const O2 = await plan("Открытый готовый 2", "active", [D[1]!]);
+  await plan("Текущая работа", "active", [A, R2]);
+  const F1 = await plan("Завершён вне релизов 1", "completed", [D[2]!]);
+  const F2 = await plan("Завершён вне релизов 2", "completed", [D[3]!]);
+  const L1 = await plan("Для релиза без даты", "completed", [D[4]!]);
+  const L2 = await plan("Для релиза с датой", "completed", [D[5]!]);
+  const undated = await data([
+    "release",
+    "create",
+    "--title",
+    "Без даты",
+    "--release-version",
+    "1.0",
+    "--plans",
+    L1,
+  ]);
+  const dated = await data([
+    "release",
+    "create",
+    "--title",
+    "С датой",
+    "--release-version",
+    "0.9",
+    "--plans",
+    L2,
+    "--planned-for",
+    "2030-02-01",
+  ]);
+  return { A, B, R1, R2, R3, R4, C1, P, K, O1, O2, F1, F2, undated: undated.key, dated: dated.key };
+}
+
+/** Все страницы метрики по nextCursor CLI; каждая страница сообщает тот же total. */
+async function allPages(app: App, args: Array<string | number>, limit: number) {
+  const pages: MetricView[] = [];
+  let page = successful(
+    await app.run<MetricView>(["product", "overview", ...args, "--limit", limit]),
+  );
+  for (;;) {
+    pages.push(page.data);
+    assert.ok(page.data.items.length <= limit);
+    assert.equal(page.meta?.page?.total, page.data.total);
+    const cursor = page.meta?.page?.nextCursor;
+    if (!cursor) break;
+    assert.ok(pages.length < 50, "продолжение не завершается");
+    page = successful(await app.run<MetricView>(["product", "overview", "--cursor", cursor]));
+  }
+  return pages;
+}
+
+const metricKey = (item: object) =>
+  "key" in item ? String(item.key) : String((item as { prefix: string }).prefix);
+const byId = (left: { id: string }, right: { id: string }) =>
+  left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+
+test("product overview: показатели оператора, детализация --metric, продолжение и local/HTTP", async (t) => {
+  const app = await quotedFixture(t);
+  const keys = await operatorProject(app);
+  const full = successful(await app.run<OverviewWithOperator>(["product", "overview"]));
+  const operator = full.data.snapshot.operator;
+  const preview = (entry: { total: number; items: object[] }) => [
+    entry.total,
+    entry.items.map(metricKey),
+  ];
+
+  await t.test("snapshot.operator: точные числа заранее выписанной fixture", () => {
+    assert.equal(operator.review.total, full.data.snapshot.tasks.byColumn.review);
+    assert.deepEqual(preview(operator.review.obligationsMet), [2, [keys.R2, keys.R1]]);
+    assert.deepEqual(preview(operator.review.obligationsOpen), [2, [keys.R4, keys.R3]]);
+    assert.deepEqual(
+      operator.review.obligationsOpen.items.map((task) => task.reasons),
+      [["DEPENDENCY_INCOMPLETE"], ["CRITERION_INCOMPLETE"]],
+    );
+    const blockers = operator.blockerImpact;
+    assert.equal(blockers.total, 3);
+    assert.equal(blockers.items[0]!.key, keys.A);
+    assert.deepEqual(
+      blockers.items[0]!.affected.items.map((task) => [task.key, task.relations]).sort(),
+      [
+        [keys.R4, ["dependency"]],
+        [keys.C1, ["dependency"]],
+      ].sort(),
+    );
+    // Равное число затронутых задач упорядочено по постоянному ID.
+    assert.deepEqual(
+      blockers.items.slice(1).map((blocker) => blocker.key),
+      [...blockers.items.slice(1)].sort(byId).map((blocker) => blocker.key),
+    );
+    const child = blockers.items.find((blocker) => blocker.key === keys.K)!;
+    assert.deepEqual(
+      [child.affected.total, child.affected.items.map((task) => [task.key, task.relations])],
+      [1, [[keys.P, ["dependency", "subtask"]]]],
+    );
+    assert.deepEqual(preview(operator.unplannedWork), [4, [keys.P, keys.R4, keys.R3, keys.R1]]);
+    assert.deepEqual(operator.unplannedWork.byColumn, { "in-progress": 1, review: 3 });
+    assert.deepEqual([operator.boardWork.remaining, operator.boardWork.blockedRemaining], [9, 3]);
+    assert.deepEqual(
+      operator.boardWork.boards.items.map((board) => [
+        board.prefix,
+        board.tasks.total,
+        board.tasks.completed,
+        board.tasks.remaining,
+        board.tasks.blockedRemaining,
+        board.tasks.readyToStart,
+      ]),
+      [
+        ["PRODUCT", 14, 6, 8, 3, 0],
+        ["INFRA", 1, 0, 1, 0, 1],
+      ],
+    );
+    assert.deepEqual(preview(operator.openPlansComplete), [2, [keys.O2, keys.O1]]);
+    assert.deepEqual(preview(operator.releasePreparation.readyReleases), [
+      2,
+      [keys.dated, keys.undated],
+    ]);
+    assert.deepEqual(preview(operator.releasePreparation.completedPlansOutsideReleases), [
+      2,
+      [keys.F2, keys.F1],
+    ]);
+  });
+
+  await t.test("human: компактные блоки и подписи по смыслу, без ANSI", async () => {
+    for (const width of [40, 120]) {
+      const human = await invokeRaw(app.root, ["product", "overview"], {
+        env: { COLUMNS: String(width), FORCE_COLOR: "1" },
+      });
+      assert.equal(human.code, 0, human.stdout);
+      assert.equal(human.stderr, "");
+      const out = human.stdout.replace(/\s+/g, " ");
+      for (const text of [
+        "Показатели работы",
+        "на проверке 4 = обязательства выполнены 2 + остались обязательства 2",
+        "Обязательства выполнены: можно рассмотреть завершение · все 2",
+        "не доказывают внешнюю проверку",
+        `Осталось: зависимости: ${keys.A}, ${keys.B}`,
+        "Осталось: критерии 0 из 1",
+        "Прямые блокеры · все 3",
+        "блокирует 2 незавершённые задачи напрямую",
+        `${keys.P} (зависимость и подзадача)`,
+        "не критический путь",
+        "Вне открытых планов (in-progress 1 · review 3) · все 4",
+        "а не ошибка",
+        "Незавершённая работа: 9 задач, из них с прямыми блокерами 3",
+        "PRODUCT — Продукт · незавершено 8",
+        "не загрузка людей",
+        "Состав выполнен, план открыт · все 2",
+        "Запланированные релизы с готовым составом · все 2",
+        "Готовые завершённые планы вне релизов · все 2",
+        "Подзадача 世界 🧭",
+      ])
+        assert.ok(out.includes(text), `${text}\n${human.stdout}`);
+      assert.doesNotMatch(human.stdout, /\u001b|"data":|проверено|█|▇/);
+      const positions = ["Требует внимания", "Показатели работы", "Планы", "Состав выполнен"].map(
+        (title) => out.indexOf(title),
+      );
+      assert.deepEqual(
+        [...positions].sort((a, b) => a - b),
+        positions,
+      );
+    }
+  });
+
+  const metricArgs = (metric: ProductOverviewMetric): string[] =>
+    metric === "blocker-affected"
+      ? ["--metric", metric, "--blocker", keys.A]
+      : ["--metric", metric];
+  const expectedTotals: Record<ProductOverviewMetric, number> = {
+    "review-obligations-met": 2,
+    "review-obligations-open": 2,
+    "blocker-impact": 3,
+    "blocker-affected": 2,
+    "unplanned-work": 4,
+    "board-work": 2,
+    "open-plans-complete": 2,
+    "ready-releases": 2,
+    "plans-outside-releases": 2,
+  };
+  const fullPages = {} as Record<ProductOverviewMetric, MetricView>;
+
+  await t.test(
+    "каждая метрика: продолжение без пропусков и дублей, total не зависит от limit",
+    async () => {
+      for (const metric of productOverviewMetrics) {
+        const [single] = await allPages(app, metricArgs(metric), 100);
+        fullPages[metric] = single!;
+        assert.equal(single!.metric, metric);
+        assert.equal(single!.total, expectedTotals[metric], metric);
+        assert.equal(single!.items.length, single!.total);
+        assert.equal(single!.snapshotVersion, full.data.snapshotVersion);
+        const pages = await allPages(app, metricArgs(metric), 1);
+        assert.equal(pages.length, single!.total, metric);
+        assert.deepEqual(
+          pages.flatMap((page) => page.items.map(metricKey)),
+          single!.items.map(metricKey),
+          metric,
+        );
+        for (const page of pages) assert.equal(page.total, single!.total);
+      }
+      const affected = fullPages["blocker-affected"];
+      assert.equal(affected.blocker?.key, keys.A);
+      assert.deepEqual(affected.items.map(metricKey).sort(), [keys.C1, keys.R4].sort());
+      assert.deepEqual(
+        fullPages["review-obligations-met"].items.map(metricKey),
+        operator.review.obligationsMet.items.map(metricKey),
+      );
+      assert.deepEqual(
+        (
+          fullPages["blocker-impact"] as Extract<MetricView, { metric: "blocker-impact" }>
+        ).items.map((item) => [item.key, item.affected.total]),
+        operator.blockerImpact.items.map((item) => [item.key, item.affected.total]),
+      );
+    },
+  );
+
+  await t.test("JSON-команды исполняемы, сохраняют --config с пробелом и кавычкой", async () => {
+    const run = await hintRunner(t);
+    const commands = full.data.commands;
+    assert.deepEqual(
+      Object.keys(commands.metrics).sort(),
+      productOverviewMetrics.filter((metric) => metric !== "blocker-affected").sort(),
+    );
+    assert.deepEqual(
+      Object.keys(commands.blockerAffected).sort(),
+      operator.blockerImpact.items.map((blocker) => blocker.id).sort(),
+    );
+    for (const [metric, command] of Object.entries(commands.metrics as Record<string, string>)) {
+      assert.match(
+        command,
+        /^npx @oim-dev\/relay-cli --local --config '.*проект с '\\''кавычкой'\\''.*' --format json product overview --metric [a-z-]+$/,
+      );
+      const body = JSON.parse(await run(command));
+      assert.equal(body.ok, true, command);
+      assert.equal(body.data.metric, metric);
+      assert.equal(body.data.total, expectedTotals[metric as ProductOverviewMetric]);
+    }
+    for (const blocker of operator.blockerImpact.items) {
+      const command = commands.blockerAffected[blocker.id] as string;
+      assert.ok(command.endsWith(`--metric blocker-affected --blocker ${blocker.id}`), command);
+      const body = JSON.parse(await run(command));
+      assert.equal(body.data.blocker.id, blocker.id);
+      assert.equal(body.data.total, blocker.affected.total);
+    }
+    const impact = fullPages["blocker-impact"];
+    for (const blocker of impact.items)
+      assert.equal(impact.commands.affected?.[blocker.id], commands.blockerAffected[blocker.id]);
+    const affected = fullPages["blocker-affected"];
+    assert.equal(JSON.parse(await run(affected.commands.blocker!)).data.key, keys.A);
+    assert.equal(JSON.parse(await run(affected.commands.overview)).ok, true);
+    const first = successful(
+      await app.run<MetricView>([
+        "product",
+        "overview",
+        ...metricArgs("blocker-affected"),
+        "--limit",
+        1,
+      ]),
+    );
+    const next = JSON.parse(await run(first.meta!.page!.nextCommand!));
+    assert.equal(next.data.items.length, 1);
+    assert.equal(next.meta.page.nextCursor, null);
+  });
+
+  await t.test("human детализации: смысл, список, общее продолжение", async () => {
+    const human = await invokeRaw(
+      app.root,
+      ["product", "overview", "--metric", "blocker-affected", "--blocker", keys.A, "--limit", 1],
+      { env: { COLUMNS: "40", FORCE_COLOR: "1" } },
+    );
+    assert.equal(human.code, 0, human.stdout);
+    const out = human.stdout.replace(/\s+/g, " ");
+    for (const text of [
+      "Задачи, которые блокер задерживает напрямую",
+      `Блокер: ${keys.A} — Блокер А`,
+      "Всего: 2",
+      "связь с блокером: зависимость",
+      "Блокер целиком",
+      "Есть продолжение",
+      "product overview --metric blocker-affected --blocker",
+    ])
+      assert.ok(out.includes(text), `${text}\n${human.stdout}`);
+    assert.doesNotMatch(human.stdout, /\u001b|"data":/);
+    const met = await invokeRaw(app.root, [
+      "product",
+      "overview",
+      "--metric",
+      "review-obligations-met",
+    ]);
+    assert.match(
+      met.stdout.replace(/\s+/g, " "),
+      /Обязательства выполнены: можно рассмотреть завершение .*Это не внешняя проверка результата/,
+    );
+    assert.match(met.stdout, /Конец списка/);
+  });
+
+  await t.test("ошибки: метрика, блокер, курсор чужого контекста, изменение среза", async () => {
+    failed(await app.run(["product", "overview", "--metric", "nope"]), "UNKNOWN_METRIC");
+    failed(
+      await app.run(["product", "overview", "--metric", "blocker-affected"]),
+      "INVALID_ARGUMENT",
+    );
+    failed(
+      await app.run(["product", "overview", "--metric", "board-work", "--blocker", keys.A]),
+      "INVALID_ARGUMENT",
+    );
+    failed(await app.run(["product", "overview", "--blocker", keys.A]), "INVALID_ARGUMENT");
+    failed(
+      await app.run([
+        "product",
+        "overview",
+        "--metric",
+        "blocker-affected",
+        "--blocker",
+        "PRODUCT-999",
+      ]),
+      "NOT_FOUND",
+      3,
+    );
+    const page = successful(
+      await app.run<MetricView>([
+        "product",
+        "overview",
+        "--metric",
+        "unplanned-work",
+        "--limit",
+        1,
+      ]),
+    );
+    const cursor = page.meta!.page!.nextCursor!;
+    failed(
+      await app.run(["product", "overview", "--metric", "board-work", "--cursor", cursor]),
+      "INVALID_CURSOR",
+    );
+    const map = successful(await app.run<Overview>(["product", "overview", "--limit", 1]));
+    if (map.meta?.page?.nextCursor)
+      failed(
+        await app.run([
+          "product",
+          "overview",
+          "--metric",
+          "unplanned-work",
+          "--cursor",
+          map.meta.page.nextCursor,
+        ]),
+        "INVALID_CURSOR",
+      );
+    // Один --cursor восстанавливает метрику, лимит и проект.
+    const continued = successful(
+      await app.run<MetricView>(["product", "overview", "--cursor", cursor]),
+    );
+    assert.deepEqual([continued.data.metric, continued.data.items.length], ["unplanned-work", 1]);
+    const affected = successful(
+      await app.run<MetricView>([
+        "product",
+        "overview",
+        ...metricArgs("blocker-affected"),
+        "--limit",
+        1,
+      ]),
+    );
+    failed(
+      await app.run([
+        "product",
+        "overview",
+        "--metric",
+        "blocker-affected",
+        "--blocker",
+        keys.B,
+        "--cursor",
+        affected.meta!.page!.nextCursor!,
+      ]),
+      "INVALID_CURSOR",
+    );
+    const revision = successful(await app.run<{ revision: number }>(["task", "get", keys.R1])).data
+      .revision;
+    successful(
+      await app.run([
+        "task",
+        "update",
+        keys.R1,
+        "--title",
+        "Новое название",
+        "--if-revision",
+        revision,
+      ]),
+    );
+    failed(await app.run(["product", "overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
+  });
+
+  await t.test("HTTP: те же данные всех метрик, команды сохраняют сервер", async () => {
+    const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
+    t.after(() => server.close());
+    const local = successful(
+      await app.run<OverviewWithOperator>(["--local", "product", "overview"]),
+    );
+    const remote = successful(
+      await app.run<OverviewWithOperator>(["--server-url", server.url, "product", "overview"]),
+    );
+    assert.deepEqual(remote.data.snapshot.operator, local.data.snapshot.operator);
+    const comparablePage = ({ generatedAt: _g, commands: _c, ...rest }: MetricView) => rest;
+    const run = await hintRunner(t);
+    for (const metric of productOverviewMetrics) {
+      const args = ["product", "overview", ...metricArgs(metric), "--limit", 1];
+      const localPage = successful(await app.run<MetricView>(["--local", ...args]));
+      const remotePage = successful(
+        await app.run<MetricView>(["--server-url", server.url, ...args]),
+      );
+      assert.deepEqual(comparablePage(remotePage.data), comparablePage(localPage.data), metric);
+      assert.equal(remotePage.meta?.page?.total, localPage.meta?.page?.total);
+      const nextCommand = remotePage.meta!.page!.nextCommand!;
+      assert.match(nextCommand, new RegExp(`^npx @oim-dev/relay-cli --server-url ${server.url} `));
+      const next = JSON.parse(await run(nextCommand));
+      assert.equal(next.ok, true, nextCommand);
+      const localNext = successful(
+        await app.run<MetricView>([
+          "--local",
+          "product",
+          "overview",
+          "--cursor",
+          localPage.meta!.page!.nextCursor!,
+        ]),
+      );
+      assert.deepEqual(comparablePage(next.data), comparablePage(localNext.data), metric);
+      failed(
+        await app.run([
+          "--local",
+          "product",
+          "overview",
+          "--cursor",
+          remotePage.meta!.page!.nextCursor!,
+        ]),
+        "INVALID_CURSOR",
+      );
+    }
+    for (const command of [
+      ...Object.values(remote.data.commands.metrics as Record<string, string>),
+      ...Object.values(remote.data.commands.blockerAffected as Record<string, string>),
+    ]) {
+      assert.match(command, new RegExp(`^npx @oim-dev/relay-cli --server-url ${server.url} `));
+      assert.equal(JSON.parse(await run(command)).ok, true, command);
+    }
+    const human = await invokeRaw(
+      app.root,
+      ["--server-url", server.url, "product", "overview", "--metric", "board-work"],
+      { env: { COLUMNS: "60" } },
+    );
+    assert.equal(human.code, 0, human.stdout);
+    assert.match(human.stdout, /PRODUCT — Продукт · незавершено 8/);
+    failed(
+      await app.run(["--server-url", server.url, "product", "overview", "--metric", "nope"]),
+      "UNKNOWN_METRIC",
+    );
+    failed(
+      await app.run([
+        "--server-url",
+        server.url,
+        "product",
+        "overview",
+        "--metric",
+        "blocker-affected",
+        "--blocker",
+        "PRODUCT-999",
+      ]),
+      "NOT_FOUND",
+      3,
+    );
+  });
 });

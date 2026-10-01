@@ -1,3 +1,4 @@
+import type { TaskCompletion } from "../board-tasks/completion.js";
 import { createHash } from "node:crypto";
 import type {
   ProductContract,
@@ -161,6 +162,8 @@ export function productState(
   productId: string,
   records: ProductRecord[],
   tasks: BoardTaskRecord[] = [],
+  /** Выполнение тех же задач, уже посчитанное в этом чтении. */
+  completion?: Map<string, TaskCompletion>,
 ): ProductState {
   const contracts = records.flatMap((record) => {
     const fields = record.fields;
@@ -174,7 +177,7 @@ export function productState(
       ? [{ id: record.id, featureId: record.fields.featureId }]
       : [],
   );
-  const statusesById = productTaskStatuses(tasks, contracts, scenarios);
+  const statusesById = productTaskStatuses(tasks, contracts, scenarios, completion);
   const readiness = records
     .filter((record) => record.fields.kind === "scenario" || record.fields.kind === "feature")
     .map((record) => {

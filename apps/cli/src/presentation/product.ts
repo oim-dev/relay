@@ -6,6 +6,8 @@ import type {
   ProductListQuery,
   ProductMutation,
   ProductOverview,
+  ProductOverviewMetric,
+  ProductOverviewMetricPage,
   ProductOverviewSnapshot,
   ProductState,
 } from "@relay/core/domain/product";
@@ -187,6 +189,10 @@ export type ProductOverviewCommands = {
   documents: string;
   pinnedDocuments: string;
   sections: string;
+  /** Полное постраничное чтение каждой метрики оператора, кроме требующей блокер. */
+  metrics: Record<Exclude<ProductOverviewMetric, "blocker-affected">, string>;
+  /** Полный состав затронутых задач для каждого блокера из подборки, по его постоянному ID. */
+  blockerAffected: Record<string, string>;
 };
 
 export type ProductOverviewView = ProductOverview & {
@@ -385,6 +391,397 @@ function releaseLine(release: OverviewRelease, options: TextOptions): string {
   ].join("\n");
 }
 
+type Operator = Snapshot["operator"];
+type OperatorTask = Operator["review"]["obligationsMet"]["items"][number];
+type BlockerImpact = Operator["blockerImpact"]["items"][number];
+type AffectedTask = Extract<
+  ProductOverviewMetricPage,
+  { metric: "blocker-affected" }
+>["items"][number];
+type BoardWork = Operator["boardWork"]["boards"]["items"][number];
+type OperatorPlan = Operator["openPlansComplete"]["items"][number];
+
+const obligationReasons = {
+  CRITERION_INCOMPLETE: "невыполненные критерии",
+  DEPENDENCY_INCOMPLETE: "невыполненные зависимости",
+  CHILD_INCOMPLETE: "невыполненные подзадачи",
+};
+// Направление связи от затронутой задачи к блокеру.
+const affectedRelations = { dependency: "зависимость", subtask: "подзадача" };
+const unfinishedTasks = (count: number) =>
+  `${count} ${plural(count, ["незавершённую задачу", "незавершённые задачи", "незавершённых задач"])}`;
+
+/** Подписи метрик по смыслу: что означает включение и чего оно не утверждает. */
+const metricLabels: Record<ProductOverviewMetric, { title: string; note: string }> = {
+  "review-obligations-met": {
+    title: "Обязательства выполнены: можно рассмотреть завершение",
+    note: "Задачи на проверке, у которых выполнены критерии и прямые обязательства. Это не внешняя проверка результата; задача не закрывается автоматически.",
+  },
+  "review-obligations-open": {
+    title: "На проверке, остались обязательства",
+    note: "Задачи на проверке с невыполненными критериями, зависимостями или подзадачами; основание указано у каждой задачи.",
+  },
+  "blocker-impact": {
+    title: "Прямые блокеры незавершённой работы",
+    note: "Число незавершённых задач, которые блокер задерживает напрямую через зависимость или подзадачу. Это не критический путь, не транзитивное влияние и не рекомендация приоритета.",
+  },
+  "blocker-affected": {
+    title: "Задачи, которые блокер задерживает напрямую",
+    note: "Незавершённые задачи, у которых блокер — прямая невыполненная зависимость или подзадача; задача с обеими связями учитывается один раз.",
+  },
+  "unplanned-work": {
+    title: "Вне открытых планов",
+    note: "Задачи in-progress и review вне явного состава планов draft и active. Это сигнал для пересмотра планирования, а не ошибка: самостоятельная работа допустима.",
+  },
+  "board-work": {
+    title: "Незавершённая работа по доскам",
+    note: "Незавершённые — не cancelled и фактически не выполнены, включая done с открытыми обязательствами. Число карточек — не загрузка людей и не оценка трудозатрат; показатели пересекаются и не складываются.",
+  },
+  "open-plans-complete": {
+    title: "Состав выполнен, план открыт",
+    note: "Планы draft и active с непустым фактически выполненным составом. Завершение плана дополнительно требует итог и проверку ревизии.",
+  },
+  "ready-releases": {
+    title: "Запланированные релизы с готовым составом",
+    note: "Можно рассмотреть явную фиксацию выпуска. Это не подтверждение CI или публикации; статус релиза при чтении не меняется.",
+  },
+  "plans-outside-releases": {
+    title: "Готовые завершённые планы вне релизов",
+    note: "Завершённые планы с выполненным составом, не включённые в запланированный или выпущенный релиз; участие только в отменённом релизе не учитывается.",
+  },
+};
+
+/** Основание включения: какие обязательства ещё не выполнены, с адресами прямых блокеров. */
+function remainingText(task: OperatorTask): string {
+  const parts: string[] = [];
+  if (task.reasons.includes("CRITERION_INCOMPLETE"))
+    parts.push(`критерии ${task.acceptance.completed} из ${task.acceptance.total}`);
+  const relations = [
+    ...(task.reasons.includes("DEPENDENCY_INCOMPLETE") ? ["зависимости"] : []),
+    ...(task.reasons.includes("CHILD_INCOMPLETE") ? ["подзадачи"] : []),
+  ];
+  if (relations.length) {
+    const keys = [...new Set(task.blockers.items.map((blocker) => blocker.key))];
+    const rest = task.blockers.total - task.blockers.items.length;
+    parts.push(
+      `${relations.join(" и ")}${keys.length ? `: ${keys.join(", ")}` : ""}${rest > 0 ? ` и ещё ${rest}` : ""}`,
+    );
+  }
+  return `Осталось: ${parts.join("; ")}`;
+}
+
+/** Компактная строка подборки: подробности блокировок уже есть в «Требует внимания». */
+function operatorTaskBrief(task: OperatorTask, options: TextOptions): string {
+  const width = outputWidth(options);
+  const lines = [indent(`${task.key} — ${task.title || "Без названия"} · ${task.column}`, width)];
+  if (task.reasons.length) lines.push(indent(remainingText(task), width, "    "));
+  return lines.join("\n");
+}
+
+function operatorTaskLine(task: OperatorTask, options: TextOptions): string {
+  const lines = [taskLine(task, options)];
+  if (task.reasons.length)
+    lines.push(
+      indent(
+        `Основание: ${task.reasons.map((reason) => obligationReasons[reason]).join(", ")}`,
+        outputWidth(options),
+        "    ",
+      ),
+    );
+  return lines.join("\n");
+}
+
+function operatorReleaseBrief(release: OverviewRelease, options: TextOptions): string {
+  return indent(
+    `${release.key} — ${release.title} · версия ${release.version} · ${
+      release.plannedFor ? `плановая дата ${release.plannedFor}` : "без плановой даты"
+    } · планов ${release.readiness.ready} из ${release.readiness.total} готово`,
+    outputWidth(options),
+  );
+}
+
+function blockerLine(
+  blocker: BlockerImpact,
+  options: TextOptions,
+  affectedCommand: string | undefined,
+): string {
+  const width = outputWidth(options);
+  const affected = blocker.affected;
+  const lines = [
+    indent(`${blocker.key} — ${blocker.title || "Без названия"}`, width),
+    indent(
+      `доска ${blocker.board.name} (${blocker.board.prefix}) · колонка ${blocker.column} · блокирует ${unfinishedTasks(affected.total)} напрямую`,
+      width,
+      "    ",
+    ),
+  ];
+  if (affected.items.length) {
+    const rest = affected.total - affected.items.length;
+    lines.push(
+      indent(
+        `Затронуты: ${affected.items
+          .map(
+            (task) =>
+              `${task.key} (${task.relations.map((relation) => affectedRelations[relation]).join(" и ")})`,
+          )
+          .join("; ")}${rest > 0 ? `; и ещё ${rest}` : ""}`,
+        width,
+        "    ",
+      ),
+    );
+    if (rest > 0 && affectedCommand)
+      lines.push(
+        `${indent("Все затронутые задачи:", width, "    ")}\n${commandText(affectedCommand, options)}`,
+      );
+  }
+  return lines.join("\n");
+}
+
+function affectedLine(task: AffectedTask, options: TextOptions): string {
+  const width = outputWidth(options);
+  return [
+    indent(`${task.key} — ${task.title || "Без названия"}`, width),
+    indent(
+      `доска ${task.board.name} (${task.board.prefix}) · колонка ${task.column} · связь с блокером: ${task.relations
+        .map((relation) => affectedRelations[relation])
+        .join(" и ")}`,
+      width,
+      "    ",
+    ),
+  ].join("\n");
+}
+
+function boardWorkLine(board: BoardWork, options: TextOptions, detailed = false): string {
+  const width = outputWidth(options);
+  const tasks = board.tasks;
+  const columns = tasks.byColumn;
+  const lines = [
+    indent(`${board.prefix} — ${board.name} · незавершено ${tasks.remaining}`, width),
+    indent(
+      `in-progress ${columns["in-progress"]} · review ${columns.review} · с блокерами ${tasks.blockedRemaining} · готовы к началу ${tasks.readyToStart} · всего ${tasks.total}, фактически выполнено ${tasks.completed}`,
+      width,
+      "    ",
+    ),
+  ];
+  if (detailed)
+    lines.push(
+      indent(
+        `По колонкам: inbox ${columns.inbox} · ready ${columns.ready} · in-progress ${columns["in-progress"]} · review ${columns.review} · done ${columns.done} · cancelled ${columns.cancelled}`,
+        width,
+        "    ",
+      ),
+    );
+  return lines.join("\n");
+}
+
+function operatorPlanLine(plan: OperatorPlan, options: TextOptions): string {
+  const width = outputWidth(options);
+  return [
+    indent(`${plan.key} — ${plan.title}`, width),
+    indent(
+      `Статус: ${planStatuses[plan.status]} · выполнено ${plan.counts.completed} из ${plan.counts.total} ${ofTasks(plan.counts.total)} · этапы ${plan.stages.completed} из ${plan.stages.total}`,
+      width,
+      "    ",
+    ),
+  ].join("\n");
+}
+
+/** Компактные блоки показателей оператора: точные числа, подписи по смыслу, без диаграмм. */
+function operatorWorkText(data: ProductOverviewView, options: TextOptions): string {
+  const operator = data.snapshot.operator;
+  const width = outputWidth(options);
+  const metrics = data.commands.metrics;
+  const review = operator.review;
+  const unplanned = operator.unplannedWork;
+  const boardWork = operator.boardWork;
+  return [
+    prose("Показатели работы", width),
+    prose(
+      `Очередь проверки: на проверке ${review.total} = обязательства выполнены ${review.obligationsMet.total} + остались обязательства ${review.obligationsOpen.total}.`,
+      width,
+    ),
+    previewBlock(
+      metricLabels["review-obligations-met"].title,
+      review.obligationsMet,
+      (task) => operatorTaskBrief(task, options),
+      "Таких задач нет.",
+      metrics["review-obligations-met"],
+      options,
+    ),
+    previewBlock(
+      "Остались обязательства",
+      review.obligationsOpen,
+      (task) => operatorTaskBrief(task, options),
+      "Таких задач нет.",
+      metrics["review-obligations-open"],
+      options,
+    ),
+    prose(
+      "Выполненные обязательства не доказывают внешнюю проверку результата и не закрывают задачу.",
+      width,
+    ),
+    previewBlock(
+      "Прямые блокеры",
+      operator.blockerImpact,
+      (blocker) => blockerLine(blocker, options, data.commands.blockerAffected[blocker.id]),
+      "Незавершённая работа не ждёт других задач.",
+      metrics["blocker-impact"],
+      options,
+    ),
+    prose(
+      "Учитываются только прямые зависимости и подзадачи незавершённых задач; это не критический путь и не рекомендация приоритета.",
+      width,
+    ),
+    previewBlock(
+      `Вне открытых планов (in-progress ${unplanned.byColumn["in-progress"]} · review ${unplanned.byColumn.review})`,
+      unplanned,
+      (task) => operatorTaskBrief(task, options),
+      "Вся исполняемая работа входит в планы draft или active.",
+      metrics["unplanned-work"],
+      options,
+    ),
+    prose(
+      "Это сигнал для пересмотра планирования, а не ошибка: самостоятельная работа допустима.",
+      width,
+    ),
+    prose(
+      `Незавершённая работа: ${boardWork.remaining} ${plural(boardWork.remaining, ["задача", "задачи", "задач"])}, из них с прямыми блокерами ${boardWork.blockedRemaining}.`,
+      width,
+    ),
+    previewBlock(
+      "По доскам, больше незавершённых первыми",
+      boardWork.boards,
+      (board) => boardWorkLine(board, options),
+      "Досок нет.",
+      metrics["board-work"],
+      options,
+    ),
+    prose(
+      "Незавершённые включают done с открытыми обязательствами и не включают cancelled. Число карточек — не загрузка людей и не трудозатраты.",
+      width,
+    ),
+  ].join("\n\n");
+}
+
+/** M-05/M-06 рядом с планами и релизами: готовность состава отдельно от статуса. */
+function operatorPlanningText(data: ProductOverviewView, options: TextOptions): string {
+  const operator = data.snapshot.operator;
+  const width = outputWidth(options);
+  const metrics = data.commands.metrics;
+  const release = operator.releasePreparation;
+  return [
+    previewBlock(
+      metricLabels["open-plans-complete"].title,
+      operator.openPlansComplete,
+      (plan) => operatorPlanLine(plan, options),
+      "Открытых планов с выполненным составом нет.",
+      metrics["open-plans-complete"],
+      options,
+    ),
+    previewBlock(
+      "Запланированные релизы с готовым составом",
+      release.readyReleases,
+      (entry) => operatorReleaseBrief(entry, options),
+      "Готовых запланированных релизов нет.",
+      metrics["ready-releases"],
+      options,
+    ),
+    previewBlock(
+      metricLabels["plans-outside-releases"].title,
+      release.completedPlansOutsideReleases,
+      (plan) => operatorPlanLine(plan, options),
+      "Все готовые завершённые планы включены в релизы.",
+      metrics["plans-outside-releases"],
+      options,
+    ),
+    prose(
+      "Завершение плана требует итог и ревизию, выпуск — явную фиксацию; обзор только читает и статусы не меняет.",
+      width,
+    ),
+  ].join("\n\n");
+}
+
+/** Исполняемые команды страницы детализации; сохраняют подключение исходного вызова. */
+export type ProductOverviewMetricCommands = {
+  overview: string;
+  /** Для blocker-affected: полное чтение самого блокера. */
+  blocker?: string;
+  /** Для blocker-impact: полный состав затронутых задач каждого блокера страницы. */
+  affected?: Record<string, string>;
+};
+export type ProductOverviewMetricView = ProductOverviewMetricPage & {
+  commands: ProductOverviewMetricCommands;
+};
+
+/** Страница детализации: смысл метрики, точный total и элементы; продолжение — общий footer. */
+export function productOverviewMetricText(
+  data: ProductOverviewMetricView,
+  options: TextOptions,
+): string {
+  const width = outputWidth(options);
+  const label = metricLabels[data.metric];
+  const fields: [string, string | number][] = [
+    ["Метрика", data.metric],
+    ["Всего", data.total],
+    ["На странице", data.items.length],
+  ];
+  if (data.blocker)
+    fields.unshift(
+      ["Блокер", `${data.blocker.key} — ${data.blocker.title || "Без названия"}`],
+      ["Колонка блокера", data.blocker.column],
+      ["Доска блокера", `${data.blocker.board.name} (${data.blocker.board.prefix})`],
+    );
+  fields.push(["Срез", data.snapshotVersion], ["Получен", data.generatedAt]);
+  const head = cardText({ title: label.title, fields }, options);
+  const note = prose(label.note, width);
+  let items: string[];
+  switch (data.metric) {
+    case "review-obligations-met":
+    case "review-obligations-open":
+    case "unplanned-work":
+      items = data.items.map((task) => operatorTaskLine(task, options));
+      break;
+    case "blocker-impact":
+      items = data.items.map((blocker) =>
+        blockerLine(blocker, options, data.commands.affected?.[blocker.id]),
+      );
+      break;
+    case "blocker-affected":
+      items = data.items.map((task) => affectedLine(task, options));
+      break;
+    case "board-work":
+      items = data.items.map((board) => boardWorkLine(board, options, true));
+      break;
+    case "open-plans-complete":
+    case "plans-outside-releases":
+      items = data.items.map((plan) => operatorPlanLine(plan, options));
+      break;
+    case "ready-releases":
+      items = data.items.map((release) => releaseLine(release, options));
+      break;
+  }
+  const empty = data.total
+    ? "На этой странице элементов нет."
+    : data.metric === "blocker-affected"
+      ? "Блокер сейчас не задерживает незавершённых задач."
+      : "Таких элементов нет.";
+  const commands = cardText(
+    {
+      title: "Дальнейшее чтение",
+      commands: [
+        ...(data.commands.blocker
+          ? [{ label: "Блокер целиком", command: data.commands.blocker }]
+          : []),
+        { label: "Обзор проекта", command: data.commands.overview },
+      ],
+    },
+    options,
+  );
+  return [head, note, items.length ? items.join("\n") : indent(empty, width), commands].join(
+    "\n\n",
+  );
+}
+
 const statusSplit = (counts: { none: number; partial: number; done: number }) =>
   `готово ${counts.done} · частично ${counts.partial} · не начато ${counts.none}`;
 
@@ -566,6 +963,7 @@ export function productOverviewText(
       commands.releasedReleases,
       options,
     ),
+    operatorPlanningText(data, options),
     prose(
       "Собственный статус плана или релиза не равен фактической готовности состава: она считается по задачам.",
       width,
@@ -682,6 +1080,7 @@ export function productOverviewText(
     summary,
     overlap,
     attention,
+    operatorWorkText(data, options),
     planning,
     knowledgeText,
     boards,

@@ -84,6 +84,7 @@ export interface Backend {
     | "state"
     | "mutate"
     | "overview"
+    | "overviewMetric"
     | "list"
     | "context"
     | "entities"

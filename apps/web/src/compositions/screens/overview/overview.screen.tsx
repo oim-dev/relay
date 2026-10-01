@@ -8,6 +8,7 @@ import { OVERVIEW_SECTION_IDS } from "./config/overview.config";
 import { getOverviewErrorMessage } from "./helpers/overview-error";
 import { AttentionList } from "./ui/attention-list/attention-list";
 import { BoardList } from "./ui/board-list/board-list";
+import { MetricDisclosure } from "./ui/metric-disclosure/metric-disclosure";
 import { OverviewHeader } from "./ui/overview-header/overview-header";
 import { OverviewMetrics } from "./ui/overview-metrics/overview-metrics";
 import { OverviewPanel } from "./ui/overview-panel/overview-panel";
@@ -63,7 +64,8 @@ export const OverviewScreen = () => {
   }
 
   const refreshError = isDefined(error) ? getOverviewErrorMessage(error) : null;
-  const { plans, releases, documents, boards } = data;
+  const { plans, releases, documents, boards, operator, snapshotVersion } = data;
+  const { boardWork } = operator;
   const tasksDescription =
     `Где сейчас находятся все задачи проекта со всех досок (${boards.total}): ` +
     "каждая задача учтена ровно в одной колонке.";
@@ -100,6 +102,8 @@ export const OverviewScreen = () => {
           <OverviewPanel title="Требует внимания" className={styles.attention}>
             <AttentionList
               attention={data.attention}
+              operator={operator}
+              snapshotVersion={snapshotVersion}
               basePath={basePath}
               className={styles.attentionBody}
             />
@@ -111,7 +115,12 @@ export const OverviewScreen = () => {
             link={{ to: `${basePath}/plans`, label: "Все планы" }}
             preview={{ shown: plans.active.items.length, total: plans.active.total }}
           >
-            <PlanSummaries plans={plans} basePath={basePath} />
+            <PlanSummaries
+              plans={plans}
+              operator={operator}
+              snapshotVersion={snapshotVersion}
+              basePath={basePath}
+            />
           </OverviewPanel>
           <OverviewPanel
             title="Релизы"
@@ -119,7 +128,12 @@ export const OverviewScreen = () => {
             total={releases.total}
             link={{ to: `${basePath}/releases`, label: "Все релизы" }}
           >
-            <ReleaseSummaries releases={releases} basePath={basePath} />
+            <ReleaseSummaries
+              releases={releases}
+              preparation={operator.releasePreparation}
+              snapshotVersion={snapshotVersion}
+              basePath={basePath}
+            />
           </OverviewPanel>
           <OverviewPanel
             title="Размер проекта"
@@ -142,12 +156,42 @@ export const OverviewScreen = () => {
             <ProductKnowledge knowledge={data.knowledge} />
           </OverviewPanel>
           <OverviewPanel
-            id={OVERVIEW_SECTION_IDS.boards}
             className={styles.boards}
             title="Доски"
             total={boards.total}
+            totalLabel="досок"
           >
-            <BoardList catalog={boards.catalog} basePath={basePath} />
+            <MetricDisclosure
+              id={OVERVIEW_SECTION_IDS.boardWork}
+              title="Незавершённая работа"
+              summary={`всего ${boardWork.remaining} · из них с блокерами ${boardWork.blockedRemaining}`}
+              hint="Задачи вне «Отменено», которые ещё фактически не выполнены, включая «Готово» с открытыми обязательствами. Это число карточек, а не трудозатраты и не загрузка людей. Задачи с блокерами входят в то же число и не складываются с ним."
+              request={{ metric: "board-work" }}
+              preview={{
+                total: boardWork.boards.total,
+                hasMore: boardWork.boards.hasMore,
+                entries: boardWork.boards.items.map((board) => ({
+                  kind: "board",
+                  id: board.id,
+                  board,
+                })),
+              }}
+              isPreviewShown
+              variant="plain"
+              emptyText="Досок пока нет."
+              snapshotVersion={snapshotVersion}
+              basePath={basePath}
+            />
+            <section
+              id={OVERVIEW_SECTION_IDS.boards}
+              className={styles.boardCatalog}
+              aria-labelledby={`${OVERVIEW_SECTION_IDS.boards}-title`}
+            >
+              <h3 id={`${OVERVIEW_SECTION_IDS.boards}-title`} className={styles.subtitle}>
+                Каталог досок
+              </h3>
+              <BoardList catalog={boards.catalog} basePath={basePath} />
+            </section>
           </OverviewPanel>
           <OverviewPanel
             title="Документы"

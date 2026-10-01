@@ -2,6 +2,7 @@ import { Ban, CircleCheck, CirclePlay, Eye, Flag, Inbox, Lock } from "lucide-rea
 import type { LucideIcon } from "lucide-react";
 import type {
   OverviewBoard,
+  OverviewObligationReason,
   OverviewPlans,
   OverviewReleases,
   OverviewTasks,
@@ -47,6 +48,24 @@ export const BOARD_KIND_LABELS: Record<OverviewBoard["kind"], string> = {
   infrastructure: "инфраструктура",
 };
 
+/** Подписи причин невыполненных обязательств задачи. */
+export const OBLIGATION_REASON_LABELS: Record<OverviewObligationReason, string> = {
+  criterion: "критерии приёмки",
+  dependency: "зависимость",
+  child: "подзадача",
+};
+
+/** Подписи прямой связи задачи с блокером. */
+export const BLOCKER_RELATION_LABELS = { dependency: "зависимость", subtask: "подзадача" } as const;
+
+/** Подписи собственных статусов плана в единственном числе. */
+export const PLAN_STATUS_LABELS: Record<keyof OverviewPlans["byStatus"], string> = {
+  draft: "Запланирован",
+  active: "В работе",
+  completed: "Завершён",
+  cancelled: "Отменён",
+};
+
 /** Резервный заголовок записи без названия. */
 export const UNTITLED = "Без названия";
 
@@ -58,6 +77,8 @@ export const OVERVIEW_SECTION_IDS = {
   attentionReview: "overview-attention-review",
   attentionBlocked: "overview-attention-blocked",
   boards: "overview-boards",
+  boardWork: "overview-board-work",
+  blockerImpact: "overview-blocker-impact",
 } as const;
 
 /**

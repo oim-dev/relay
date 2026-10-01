@@ -48,6 +48,7 @@
   font-weight: 650;
   line-height: 1.5rem;
   text-align: center;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 

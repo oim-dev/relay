@@ -5,6 +5,10 @@ import type { ProductOverview } from "domains/product-overview";
 export type AttentionListParams = {
   /** Подборки задач, требующих внимания. */
   attention: ProductOverview["attention"];
+  /** Показатели оператора: проверка обязательств и прямые блокеры. */
+  operator: Pick<ProductOverview["operator"], "review" | "blockerImpact">;
+  /** Версия показанного обзора: по ней раскрываются полные списки показателей. */
+  snapshotVersion: string;
   /** Базовый адрес проекта. */
   basePath: string;
 };

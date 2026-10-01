@@ -19,12 +19,18 @@ import { planningRecords } from "../../storage/planning.js";
 import { ProductRepository } from "../../storage/product.js";
 import { projectSettings } from "../../storage/project-settings.js";
 import type { Workspace } from "../../storage/workspace.js";
-import { taskCompletions } from "../board-tasks/completion.js";
-import type { TaskCompletion } from "../board-tasks/completion.js";
 import { boardViews } from "../boards/service.js";
 import { planningCountsCompleted, readPlanningState } from "../planning/model.js";
 import type { PlanningState } from "../planning/model.js";
-import { releaseComposition } from "../releases/model.js";
+import {
+  memoizedPlanning,
+  operatorIndex,
+  operatorSnapshot,
+  overviewCards,
+  overviewCompletion,
+  recentFirst,
+} from "./operator.js";
+import type { OperatorIndex } from "./operator.js";
 import { productState, validateProduct } from "./model.js";
 
 /** Все исходные данные одного согласованного чтения обзора. */
@@ -87,7 +93,7 @@ export function overviewSnapshotVersion(sources: OverviewSources): string {
   return createHash("sha256")
     .update(
       JSON.stringify([
-        "product-overview/1",
+        "product-overview/2",
         sources.projectId,
         sources.settings,
         sources.productId,
@@ -113,7 +119,7 @@ export function overviewExcerpt(source: string) {
       };
 }
 
-function preview<T>(items: readonly T[]) {
+export function preview<T>(items: readonly T[]) {
   const shown = items.slice(0, PRODUCT_OVERVIEW_PREVIEW_LIMIT);
   return {
     total: items.length,
@@ -122,11 +128,6 @@ function preview<T>(items: readonly T[]) {
     items: shown,
   };
 }
-
-/** Новые изменения первыми, постоянный ID разрешает равенство. */
-const recentFirst = <T extends { id: string; updatedAt: string }>(left: T, right: T) =>
-  right.updatedAt.localeCompare(left.updatedAt) ||
-  (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
 
 const columnPriority: Record<BoardTaskRecord["column"], number> = {
   "in-progress": 0,
@@ -145,10 +146,25 @@ export function buildProductOverview(
   sources: OverviewSources,
   generatedAt: string,
 ): ProductOverview {
-  const state: ProductState = productState(sources.productId, sources.records, sources.tasks);
-  const completion: Map<string, TaskCompletion> = taskCompletions(sources.tasks, "blocked");
-  const boardsById = new Map(sources.boards.map((board) => [board.id, board]));
-  const tasksById = new Map(sources.tasks.map((task) => [task.id, task]));
+  return buildOverviewWithIndex(sources, generatedAt).overview;
+}
+
+/** Расчёт обзора вместе с полным индексом метрик оператора того же чтения. */
+export function buildOverviewWithIndex(
+  sources: OverviewSources,
+  generatedAt: string,
+): { overview: ProductOverview; index: OperatorIndex } {
+  // Выполнение задач считается один раз и передаётся всем расчётам этого чтения.
+  const completion = overviewCompletion(sources);
+  const state: ProductState = productState(
+    sources.productId,
+    sources.records,
+    sources.tasks,
+    completion,
+  );
+  const planning = memoizedPlanning(sources.planning);
+  const cards = overviewCards(sources, completion, planning);
+  const index = operatorIndex(sources, completion, planning);
   const readiness = new Map(state.readiness.map((entry) => [entry.id, entry.status]));
 
   const passportRecord = sources.records.find((record) => record.fields.kind === "passport");
@@ -225,40 +241,13 @@ export function buildProductOverview(
     }
   }
 
-  const taskRef = (task: BoardTaskRecord) => ({
-    id: task.id,
-    key: task.key,
-    title: task.title,
-    column: task.column,
-  });
-  const attentionCard = (task: BoardTaskRecord) => {
-    const board = boardsById.get(task.boardId)!;
-    const blockers = completion.get(task.id)!.blockers;
-    return {
-      ...taskRef(task),
-      board: { id: board.id, prefix: board.prefix, slug: board.slug, name: board.name },
-      updatedAt: task.updatedAt,
-      completed: completion.get(task.id)!.completed,
-      acceptance: {
-        total: task.acceptanceCriteria.length,
-        completed: task.acceptanceCriteria.filter((entry) => entry.completed).length,
-      },
-      blockers: {
-        total: blockers.length,
-        items: blockers.slice(0, PRODUCT_OVERVIEW_PREVIEW_LIMIT).map((id) => ({
-          ...taskRef(tasksById.get(id)!),
-          relation: task.dependencies.includes(id) ? ("dependency" as const) : ("subtask" as const),
-        })),
-      },
-    };
-  };
   const attentionList = (
     filter: (task: BoardTaskRecord) => boolean,
     order: (left: BoardTaskRecord, right: BoardTaskRecord) => number = recentFirst,
   ) => {
     const selected = sources.tasks.filter(filter).sort(order);
     const page = preview(selected);
-    return { ...page, items: page.items.map(attentionCard) };
+    return { ...page, items: page.items.map(cards.taskCard) };
   };
 
   const documents = sources.records.filter((record) => record.fields.kind === "document");
@@ -291,7 +280,7 @@ export function buildProductOverview(
   let completedNotReady = 0;
   for (const plan of sources.plans) {
     planStatus[plan.status]++;
-    if (plan.status === "completed" && !sources.planning!.summary(plan).ready) completedNotReady++;
+    if (plan.status === "completed" && !planning!.summary(plan).ready) completedNotReady++;
   }
   const activePlans = preview(
     sources.plans.filter((plan) => plan.status === "active").sort(recentFirst),
@@ -299,23 +288,6 @@ export function buildProductOverview(
 
   const releaseStatus = { planned: 0, released: 0, cancelled: 0 };
   for (const release of sources.releases) releaseStatus[release.status]++;
-  const releaseCard = (release: Release) => {
-    const readiness = releaseComposition(release.planIds, sources.planning!).readiness;
-    return {
-      id: release.id,
-      key: release.key,
-      title: release.title,
-      version: release.version,
-      status: release.status,
-      plannedFor: release.plannedFor === "" ? null : release.plannedFor,
-      releasedAt: release.releasedAt,
-      updatedAt: release.updatedAt,
-      readiness: {
-        ...readiness,
-        canRelease: release.status === "planned" && readiness.canRelease,
-      },
-    };
-  };
   const upcoming = preview(
     sources.releases
       .filter((release) => release.status === "planned")
@@ -444,7 +416,7 @@ export function buildProductOverview(
         active: {
           ...activePlans,
           items: activePlans.items.map((plan) => {
-            const state = sources.planning!;
+            const state = planning!;
             const summary = state.summary(plan);
             return {
               id: plan.id,
@@ -470,11 +442,12 @@ export function buildProductOverview(
       releases: {
         total: sources.releases.length,
         byStatus: releaseStatus,
-        upcoming: { ...upcoming, items: upcoming.items.map(releaseCard) },
-        recent: { ...recent, items: recent.items.map(releaseCard) },
+        upcoming: { ...upcoming, items: upcoming.items.map(cards.releaseCard) },
+        recent: { ...recent, items: recent.items.map(cards.releaseCard) },
       },
+      operator: operatorSnapshot(index, preview),
     },
   };
   // Runtime-проверка формы: ошибка расчёта не должна уйти потребителям как «успешные нули».
-  return productOverviewSchema.parse(overview);
+  return { overview: productOverviewSchema.parse(overview), index };
 }

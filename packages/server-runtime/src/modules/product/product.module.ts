@@ -1,16 +1,28 @@
-import { Body, Controller, Get, HttpCode, Inject, Module, Post, Query } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Module,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
+import { ApiParam, ApiTags } from "@nestjs/swagger";
 import { success } from "@relay/contracts";
 import { ProductQueries } from "@relay/core/application/product/queries";
 import {
   productContextQuerySchema,
   productListQuerySchema,
   productMutationSchema,
+  productOverviewMetrics,
 } from "@relay/core/domain/product";
 import type {
   ProductContextQuery,
   ProductListQuery,
   ProductMutation,
+  ProductOverviewMetricQuery,
 } from "@relay/core/domain/product";
 import { ApiEndpoint } from "../../openapi/endpoint.js";
 import { ZodValidationPipe } from "../../common/validation.js";
@@ -100,6 +112,31 @@ class ProductController {
   })
   async overview() {
     return success(await new ProductQueries(await this.workspace.open()).overview());
+  }
+
+  @Get("overview/metrics/:metric")
+  @ApiParam({
+    name: "metric",
+    enum: productOverviewMetrics,
+    enumName: "ProductOverviewMetric",
+    description:
+      "Раскрываемая метрика оператора обзора; неизвестное значение — UNKNOWN_METRIC (400)",
+  })
+  @ApiEndpoint({
+    id: "getProductOverviewMetric",
+    summary:
+      "Страница полной выборки метрики оператора обзора (snapshot.operator) с продолжением на неизменном срезе",
+    response: "ProductOverviewMetricPage",
+    query: "ProductOverviewMetricPageQuery",
+  })
+  async overviewMetric(@Param("metric") metric: string, @Query() query: Record<string, unknown>) {
+    // Метрику, блокер и страницу проверяет Core: транспорт не дублирует предметные правила.
+    return success(
+      await new ProductQueries(await this.workspace.open()).overviewMetric({
+        ...query,
+        metric,
+      } as ProductOverviewMetricQuery),
+    );
   }
 
   @Get("records")

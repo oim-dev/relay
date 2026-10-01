@@ -114,7 +114,7 @@ function recoveryText(error: AppError): string {
   if (/CONFLICT|REVISION|VERSION|STALE/.test(error.code)) {
     return "Перечитайте запись или начните список с первой страницы. Сравните изменения перед новой попыткой; не подставляйте свежую ревизию автоматически.";
   }
-  if (/INVALID|VALIDATION|ARGUMENT/.test(error.code)) {
+  if (/INVALID|VALIDATION|ARGUMENT|UNKNOWN_METRIC/.test(error.code)) {
     return "Проверьте указанные поля и параметры. Синтаксис и примеры доступны через --help у этой команды.";
   }
   if (/NOT_FOUND/.test(error.code)) {
