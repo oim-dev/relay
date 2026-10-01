@@ -16,6 +16,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import type { CSSVariablesResolver } from "@mantine/core";
+import progressClasses from "../styles/progress.module.css";
 
 /**
  * Согласует поверхности Mantine с графитовой палитрой и контрастом нейтральных действий.
@@ -150,7 +151,14 @@ export const theme = createTheme({
     NativeSelect: NativeSelect.extend({ defaultProps: { size: "sm" } }),
     NumberInput: NumberInput.extend({ defaultProps: { size: "sm" } }),
     Autocomplete: Autocomplete.extend({ defaultProps: { size: "sm" } }),
-    Progress: Progress.extend({ defaultProps: { color: "var(--tasks-muted)" } }),
+    Progress: Progress.extend({
+      defaultProps: { color: "var(--tasks-muted)" },
+      // Акцентный вариант: общий вид полос прогресса и величин на ролях темы.
+      classNames: (_theme, props) =>
+        props.variant === "accent"
+          ? { root: progressClasses.accentRoot, section: progressClasses.accentSection }
+          : {},
+    }),
     Tooltip: Tooltip.extend({ defaultProps: { withArrow: true, openDelay: 400 } }),
     Modal: Modal.extend({
       defaultProps: {

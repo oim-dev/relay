@@ -1,0 +1,14 @@
+/*
+ * Вариант Progress variant="accent": единый вид акцентных полос прогресса и величин.
+ * Толщина, скругление, дорожка и заливка задаются здесь и ролями темы, а не в экранах.
+ */
+.accentRoot {
+  --progress-size: 0.5rem;
+  --progress-radius: 999px;
+
+  background-color: var(--tasks-progress-track);
+}
+
+.accentSection {
+  background-color: var(--tasks-progress);
+}

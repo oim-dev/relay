@@ -4,17 +4,14 @@
   gap: 1rem;
   min-width: 0;
   padding: 1.125rem 1rem 1.25rem;
-  border-radius: var(--mantine-radius-xl);
-  background: var(--tasks-surface);
-  box-shadow: var(--tasks-raised-shadow);
+  border-radius: 1.5rem;
+  background: var(--tasks-card);
   /* Переход показателя к блоку не прячет заголовок под закреплённой шапкой проекта. */
   scroll-margin-top: 5rem;
 
-  &[data-tone="quiet"] {
-    gap: 0.875rem;
-    border: 1px solid var(--tasks-border);
-    background: var(--tasks-surface-quiet);
-    box-shadow: none;
+  /* Главная карточка: градиент от розоватого к серо-синему. */
+  &[data-tone="feature"] {
+    background: var(--tasks-card-feature);
   }
 
   @media (--md) {
@@ -31,30 +28,27 @@
 
 .title {
   margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 650;
-  line-height: 1.3;
-  letter-spacing: -0.005em;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
 
-  .root[data-tone="quiet"] & {
-    font-size: 0.9375rem;
+  @media (--md) {
+    font-size: 1.25rem;
   }
 }
 
 .total {
-  min-width: 1.75rem;
-  padding: 0.0625rem 0.5rem;
+  min-width: 1.875rem;
+  padding: 0.0625rem 0.5625rem;
   border-radius: 999px;
-  background: var(--tasks-subtle);
-  color: var(--tasks-muted);
+  background: var(--tasks-tile);
+  color: var(--tasks-ink);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 650;
+  line-height: 1.5rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
-
-  .root[data-tone="quiet"] & {
-    background: var(--tasks-surface);
-  }
 }
 
 .link {
@@ -63,15 +57,26 @@
   gap: 0.25rem;
   min-height: 2rem;
   margin-left: auto;
+  padding-inline: 0.75rem;
+  border-radius: 999px;
+  background: var(--tasks-tile);
   color: var(--tasks-accent-ink);
   font-size: 0.8125rem;
-  font-weight: 550;
+  font-weight: 600;
   text-decoration: none;
 
   &:hover {
     color: var(--tasks-accent-hover);
     text-decoration: underline;
   }
+}
+
+.description {
+  max-width: 44rem;
+  margin: -0.5rem 0 0;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
 }
 
 .note {

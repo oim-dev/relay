@@ -15,6 +15,62 @@
   --tasks-border: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   --tasks-border-strong: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
   --tasks-selected: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+
+  /*
+   * Уровни экрана-дашборда, от дальнего к ближнему: серая область экрана, светлая сцена
+   * с содержимым, тонированная карточка блока и светлый подблок внутри карточки.
+   * В тёмной теме уровни поднимаются к свету в том же порядке.
+   */
+  --tasks-backdrop: light-dark(
+    var(--mantine-color-gray-2),
+    color-mix(in srgb, var(--mantine-color-dark-9) 60%, black)
+  );
+  --tasks-stage: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-0) 45%, var(--mantine-color-white)),
+    var(--mantine-color-dark-9)
+  );
+  --tasks-card: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-1) 55%, var(--mantine-color-gray-2)),
+    var(--mantine-color-dark-7)
+  );
+  --tasks-tile: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  --tasks-tile-hover: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5));
+  --tasks-tile-border: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  /* Главная карточка экрана: переход от тона акцента к серо-синему. */
+  --tasks-card-feature: linear-gradient(
+    155deg,
+    light-dark(
+        color-mix(in srgb, var(--tasks-accent) 11%, var(--mantine-color-white)),
+        color-mix(in srgb, var(--tasks-accent) 16%, var(--mantine-color-dark-7))
+      )
+      0%,
+    light-dark(
+        color-mix(in srgb, var(--mantine-color-indigo-1) 45%, var(--mantine-color-gray-2)),
+        color-mix(in srgb, var(--mantine-color-indigo-4) 16%, var(--mantine-color-dark-7))
+      )
+      100%
+  );
+  /* Показатель со штрихованным фоном: основа и нейтральная полупрозрачная штриховка. */
+  --tasks-hatch-surface: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  --tasks-hatch: repeating-linear-gradient(
+    -45deg,
+    light-dark(
+        color-mix(in srgb, var(--tasks-ink) 7%, transparent),
+        color-mix(in srgb, var(--tasks-ink) 9%, transparent)
+      )
+      0 0.25rem,
+    transparent 0.25rem 0.625rem
+  );
+  /* Выделенный показатель: заливка акцента с контрастным текстом. */
+  --tasks-highlight: var(--tasks-accent);
+  --tasks-highlight-hover: var(--tasks-accent-hover);
+  --tasks-highlight-ink: var(--tasks-accent-contrast);
+  /* Подложки иконок показателей: полупрозрачный тон текста своей поверхности. */
+  --tasks-icon-chip-highlight: color-mix(in srgb, var(--tasks-highlight-ink) 18%, transparent);
+  --tasks-icon-chip-hatch: color-mix(in srgb, var(--tasks-ink) 8%, transparent);
+  --tasks-icon-chip-inverse: color-mix(in srgb, var(--tasks-inverse) 14%, transparent);
+  /* Полупрозрачный светлый подблок поверх градиента главной карточки. */
+  --tasks-tile-translucent: color-mix(in srgb, var(--tasks-tile) 55%, transparent);
   --tasks-selected-border: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-3));
 
   /* Текст. */
@@ -26,15 +82,22 @@
   --tasks-inverse-surface: light-dark(var(--mantine-color-gray-9), var(--mantine-color-dark-0));
   --tasks-inverse: light-dark(var(--mantine-color-white), var(--mantine-color-dark-9));
   --tasks-inverse-muted: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-5));
-  --tasks-inverse-accent: light-dark(var(--mantine-color-rose-4), var(--mantine-color-rose-7));
+  --tasks-inverse-accent: light-dark(
+    color-mix(in srgb, var(--tasks-accent) 70%, var(--mantine-color-white)),
+    color-mix(in srgb, var(--tasks-accent) 60%, black)
+  );
 
   /* Акцент Relay: переходы, выделенные показатели, текущая работа. */
   --tasks-accent: light-dark(var(--mantine-color-rose-6), var(--mantine-color-rose-4));
-  --tasks-accent-hover: light-dark(var(--mantine-color-rose-7), var(--mantine-color-rose-3));
-  --tasks-accent-ink: light-dark(var(--mantine-color-rose-7), var(--mantine-color-rose-3));
+  /* Производные акцента: при смене --tasks-accent меняются вместе с ним. */
+  --tasks-accent-hover: light-dark(
+    color-mix(in srgb, var(--tasks-accent) 85%, black),
+    color-mix(in srgb, var(--tasks-accent) 70%, var(--mantine-color-white))
+  );
+  --tasks-accent-ink: var(--tasks-accent-hover);
   --tasks-accent-subtle: light-dark(
-    var(--mantine-color-rose-0),
-    color-mix(in srgb, var(--mantine-color-rose-4) 16%, var(--mantine-color-dark-7))
+    color-mix(in srgb, var(--tasks-accent) 7%, var(--mantine-color-white)),
+    color-mix(in srgb, var(--tasks-accent) 16%, var(--mantine-color-dark-7))
   );
   --tasks-accent-contrast: light-dark(var(--mantine-color-white), var(--mantine-color-dark-9));
 
@@ -71,7 +134,10 @@
 
   /* Фокус и выделение текста. */
   --tasks-focus-ring: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
-  --tasks-selection: light-dark(var(--mantine-color-rose-1), var(--tasks-accent-subtle));
+  --tasks-selection: light-dark(
+    color-mix(in srgb, var(--tasks-accent) 14%, var(--mantine-color-white)),
+    var(--tasks-accent-subtle)
+  );
 
   /*
    * Колонки задач — единый источник для доски и обзора; фактическое выполнение и
@@ -90,6 +156,20 @@
   --tasks-blocked: var(--tasks-danger);
   --tasks-chart-track: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   --tasks-chart-grid: var(--tasks-border);
+  /*
+   * Акцентные полосы прогресса и величин (Progress variant="accent"): заливка ≥3:1
+   * с дорожкой и с поверхностью, дорожка — сплошной спокойный тон акцента.
+   */
+  --tasks-progress: var(--tasks-accent);
+  --tasks-progress-track: light-dark(
+    color-mix(in srgb, var(--tasks-accent) 22%, var(--mantine-color-white)),
+    color-mix(in srgb, var(--tasks-accent) 18%, var(--mantine-color-dark-6))
+  );
+  /* Отменённые на диаграмме: бледная заливка с рамкой цвета колонки вместо штриховки. */
+  --tasks-column-cancelled-fill: light-dark(
+    color-mix(in srgb, var(--tasks-column-cancelled) 22%, var(--mantine-color-white)),
+    color-mix(in srgb, var(--tasks-column-cancelled) 30%, var(--mantine-color-dark-6))
+  );
 
   /* Тени; значения alpha принадлежат теме. */
   --tasks-card-shadow: 0 1px 2px light-dark(#19191908, #00000029);

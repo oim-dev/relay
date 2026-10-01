@@ -16,7 +16,7 @@
   & li {
     padding: 0.1875rem 0.625rem;
     border-radius: 999px;
-    background: var(--tasks-subtle);
+    background: var(--tasks-tile);
     white-space: nowrap;
   }
 

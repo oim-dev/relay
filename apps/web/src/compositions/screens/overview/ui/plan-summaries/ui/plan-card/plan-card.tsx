@@ -30,13 +30,7 @@ export const PlanCard = (props: PlanCardProps) => {
         <span className={styles.title}>{title}</span>
       </Link>
       {isDefined(description) && <p className={styles.description}>{description}</p>}
-      <Progress
-        value={plan.tasks.percent}
-        size="sm"
-        color="var(--tasks-completed)"
-        classNames={{ root: styles.progress }}
-        aria-label={tasksLabel}
-      />
+      <Progress variant="accent" value={plan.tasks.percent} aria-label={tasksLabel} />
       <p className={styles.meta}>
         <span>{tasksLabel}</span>
         <span>{stagesLabel}</span>

@@ -1,7 +1,7 @@
 import type { ComponentPropsWithoutRef } from "react";
 import type { ProductOverview } from "domains/product-overview";
 
-/** Параметры полосы размера проекта. */
+/** Параметры диаграммы размера проекта. */
 export type ProjectSizeParams = {
   /** Статистика задач. */
   tasks: ProductOverview["tasks"];
@@ -15,6 +15,6 @@ export type ProjectSizeParams = {
   basePath: string;
 };
 /** Атрибуты корневого элемента. */
-type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children">;
-/** Свойства полосы размера проекта. */
+type RootAttrs = Omit<ComponentPropsWithoutRef<"div">, "children">;
+/** Свойства диаграммы размера проекта. */
 export type ProjectSizeProps = RootAttrs & ProjectSizeParams;

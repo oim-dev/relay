@@ -63,26 +63,48 @@ Provider принадлежит своему механизму, а не мес�
 2. Семантические роли `--tasks-*` — в [variables.css](../src/ui/themes/styles/variables.css):
    каждая связывает оттенки палитр со светлой и тёмной схемой через `light-dark()`.
    Группы ролей: поверхности (`canvas`, `chrome`, `surface`, `surface-quiet`, `raised`,
-   `subtle`, `border`, `border-strong`), текст (`ink`, `muted`, `soft`), инверсная
+   `subtle`, `border`, `border-strong`), уровни экрана-дашборда от дальнего к ближнему
+   (`backdrop` — серая область экрана, `stage` — светлая сцена с содержимым, `card` —
+   тонированная карточка блока, `tile`, `tile-hover`, `tile-border` — светлый подблок,
+   `tile-translucent` — полупрозрачный подблок поверх градиента;
+   `card-feature` — градиент главной карточки), текст (`ink`, `muted`, `soft`), инверсная
    поверхность (`inverse-surface`, `inverse`, `inverse-muted`, `inverse-accent`), акцент
-   (`accent`, `accent-hover`, `accent-ink`, `accent-subtle`, `accent-contrast`),
-   состояния `success`/`warning`/`danger`/`info` с парами `-surface` и `-border`,
-   `focus-ring` и `selection`, роли диаграмм (`column-*` для шести колонок, `completed`,
-   `blocked`, `chart-track`, `chart-grid`) и тени (`card-shadow`, `card-hover`,
-   `raised-shadow`). Прежние имена сохранены; `--tasks-warning-ink` — совместимый
-   псевдоним `--tasks-warning`.
+   (`accent`, `accent-hover`, `accent-ink`, `accent-subtle`, `accent-contrast`) и
+   выделенный показатель (`highlight`, `highlight-hover`, `highlight-ink` — ссылки
+   на акцент; `icon-chip-highlight`, `icon-chip-hatch`, `icon-chip-inverse` — подложки
+   иконок показателей), состояния `success`/`warning`/`danger`/`info` с парами `-surface` и
+   `-border`, `focus-ring` и `selection`, роли диаграмм (`column-*` для шести колонок,
+   `column-cancelled-fill` — бледная заливка отменённых, `completed`, `blocked`,
+   `chart-track`, `chart-grid`), прогресс (`progress`, `progress-track`), декоративная
+   штриховка показателя (`hatch` — нейтральные полупрозрачные полосы, `hatch-surface` —
+   основа под ними) и тени (`card-shadow`, `card-hover`, `raised-shadow`). Прежние имена
+   сохранены, включая `surface-quiet`, которую сейчас не использует ни один экран;
+   `--tasks-warning-ink` — совместимый псевдоним `--tasks-warning`. Роли-градиенты и
+   штриховки (`card-feature`, `hatch`) содержат значение `background`, а не цвет.
+
+Акцентные полосы прогресса и величин оформляются одним способом — вариантом
+`<Progress variant="accent">` Mantine. Вариант подключён в `theme.config.ts` через
+`classNames` и описан в [progress.module.css](../src/ui/themes/styles/progress.module.css):
+толщина, скругление, дорожка `progress-track` и заливка `progress`. Экраны не держат
+собственных копий этих стилей; остальные `Progress` приложения сохраняют прежний вид.
 
 CSS Modules и свойства компонентов используют только роли `--tasks-*`, без hex/rgb/hsl,
 выбора палитры вида `color="orange"` и прямых `--mantine-color-*` по смыслу статуса.
 Локальная CSS-переменная компонента допустима как ссылка на роль, например
-`--segment-color: var(--tasks-column-done)`; геометрия диаграмм (ширины, `flex-grow`)
-задаётся inline. Экран «Обзор» соблюдает это правило полностью; часть старых экранов
-ещё выбирает палитры Mantine напрямую.
+`--stage-color: var(--tasks-column-done)`. Прозрачность и смешения (`color-mix()`,
+alpha) задаются только в теме отдельной ролью в `variables.css`, например
+`--tasks-icon-chip-hatch` или `--tasks-tile-translucent`; компонент ссылается на роль.
+Геометрия диаграмм задаётся inline: доля высоты столбца — переменной `--share`, длина
+полосы — значением `Progress`. Экран «Обзор» соблюдает это
+правило полностью; часть старых экранов ещё выбирает палитры Mantine напрямую.
 
 Чтобы добавить цвет, добавьте роль в `variables.css` со значениями для обеих схем,
 при необходимости — новую палитру в `theme.config.ts`, проверьте контраст (текст ≥4.5:1,
-крупный текст и значимые индикаторы ≥3:1) и используйте роль в компоненте. Смена акцента
-выполняется правкой акцентных ролей или палитры `rose` без изменения компонентов.
+крупный текст и значимые индикаторы ≥3:1, в том числе на градиентах и штриховках)
+и используйте роль в компоненте. Палитра `rose` используется только в `--tasks-accent`;
+производные роли (`accent-hover`, `accent-ink`, `accent-subtle`, `inverse-accent`,
+`selection`, `progress-track`, `card-feature`) смешиваются из него в теме. Смена акцента —
+правка одной роли `--tasks-accent` или палитры `rose` без изменения компонентов.
 Акцент не является единственным признаком ошибки: ошибки используют `danger`, текст
 и значок.
 

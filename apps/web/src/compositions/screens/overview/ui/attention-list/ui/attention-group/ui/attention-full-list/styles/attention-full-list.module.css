@@ -15,7 +15,7 @@
   display: grid;
   gap: 0.125rem;
   padding: 0.5rem 0 0.5625rem;
-  border-top: 1px solid var(--tasks-border);
+  border-top: 1px solid var(--tasks-tile-border);
 }
 
 .link {

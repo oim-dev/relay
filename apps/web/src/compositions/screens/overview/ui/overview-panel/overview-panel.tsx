@@ -8,7 +8,7 @@ import styles from "./styles/overview-panel.module.css";
 
 /**
  * Оформляет самостоятельную область обзора с заголовком, полным числом и переходом к разделу.
- * Уровень поверхности отделяет срочную работу от справочного контекста проекта.
+ * Карточка лежит на светлой сцене экрана; её подблоки — ещё более светлые плитки.
  *
  * Используется для:
  *  - блоков задач, внимания, планов, релизов, досок, знаний и документов
@@ -20,7 +20,8 @@ export const OverviewPanel = (props: OverviewPanelProps) => {
     total,
     link,
     preview,
-    tone = "primary",
+    description,
+    tone = "default",
     children,
     className,
     ...rootAttrs
@@ -47,6 +48,7 @@ export const OverviewPanel = (props: OverviewPanelProps) => {
           </Link>
         )}
       </header>
+      {isDefined(description) && <p className={styles.description}>{description}</p>}
       {children}
       {isDefined(previewNote) && <p className={styles.note}>{previewNote}</p>}
     </section>

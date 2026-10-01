@@ -1,7 +1,10 @@
+import { Ban, CircleCheck, CirclePlay, Eye, Flag, Inbox, Lock } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type {
   OverviewBoard,
   OverviewPlans,
   OverviewReleases,
+  OverviewTasks,
   ProductOverviewFreshness,
 } from "domains/product-overview";
 
@@ -56,3 +59,17 @@ export const OVERVIEW_SECTION_IDS = {
   attentionBlocked: "overview-attention-blocked",
   boards: "overview-boards",
 } as const;
+
+/**
+ * Единая система иконок колонок и блокировки: одинаковы в операционных показателях
+ * и на диаграмме колонок, чтобы состояние узнавалось не только по цвету.
+ */
+export const TASK_STATE_ICONS: Record<keyof OverviewTasks["byColumn"] | "blocked", LucideIcon> = {
+  inbox: Inbox,
+  ready: Flag,
+  "in-progress": CirclePlay,
+  review: Eye,
+  done: CircleCheck,
+  cancelled: Ban,
+  blocked: Lock,
+};

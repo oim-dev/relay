@@ -1,4 +1,6 @@
+/* Группы — светлые подблоки карточки высотой по содержимому. */
 .root {
   display: grid;
-  gap: 1.25rem;
+  align-content: start;
+  gap: 0.625rem;
 }

@@ -1,5 +1,5 @@
-import { useId } from "react";
 import clsx from "clsx";
+import { Progress } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { isDefined } from "shared/value-predicates";
 import { OVERVIEW_SECTION_IDS } from "../../config/overview.config";
@@ -17,8 +17,10 @@ type SizeItem = {
 };
 
 /**
- * Показывает полный объём проекта: задачи, доски, документы и продуктовые знания.
- * Задачи и доски не имеют общего раздела проекта, поэтому ведут к блокам этого экрана.
+ * Показывает полный объём проекта горизонтальной столбиковой диаграммой: задачи, доски,
+ * документы и продуктовые знания. У каждой полосы подпись, точное число и расшифровка;
+ * полосы скрыты от скринридера. Задачи и доски не имеют общего раздела проекта,
+ * поэтому ведут к блокам этого экрана.
  *
  * Используется для:
  *  - оценки размера проекта без конкуренции со срочной работой
@@ -26,7 +28,6 @@ type SizeItem = {
  */
 export const ProjectSize = (props: ProjectSizeProps) => {
   const { tasks, boards, documents, knowledge, basePath, className, ...rootAttrs } = props;
-  const titleId = useId();
   const sizeItems: SizeItem[] = [
     {
       label: "Задачи",
@@ -68,22 +69,31 @@ export const ProjectSize = (props: ProjectSizeProps) => {
       path: `${basePath}/product/applications`,
     },
   ];
+  const largestValue = Math.max(...sizeItems.map((item) => item.value));
+  const barItems = sizeItems.map((item) => {
+    // Длина полосы — геометрия диаграммы; точное число подписано текстом.
+    const share = largestValue === 0 ? 0 : (item.value / largestValue) * 100;
+    return { ...item, share, emptyMark: item.value === 0 ? "" : undefined };
+  });
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)} aria-labelledby={titleId}>
-      <h2 id={titleId} className={styles.title}>
-        Размер проекта
-      </h2>
+    <div {...rootAttrs} className={clsx(styles.root, className)}>
       <ul className={styles.list} aria-label="Размер проекта">
-        {sizeItems.map((item) => {
+        {barItems.map((item) => {
           const content = (
             <>
               <span className={styles.label}>{item.label}</span>
               <span className={styles.value}>{item.value}</span>
+              <Progress
+                variant="accent"
+                value={item.share}
+                className={styles.bar}
+                aria-hidden="true"
+              />
               {isDefined(item.detail) && <span className={styles.detail}>{item.detail}</span>}
             </>
           );
           return (
-            <li key={item.label} className={styles.item}>
+            <li key={item.label} className={styles.item} data-empty={item.emptyMark}>
               {isDefined(item.anchor) && (
                 <a href={`#${item.anchor}`} className={styles.cell}>
                   {content}
@@ -101,6 +111,6 @@ export const ProjectSize = (props: ProjectSizeProps) => {
           );
         })}
       </ul>
-    </section>
+    </div>
   );
 };

@@ -1,71 +1,146 @@
+/* Серая область экрана вокруг светлой сцены с содержимым. */
 .root {
+  padding: 0.5rem 0.5rem 2.5rem;
+  background: var(--tasks-backdrop);
+
+  @media (--md) {
+    padding: 1rem var(--tasks-page-gutter) 3rem;
+  }
+}
+
+.stage {
   display: grid;
   gap: 1.25rem;
   max-width: 90rem;
   margin-inline: auto;
-  padding: 1.5rem var(--tasks-page-gutter) 4rem;
+  padding: 1.25rem 0.625rem 1rem;
+  border-radius: 1.5rem;
+  background: var(--tasks-stage);
 
   @media (--md) {
     gap: 1.5rem;
-    padding-top: 2rem;
+    padding: 1.75rem 1.5rem 1.5rem;
+    border-radius: 2rem;
+  }
+
+  @media (--xl) {
+    padding: 2rem 2rem 2rem;
   }
 }
 
 /*
- * Работа и прогресс. На широком экране «Требует внимания» занимает правую колонку
- * на всю высоту, а задачи, планы и релизы идут слева друг за другом: длинная группа
- * внимания не оставляет пустоту под распределением задач. Порядок DOM и Tab прежний —
- * задачи, внимание, планы, релизы; избыток высоты уходит в конец левой колонки.
+ * Сетка блоков. Каждый ряд выравнивает высоту карточек, поэтому под колонками
+ * не остаётся дыр. «Требует внимания» на широком экране не растягивает ряд:
+ * высоту задаёт карточка задач, длинная группа прокручивается внутри карточки.
+ * Порядок DOM и Tab: задачи, внимание, планы, релизы, размер, знания, доски, документы.
  */
-.main {
+.grid {
   display: grid;
-  gap: 1.25rem;
-  align-items: start;
+  gap: 1rem;
+
+  @media (--md) {
+    grid-template-areas:
+      "tasks tasks"
+      "attention attention"
+      "plans releases"
+      "size size"
+      "knowledge knowledge"
+      "boards documents";
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   @media (--lg) {
     grid-template-areas:
       "tasks attention"
-      "plans attention"
-      "releases attention";
+      "plans releases"
+      "size knowledge"
+      "boards documents";
     grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
-    grid-template-rows: auto auto 1fr;
+    gap: 1.25rem;
   }
 }
 
 .tasks {
-  @media (--lg) {
+  @media (--md) {
     grid-area: tasks;
   }
 }
 
 .attention {
-  @media (--lg) {
+  @media (--md) {
     grid-area: attention;
+  }
+
+  @media (--lg) {
+    position: relative;
+    contain: size;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 30rem;
+
+    /* Затухание снизу подсказывает, что длинный список продолжается при прокрутке. */
+    &::after {
+      position: absolute;
+      inset: auto 1.5rem 1.5rem;
+      height: 1.75rem;
+      background: linear-gradient(to bottom, transparent, var(--tasks-card));
+      content: "";
+      pointer-events: none;
+    }
   }
 }
 
-.plans {
+.attentionBody {
   @media (--lg) {
+    min-height: 0;
+    margin-inline: -0.375rem;
+    padding: 0.25rem 0.375rem;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    /* Последняя запись поднимается над затуханием нижнего края. */
+    padding-bottom: 1.5rem;
+  }
+}
+
+.documents,
+.plans {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.plans {
+  @media (--md) {
     grid-area: plans;
   }
 }
 
 .releases {
-  @media (--lg) {
+  @media (--md) {
     grid-area: releases;
   }
 }
 
-.context {
-  display: grid;
-  gap: 1rem;
-  align-items: start;
+/* Диаграмма размера распределяет строки по высоте ряда вместо пустоты под ними. */
+.size {
+  grid-template-rows: auto auto minmax(0, 1fr);
 
   @media (--md) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-area: size;
   }
+}
 
-  @media (--xl) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+.knowledge {
+  @media (--md) {
+    grid-area: knowledge;
+  }
+}
+
+.boards {
+  @media (--md) {
+    grid-area: boards;
+  }
+}
+
+.documents {
+  @media (--md) {
+    grid-area: documents;
   }
 }
