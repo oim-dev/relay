@@ -76,6 +76,9 @@ export function filterFields(query: object): OutputField[] {
     active: "Участие",
     section: "Раздел",
     documentKind: "Тип документа",
+    documentFormat: "Формат",
+    tags: "Теги (все)",
+    unattached: "Без прикреплений",
     pinned: "Закрепление",
     archived: "Архив",
     sort: "Сортировка",
@@ -89,12 +92,35 @@ export function filterFields(query: object): OutputField[] {
         ? (labels.get(value as EntitySummary["ref"]["kind"]) ?? String(value))
         : key === "status"
           ? stateLabel(kind, String(value))
-          : Array.isArray(value)
-            ? value.join(", ")
-            : String(value),
+          : key === "documentFormat"
+            ? (documentFormats[value as keyof typeof documentFormats] ?? String(value))
+            : Array.isArray(value)
+              ? value.join(", ")
+              : String(value),
     ]);
 }
 const documentStates = { draft: "Черновик", active: "Действующий", archived: "Архив" };
+export const documentFormats = { markdown: "Markdown", link: "Ссылка" };
+/** Компактные свойства документа в каталоге: формат, адрес, теги и прикрепления. */
+/** Названия разделов проекта по ID; без карты показывается ID. */
+export type SectionNames = ReadonlyMap<string, string>;
+export function sectionLabel(id: string | null, names?: SectionNames): string {
+  if (id === null) return "Без раздела";
+  const name = names?.get(id);
+  return name ? `${name} (${id})` : id;
+}
+export function documentSummaryDetails(
+  document: NonNullable<EntitySummary["document"]>,
+  sections?: SectionNames,
+): string[] {
+  return [
+    stateLabel("document", document.status),
+    documentKinds[document.kind],
+    `Формат: ${documentFormats[document.format]}${document.url ? ` · ${document.url}` : ""}`,
+    ...(document.tags.length ? [`Теги: ${document.tags.join(" · ")}`] : []),
+    `Раздел: ${sectionLabel(document.sectionId, sections)} · ${document.linkCount ? `связей ${document.linkCount}` : "без прикреплений"}${document.pinned ? " · закреплён" : ""}`,
+  ];
+}
 const documentKinds = {
   specification: "Техническое задание",
   description: "Описание",
@@ -112,6 +138,7 @@ export function entitiesText(
   query: object,
   options: TextOptions,
   readCommands: string[] = [],
+  sections?: SectionNames,
 ): string {
   return [
     listText(
@@ -124,11 +151,7 @@ export function entitiesText(
           details: [
             labels.get(item.ref.kind) ?? item.ref.kind,
             ...(item.document
-              ? [
-                  stateLabel("document", item.document.status),
-                  documentKinds[item.document.kind],
-                  `Раздел: ${item.document.sectionId ?? "Без раздела"} · связей ${item.document.linkCount}${item.document.pinned ? " · закреплён" : ""}`,
-                ]
+              ? documentSummaryDetails(item.document, sections)
               : entityStateFields(item).map(([label, value]) => `${label}: ${value}`)),
             ...(item.context ? [item.context] : []),
           ],
@@ -207,7 +230,7 @@ export function entityText(
     );
   if (data.kind === "document") {
     lines.push(
-      `Тип документа: ${documentKinds[data.documentKind]}\nСостояние: ${safeText(stateLabel("document", data.documentStatus ?? "active"))}\nРаздел: ${safeText(entity.document?.sectionId ?? "Без раздела")}\nЗакреплён: ${data.pinned ? "да" : "нет"}`,
+      `Тип документа: ${documentKinds[data.documentKind]}\nФормат: ${documentFormats[data.documentFormat ?? "markdown"]}${data.url ? `\nАдрес: ${safeText(data.url)}` : ""}\nТеги: ${safeText((data.tags ?? []).join(" · ") || "—")}\nСостояние: ${safeText(stateLabel("document", data.documentStatus ?? "active"))}\nРаздел: ${safeText(entity.document?.sectionId ?? "Без раздела")}\nЗакреплён: ${data.pinned ? "да" : "нет"}`,
     );
     const relations = [
       ...data.links.map((link) => ({
@@ -259,8 +282,18 @@ export function entityText(
       sections: [
         { title: "Сведения", body: lines.map((line) => wrap(line, options.width)).join("\n\n") },
         ...(markdown
-          ? [{ title: "Полное содержание", body: renderMarkdown(markdown, options) }]
-          : []),
+          ? [
+              {
+                title:
+                  data.kind === "document" && data.documentFormat === "link"
+                    ? "Пояснение к ссылке"
+                    : "Полное содержание",
+                body: renderMarkdown(markdown, options),
+              },
+            ]
+          : data.kind === "document" && data.documentFormat === "link"
+            ? [{ title: "Пояснение к ссылке", body: "Пояснение не задано." }]
+            : []),
         ...relationSections,
       ],
       commands: Object.entries(commands)

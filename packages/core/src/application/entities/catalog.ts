@@ -234,6 +234,9 @@ export async function readEntityCatalog(
                   ? (fields.sectionId ?? null)
                   : null,
                 pinned: fields.pinned ?? false,
+                format: fields.documentFormat ?? "markdown",
+                ...(fields.url === undefined ? {} : { url: fields.url }),
+                tags: fields.tags ?? [],
                 updatedAt: record.updatedAt,
                 linkCount: fields.links.length + (fields.relations?.length ?? 0),
               },
@@ -246,6 +249,15 @@ export async function readEntityCatalog(
                   target: [
                     ...fields.links.map((link) => (link.kind === "product" ? "passport" : link.id)),
                     ...(fields.relations ?? []).map((link) => link.target.id),
+                  ],
+                  // Цель документа может быть любого вида, а ID уникальны только внутри вида.
+                  targetAddress: [
+                    ...fields.links.map((link) =>
+                      link.kind === "product"
+                        ? "product:passport"
+                        : entityAddress({ kind: link.kind, id: link.id }),
+                    ),
+                    ...(fields.relations ?? []).map((link) => entityAddress(link.target)),
                   ],
                 }
               : {},

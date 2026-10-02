@@ -1,0 +1,76 @@
+.root {
+  display: grid;
+  gap: 1rem 2rem;
+  min-width: 0;
+
+  @media (--xl) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 36rem);
+    align-items: end;
+  }
+}
+
+.identity {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+
+  &:focus {
+    outline: none;
+  }
+
+  @media (--md) {
+    font-size: 2rem;
+  }
+}
+
+.description {
+  max-width: 40rem;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.tools {
+  display: grid;
+  gap: 0.625rem;
+  min-width: 0;
+
+  @media (--sm) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+.search {
+  min-width: 0;
+}
+
+.mobileTools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  @media (--xl) {
+    display: none;
+  }
+}
+
+/* Фильтры на средней ширине стоят над выдачей, панель нужна только на телефоне. */
+.filtersButton {
+  @media (--md) {
+    display: none;
+  }
+}
+
+.navigationButton,
+.create {
+  flex: none;
+}

@@ -100,7 +100,10 @@ export const ProductFeatureScreen = () => {
         <FeatureScenarios key={featureData.id} feature={featureData} />
       </ProductRequirement>
       <div style={{ marginTop: "1.5rem" }}>
-        <EntityDocuments target={{ kind: "feature", id: featureData.id }} />
+        <EntityDocuments
+          target={{ kind: "feature", id: featureData.id }}
+          targetTitle={featureData.name}
+        />
       </div>
     </ProductPage>
   );

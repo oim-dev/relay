@@ -1,0 +1,49 @@
+.root {
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--tasks-warning-border);
+  border-radius: 0.75rem;
+  background: var(--tasks-warning-surface);
+}
+
+.heading {
+  margin: 0;
+  color: var(--tasks-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.list {
+  display: grid;
+  gap: 0.25rem;
+  max-height: 9rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  gap: 0 0.375rem;
+  align-items: start;
+  color: var(--tasks-danger);
+  font-size: 0.75rem;
+
+  &[data-applied="true"] {
+    color: var(--tasks-success);
+  }
+}
+
+.title {
+  color: var(--tasks-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.message {
+  grid-column: 2;
+  color: var(--tasks-muted);
+}

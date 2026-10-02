@@ -6,10 +6,10 @@ import { formatHelpExample } from "../src/help-example.js";
 import { commandTree, renderHelp } from "./helpers/help.js";
 import { failed, invoke, invokeRaw, tempDirectory } from "./helpers/cli.js";
 
-test("help: все 129 листьев и группы работают без config и не создают базу", async (t) => {
+test("help: все 136 листьев и группы работают без config и не создают базу", async (t) => {
   const root = await tempDirectory(t);
   const tree = commandTree(root);
-  assert.equal(tree.filter(({ command }) => !command.commands.length).length, 129);
+  assert.equal(tree.filter(({ command }) => !command.commands.length).length, 136);
   const examples: string[] = [];
   for (const { command, path } of tree) {
     const result = await renderHelp(root, [...path, "--help"]);

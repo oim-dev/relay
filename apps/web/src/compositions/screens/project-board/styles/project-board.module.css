@@ -18,13 +18,19 @@
   flex-shrink: 0;
 }
 .title {
+  min-width: 0;
   font-size: 26px;
   font-weight: 650;
   letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
 }
 .heading {
-  flex: 1;
+  flex: 1 1 14rem;
   min-width: 0;
+}
+/* Действия шапки переносятся под заголовок, когда рядом не хватает места. */
+.actions {
+  flex-wrap: wrap;
 }
 .search {
   width: 260px;

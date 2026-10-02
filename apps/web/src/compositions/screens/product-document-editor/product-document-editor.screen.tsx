@@ -2,17 +2,22 @@ import { Button, Skeleton } from "@mantine/core";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useDocument, DOCUMENT_INPUT_SCHEMA } from "domains/documents";
 import type { DocumentInput } from "domains/documents";
-import { useEntitySummary } from "domains/entities";
+import { entityKindLabel, useEntitySummary } from "domains/entities";
 import { useProjectBasePath, useProjectId } from "domains/project";
-import { getProductReturn, ProductPage } from "compositions/widgets/product-page";
+import { getProductReturn } from "compositions/widgets/product-page";
+import { PageStage } from "ui/page-stage";
 import { StatePanel } from "ui/state-panel";
+import { isDefined } from "shared/value-predicates";
+import { readEditorParams } from "./helpers/read-editor-params";
 import { DocumentationForm } from "./ui/documentation-form";
 
 /**
- * Открывает полноценный документ с заранее выбранным контекстом создания.
+ * Открывает редактор материала: новый документ или внешнюю ссылку, в том числе
+ * с начальным прикреплением к сущности, из которой начато создание.
  *
  * Используется для:
- *  - записи знаний и чернового проектирования из библиотеки или сущности
+ *  - создания материала из библиотеки или блока «Материалы» сущности
+ *  - изменения содержания, формата, адреса и свойств существующего материала
  */
 export const ProductDocumentEditorScreen = () => {
   const { documentId } = useParams();
@@ -20,60 +25,80 @@ export const ProductDocumentEditorScreen = () => {
   const base = useProjectBasePath();
   const location = useLocation();
   const [params] = useSearchParams();
-  const query = useDocument(projectId, documentId ?? null);
-  const target = useEntitySummary(projectId, documentId ? null : params.get("target"));
-  const returnTo = getProductReturn(location.state, `${base}/documents`, base);
   const isNew = documentId === undefined;
+  const editorParams = readEditorParams(params, base);
+  const query = useDocument(projectId, documentId ?? null);
+  const target = useEntitySummary(projectId, isNew ? editorParams.attach : null);
+  const catalogReturn = getProductReturn(location.state, `${base}/documents`, base);
   const isLoading = query.isLoading || target.isLoading;
   if (isLoading)
     return (
-      <ProductPage title="Открываем редактор" description="Загружаем документ">
-        <Skeleton height={350} />
-      </ProductPage>
+      <PageStage aria-busy="true">
+        <Skeleton height={40} width="40%" />
+        <Skeleton height={420} radius="xl" />
+      </PageStage>
     );
-  if ((!isNew && query.data === undefined) || target.error)
+  const loadError = isNew ? target.error : query.error;
+  const errorTitle = isNew ? "Не найдена запись для прикрепления" : "Не удалось открыть редактор";
+  const errorFallback = isNew
+    ? "Сущность, к которой нужно прикрепить материал, недоступна."
+    : "Материал не найден.";
+  if ((!isNew && !isDefined(query.data)) || isDefined(target.error))
     return (
       <StatePanel
-        title="Не удалось открыть редактор"
-        description={query.error?.message ?? target.error?.message ?? "Документ не найден."}
+        title={errorTitle}
+        description={loadError?.message ?? errorFallback}
         action={
-          <Button component={Link} to={returnTo}>
+          <Button component={Link} to={editorParams.returnTo ?? catalogReturn}>
             Назад
           </Button>
         }
       />
     );
-  const initialData: DocumentInput = query.data
-    ? DOCUMENT_INPUT_SCHEMA.parse(query.data)
+  const attachment = isNew && isDefined(target.data) ? target.data : null;
+  const initialData: DocumentInput = isDefined(query.data)
+    ? { ...DOCUMENT_INPUT_SCHEMA.parse(query.data), url: query.data.url ?? "" }
     : {
         name: "",
         summary: "",
         body: "",
         documentKind: "description",
         documentStatus: "draft",
-        sectionId: params.get("section"),
+        sectionId: editorParams.section,
         pinned: false,
-        relations: target.data
-          ? [{ target: target.data.ref, type: "references", description: "" }]
+        documentFormat: "markdown",
+        url: "",
+        tags: [],
+        relations: isDefined(attachment)
+          ? [{ target: attachment.ref, type: editorParams.relation, description: "" }]
           : [],
       };
-  const backTo = isNew ? returnTo : `${base}/documents/${documentId}`;
-  const title = isNew ? "Новый документ" : "Редактирование документа";
-  const draftScope = `${projectId}:${documentId ?? `new:${params.get("target") ?? "library"}`}`;
+  const attachmentView = isDefined(attachment)
+    ? {
+        title: attachment.title,
+        entityKey: attachment.key,
+        kindLabel: entityKindLabel(attachment.ref.kind),
+      }
+    : null;
+  const cardHref = isNew ? null : `${base}/documents/${documentId}`;
+  const cancelTo = cardHref ?? editorParams.returnTo ?? catalogReturn;
+  const title = isNew ? "Новый материал" : "Редактирование материала";
+  const draftScope = `${projectId}:${documentId ?? `new:${editorParams.attach ?? "library"}`}`;
   return (
-    <ProductPage
-      title={title}
-      description="Сохраните знание или начните проектировать решение. Связи помогут найти его в нужный момент."
-    >
+    <PageStage>
       <DocumentationForm
         key={draftScope}
+        title={title}
         initial={initialData}
         documentId={documentId}
         revision={query.data?.revision ?? 0}
         draftScope={draftScope}
-        backTo={backTo}
-        returnTo={returnTo}
+        attachment={attachmentView}
+        cancelTo={cancelTo}
+        createdReturnTo={editorParams.returnTo}
+        catalogReturn={catalogReturn}
+        onReload={() => void query.mutate()}
       />
-    </ProductPage>
+    </PageStage>
   );
 };

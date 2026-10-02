@@ -216,7 +216,7 @@ export const appRouter = createBrowserRouter([
               },
               {
                 path: "new",
-                handle: breadcrumbHandle({ label: "Новый документ" }),
+                handle: breadcrumbHandle({ label: "Новый материал" }),
                 lazy: () => import("compositions/screens/product-document-editor/lazy"),
               },
               {

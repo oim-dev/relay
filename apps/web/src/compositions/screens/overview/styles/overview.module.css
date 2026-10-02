@@ -1,33 +1,3 @@
-/* Серая область экрана вокруг светлой сцены с содержимым. */
-.root {
-  padding: 0.5rem 0.5rem 2.5rem;
-  background: var(--tasks-backdrop);
-
-  @media (--md) {
-    padding: 1rem var(--tasks-page-gutter) 3rem;
-  }
-}
-
-.stage {
-  display: grid;
-  gap: 1.25rem;
-  max-width: 90rem;
-  margin-inline: auto;
-  padding: 1.25rem 0.625rem 1rem;
-  border-radius: 1.5rem;
-  background: var(--tasks-stage);
-
-  @media (--md) {
-    gap: 1.5rem;
-    padding: 1.75rem 1.5rem 1.5rem;
-    border-radius: 2rem;
-  }
-
-  @media (--xl) {
-    padding: 2rem 2rem 2rem;
-  }
-}
-
 /*
  * Сетка блоков. Каждый ряд выравнивает высоту карточек, поэтому под колонками
  * не остаётся дыр. «Требует внимания» на широком экране не растягивает ряд:
@@ -159,4 +129,13 @@
   margin: 0;
   font-size: 0.875rem;
   font-weight: 650;
+}
+
+/* Материалы, прикреплённые к самому проекту, — после справочного контекста. */
+.materials {
+  margin-top: 1rem;
+
+  @media (--lg) {
+    margin-top: 1.25rem;
+  }
 }

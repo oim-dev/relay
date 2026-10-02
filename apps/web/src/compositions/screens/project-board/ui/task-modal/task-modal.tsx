@@ -141,7 +141,7 @@ export const TaskModal = (props: TaskModalProps) => {
               <Tabs.List aria-label="Разделы карточки" className={styles.tabList}>
                 <Tabs.Tab value="task">Задача</Tabs.Tab>
                 <Tabs.Tab value="comments">Обсуждения</Tabs.Tab>
-                <Tabs.Tab value="documents">Документы</Tabs.Tab>
+                <Tabs.Tab value="documents">Материалы</Tabs.Tab>
               </Tabs.List>
               <Tabs.Panel value="task" className={styles.tabPanel}>
                 <TaskEditor
@@ -160,6 +160,7 @@ export const TaskModal = (props: TaskModalProps) => {
                 {tab === "documents" && (
                   <EntityDocuments
                     target={{ kind: "task", id: task.id }}
+                    targetTitle={taskTitle}
                     onOpenedChange={setDeleteOpened}
                   />
                 )}

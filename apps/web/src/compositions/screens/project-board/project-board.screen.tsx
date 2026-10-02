@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Drawer,
   Group,
   Menu,
   Popover,
@@ -15,12 +16,20 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { useDebouncedValue, useHotkeys } from "@mantine/hooks";
-import { Plus, Search, SlidersHorizontal, MoreHorizontal, ExternalLink } from "lucide-react";
+import { useDebouncedValue, useHotkeys, useMediaQuery } from "@mantine/hooks";
+import {
+  BookOpen,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  MoreHorizontal,
+  ExternalLink,
+} from "lucide-react";
 import { useBoard } from "domains/boards";
 import { BoardTaskError, useBoardTask, useBoardTaskCreation } from "domains/board-tasks";
 import type { TaskColumn, TaskFilters } from "domains/board-tasks";
 import { useProjectId, useProjectBasePath } from "domains/project";
+import { EntityDocuments } from "compositions/widgets/entity-documents";
 import { TaskKanban } from "./ui/task-kanban";
 import { TaskModal } from "./ui/task-modal";
 import { BOARD_BACKGROUND_SCHEMA } from "./config/route.schema";
@@ -55,6 +64,11 @@ export const ProjectBoardScreen = () => {
   const [creatingColumn, setCreatingColumn] = useState<TaskColumn | null>(null);
   const [error, setError] = useState("");
   const [defect, setDefect] = useState<unknown>();
+  const [isMaterialsOpened, setMaterialsOpened] = useState(false);
+  const [isMaterialsDialogOpened, setMaterialsDialogOpened] = useState(false);
+  const materialsButtonRef = useRef<HTMLButtonElement>(null);
+  const isWideScreen = useMediaQuery("(min-width: 48em)");
+  const materialsDrawerSize = isWideScreen ? "36rem" : "100%";
   const create = useBoardTaskCreation(projectId);
   const requestRef = useRef<{ board: string; column: TaskColumn; id: string } | null>(null);
   const isCreatingRef = useRef(false);
@@ -226,14 +240,26 @@ export const ProjectBoardScreen = () => {
             {boardDescription}
           </Text>
         </Stack>
-        <Button
-          size="sm"
-          leftSection={<Plus size={16} />}
-          loading={creatingColumn !== null}
-          onClick={() => void handleCreate("inbox")}
-        >
-          Создать задачу
-        </Button>
+        <Group gap="xs" className={styles.actions}>
+          <Button
+            ref={materialsButtonRef}
+            size="sm"
+            variant="default"
+            leftSection={<BookOpen size={15} aria-hidden="true" />}
+            aria-haspopup="dialog"
+            onClick={() => setMaterialsOpened(true)}
+          >
+            Материалы
+          </Button>
+          <Button
+            size="sm"
+            leftSection={<Plus size={16} />}
+            loading={creatingColumn !== null}
+            onClick={() => void handleCreate("inbox")}
+          >
+            Создать задачу
+          </Button>
+        </Group>
       </header>
       <div className={styles.filterbar}>
         <Group gap="xs" className={styles.controls}>
@@ -327,6 +353,25 @@ export const ProjectBoardScreen = () => {
         onOpen={handleOpen}
         onCreate={(target) => void handleCreate(target)}
       />
+      <Drawer
+        opened={isMaterialsOpened}
+        position="right"
+        size={materialsDrawerSize}
+        title={`Материалы доски «${board.name}»`}
+        closeButtonProps={{ "aria-label": "Закрыть материалы доски" }}
+        trapFocus={!isMaterialsDialogOpened}
+        closeOnEscape={!isMaterialsDialogOpened}
+        closeOnClickOutside={!isMaterialsDialogOpened}
+        returnFocus={false}
+        onClose={() => setMaterialsOpened(false)}
+        onExitTransitionEnd={() => materialsButtonRef.current?.focus()}
+      >
+        <EntityDocuments
+          target={{ kind: "board", id: board.id }}
+          targetTitle={board.name}
+          onOpenedChange={setMaterialsDialogOpened}
+        />
+      </Drawer>
       {selected !== null && (
         <TaskModal
           projectId={projectId}

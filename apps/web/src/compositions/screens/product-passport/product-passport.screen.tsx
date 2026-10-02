@@ -1,8 +1,8 @@
-import { Anchor, Button, Text } from "@mantine/core";
+import { Button, Text } from "@mantine/core";
 import { ArrowRight, Pencil, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getFeatureStatus, getRelatedDocuments, useProductDemo } from "domains/product-demo";
-import { useProjectBasePath } from "domains/project";
+import { getFeatureStatus, useProductDemo } from "domains/product-demo";
+import { EntityDocuments } from "compositions/widgets/entity-documents";
 import { ProductPage, useProductPath } from "compositions/widgets/product-page";
 import { MarkdownView } from "ui/markdown-view";
 import { StatePanel } from "ui/state-panel";
@@ -17,7 +17,6 @@ import styles from "./styles/product-passport.module.css";
 export const ProductPassportScreen = () => {
   const { snapshot } = useProductDemo();
   const base = useProductPath();
-  const projectBase = useProjectBasePath();
   const passportData = snapshot.passport;
   const isEmpty = passportData.name === "";
   const doneCount = snapshot.features.filter(
@@ -29,7 +28,6 @@ export const ProductPassportScreen = () => {
   const noneCount = snapshot.features.filter(
     (feature) => getFeatureStatus(feature) === "none",
   ).length;
-  const relatedDocuments = getRelatedDocuments(snapshot, [JSON.stringify({ kind: "product" })]);
   if (isEmpty)
     return (
       <ProductPage
@@ -113,27 +111,16 @@ export const ProductPassportScreen = () => {
               <ArrowRight size={14} aria-hidden="true" />
             </Link>
           </section>
-          <section className={styles.panel} aria-label="Документы продукта">
-            <h2 className={styles.panelTitle}>Документы продукта</h2>
-            <ul>
-              {relatedDocuments.map((document) => (
-                <li key={document.id}>
-                  <Anchor
-                    component={Link}
-                    c="var(--mantine-color-text)"
-                    to={`${projectBase}/documents/${document.id}`}
-                  >
-                    {document.name}
-                  </Anchor>
-                </li>
-              ))}
-            </ul>
-          </section>
           <Text size="xs" c="dimmed" lh={1.7}>
             Фича готова, когда готовы все её сценарии и общие контракты участвующих приложений.
           </Text>
         </aside>
       </div>
+      <EntityDocuments
+        className={styles.materials}
+        target={{ kind: "product", id: "passport" }}
+        targetTitle={passportData.name}
+      />
     </ProductPage>
   );
 };

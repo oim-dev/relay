@@ -24,11 +24,14 @@ Web — браузерная React SPA, представляющая данны�
   [page-breadcrumbs](../src/compositions/widgets/page-breadcrumbs),
   [planning-workspace](../src/compositions/widgets/planning-workspace),
   [entity-documents](../src/compositions/widgets/entity-documents),
+  [document-relations](../src/compositions/widgets/document-relations) — «Где используется»
+  в карточке материала: прямые связи по видам сущностей и изменение одной связи через `relate`,
   [entity-delete](../src/compositions/widgets/entity-delete).
 - `domains` — предметные адаптеры, модели, операции и lifecycle чтения: project,
   workspace, product, product-overview, boards, board-tasks, entities, documents, relations, planning, releases.
 - `infra` — технические механизмы HTTP, SWR-конфигурации, SSE, browser storage.
-- `ui` — общие визуальные возможности: темы, Markdown, состояния страниц, канбан DnD.
+- `ui` — общие визуальные возможности: темы, Markdown, состояния страниц, сцена экрана
+  [page-stage](../src/ui/page-stage) (серая область и светлая сцена «Обзора» и библиотеки), канбан DnD.
 - `shared` — чистые значения и преобразования без сети, storage и браузерного lifecycle.
 
 Полные правила доступны после [подготовки dev-навыков](DEVELOPMENT.md#источники-инструкций-и-создание-компонентов):
@@ -71,7 +74,8 @@ Provider принадлежит своему механизму, а не мес�
    `tile-translucent` — полупрозрачный подблок поверх градиента;
    `card-feature` — градиент главной карточки), текст (`ink`, `muted`, `soft`), инверсная
    поверхность (`inverse-surface`, `inverse`, `inverse-muted`, `inverse-accent`), акцент
-   (`accent`, `accent-hover`, `accent-ink`, `accent-subtle`, `accent-contrast`) и
+   (`accent`, `accent-hover`, `accent-ink`, `accent-subtle`, `accent-contrast`),
+   подсветка совпадения поиска (`search-mark`) и
    выделенный показатель (`highlight`, `highlight-hover`, `highlight-ink` — ссылки
    на акцент; `icon-chip-highlight`, `icon-chip-hatch`, `icon-chip-inverse` — подложки
    иконок показателей), состояния `success`/`warning`/`danger`/`info` с парами `-surface` и
@@ -263,6 +267,16 @@ Polling нет; replay пропущенных событий нет — посл
 показывается отдельно как ошибка хранилища. При смене проекта меняется ключ кеша и подписка,
 поэтому поздний ответ прежнего проекта не попадает в обзор нового. После HTTP-отказа,
 закрывающего `EventSource`, повторное подключение идёт с задержкой 1 → 2 → 4 с (не более 4 с).
+
+Каталог библиотеки читает `useMaterialCatalog` домена [documents](../src/domains/documents):
+порции по 40 через `useSWRInfinite`, каждая следующая — в версии предыдущей; число порций
+задаёт адрес экрана (`pages`), SSE перечитывает все показанные порции с первой.
+`ENTITIES_CHANGED` и `REVISION_CONFLICT` становятся `DocumentConflictError`: выдачу
+перечитывают, быстрые действия (`updateMaterialProperties`) не повторяются автоматически.
+Записи материалов (`useMaterialMutations`: сохранение, свойства, массовое действие, одна связь)
+после любого исхода сообщают локальный сигнал домена и перечитывают ключи проекта, поэтому
+каталог, счётчики (`useMaterialFacets`), карточка и блоки `useEntityMaterials` согласованы
+и без SSE; поток проекта по-прежнему обновляет их после изменений других клиентов.
 
 У списков сохраняются фильтры, запрошенный объём и предусмотренная API версия продолжения.
 [read-api-pages](../src/infra/tasks-api/helpers/read-api-pages.ts) не означает загрузку

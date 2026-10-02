@@ -24,14 +24,21 @@ import {
 import { boardSchema } from "./entities/board.js";
 import { projectDisplayNameSchema, projectSettingsSchema } from "./entities/project-settings.js";
 import {
+  documentFormatSchema,
   documentKindSchema,
   documentStatusSchema,
   documentSectionsSchema,
+  documentTagSchema,
+  documentUrlSchema,
 } from "./entities/document-library.js";
 export {
+  documentFormatSchema,
   documentKindSchema,
   documentStatusSchema,
   documentSectionsSchema,
+  documentTagSchema,
+  documentTagsSchema,
+  documentUrlSchema,
   documentRelationSchema,
   documentRelationsSchema,
   defaultDocumentSections,
@@ -133,8 +140,26 @@ export const entitySummarySchema = z.strictObject({
         .nullable()
         .describe("Эффективный раздел; удалённый раздел отображается как null"),
       pinned: z.boolean().describe("Закрепление в проекте"),
+      format: documentFormatSchema
+        .default("markdown")
+        .describe(
+          "Эффективный формат материала; прежние записи и карточки без поля читаются как markdown",
+        ),
+      url: documentUrlSchema.optional().describe("Внешний адрес материала формата link"),
+      tags: z
+        .array(z.string())
+        .default([])
+        .describe(
+          "Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []",
+        ),
       updatedAt: timestampSchema,
-      linkCount: z.number().int().nonnegative().describe("Количество прямых отношений документа"),
+      linkCount: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe(
+          "Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений",
+        ),
       excerpt: z.string().optional().describe("Фрагмент совпадения полнотекстового поиска"),
     })
     .optional()
@@ -220,7 +245,13 @@ const pageShape = {
 };
 export const entitiesQuerySchema = entityPageQuerySchema.extend({
   kind: entityKindSchema.optional(),
-  q: z.string().max(4096).optional().describe("Поиск по ключам, ID, названию и краткому описанию"),
+  q: z
+    .string()
+    .max(4096)
+    .optional()
+    .describe(
+      "Поиск по ключам, ID, названию и краткому описанию; у документов также по Markdown-содержанию, url и тегам",
+    ),
   refs: z
     .array(entityReferenceSchema)
     .max(100)
@@ -243,6 +274,22 @@ export const entitiesQuerySchema = entityPageQuerySchema.extend({
     .describe("Активность реализации; прежние ссылки доступны без фильтра"),
   section: z.string().max(64).optional().describe("Раздел документов; none — без раздела"),
   documentKind: documentKindSchema.optional(),
+  documentFormat: documentFormatSchema
+    .optional()
+    .describe("Формат документа; прежние записи без поля относятся к markdown"),
+  tags: z
+    .array(documentTagSchema)
+    .max(20)
+    .optional()
+    .describe(
+      "Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются",
+    ),
+  unattached: z
+    .enum(["true", "false"])
+    .optional()
+    .describe(
+      "true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые",
+    ),
   pinned: z
     .enum(["true", "false"])
     .optional()
@@ -254,7 +301,9 @@ export const entitiesQuerySchema = entityPageQuerySchema.extend({
   sort: z
     .enum(["key", "title", "updated"])
     .default("key")
-    .describe("Сортировка по ключу, названию или последнему обновлению"),
+    .describe(
+      "Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)",
+    ),
 });
 export type EntitiesQuery = z.input<typeof entitiesQuerySchema>;
 export const entitiesPageSchema = z.strictObject({
@@ -334,6 +383,7 @@ const implementationCreate = z.strictObject({
     .describe("Состояние вклада; done подтверждает актуальные требования"),
 });
 const documentCreate = document.omit({ links: true }).extend({
+  body: document.shape.body.default(""),
   targets: referenceList.default([]).describe("Ключи или ID продуктовых областей документа"),
 });
 export const entityCreateDataSchemas = {
@@ -391,7 +441,10 @@ export const entityUpdateDataSchemas = {
       .describe("Новый набор продуктовых целей; отсутствие сохраняет текущий набор"),
   }),
   document: documentCreate
-    .extend({ targets: referenceList.describe("Новый набор областей документа") })
+    .extend({
+      body: document.shape.body,
+      targets: referenceList.describe("Новый набор областей документа"),
+    })
     .partial()
     .required({ kind: true }),
 };
@@ -562,9 +615,20 @@ export const entityDefinitions: readonly EntityType[] = [
   {
     kind: "document",
     title: "Документ",
-    description: "Самостоятельный Markdown-материал: ТЗ, описание, правила или решение",
+    description:
+      "Материал библиотеки знаний: Markdown-текст или внешняя ссылка с типом, тегами, разделом и прикреплениями",
     keyPolicy: "DOC-<номер>; ключ не определяет область применимости",
-    filters: ["target", "status", "section", "documentKind", "pinned", "archived"],
-    actions: ["create", "update", "rename"],
+    filters: [
+      "target",
+      "status",
+      "section",
+      "documentKind",
+      "documentFormat",
+      "tags",
+      "unattached",
+      "pinned",
+      "archived",
+    ],
+    actions: ["create", "update", "rename", "relate", "bulk", "facets"],
   },
 ].map((definition) => ({ ...definition, kind: definition.kind as EntityKind, contractVersion: 1 }));

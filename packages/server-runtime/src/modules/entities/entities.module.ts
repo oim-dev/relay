@@ -16,6 +16,18 @@ import {
   entityDeletionQuerySchema,
   deleteEntitySchema,
 } from "@relay/contracts/entities";
+import {
+  documentBulkSchema,
+  documentFacetsQuerySchema,
+  documentRelationChangeSchema,
+  entityDocumentsQuerySchema,
+} from "@relay/contracts/entities/document-catalog";
+import type {
+  DocumentBulk,
+  DocumentFacetsQuery,
+  DocumentRelationChange,
+  EntityDocumentsQuery,
+} from "@relay/contracts/entities/document-catalog";
 import type { z } from "zod";
 import type {
   EntityPageQuery,
@@ -37,6 +49,13 @@ import { ZodValidationPipe } from "../../common/validation.js";
 import { WorkspaceService } from "../workspace/workspace.module.js";
 import { EventsService } from "../events/events.service.js";
 import { EventsModule } from "../events/events.module.js";
+
+/** Fastify отдаёт одиночный повторяемый query-параметр строкой; контракт ожидает массив. */
+function queryList<T extends object>(input: T, ...names: string[]): T {
+  const result = { ...input } as Record<string, unknown>;
+  for (const name of names) if (typeof result[name] === "string") result[name] = [result[name]];
+  return result as T;
+}
 
 @ApiTags("entities")
 @Controller("entities")
@@ -111,11 +130,68 @@ class EntitiesController {
     response: "EntitiesPage",
   })
   async list(@Query() input: EntitiesQuery) {
-    const query = new ZodValidationPipe(entitiesQuerySchema).transform({
-      ...input,
-      ...(typeof input.refs === "string" ? { refs: [input.refs] } : {}),
-    });
+    const query = new ZodValidationPipe(entitiesQuerySchema).transform(
+      queryList(input, "refs", "tags"),
+    );
     return success(await (await this.engine()).list(query));
+  }
+  @Get("document-facets")
+  @ApiEndpoint({
+    id: "getDocumentFacets",
+    summary:
+      "Посчитать документы библиотеки по разделам, тегам, форматам, типам, состояниям и системным представлениям по полным данным проекта",
+    query: "DocumentFacetsQuery",
+    response: "DocumentFacets",
+  })
+  async documentFacets(@Query() input: DocumentFacetsQuery) {
+    const query = new ZodValidationPipe(documentFacetsQuerySchema).transform(
+      queryList(input, "tags"),
+    );
+    return success(await (await this.engine()).documentFacets(query));
+  }
+  @Get("documents")
+  @ApiEndpoint({
+    id: "getEntityDocuments",
+    summary:
+      "Прочитать материалы, прикреплённые непосредственно к сущности любого вида: связи relations и совместимые links",
+    query: "EntityDocumentsQuery",
+    response: "EntityDocumentsPage",
+  })
+  async entityDocuments(
+    @Query(new ZodValidationPipe(entityDocumentsQuerySchema)) query: EntityDocumentsQuery,
+  ) {
+    return success(await (await this.engine()).entityDocuments(query));
+  }
+  @Post("document-bulk")
+  @HttpCode(200)
+  @ApiEndpoint({
+    id: "bulkChangeDocuments",
+    summary:
+      "Изменить до 100 документов одним действием; каждый записывается отдельно под своей ревизией, отказ одного не откатывает остальные",
+    body: "DocumentBulk",
+    response: "DocumentBulkResult",
+  })
+  async documentBulk(@Body(new ZodValidationPipe(documentBulkSchema)) input: DocumentBulk) {
+    const engine = await this.engine();
+    const result = await engine.documentBulk(input, this.workspace.actor());
+    // Частичный результат: событие нужно, если сохранён хотя бы один документ.
+    if (result.applied > 0)
+      await this.events.apiChanged(engine.workspace.config.projectId).catch(() => {});
+    return success(result);
+  }
+  @Post("relate-document")
+  @HttpCode(200)
+  @ApiEndpoint({
+    id: "relateDocument",
+    summary:
+      "Прикрепить, изменить или открепить одну связь документа с проверкой ревизии; прочие связи и links сохраняются",
+    body: "DocumentRelationChange",
+    response: "EntitySaved",
+  })
+  async relateDocument(
+    @Body(new ZodValidationPipe(documentRelationChangeSchema)) input: DocumentRelationChange,
+  ) {
+    return this.changed((engine) => engine.relateDocument(input, this.workspace.actor()));
   }
   @Get("get")
   @ApiEndpoint({
