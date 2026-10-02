@@ -205,7 +205,7 @@
     "packages/relay-skill/scripts/diagnose.test.mjs": "6091428885e9e66d6f05560ef0e060028139afe973d302e0155432488b48e658",
     "packages/relay-skill/scripts/examples.test.mjs": "ba8ec7ee88f2549309fb464c312d238728f524f2916fcc47397d8c42de8231a2",
     "packages/relay-skill/scripts/generate.mjs": "c463fedf5e28bc1b411bfada278852e18d5291b8588b5aa50731eb43686b2333",
-    "packages/relay-skill/scripts/generate.test.mjs": "c9479496efd7f31931731421aeff0e9ab57f8ed795db3461c52d8fd06200e340",
+    "packages/relay-skill/scripts/generate.test.mjs": "876b81813e75468640b4318235f95a3ad9b23d460ddd62afed5fb5ff5ce1c4bb",
     "packages/relay-skill/scripts/lib.mjs": "1ee8cf7ed6be30b529e0c3fb4bc728caa0f173599458f57be649a5357b8c7364",
     "packages/relay-skill/scripts/skill-contract.test.mjs": "b9443e3823f3c027fec23bddb8604c3b95ca00a7f4653482fbcad27c5a8f72f8",
     "packages/relay-skill/src/bundle.json": "5f05011e83d371c0a136f5da41b0d1c1452218997fd8af2d366b676d7f3df9a1",

@@ -152,7 +152,7 @@ export const EntityDocuments = (props: EntityDocumentsProps) => {
         </Alert>
       )}
       {isFirstLoading && (
-        <div className={styles.loading} aria-label="Загружаем материалы">
+        <div className={styles.loading} role="status" aria-label="Загружаем материалы">
           <Skeleton height={64} radius="lg" />
           <Skeleton height={64} radius="lg" />
         </div>

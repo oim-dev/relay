@@ -368,7 +368,7 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
                 </Alert>
               )}
               {isFirstLoading && (
-                <div className={styles.loading} aria-label="Читаем библиотеку">
+                <div className={styles.loading} role="status" aria-label="Читаем библиотеку">
                   <Skeleton height={56} radius="md" />
                   <Skeleton height={56} radius="md" />
                   <Skeleton height={56} radius="md" />

@@ -57,7 +57,7 @@ export const MaterialPreview = (props: MaterialPreviewProps) => {
         Открыть полностью
       </Button>
       {isLoading && (
-        <div className={styles.loading} aria-label="Читаем материал">
+        <div className={styles.loading} role="status" aria-label="Читаем материал">
           <Skeleton height={16} />
           <Skeleton height={72} />
           <Skeleton height={160} />
