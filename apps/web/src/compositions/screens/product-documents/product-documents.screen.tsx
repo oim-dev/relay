@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { Button, Drawer } from "@mantine/core";
+import { useEffect, useId, useState } from "react";
+import { ActionIcon, Button, Drawer, Tooltip } from "@mantine/core";
 import { useDebouncedValue, useMediaQuery } from "@mantine/hooks";
-import { RefreshCw } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import {
   DOCUMENT_KINDS,
@@ -23,6 +23,7 @@ import { uniqueMaterials } from "./helpers/unique-materials";
 import { useBulkSelection } from "./hooks/use-bulk-selection.hook";
 import { useLibraryReturn } from "./hooks/use-library-return.hook";
 import { useMaterialActions } from "./hooks/use-material-actions.hook";
+import { usePanelPreference } from "./hooks/use-panel-preference.hook";
 import { BulkActions } from "./ui/bulk-actions/bulk-actions";
 import { BulkResult } from "./ui/bulk-result/bulk-result";
 import { CatalogState } from "./ui/catalog-state/catalog-state";
@@ -55,6 +56,13 @@ export const ProductDocumentsScreen = () => {
   const [params, setParams] = useSearchParams();
   const [isNavigationOpen, setNavigationOpen] = useState(false);
   const [isFiltersOpen, setFiltersOpen] = useState(false);
+  const [isFilterPanelOpen, setFilterPanelOpen] = usePanelPreference("filters-open", false);
+  const [isSidebarCollapsed, setSidebarCollapsed] = usePanelPreference(
+    "navigation-collapsed",
+    false,
+  );
+  const filtersPanelId = useId();
+  const sidebarNavigationId = useId();
   const [preview, setPreview] = useState<{ id: string; title: string } | null>(null);
   const [isPreviewOpen, setPreviewOpen] = useState(false);
   const isWide = useMediaQuery("(min-width: 75em)", true, { getInitialValueInEffect: false });
@@ -141,6 +149,12 @@ export const ProductDocumentsScreen = () => {
   const isResultEmpty = isDefined(firstPage) && isEmptyArray(materialItems);
   const catalogError = catalog.error;
   const isConflict = catalogError instanceof DocumentConflictError;
+  const sidebarToggleLabel = isSidebarCollapsed ? "Развернуть разделы" : "Свернуть разделы";
+  const SidebarToggleIcon = isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
+  const hasSidebar = isWide && isDefined(settings.data);
+  const sidebarState = hasSidebar ? (isSidebarCollapsed ? "collapsed" : "expanded") : "none";
+  const isFiltersShown = isMedium ? isFilterPanelOpen : isFiltersOpen;
+  const filtersControls = isMedium ? filtersPanelId : undefined;
   const createHref = `${base}/documents/new${
     isDefined(filters.section) ? `?section=${encodeURIComponent(filters.section)}` : ""
   }`;
@@ -192,6 +206,11 @@ export const ProductDocumentsScreen = () => {
       },
       { replace: true },
     );
+  };
+  /** Показывает фильтры над выдачей либо, на телефоне, в выдвижной панели. */
+  const handleToggleFilters = (): void => {
+    if (isMedium) setFilterPanelOpen(!isFilterPanelOpen);
+    else setFiltersOpen(true);
   };
   /** Открывает предпросмотр выбранного материала. */
   const handlePreview = (material: CatalogMaterial): void => {
@@ -253,24 +272,54 @@ export const ProductDocumentsScreen = () => {
         createHref={createHref}
         returnTo={returnTo}
         filterCount={filterCount}
+        isFiltersExpanded={isFiltersShown}
+        filtersControls={filtersControls}
         onQueryChange={(value) => updateParams({ q: value }, true)}
         onOpenNavigation={() => setNavigationOpen(true)}
-        onOpenFilters={() => setFiltersOpen(true)}
+        onToggleFilters={handleToggleFilters}
       />
-      <div className={styles.layout}>
-        {isWide && isDefined(settings.data) && (
-          <aside className={styles.sidebar} aria-label="Разделы и представления">
-            <LibraryNavigation
-              settings={settings.data}
-              selected={selected}
-              counts={counts}
-              countScope={countScope}
-              onSelect={handleSelect}
-            />
+      <div className={styles.layout} data-sidebar={sidebarState}>
+        {hasSidebar && isDefined(settings.data) && (
+          <aside
+            className={styles.sidebar}
+            data-collapsed={isSidebarCollapsed}
+            aria-label="Разделы и представления"
+          >
+            <Tooltip label={sidebarToggleLabel} position="right" withArrow>
+              <ActionIcon
+                className={styles.sidebarToggle}
+                variant="subtle"
+                color="gray"
+                size="lg"
+                radius="xl"
+                aria-label={sidebarToggleLabel}
+                aria-expanded={!isSidebarCollapsed}
+                aria-controls={sidebarNavigationId}
+                onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
+              >
+                <SidebarToggleIcon size={18} aria-hidden="true" />
+              </ActionIcon>
+            </Tooltip>
+            <div id={sidebarNavigationId} hidden={isSidebarCollapsed}>
+              <LibraryNavigation
+                settings={settings.data}
+                selected={selected}
+                counts={counts}
+                countScope={countScope}
+                onSelect={handleSelect}
+              />
+            </div>
           </aside>
         )}
         <div className={styles.main}>
-          {isMedium && <LibraryFilters {...filterProps} />}
+          {isMedium && (
+            <LibraryFilters
+              {...filterProps}
+              id={filtersPanelId}
+              className={styles.filters}
+              hidden={!isFilterPanelOpen}
+            />
+          )}
           {shouldShowScope && (
             <SearchScope
               query={requested.q.trim()}

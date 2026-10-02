@@ -4,8 +4,16 @@
   min-width: 0;
 
   @media (--xl) {
-    grid-template-columns: 15.5rem minmax(0, 1fr);
     align-items: start;
+
+    &[data-sidebar="expanded"] {
+      grid-template-columns: 15.5rem minmax(0, 1fr);
+    }
+
+    /* Свёрнутые разделы оставляют узкую полосу с кнопкой, выдача получает ширину. */
+    &[data-sidebar="collapsed"] {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
   }
 }
 
@@ -19,6 +27,31 @@
   border-radius: 1.5rem;
   background: var(--tasks-card);
   overscroll-behavior: contain;
+
+  &[data-collapsed="true"] {
+    padding: 0.5rem;
+  }
+}
+
+/* Кнопка сворачивания стоит в углу панели и остаётся на месте в свёрнутой полосе. */
+.sidebarToggle {
+  display: flex;
+  margin: 0 0.25rem 0.25rem auto;
+
+  [data-collapsed="true"] > & {
+    margin: 0;
+  }
+}
+
+/* Фильтры над выдачей: мягкая панель того же уровня, что и разделы. */
+.filters {
+  padding: 1rem 1.25rem 1.25rem;
+  border-radius: 1.5rem;
+  background: var(--tasks-card);
+
+  &[hidden] {
+    display: none;
+  }
 }
 
 .main {

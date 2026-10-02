@@ -5,7 +5,8 @@
   min-width: 0;
   padding: 1rem 0.625rem 1.125rem;
   border-radius: 1.5rem;
-  background: var(--tasks-card);
+  /* Главная карточка экрана: тот же градиент, что у главного блока «Обзора». */
+  background: var(--tasks-card-feature);
 
   @media (--md) {
     padding: 1.25rem 1.25rem 1.5rem;

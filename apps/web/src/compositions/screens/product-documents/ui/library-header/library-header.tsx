@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Button, CloseButton, TextInput } from "@mantine/core";
+import { Badge, Button, CloseButton, TextInput } from "@mantine/core";
 import { PanelLeft, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { LibraryHeaderProps } from "./types/library-header-props.type";
@@ -11,17 +11,24 @@ import styles from "./styles/library-header.module.css";
  *
  * Используется для:
  *  - поиска по библиотеке и создания материала
- *  - доступа к разделам и фильтрам на узком экране
+ *  - показа и скрытия фильтров, доступа к разделам на узком экране
  */
 export const LibraryHeader = (props: LibraryHeaderProps) => {
-  const { query, createHref, returnTo, filterCount } = props;
-  const { onQueryChange, onOpenNavigation, onOpenFilters } = props;
+  const { query, createHref, returnTo, filterCount, isFiltersExpanded, filtersControls } = props;
+  const { onQueryChange, onOpenNavigation, onToggleFilters } = props;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const hasQuery = query !== "";
   const clearButton = hasQuery && (
     <CloseButton size="sm" aria-label="Очистить поиск" onClick={() => onQueryChange("")} />
   );
-  const filtersLabel = filterCount > 0 ? `Фильтры: ${filterCount}` : "Фильтры";
+  const hasFilters = filterCount > 0;
+  const filtersVariant = isFiltersExpanded ? "light" : "default";
+  const filtersLabel = hasFilters ? `Фильтры, активно: ${filterCount}` : "Фильтры";
+  const filtersBadge = hasFilters && (
+    <Badge size="sm" circle className={styles.filtersCount} aria-hidden="true">
+      {filterCount}
+    </Badge>
+  );
   useEffect(() => {
     document.title = "Библиотека знаний · Relay";
     /* Не перехватывает фокус, уже возвращённый к материалу после возврата в каталог. */
@@ -52,6 +59,30 @@ export const LibraryHeader = (props: LibraryHeaderProps) => {
           onChange={(event) => onQueryChange(event.currentTarget.value)}
         />
         <Button
+          variant="default"
+          size="md"
+          radius="xl"
+          className={styles.navigationButton}
+          leftSection={<PanelLeft size={16} aria-hidden="true" />}
+          onClick={onOpenNavigation}
+        >
+          Разделы
+        </Button>
+        <Button
+          variant={filtersVariant}
+          size="md"
+          radius="xl"
+          className={styles.filtersButton}
+          aria-label={filtersLabel}
+          aria-expanded={isFiltersExpanded}
+          aria-controls={filtersControls}
+          leftSection={<SlidersHorizontal size={16} aria-hidden="true" />}
+          rightSection={filtersBadge}
+          onClick={onToggleFilters}
+        >
+          Фильтры
+        </Button>
+        <Button
           component={Link}
           to={createHref}
           state={{ returnTo }}
@@ -61,26 +92,6 @@ export const LibraryHeader = (props: LibraryHeaderProps) => {
           leftSection={<Plus size={17} aria-hidden="true" />}
         >
           Добавить материал
-        </Button>
-      </div>
-      <div className={styles.mobileTools}>
-        <Button
-          variant="default"
-          radius="xl"
-          className={styles.navigationButton}
-          leftSection={<PanelLeft size={15} aria-hidden="true" />}
-          onClick={onOpenNavigation}
-        >
-          Разделы
-        </Button>
-        <Button
-          variant="default"
-          radius="xl"
-          className={styles.filtersButton}
-          leftSection={<SlidersHorizontal size={15} aria-hidden="true" />}
-          onClick={onOpenFilters}
-        >
-          {filtersLabel}
         </Button>
       </div>
     </header>

@@ -4,7 +4,7 @@
   min-width: 0;
 
   @media (--xl) {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 36rem);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 44rem);
     align-items: end;
   }
 }
@@ -39,38 +39,51 @@
   line-height: 1.5;
 }
 
+/*
+ * Поиск, разделы (до широкого экрана), фильтры и добавление в порядке чтения.
+ * На телефоне добавление занимает отдельную строку целиком.
+ */
 .tools {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.625rem;
   min-width: 0;
-
-  @media (--sm) {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
 }
 
 .search {
+  flex: 1 1 100%;
   min-width: 0;
+
+  /* До широкой раскладки поиск стоит отдельной строкой, кнопки — под ним. */
+  @media (--xl) {
+    flex-basis: 10rem;
+  }
 }
 
-.mobileTools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+/* Счётчик активных фильтров виден и при скрытой панели: акцентная метка в обеих темах. */
+.filtersCount {
+  --badge-bg: var(--tasks-accent);
+  --badge-color: var(--tasks-accent-contrast);
 
+  font-variant-numeric: tabular-nums;
+}
+
+.navigationButton,
+.filtersButton {
+  flex: none;
+}
+
+.navigationButton {
   @media (--xl) {
     display: none;
   }
 }
 
-/* Фильтры на средней ширине стоят над выдачей, панель нужна только на телефоне. */
-.filtersButton {
-  @media (--md) {
-    display: none;
-  }
-}
-
-.navigationButton,
 .create {
-  flex: none;
+  flex: 1 1 auto;
+  min-width: 0;
+
+  @media (--sm) {
+    flex-grow: 0;
+  }
 }
