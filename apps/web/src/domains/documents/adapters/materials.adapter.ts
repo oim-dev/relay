@@ -6,8 +6,12 @@ import {
   entityDocumentsPageSchema,
 } from "@relay/contracts/entities/document-catalog";
 import { getProjectApi } from "infra/tasks-api";
-import { throwDocumentFailure } from "../errors/document-errors";
+import { DocumentConflictError, throwDocumentFailure } from "../errors/document-errors";
 import { toMaterialFilterQuery } from "./documents.adapter";
+import type {
+  EntityMaterialRelations,
+  MaterialRelationType,
+} from "../types/entity-material-relations.type";
 import type {
   EntityMaterialsPage,
   MaterialBulkOperation,
@@ -20,6 +24,10 @@ import type {
 
 /** Размер порции материалов сущности. */
 const ENTITY_MATERIALS_LIMIT = 50;
+/** Наибольшая порция контракта: полное чтение связей занимает ceil(N / 100) запросов. */
+const ENTITY_RELATIONS_LIMIT = 100;
+/** Сколько раз полное чтение начинается заново, если связи изменились между порциями. */
+const ENTITY_RELATIONS_ATTEMPTS = 3;
 
 /** Считает каталог по полным данным проекта с теми же условиями, что и выдача. */
 export const getMaterialFacets = async (
@@ -104,5 +112,53 @@ export const getEntityMaterialsPage = async (
     return entityDocumentsPageSchema.parse(response.data);
   } catch (failure) {
     return throwDocumentFailure(failure);
+  }
+};
+
+/** Читает все порции связей сущности в версии первой порции; ошибки источника не разбирает. */
+const readEntityMaterialRelations = async (
+  projectId: string,
+  ref: string,
+): Promise<EntityMaterialRelations> => {
+  /** Без прототипа: ID материала не совпадёт с унаследованным свойством объекта. */
+  const relations: Record<string, MaterialRelationType[]> = Object.create(null);
+  let offset: number | null = 0;
+  let version: string | undefined;
+  while (offset !== null) {
+    const response = await getProjectApi(projectId).entities.getEntityDocuments({
+      ref,
+      offset,
+      limit: ENTITY_RELATIONS_LIMIT,
+      archived: "false",
+      ...(version === undefined ? {} : { version }),
+    });
+    const page = entityDocumentsPageSchema.parse(response.data);
+    page.items.forEach((item) => {
+      relations[item.document.ref.id] = item.relations.map((relation) => relation.type);
+    });
+    offset = page.nextOffset;
+    version = page.version;
+  }
+  return relations;
+};
+
+/**
+ * Читает до конца типы связей всех материалов вне архива, прикреплённых к сущности:
+ * ceil(N / 100) запросов на N прикреплений. Совместимые links приходят как documents.
+ * Если связи изменились между порциями, чтение начинается заново (не более трёх раз),
+ * затем DocumentConflictError. Частичный результат не возвращается: неизвестное не выдаётся
+ * за отсутствие связи.
+ */
+export const getEntityMaterialRelations = async (
+  projectId: string,
+  ref: string,
+): Promise<EntityMaterialRelations> => {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await readEntityMaterialRelations(projectId, ref).catch(throwDocumentFailure);
+    } catch (failure) {
+      if (failure instanceof DocumentConflictError && attempt < ENTITY_RELATIONS_ATTEMPTS) continue;
+      throw failure;
+    }
   }
 };

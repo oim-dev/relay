@@ -67,3 +67,9 @@
   color: var(--tasks-muted);
   font-size: 0.75rem;
 }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

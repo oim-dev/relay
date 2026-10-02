@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Alert, Button, Checkbox, Modal, Radio, Skeleton, Textarea } from "@mantine/core";
+import { Alert, Button, Checkbox, Loader, Modal, Radio, Skeleton, Textarea } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useDebouncedValue, useMediaQuery, useWindowEvent } from "@mantine/hooks";
 import { ArrowLeft } from "lucide-react";
@@ -8,7 +8,7 @@ import {
   DOCUMENT_RELATION_TYPES,
   DOCUMENT_RELATION_TYPE_OPTIONS,
   MATERIAL_FORMAT_OPTIONS,
-  useEntityMaterials,
+  useEntityMaterialRelations,
   useLibrarySettings,
   useMaterialCatalog,
   useMaterialFacets,
@@ -86,16 +86,14 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
   const catalog = useMaterialCatalog(projectId, catalogFilters, opened ? pages : 1);
   const facets = useMaterialFacets(projectId, opened ? catalogFilters : null);
   const settings = useLibrarySettings(projectId);
-  const attachments = useEntityMaterials(
+  const attachments = useEntityMaterialRelations(
     projectId,
     opened ? `${target.kind}:${target.id}` : null,
-    null,
   );
-  const attachedTypes = new Map<string, RelationType[]>(
-    (attachments.data ?? [])
-      .flatMap((page) => page.items)
-      .map((item) => [item.document.ref.id, item.relations.map((relation) => relation.type)]),
-  );
+  const attachedTypes = attachments.data;
+  const hasAttachmentsError = isDefined(attachments.error);
+  const isAttachmentsKnown = isDefined(attachedTypes) && !hasAttachmentsError;
+  const isCheckingAttachments = !isDefined(attachedTypes) && !hasAttachmentsError;
   const sectionNames = new Map(
     (settings.data?.sections ?? []).map((section) => [section.id, section.name]),
   );
@@ -135,8 +133,11 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
   const lastPage = catalogPages.at(-1);
   const total = catalogPages[0]?.total ?? 0;
   const chosenType = form.values.type;
+  /** Существующие связи материала; пустой список только для полностью прочитанного набора. */
+  const typesOf = (materialId: string): RelationType[] =>
+    isAttachmentsKnown ? (attachedTypes?.[materialId] ?? []) : [];
   const optionItems = materialList.map((material) => {
-    const types = attachedTypes.get(material.ref.id) ?? [];
+    const types = typesOf(material.ref.id);
     return {
       material,
       sectionName:
@@ -149,7 +150,15 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
     };
   });
   const selectedList = [...selected.values()];
-  const selectedCount = selectedList.length;
+  /** Выбранные, у которых связь выбранного типа уже есть: не отправляются, выбор сохраняется. */
+  const lockedCount = selectedList.filter((material) =>
+    typesOf(material.ref.id).includes(chosenType),
+  ).length;
+  const attachList = selectedList.filter(
+    (material) => !typesOf(material.ref.id).includes(chosenType),
+  );
+  const selectedCount = attachList.length;
+  const lockedLabel = `Уже прикреплены как «${DOCUMENT_RELATION_TYPES[chosenType]}» и не будут отправлены: ${lockedCount}`;
   const isFirstLoading = !isDefined(catalog.data) && !isDefined(catalog.error);
   const hasCatalogError = isDefined(catalog.error);
   const isEmpty = isDefined(catalog.data) && isEmptyArray(materialList);
@@ -211,16 +220,8 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
     setOutcomes([]);
     const results: AttachOutcome[] = [];
     try {
-      for (const material of selectedList) {
+      for (const material of attachList) {
         const entry = { id: material.ref.id, title: material.title };
-        if (attachedTypes.get(material.ref.id)?.includes(values.type) === true) {
-          results.push({
-            ...entry,
-            status: "exists",
-            message: "Уже прикреплён с этим типом связи.",
-          });
-          continue;
-        }
         try {
           await relate(
             { id: material.ref.id, revision: material.revision },
@@ -311,7 +312,7 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
                     <Checkbox
                       label="Выбрать для прикрепления"
                       checked={previewItem.isSelected || previewItem.isLocked}
-                      disabled={previewItem.isLocked || isSubmitting}
+                      disabled={previewItem.isLocked || isSubmitting || !isAttachmentsKnown}
                       onChange={(event) =>
                         handleToggle(previewItem.material, event.currentTarget.checked)
                       }
@@ -347,6 +348,25 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
                   </Button>
                 </Alert>
               )}
+              {isCheckingAttachments && (
+                <p className={styles.status} role="status">
+                  <Loader size={14} aria-hidden="true" />
+                  Проверяем, что уже прикреплено. До проверки выбор недоступен.
+                </p>
+              )}
+              {hasAttachmentsError && (
+                <Alert color="orange" title="Не удалось проверить прикрепления">
+                  Связи материалов с этой записью не прочитаны. Выбор недоступен, пока не известно,
+                  что уже прикреплено.
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => void attachments.mutate().catch(() => undefined)}
+                  >
+                    Проверить снова
+                  </Button>
+                </Alert>
+              )}
               {isFirstLoading && (
                 <div className={styles.loading} aria-label="Читаем библиотеку">
                   <Skeleton height={56} radius="md" />
@@ -370,7 +390,7 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
                     attachedLabels={item.attachedLabels}
                     isSelected={item.isSelected}
                     isLocked={item.isLocked}
-                    isDisabled={isSubmitting}
+                    isDisabled={isSubmitting || !isAttachmentsKnown}
                     previewRef={(node) => {
                       previewTriggers.current.set(item.material.ref.id, node);
                     }}
@@ -394,6 +414,7 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
             </div>
             <div className={styles.footer}>
               {hasOutcomes && <PickerResults outcomes={outcomes} />}
+              {lockedCount > 0 && <p className={styles.locked}>{lockedLabel}</p>}
               <Radio.Group label="Тип связи" size="xs" {...form.getInputProps("type")}>
                 <div className={styles.types}>
                   {DOCUMENT_RELATION_TYPE_OPTIONS.map((option) => (
@@ -421,14 +442,14 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
                   type="submit"
                   size="sm"
                   loading={isSubmitting}
-                  disabled={selectedCount === 0}
+                  disabled={selectedCount === 0 || !isAttachmentsKnown}
                 >
                   {submitLabel}
                 </Button>
                 <Button
                   size="sm"
                   variant="default"
-                  disabled={isSubmitting || selectedCount === 0}
+                  disabled={isSubmitting || selected.size === 0}
                   onClick={() => setSelected(new Map())}
                 >
                   Снять выбор

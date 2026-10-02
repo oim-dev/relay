@@ -38,6 +38,7 @@ export { useDocument, useLibrarySettings } from "./hooks/use-documents.hook";
 export { useMaterialCatalog } from "./hooks/use-material-catalog.hook";
 export { useMaterialFacets, ALL_MATERIALS_FILTERS } from "./hooks/use-material-facets.hook";
 export { useEntityMaterials } from "./hooks/use-entity-materials.hook";
+export { useEntityMaterialRelations } from "./hooks/use-entity-material-relations.hook";
 export { useMaterialMutations } from "./hooks/use-material-mutations.hook";
 export { useEntityHref } from "./hooks/use-entity-href.hook";
 export type { MaterialMutations } from "./hooks/use-material-mutations.hook";
@@ -47,6 +48,7 @@ export type { MaterialTagsInputProps } from "./ui/material-tags-input/types/mate
 export {
   DocumentAccessError,
   DocumentConflictError,
+  DocumentOutcomeUnknownError,
   DocumentRelationError,
 } from "./errors/document-errors";
 export {

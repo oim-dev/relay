@@ -1,27 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
-import { readSessionStored, writeSessionStored } from "infra/browser-storage";
 import { isDefined } from "shared/value-predicates";
-
-/** Сохранённое положение каталога при уходе с экрана. */
-type ReturnPoint = {
-  /** Адрес каталога с условиями и объёмом. */
-  location: string;
-  /** Вертикальная прокрутка окна. */
-  scrollY: number;
-  /** Материал, который открыли последним. */
-  materialId: string | null;
-};
-
-/** Проверяет запись из хранилища вкладки. */
-const isReturnPoint = (value: unknown): value is ReturnPoint =>
-  typeof value === "object" &&
-  value !== null &&
-  "location" in value &&
-  typeof value.location === "string" &&
-  "scrollY" in value &&
-  typeof value.scrollY === "number" &&
-  "materialId" in value &&
-  (value.materialId === null || typeof value.materialId === "string");
+import { readReturnPoint, writeReturnPoint } from "../helpers/library-return-point";
+import type { ReturnPoint } from "../helpers/library-return-point";
 
 /**
  * Возвращает каталог к прежнему положению после карточки материала, Back или reload.
@@ -33,7 +13,6 @@ export const useLibraryReturn = (
   location: string,
   isReady: boolean,
 ): ((materialId: string) => void) => {
-  const storageKey = `relay:library-return:${projectId}`;
   const locationRef = useRef(location);
   const materialRef = useRef<string | null>(null);
   const scrollRef = useRef(0);
@@ -47,7 +26,7 @@ export const useLibraryReturn = (
       scrollRef.current = window.scrollY;
     };
     const save = (): void => {
-      writeSessionStored(storageKey, {
+      writeReturnPoint(projectId, {
         location: locationRef.current,
         scrollY: scrollRef.current,
         materialId: materialRef.current,
@@ -55,8 +34,7 @@ export const useLibraryReturn = (
     };
     /* Точка возврата читается до первой записи: повторный монтаж в StrictMode её не затирает. */
     if (pendingRef.current === undefined) {
-      const stored = readSessionStored(storageKey);
-      pendingRef.current = isReturnPoint(stored) ? stored : null;
+      pendingRef.current = readReturnPoint(projectId);
     }
     track();
     window.addEventListener("scroll", track, { passive: true });
@@ -66,7 +44,7 @@ export const useLibraryReturn = (
       window.removeEventListener("pagehide", save);
       save();
     };
-  }, [storageKey]);
+  }, [projectId]);
   useEffect(() => {
     const stored = pendingRef.current;
     if (!isReady || !isDefined(stored)) return;

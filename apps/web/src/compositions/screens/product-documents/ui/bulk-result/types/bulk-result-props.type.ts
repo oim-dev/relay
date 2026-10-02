@@ -5,10 +5,12 @@ import type { BulkOutcome } from "../../../types/bulk.type";
 export type BulkResultParams = {
   /** Фактический результат последнего действия. */
   outcome: BulkOutcome;
-  /** В выборе остались неприменённые материалы для повтора. */
-  retryCount: number;
   /** Скрытие отчёта. */
   onDismiss: () => void;
+  /** Явное перечитывание списка для проверки состояния; без него действие не показывается. */
+  onRefresh?: () => void;
+  /** Список перечитывается. */
+  isRefreshing?: boolean;
 };
 /** Атрибуты отчёта. */
 type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children">;

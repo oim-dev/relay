@@ -8,6 +8,7 @@ import {
   DOCUMENT_STATUSES,
   MATERIAL_FORMATS,
   DocumentConflictError,
+  DocumentOutcomeUnknownError,
   useLibrarySettings,
   useMaterialCatalog,
   useMaterialFacets,
@@ -21,6 +22,7 @@ import { getNavigationCounts } from "./helpers/get-navigation-counts";
 import { readLibraryParams } from "./helpers/read-library-params";
 import { uniqueMaterials } from "./helpers/unique-materials";
 import { useBulkSelection } from "./hooks/use-bulk-selection.hook";
+import { useCatalogVolume } from "./hooks/use-catalog-volume.hook";
 import { useLibraryReturn } from "./hooks/use-library-return.hook";
 import { useMaterialActions } from "./hooks/use-material-actions.hook";
 import { usePanelPreference } from "./hooks/use-panel-preference.hook";
@@ -67,16 +69,22 @@ export const ProductDocumentsScreen = () => {
   const [isPreviewOpen, setPreviewOpen] = useState(false);
   const isWide = useMediaQuery("(min-width: 75em)", true, { getInitialValueInEffect: false });
   const isMedium = useMediaQuery("(min-width: 48em)", true, { getInitialValueInEffect: false });
-  const { filters: requested, pages } = readLibraryParams(params);
+  const { filters: requested, pages: requestedPages } = readLibraryParams(params);
+  const search = params.toString();
+  const returnTo = `${base}/documents${search === "" ? "" : `?${search}`}`;
+  const volume = useCatalogVolume(
+    projectId,
+    JSON.stringify([projectId, requested]),
+    returnTo,
+    requestedPages,
+  );
   const [debouncedQuery] = useDebouncedValue(requested.q.trim(), 250);
   const filters = { ...requested, q: debouncedQuery };
-  const catalog = useMaterialCatalog(projectId, filters, pages);
+  const catalog = useMaterialCatalog(projectId, filters, volume.pages);
   const navigationFilters = { ...filters, view: "all" as const, section: null, status: null };
   const navigationFacets = useMaterialFacets(projectId, navigationFilters);
   const filterFacets = useMaterialFacets(projectId, filters);
   const actions = useMaterialActions(projectId);
-  const search = params.toString();
-  const returnTo = `${base}/documents${search === "" ? "" : `?${search}`}`;
   const rememberMaterial = useLibraryReturn(projectId, returnTo, isDefined(catalog.data));
   const hasLegacyParams = LEGACY_PARAMS.some((name) => params.has(name));
   useEffect(() => {
@@ -107,7 +115,9 @@ export const ProductDocumentsScreen = () => {
   const selected = isDefined(filters.section) ? `section:${filters.section}` : filters.view;
   const isSortFixed = filters.view === "recent" && !isDefined(filters.section);
   const sort: MaterialSort = isSortFixed ? "updated" : filters.sort;
-  const hasMore = isDefined(lastPage) && lastPage.nextOffset !== null;
+  const catalogError = catalog.error;
+  /* После ошибки чтения продолжение недоступно, пока список не перечитан. */
+  const hasMore = isDefined(lastPage) && lastPage.nextOffset !== null && !isDefined(catalogError);
   const isLoadingMore = catalog.size > pageList.length && isDefined(firstPage);
   const isFirstLoading = !isDefined(catalog.data) && !isDefined(catalog.error);
   const tagList = filters.tags ?? [];
@@ -147,7 +157,6 @@ export const ProductDocumentsScreen = () => {
   const hasSelection = bulk.selected.size > 0;
   const isLibraryEmpty = isDefined(firstPage) && libraryTotal === 0;
   const isResultEmpty = isDefined(firstPage) && isEmptyArray(materialItems);
-  const catalogError = catalog.error;
   const isConflict = catalogError instanceof DocumentConflictError;
   const sidebarToggleLabel = isSidebarCollapsed ? "Развернуть разделы" : "Свернуть разделы";
   const SidebarToggleIcon = isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
@@ -196,17 +205,6 @@ export const ProductDocumentsScreen = () => {
   const handleReset = (): void => {
     updateParams(Object.fromEntries([...SCOPE_PARAMS, "q"].map((name) => [name, null])));
   };
-  /** Добавляет следующую порцию, сохраняя показанный объём в адресе. */
-  const handleLoadMore = (): void => {
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.set("pages", String(pages + 1));
-        return next;
-      },
-      { replace: true },
-    );
-  };
   /** Показывает фильтры над выдачей либо, на телефоне, в выдвижной панели. */
   const handleToggleFilters = (): void => {
     if (isMedium) setFilterPanelOpen(!isFilterPanelOpen);
@@ -243,6 +241,10 @@ export const ProductDocumentsScreen = () => {
       Перечитать список
     </Button>
   );
+  /* Пока показана ошибка чтения, перечитывание предлагает её сообщение, а не отчёт о записи. */
+  const refreshAfterWrite = isDefined(catalogError) ? undefined : () => void catalog.mutate();
+  const actionNoticeRetry =
+    actions.notice?.tone === "warning" && !isDefined(catalogError) ? retryButton : undefined;
   const resultKind = isFirstLoading
     ? "loading"
     : isLibraryEmpty
@@ -263,7 +265,9 @@ export const ProductDocumentsScreen = () => {
   const errorTitle = isConflict ? "Список изменился" : "Не удалось прочитать список";
   const errorMessage = isConflict
     ? "Пока читалось продолжение, материалы изменились. Перечитайте список: показанный объём сохранится."
-    : (catalogError?.message ?? "");
+    : catalogError instanceof DocumentOutcomeUnknownError
+      ? "Ответ сервера не получен или не прочитан. Проверьте соединение и перечитайте список."
+      : (catalogError?.message ?? "");
 
   return (
     <PageStage>
@@ -357,7 +361,8 @@ export const ProductDocumentsScreen = () => {
           {isDefined(bulk.outcome) && (
             <BulkResult
               outcome={bulk.outcome}
-              retryCount={bulk.selected.size}
+              isRefreshing={catalog.isValidating}
+              onRefresh={refreshAfterWrite}
               onDismiss={bulk.dismissOutcome}
             />
           )}
@@ -366,6 +371,7 @@ export const ProductDocumentsScreen = () => {
               tone={actions.notice.tone}
               title={actions.notice.title}
               message={actions.notice.message}
+              action={actionNoticeRetry}
               onDismiss={actions.dismissNotice}
             />
           )}
@@ -396,7 +402,7 @@ export const ProductDocumentsScreen = () => {
             isLoadingMore={isLoadingMore}
             state={resultState}
             onSortChange={(value) => updateParams({ sort: value === "updated" ? null : value })}
-            onLoadMore={handleLoadMore}
+            onLoadMore={volume.loadMore}
             onOpen={rememberMaterial}
             onPreview={handlePreview}
             onChange={(material, changes) =>

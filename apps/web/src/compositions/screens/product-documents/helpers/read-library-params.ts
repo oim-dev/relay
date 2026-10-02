@@ -1,13 +1,14 @@
 import { DOCUMENT_KIND_OPTIONS, normalizeMaterialTags } from "domains/documents";
 import type { MaterialCatalogFilters, MaterialView } from "domains/documents";
-import { MAX_PAGES, VIEW_LABELS } from "../config/library.config";
+import { VIEW_LABELS } from "../config/library.config";
 
 /** Проверяет известное представление каталога. */
 const isMaterialView = (value: string): value is MaterialView => value in VIEW_LABELS;
 
 /**
- * Разбирает адрес каталога в условия выборки и показанный объём.
- * Неизвестные значения не ломают экран и приводятся к значениям по умолчанию.
+ * Разбирает адрес каталога в условия выборки и запрошенный объём.
+ * Неизвестные значения не ломают экран и приводятся к значениям по умолчанию;
+ * допустимый к загрузке объём определяет экран, а не разбор адреса.
  */
 export const readLibraryParams = (
   params: URLSearchParams,
@@ -29,6 +30,6 @@ export const readLibraryParams = (
       format: format === "markdown" || format === "link" ? format : null,
       status: status === "draft" || status === "active" ? status : null,
     },
-    pages: Number.isFinite(pages) ? Math.min(MAX_PAGES, Math.max(1, pages)) : 1,
+    pages: Number.isFinite(pages) ? Math.max(1, pages) : 1,
   };
 };

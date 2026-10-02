@@ -53,6 +53,22 @@
   font-size: 0.75rem;
 }
 
+.status {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+}
+
+.locked {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
 .loading {
   display: grid;
   gap: 0.5rem;

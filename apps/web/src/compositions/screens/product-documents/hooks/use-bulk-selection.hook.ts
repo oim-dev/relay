@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { DocumentAccessError, useMaterialMutations } from "domains/documents";
+import {
+  DocumentAccessError,
+  DocumentOutcomeUnknownError,
+  useMaterialMutations,
+} from "domains/documents";
 import type { MaterialBulkItem, MaterialBulkOperation } from "domains/documents";
 import type { BulkOutcome, BulkRemainder, SelectedMaterial } from "../types/bulk.type";
 
@@ -21,6 +25,8 @@ const isRemainder = (
  * Хранит множественный выбор текущей области каталога и выполняет массовые действия.
  * Каждое действие — один запрос без автоповторов. После частичного отказа в выборе остаются
  * только неприменённые материалы, которые можно повторить осознанно; не найденные снимаются.
+ * Отказ всего запроса и неизвестный исход (ответ не получен) сохраняют выбор целиком;
+ * при неизвестном исходе материалы не считаются неприменёнными: изменения могли сохраниться.
  * Ревизия берётся на момент выбора: изменение, сделанное после него, даёт конфликт, а не
  * молчаливую перезапись; для повтора используется актуальная ревизия из ответа сервера.
  */
@@ -64,30 +70,38 @@ export const useBulkSelection = (projectId: string, scopeKey: string) => {
         status: item.status,
         reason: [REMAINDER_REASONS[item.status], item.error?.message].filter(Boolean).join(": "),
       }));
-      setOutcome({
-        action,
-        total: chosen.length,
-        applied: result.applied,
-        unchanged: result.items.filter((item) => item.status === "unchanged").length,
-        remainder,
-        requestError: null,
-      });
       const retry = new Map<string, SelectedMaterial>();
       result.items.filter(isRemainder).forEach((item) => {
         const material = byId.get(item.ref);
         if (material === undefined || item.status === "not_found") return;
         retry.set(material.id, { ...material, revision: item.revision ?? material.revision });
       });
+      setOutcome({
+        kind: "receipt",
+        action,
+        total: chosen.length,
+        applied: result.applied,
+        unchanged: result.items.filter((item) => item.status === "unchanged").length,
+        remainder,
+        kept: retry.size,
+      });
       setState({ scopeKey, items: retry });
     } catch (failure) {
-      if (failure instanceof DocumentAccessError)
+      if (failure instanceof DocumentOutcomeUnknownError)
         setOutcome({
+          kind: "unknown",
           action,
           total: chosen.length,
-          applied: 0,
-          unchanged: 0,
-          remainder: [],
-          requestError: failure.message,
+          kept: chosen.length,
+          items: chosen.map(({ id, title }) => ({ id, title })),
+        });
+      else if (failure instanceof DocumentAccessError)
+        setOutcome({
+          kind: "rejected",
+          action,
+          total: chosen.length,
+          kept: chosen.length,
+          message: failure.message,
         });
       else
         setDefect(failure instanceof Error ? failure : new Error("Массовое действие не выполнено"));

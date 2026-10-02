@@ -2,6 +2,7 @@ import { useSWRConfig } from "swr";
 import type { EntitySaved } from "@relay/contracts/entities";
 import { saveDocument, updateMaterialProperties } from "../adapters/documents.adapter";
 import { bulkChangeMaterials, relateMaterial } from "../adapters/materials.adapter";
+import { toWriteFailure } from "../errors/document-errors";
 import { publishMaterialsChanged } from "../operations/materials-changes";
 import type {
   DocumentInput,
@@ -44,14 +45,18 @@ export type MaterialMutations = {
  * Даёт записи материалов выбранного проекта с согласованным обновлением кешей:
  * каталог, счётчики, карточка, блоки материалов сущностей и прочие чтения проекта
  * перечитываются и после отказа, чтобы следующее решение принималось по актуальной ревизии.
+ * Завершение записи не подтверждает успех перечитывания: ошибку чтения хранит и показывает
+ * само чтение. Без ответа сервера запись завершается DocumentOutcomeUnknownError — исход неизвестен.
  * Автоматических повторов записи нет; requestId — корреляция, не идемпотентность.
  */
 export const useMaterialMutations = (projectId: string): MaterialMutations => {
   const { mutate } = useSWRConfig();
-  /** Выполняет запись и перечитывает данные проекта независимо от исхода. */
+  /** Выполняет запись и запускает перечитывание данных проекта независимо от исхода записи. */
   const withRefresh = async <T>(write: () => Promise<T>): Promise<T> => {
     try {
       return await write();
+    } catch (failure) {
+      throw toWriteFailure(failure);
     } finally {
       publishMaterialsChanged(projectId);
       await mutate((key) => Array.isArray(key) && key[1] === projectId).catch(() => undefined);

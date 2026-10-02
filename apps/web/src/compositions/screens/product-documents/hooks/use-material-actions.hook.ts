@@ -3,6 +3,7 @@ import { notifications } from "@mantine/notifications";
 import {
   DocumentAccessError,
   DocumentConflictError,
+  DocumentOutcomeUnknownError,
   useMaterialMutations,
 } from "domains/documents";
 import type { MaterialPropertyChanges } from "domains/documents";
@@ -19,7 +20,7 @@ type ActionTarget = {
 
 /** Отказ действия, показанный рядом с выдачей. */
 export type MaterialActionNotice = {
-  /** Конфликт ревизии или иной отказ записи. */
+  /** Конфликт ревизии, неизвестный исход или отказ записи. */
   tone: "warning" | "danger";
   /** Заголовок отказа. */
   title: string;
@@ -39,7 +40,8 @@ const getSuccessMessage = (changes: MaterialPropertyChanges): string => {
 /**
  * Выполняет быстрые изменения свойств под прочитанной ревизией через записи домена,
  * которые сами перечитывают каталог, счётчики и карточки.
- * Конфликт не повторяется автоматически: решение остаётся за человеком.
+ * Конфликт и неизвестный исход не повторяются автоматически: решение остаётся за человеком.
+ * Отсутствие ответа сервера не считается отказом — изменение могло сохраниться.
  */
 export const useMaterialActions = (
   projectId: string,
@@ -74,7 +76,13 @@ export const useMaterialActions = (
         setNotice({
           tone: "warning",
           title: "Материал уже изменён",
-          message: `«${target.title}» изменился после загрузки списка, действие не выполнено. Список обновлён — проверьте состояние и при необходимости повторите действие.`,
+          message: `«${target.title}» изменился после загрузки списка, действие не выполнено. Проверьте актуальное состояние в списке и при необходимости повторите действие.`,
+        });
+      else if (failure instanceof DocumentOutcomeUnknownError)
+        setNotice({
+          tone: "warning",
+          title: "Результат действия неизвестен",
+          message: `Ответ сервера не получен или не прочитан: изменение «${target.title}» могло сохраниться. Проверьте текущее состояние перед повтором.`,
         });
       else if (failure instanceof DocumentAccessError)
         setNotice({
