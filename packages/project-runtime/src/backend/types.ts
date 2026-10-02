@@ -60,6 +60,10 @@ export interface Backend {
     | "rename"
     | "moveTask"
     | "linkTask"
+    | "documentFacets"
+    | "documentBulk"
+    | "relateDocument"
+    | "entityDocuments"
   >;
   graph: Pick<GraphService, "read" | "context" | "mutate">;
   boardTasks: Pick<

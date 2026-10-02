@@ -1,0 +1,34 @@
+.root {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.375rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.changed {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--tasks-warning-border);
+  border-radius: 0.75rem;
+  background: var(--tasks-warning-surface);
+  font-size: 0.8125rem;
+}
+
+.changedTitle {
+  margin: 0;
+  color: var(--tasks-warning-ink);
+  font-weight: 600;
+}

@@ -80,6 +80,7 @@ const missing = new Set([
   "PROJECT_NOT_FOUND",
   "PROJECT_RECORD_NOT_FOUND",
   "PROJECT_REFERENCE_NOT_FOUND",
+  "RELATION_NOT_FOUND",
 ]);
 const httpCodes: Record<number, string> = {
   400: "BAD_REQUEST",

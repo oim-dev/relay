@@ -3,7 +3,7 @@ import type { Command } from "commander";
 import { entityCreateSchema, entityUpdateSchema } from "@relay/contracts/entities";
 import type { EntitiesQuery, EntityDetail } from "@relay/contracts/entities";
 import { parse } from "@relay/core/domain/validation";
-import { invariant } from "@relay/core/shared/errors";
+import { AppError, invariant } from "@relay/core/shared/errors";
 import { lintProduct } from "@relay/core/application/product/content";
 import { commandGroup, registerCommand } from "../command.js";
 import { author } from "../context.js";
@@ -36,7 +36,12 @@ import { productOverviewMetrics } from "@relay/contracts/entities/product";
 import type { ProductOverviewMetric } from "@relay/contracts/entities/product";
 import { cardText } from "../presentation/common.js";
 import { registerEntityProgress } from "./progress.js";
-import { registerDocumentRelations, registerDocumentSections } from "./product-documents.js";
+import {
+  registerDocumentCatalog,
+  registerDocumentRelations,
+  registerDocumentSections,
+  documentSectionNames,
+} from "./product-documents.js";
 import { registerParticipation } from "./product-participation.js";
 
 type Kind = "product" | "feature" | "scenario" | "application" | "implementation" | "document";
@@ -120,6 +125,39 @@ const texts = (kind: Kind) =>
     : kind === "scenario" || kind === "implementation"
       ? ["description"]
       : ["summary", "description"];
+/** Повторяемый тег без разделения по запятой: запятая допустима внутри тега. */
+export const collectTag = (value: string, previous: string[] = []) => [...previous, value];
+
+/**
+ * Core проверяет согласованность формата, адреса и содержания; CLI лишь дополняет
+ * отказ названиями своих флагов, не повторяя предметное правило.
+ */
+export async function withDocumentInputHint<T>(
+  fields: Record<string, unknown> | undefined,
+  creating: boolean,
+  write: () => Promise<T>,
+): Promise<T> {
+  if (!fields) return write();
+  try {
+    return await write();
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== "VALIDATION_ERROR") throw error;
+    const hint =
+      fields.documentFormat === "link"
+        ? fields.url === undefined
+          ? "Для --document-format link укажите --url с абсолютным адресом http или https; body остаётся необязательным пояснением."
+          : undefined
+        : fields.url !== undefined
+          ? "--url допустим только вместе с --document-format link; для Markdown-документа уберите --url."
+          : (creating || fields.documentFormat === "markdown" || fields.body !== undefined) &&
+              (typeof fields.body !== "string" || fields.body.trim() === "")
+            ? "Для Markdown-документа передайте непустое содержание: --body <text>, --body-file <путь> или --body-file - (stdin). Для внешнего материала укажите --document-format link --url <адрес>."
+            : undefined;
+    if (!hint) throw error;
+    throw new AppError(error.code, `${error.message}. ${hint}`, error.exitCode, error.details);
+  }
+}
+
 export const revisionOption = (command: Command) =>
   command
     .requiredOption(
@@ -179,6 +217,25 @@ function fieldOptions(command: Command, kind: Kind, creating: boolean) {
       .option("--document-status <state>", "Состояние: draft/active/archived")
       .option("--section-id <id>", "Раздел библиотеки")
       .option("--clear-section", "Оставить без раздела")
+      .option(
+        "--document-format <format>",
+        creating
+          ? "Формат материала: markdown (по умолчанию) — непустое body; link — внешняя ссылка --url, body — необязательное пояснение"
+          : "Новый формат: markdown снимает адрес и требует непустого body; link требует --url",
+      )
+      .option(
+        "--url <url>",
+        "Абсолютный адрес http/https материала-ссылки (до 2048 символов); только с форматом link",
+      )
+      .option(
+        "--tag <tag>",
+        creating
+          ? "Тег материала; повторяйте флаг для нескольких (до 20, до 50 символов)"
+          : "Полный новый набор тегов; повторяйте флаг (до 20, до 50 символов)",
+        collectTag,
+      );
+    if (!creating) command.option("--clear-tags", "Снять все теги");
+    command
       .option("--pinned <value>", "Закрепление: true/false", (value) => {
         invariant(
           value === "true" || value === "false",
@@ -221,6 +278,11 @@ async function readFields(
     "INVALID_ARGUMENT",
     "Выберите --targets или --clear-targets",
   );
+  invariant(
+    !(options.clearTags && options.tag !== undefined),
+    "INVALID_ARGUMENT",
+    "Выберите --tag или --clear-tags",
+  );
   const fields: Record<string, unknown> = { kind, ...text };
   for (const name of [
     "name",
@@ -236,8 +298,12 @@ async function readFields(
     "sectionId",
     "pinned",
     "targets",
+    "documentFormat",
+    "url",
   ])
     if (options[name] !== undefined) fields[name] = options[name];
+  if (options.tag !== undefined) fields.tags = options.tag;
+  if (options.clearTags) fields.tags = [];
   if (options.feature !== undefined) fields.featureId = options.feature;
   if (options.clearSummary) fields.summary = "";
   if (options.clearSection) fields.sectionId = null;
@@ -285,7 +351,21 @@ export function registerProduct(program: Command, runtime: Runtime): void {
           name: "list",
           description: "Найти записи",
           details: "Согласованный снимок; продолжение сохраняет фильтры. Полное содержание — get.",
-          examples: [[`npx @oim-dev/relay-cli ${kind} list --limit 20`, "Прочитать страницу"]],
+          examples: [
+            [`npx @oim-dev/relay-cli ${kind} list --limit 20`, "Прочитать страницу"],
+            ...(kind === "document"
+              ? ([
+                  [
+                    "npx @oim-dev/relay-cli document list --tag API --tag 'Решения' --document-format link",
+                    "Ссылки, у которых есть оба тега",
+                  ],
+                  [
+                    "npx @oim-dev/relay-cli document list --unattached true",
+                    "Материалы без прикреплений",
+                  ],
+                ] as const)
+              : []),
+          ],
           configure(command) {
             paging(command)
               .option("--q <text>", "Поиск")
@@ -310,6 +390,16 @@ export function registerProduct(program: Command, runtime: Runtime): void {
                 .option("--target <ref>", "Прикрепление к сущности")
                 .option("--section <id>", "Раздел; none — без раздела")
                 .option("--document-kind <kind>", "Тип документа")
+                .option("--document-format <format>", "Формат: markdown/link")
+                .option(
+                  "--tag <tag>",
+                  "Тег; повторите флаг — нужны все выбранные теги, без учёта регистра",
+                  collectTag,
+                )
+                .option(
+                  "--unattached <value>",
+                  "true — без прикреплений (нет relations и links); false — только прикреплённые",
+                )
                 .option("--pinned <value>", "Закрепление: true/false")
                 .option("--archived <value>", "Архив: true/false");
           },
@@ -317,11 +407,15 @@ export function registerProduct(program: Command, runtime: Runtime): void {
             const { cursor: _cursor, limit: _limit, ...filters } = input.options;
             const command = [kind, "list"];
             const query = offsetQuery(context, input.options, command, filters);
-            const data = await context.backend.entities.list({ ...filters, kind, ...query });
+            // CLI-фильтр --tag повторяем; в контракте списка это массив tags.
+            const { tag, ...rest } = filters as typeof filters & { tag?: string[] };
+            const selection = { ...rest, ...(tag === undefined ? {} : { tags: tag }) };
+            const data = await context.backend.entities.list({ ...selection, kind, ...query });
+            const sections = kind === "document" ? await documentSectionNames(context) : undefined;
             return {
               data,
               page: pageResult(context, command, filters, query, data),
-              text: (options) => entitiesText(data, { ...filters, kind }, options),
+              text: (options) => entitiesText(data, { ...selection, kind }, options, [], sections),
             };
           },
         },
@@ -362,6 +456,12 @@ export function registerProduct(program: Command, runtime: Runtime): void {
         description: action === "create" ? "Создать запись" : "Изменить только указанные поля",
         details:
           `Полное описание оформляйте разделами и списками в Markdown, достаточно подробно для исполнения и проверки без чата. ${contentHints[kind]}. Правила берите из требований; неизвестное уточняйте, не выдумывайте. Markdown принимается текстом, из файла или stdin. Источники одного поля несовместимы. После потери ответа сначала прочитайте запись; автоматического повтора нет.` +
+          (kind === "document"
+            ? " Формат материала: markdown (по умолчанию) требует непустого body; link требует --url (http/https), а body становится необязательным Markdown-пояснением к ссылке. Смена формата на markdown снимает адрес. Теги: повторяемый --tag; Core обрезает края, отбрасывает пустые и повторы без учёта регистра (сохраняется первое написание), не более 20 тегов по 50 символов." +
+              (action === "update"
+                ? " --tag заменяет весь набор тегов; для добавления или снятия отдельных тегов используйте document bulk add-tags/remove-tags."
+                : "")
+            : "") +
           (kind === "implementation" && action === "create"
             ? " Для снятого участия той же пары приложение/цель Core возвращает прежний ID, но заменяет название, описание и совместимую отметку переданными значениями; без --status применяется none. Для возврата участия с сохранением содержания используйте application participation list/replace с прочитанными ревизией состава и версией продукта."
             : ""),
@@ -372,6 +472,19 @@ export function registerProduct(program: Command, runtime: Runtime): void {
               ? "Учебный пример: замените требования и адреса данными своего проекта"
               : "Изменить название; замените ревизию прочитанным значением",
           ],
+          ...(kind === "document"
+            ? ([
+                action === "create"
+                  ? ([
+                      "npx @oim-dev/relay-cli document create --actor agent --name 'Макеты каталога' --document-format link --url https://example.com/catalog --body 'Читать перед изменением карточек' --tag Дизайн --tag Каталог",
+                      "Материал-ссылка с пояснением и тегами",
+                    ] as const)
+                  : ([
+                      "npx @oim-dev/relay-cli document update DOC-1 --actor agent --tag API --tag Решения --if-revision 1",
+                      "Заменить набор тегов; ревизия — из document get",
+                    ] as const),
+              ] as const)
+            : []),
         ],
         configure: (command) => fieldOptions(command, kind, action === "create"),
         async run(context, input) {
@@ -383,7 +496,11 @@ export function registerProduct(program: Command, runtime: Runtime): void {
               { data: fields, requestId },
               "создание записи",
             );
-            const data = await context.backend.entities.create(command, author(context));
+            const data = await withDocumentInputHint(
+              kind === "document" ? fields : undefined,
+              true,
+              () => context.backend.entities.create(command, author(context)),
+            );
             return {
               data,
               text: (options) =>
@@ -400,7 +517,11 @@ export function registerProduct(program: Command, runtime: Runtime): void {
             { ref, changes: fields, ifRevision: input.options.ifRevision, requestId },
             "изменение записи",
           );
-          const data = await context.backend.entities.update(command, author(context));
+          const data = await withDocumentInputHint(
+            kind === "document" ? fields : undefined,
+            false,
+            () => context.backend.entities.update(command, author(context)),
+          );
           return {
             data,
             text: (options) =>
@@ -451,6 +572,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
     if (kind === "document") {
       registerDocumentRelations(group, runtime);
       registerDocumentSections(group, runtime);
+      registerDocumentCatalog(group, runtime);
     }
     if (kind === "application") registerParticipation(group, runtime);
     if (kind === "product") registerProductReading(group, runtime);

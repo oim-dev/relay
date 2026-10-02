@@ -90,7 +90,9 @@ export const productFieldsSchema = z.discriminatedUnion("kind", [
     kind: z.literal("document"),
     name: title.describe("Однострочное название документа"),
     summary: text(4096).describe("Краткое обычное описание документа"),
-    body: markdown.describe("Полный текст документа в Markdown"),
+    body: text(256 * 1024).describe(
+      "Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке",
+    ),
     documentKind: documentKindSchema,
     ...documentMetadataShape,
     links: z

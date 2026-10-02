@@ -2966,13 +2966,29 @@ export interface EntityDeletionPreview {
       /** Закрепление в проекте */
       pinned: boolean;
       /**
+       * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+       * @default "markdown"
+       */
+      format: EntityDeletionPreviewFormatEnum;
+      /**
+       * Внешний адрес материала формата link
+       * @format uri
+       * @maxLength 2048
+       */
+      url?: string;
+      /**
+       * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+       * @default []
+       */
+      tags: string[];
+      /**
        * Момент времени в UTC
        * @format date-time
        * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
        */
       updatedAt: string;
       /**
-       * Количество прямых отношений документа
+       * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
        * @min 0
        * @max 9007199254740991
        */
@@ -3028,13 +3044,29 @@ export interface EntityDeletionPreview {
       /** Закрепление в проекте */
       pinned: boolean;
       /**
+       * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+       * @default "markdown"
+       */
+      format: EntityDeletionPreviewFormatEnum1;
+      /**
+       * Внешний адрес материала формата link
+       * @format uri
+       * @maxLength 2048
+       */
+      url?: string;
+      /**
+       * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+       * @default []
+       */
+      tags: string[];
+      /**
        * Момент времени в UTC
        * @format date-time
        * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
        */
       updatedAt: string;
       /**
-       * Количество прямых отношений документа
+       * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
        * @min 0
        * @max 9007199254740991
        */
@@ -3088,13 +3120,29 @@ export interface EntityDeletionPreview {
       /** Закрепление в проекте */
       pinned: boolean;
       /**
+       * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+       * @default "markdown"
+       */
+      format: EntityDeletionPreviewFormatEnum2;
+      /**
+       * Внешний адрес материала формата link
+       * @format uri
+       * @maxLength 2048
+       */
+      url?: string;
+      /**
+       * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+       * @default []
+       */
+      tags: string[];
+      /**
        * Момент времени в UTC
        * @format date-time
        * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
        */
       updatedAt: string;
       /**
-       * Количество прямых отношений документа
+       * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
        * @min 0
        * @max 9007199254740991
        */
@@ -3520,7 +3568,7 @@ export interface EntitiesQuery {
   /** Вид основной сущности */
   kind?: EntitiesQueryKindEnum;
   /**
-   * Поиск по ключам, ID, названию и краткому описанию
+   * Поиск по ключам, ID, названию и краткому описанию; у документов также по Markdown-содержанию, url и тегам
    * @maxLength 4096
    */
   q?: string;
@@ -3585,12 +3633,21 @@ export interface EntitiesQuery {
   section?: string;
   /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
   documentKind?: EntitiesQueryDocumentKindEnum;
+  /** Формат документа; прежние записи без поля относятся к markdown */
+  documentFormat?: EntitiesQueryDocumentFormatEnum;
+  /**
+   * Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются
+   * @maxItems 20
+   */
+  tags?: string[];
+  /** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+  unattached?: EntitiesQueryUnattachedEnum;
   /** Только закреплённые либо незакреплённые документы */
   pinned?: EntitiesQueryPinnedEnum;
   /** Включить только архив либо исключить архивные документы */
   archived?: EntitiesQueryArchivedEnum;
   /**
-   * Сортировка по ключу, названию или последнему обновлению
+   * Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)
    * @default "key"
    */
   sort?: EntitiesQuerySortEnum;
@@ -3639,13 +3696,29 @@ export interface EntitiesPage {
       /** Закрепление в проекте */
       pinned: boolean;
       /**
+       * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+       * @default "markdown"
+       */
+      format: EntitiesPageFormatEnum;
+      /**
+       * Внешний адрес материала формата link
+       * @format uri
+       * @maxLength 2048
+       */
+      url?: string;
+      /**
+       * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+       * @default []
+       */
+      tags: string[];
+      /**
        * Момент времени в UTC
        * @format date-time
        * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
        */
       updatedAt: string;
       /**
-       * Количество прямых отношений документа
+       * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
        * @min 0
        * @max 9007199254740991
        */
@@ -3721,13 +3794,29 @@ export interface EntitySummary {
     /** Закрепление в проекте */
     pinned: boolean;
     /**
+     * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+     * @default "markdown"
+     */
+    format: EntitySummaryFormatEnum;
+    /**
+     * Внешний адрес материала формата link
+     * @format uri
+     * @maxLength 2048
+     */
+    url?: string;
+    /**
+     * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+     * @default []
+     */
+    tags: string[];
+    /**
      * Момент времени в UTC
      * @format date-time
      * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
      */
     updatedAt: string;
     /**
-     * Количество прямых отношений документа
+     * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
      * @min 0
      * @max 9007199254740991
      */
@@ -3778,13 +3867,29 @@ export interface EntityDetail {
     /** Закрепление в проекте */
     pinned: boolean;
     /**
+     * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+     * @default "markdown"
+     */
+    format: EntityDetailFormatEnum;
+    /**
+     * Внешний адрес материала формата link
+     * @format uri
+     * @maxLength 2048
+     */
+    url?: string;
+    /**
+     * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+     * @default []
+     */
+    tags: string[];
+    /**
      * Момент времени в UTC
      * @format date-time
      * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
      */
     updatedAt: string;
     /**
-     * Количество прямых отношений документа
+     * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
      * @min 0
      * @max 9007199254740991
      */
@@ -4139,7 +4244,7 @@ export interface EntityDetail {
         name: string;
         /** Краткое обычное описание документа */
         summary: string;
-        /** Полный текст документа в Markdown */
+        /** Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке */
         body: string;
         /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
         documentKind: EntityDetailDocumentKindEnum;
@@ -4149,6 +4254,19 @@ export interface EntityDetail {
         documentStatus?: EntityDetailDocumentStatusEnum;
         /** Закреплён для всех участников проекта */
         pinned?: boolean;
+        /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+        documentFormat?: EntityDetailDocumentFormatEnum;
+        /**
+         * Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown
+         * @format uri
+         * @maxLength 2048
+         */
+        url?: string;
+        /**
+         * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+         * @maxItems 20
+         */
+        tags?: string[];
         /**
          * Адресные связи документа; текст и связи сохраняются атомарно
          * @maxItems 100
@@ -4243,13 +4361,29 @@ export interface EntityDetail {
       /** Закрепление в проекте */
       pinned: boolean;
       /**
+       * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+       * @default "markdown"
+       */
+      format: EntityDetailFormatEnum1;
+      /**
+       * Внешний адрес материала формата link
+       * @format uri
+       * @maxLength 2048
+       */
+      url?: string;
+      /**
+       * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+       * @default []
+       */
+      tags: string[];
+      /**
        * Момент времени в UTC
        * @format date-time
        * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
        */
       updatedAt: string;
       /**
-       * Количество прямых отношений документа
+       * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
        * @min 0
        * @max 9007199254740991
        */
@@ -4537,8 +4671,11 @@ export interface CreateEntity {
         name: string;
         /** Краткое обычное описание документа */
         summary: string;
-        /** Полный текст документа в Markdown */
-        body: string;
+        /**
+         * Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке
+         * @default ""
+         */
+        body?: string;
         /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
         documentKind: CreateEntityDocumentKindEnum;
         /** Раздел; null — без раздела */
@@ -4547,6 +4684,19 @@ export interface CreateEntity {
         documentStatus?: CreateEntityDocumentStatusEnum;
         /** Закреплён для всех участников проекта */
         pinned?: boolean;
+        /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+        documentFormat?: CreateEntityDocumentFormatEnum;
+        /**
+         * Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown
+         * @format uri
+         * @maxLength 2048
+         */
+        url?: string;
+        /**
+         * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+         * @maxItems 20
+         */
+        tags?: string[];
         /**
          * Адресные связи документа; текст и связи сохраняются атомарно
          * @maxItems 100
@@ -4699,7 +4849,7 @@ export interface UpdateEntity {
         name?: string;
         /** Краткое обычное описание документа */
         summary?: string;
-        /** Полный текст документа в Markdown */
+        /** Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке */
         body?: string;
         /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
         documentKind?: UpdateEntityDocumentKindEnum;
@@ -4709,6 +4859,19 @@ export interface UpdateEntity {
         documentStatus?: UpdateEntityDocumentStatusEnum;
         /** Закреплён для всех участников проекта */
         pinned?: boolean;
+        /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+        documentFormat?: UpdateEntityDocumentFormatEnum;
+        /**
+         * Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown
+         * @format uri
+         * @maxLength 2048
+         */
+        url?: string;
+        /**
+         * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+         * @maxItems 20
+         */
+        tags?: string[];
         /**
          * Адресные связи документа; текст и связи сохраняются атомарно
          * @maxItems 100
@@ -4875,6 +5038,526 @@ export interface EntitySaved {
   requestId: string;
   /** Выполненное действие */
   action: EntitySavedActionEnum;
+}
+
+/** Фильтры каталога документов, как у списка; каждая ось считается без собственного фильтра */
+export interface DocumentFacetsQuery {
+  /**
+   * Поиск по ключам, ID, названию и краткому описанию; у документов также по Markdown-содержанию, url и тегам
+   * @maxLength 4096
+   */
+  q?: string;
+  /**
+   * Явная цель задачи, реализации или документа: ключ или ID
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  target?: string;
+  /**
+   * Раздел документов; none — без раздела
+   * @maxLength 64
+   */
+  section?: string;
+  /**
+   * Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются
+   * @maxItems 20
+   */
+  tags?: string[];
+  /** Формат документа; прежние записи без поля относятся к markdown */
+  documentFormat?: DocumentFacetsQueryDocumentFormatEnum;
+  /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+  documentKind?: DocumentFacetsQueryDocumentKindEnum;
+  /**
+   * Предметное состояние выбранного вида
+   * @maxLength 128
+   */
+  status?: string;
+  /** Только закреплённые либо незакреплённые документы */
+  pinned?: DocumentFacetsQueryPinnedEnum;
+  /** Включить только архив либо исключить архивные документы */
+  archived?: DocumentFacetsQueryArchivedEnum;
+  /** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+  unattached?: DocumentFacetsQueryUnattachedEnum;
+}
+
+/** Счётчики каталога документов по полным данным выбранного проекта, не по странице */
+export interface DocumentFacets {
+  /**
+   * Число документов, проходящих все переданные фильтры
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Версия снимка каталога; совпадает с version списка */
+  version: string;
+  /** Все разделы проекта в порядке отображения и затем null; область — все фильтры, кроме section */
+  sections: {
+    /** ID раздела проекта; null — без раздела, включая удалённые разделы */
+    sectionId: string | null;
+    /**
+     * @min 0
+     * @max 9007199254740991
+     */
+    count: number;
+  }[];
+  /** Теги без учёта регистра по убыванию числа; область — все фильтры, включая выбранные теги: значение равно размеру выборки после добавления тега */
+  tags: {
+    /** Самое частое написание; при равенстве — первое по алфавиту */
+    tag: string;
+    /**
+     * @min 0
+     * @max 9007199254740991
+     */
+    count: number;
+  }[];
+  /** Оба формата; область — все фильтры, кроме documentFormat */
+  formats: {
+    /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+    format: DocumentFacetsFormatEnum;
+    /**
+     * @min 0
+     * @max 9007199254740991
+     */
+    count: number;
+  }[];
+  /** Все типы документов; область — все фильтры, кроме documentKind */
+  kinds: {
+    /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+    kind: DocumentFacetsKindEnum;
+    /**
+     * @min 0
+     * @max 9007199254740991
+     */
+    count: number;
+  }[];
+  /** Все состояния, включая архив; область — все фильтры, кроме status и archived */
+  statuses: {
+    /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
+    status: DocumentFacetsStatusEnum;
+    /**
+     * @min 0
+     * @max 9007199254740991
+     */
+    count: number;
+  }[];
+  /** Системные представления; область — q, target, tags, documentFormat и documentKind без section, status, archived, pinned и unattached */
+  views: {
+    /**
+     * Неархивные документы
+     * @min 0
+     * @max 9007199254740991
+     */
+    all: number;
+    /**
+     * Неархивные закреплённые
+     * @min 0
+     * @max 9007199254740991
+     */
+    pinned: number;
+    /**
+     * Черновики
+     * @min 0
+     * @max 9007199254740991
+     */
+    draft: number;
+    /**
+     * Неархивные без раздела
+     * @min 0
+     * @max 9007199254740991
+     */
+    unsectioned: number;
+    /**
+     * Неархивные без relations и совместимых links
+     * @min 0
+     * @max 9007199254740991
+     */
+    unattached: number;
+    /**
+     * Архивные документы
+     * @min 0
+     * @max 9007199254740991
+     */
+    archived: number;
+  };
+}
+
+/** Массовое изменение: каждый документ записывается отдельно под своей ревизией; отказ одного не откатывает остальные, повторов нет */
+export interface DocumentBulk {
+  /**
+   * От 1 до 100 документов с ожидаемыми ревизиями
+   * @maxItems 100
+   * @minItems 1
+   */
+  items: {
+    /**
+     * Ключ или ID документа
+     * @minLength 1
+     * @maxLength 257
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+     */
+    ref: string;
+    /**
+     * Прочитанная ревизия этого документа
+     * @min 0
+     * @max 9007199254740991
+     */
+    ifRevision: number;
+  }[];
+  /** Одно действие для всех выбранных документов; связи и links не изменяются */
+  operation:
+    | {
+        /** Переместить в раздел */
+        type: "move";
+        /** ID существующего раздела; null — без раздела */
+        sectionId: string | null;
+      }
+    | {
+        /** Добавить теги к существующим */
+        type: "addTags";
+        /**
+         * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+         * @maxItems 20
+         * @minItems 1
+         */
+        tags: string[];
+      }
+    | {
+        /** Снять теги без учёта регистра */
+        type: "removeTags";
+        /**
+         * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+         * @maxItems 20
+         * @minItems 1
+         */
+        tags: string[];
+      }
+    | {
+        /** Изменить состояние, например архивировать */
+        type: "setStatus";
+        /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
+        documentStatus: DocumentBulkDocumentStatusEnum;
+      }
+    | {
+        /** Закрепить или открепить */
+        type: "pin";
+        /** true — закрепить, false — снять закрепление */
+        pinned: boolean;
+      };
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор; по умолчанию автор текущего интерфейса */
+  actor?: string;
+}
+
+/** Частичный результат массовой операции */
+export interface DocumentBulkResult {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Результат по каждому элементу в порядке запроса */
+  items: {
+    /** Адрес из запроса */
+    ref: string;
+    /** applied — сохранено; unchanged — ревизия совпала, изменений нет, запись не создана; conflict — ревизия устарела; not_found — документ не найден; invalid — нарушено правило данных; error — прочий отказ */
+    status: DocumentBulkResultStatusEnum;
+    /** Постоянный адрес найденного документа */
+    target?: {
+      /** Вид основной сущности */
+      kind: DocumentBulkResultKindEnum;
+      /**
+       * Постоянный ID; внутренние отношения сохраняют только этот адрес
+       * @minLength 1
+       * @maxLength 128
+       */
+      id: string;
+    };
+    /** Текущий ключ документа */
+    key?: string;
+    /**
+     * Ревизия после applied/unchanged; при conflict — актуальная ревизия
+     * @min 0
+     * @max 9007199254740991
+     */
+    revision?: number;
+    /** Причина отказа элемента */
+    error?: {
+      /** Стабильный код ошибки Core */
+      code: string;
+      /** Сообщение для человека */
+      message: string;
+    };
+  }[];
+  /**
+   * Число сохранённых документов
+   * @min 0
+   * @max 9007199254740991
+   */
+  applied: number;
+  /**
+   * Число элементов с отказом
+   * @min 0
+   * @max 9007199254740991
+   */
+  failed: number;
+}
+
+/** Изменение одной связи документа; остальные relations и совместимые links сохраняются, рёбра графа пишутся в той же транзакции */
+export interface DocumentRelationChange {
+  /**
+   * Ключ или ID документа — владельца связи
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Прочитанная ревизия документа
+   * @min 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /** Прикрепить, изменить тип или пояснение, открепить одну связь */
+  action: DocumentRelationChangeActionEnum;
+  /**
+   * Ключ, ID или kind:ID связанной сущности; родитель не распространяется на детей
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  target: string;
+  /** Тип новой связи (attach) или текущей изменяемой связи (update, detach) */
+  type: DocumentRelationChangeTypeEnum;
+  /** Пояснение Markdown: для attach по умолчанию пусто; для update отсутствие сохраняет текущее */
+  description?: string;
+  /** Только update: новый тип связи; отсутствие сохраняет текущий */
+  nextType?: DocumentRelationChangeNextTypeEnum;
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор; по умолчанию автор текущего интерфейса */
+  actor?: string;
+}
+
+/** Материалы, прикреплённые непосредственно к сущности; дети не учитываются */
+export interface EntityDocumentsQuery {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+  /**
+   * Ключ, ID или kind:ID сущности
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /** Включить только архив либо исключить архивные документы */
+  archived?: EntityDocumentsQueryArchivedEnum;
+}
+
+export interface EntityDocumentsPage {
+  /** Сущность, для которой читаются материалы */
+  target: {
+    /** Постоянный адрес в выбранном проекте */
+    ref: {
+      /** Вид основной сущности */
+      kind: EntityDocumentsPageKindEnum;
+      /**
+       * Постоянный ID; внутренние отношения сохраняют только этот адрес
+       * @minLength 1
+       * @maxLength 128
+       */
+      id: string;
+    };
+    /** Текущий читаемый ключ для человека и агента */
+    key: string;
+    /** Однострочное название */
+    title: string;
+    /** Краткое обычное описание без полного Markdown */
+    summary: string;
+    /**
+     * Ревизия записи для следующего изменения
+     * @min 0
+     * @max 9007199254740991
+     */
+    revision: number;
+    /** Текущее предметное состояние; null, когда неприменимо */
+    status: string | null;
+    /** Активная запись; снятая реализация сохраняет адрес */
+    active: boolean;
+    /** Приложение, доска или родитель для различения одинаковых названий */
+    context?: string;
+    /** Компактные свойства документа без полного Markdown */
+    document?: {
+      /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+      kind: EntityDocumentsPageKindEnum1;
+      /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
+      status: EntityDocumentsPageStatusEnum;
+      /** Эффективный раздел; удалённый раздел отображается как null */
+      sectionId: string | null;
+      /** Закрепление в проекте */
+      pinned: boolean;
+      /**
+       * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+       * @default "markdown"
+       */
+      format: EntityDocumentsPageFormatEnum;
+      /**
+       * Внешний адрес материала формата link
+       * @format uri
+       * @maxLength 2048
+       */
+      url?: string;
+      /**
+       * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+       * @default []
+       */
+      tags: string[];
+      /**
+       * Момент времени в UTC
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      updatedAt: string;
+      /**
+       * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
+       * @min 0
+       * @max 9007199254740991
+       */
+      linkCount: number;
+      /** Фрагмент совпадения полнотекстового поиска */
+      excerpt?: string;
+    };
+  };
+  /** Страница материалов: сначала закреплённые, затем по названию */
+  items: {
+    /** Краткая карточка документа с форматом и тегами */
+    document: {
+      /** Постоянный адрес в выбранном проекте */
+      ref: {
+        /** Вид основной сущности */
+        kind: EntityDocumentsPageKindEnum2;
+        /**
+         * Постоянный ID; внутренние отношения сохраняют только этот адрес
+         * @minLength 1
+         * @maxLength 128
+         */
+        id: string;
+      };
+      /** Текущий читаемый ключ для человека и агента */
+      key: string;
+      /** Однострочное название */
+      title: string;
+      /** Краткое обычное описание без полного Markdown */
+      summary: string;
+      /**
+       * Ревизия записи для следующего изменения
+       * @min 0
+       * @max 9007199254740991
+       */
+      revision: number;
+      /** Текущее предметное состояние; null, когда неприменимо */
+      status: string | null;
+      /** Активная запись; снятая реализация сохраняет адрес */
+      active: boolean;
+      /** Приложение, доска или родитель для различения одинаковых названий */
+      context?: string;
+      /** Компактные свойства документа без полного Markdown */
+      document?: {
+        /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+        kind: EntityDocumentsPageKindEnum3;
+        /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
+        status: EntityDocumentsPageStatusEnum1;
+        /** Эффективный раздел; удалённый раздел отображается как null */
+        sectionId: string | null;
+        /** Закрепление в проекте */
+        pinned: boolean;
+        /**
+         * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+         * @default "markdown"
+         */
+        format: EntityDocumentsPageFormatEnum1;
+        /**
+         * Внешний адрес материала формата link
+         * @format uri
+         * @maxLength 2048
+         */
+        url?: string;
+        /**
+         * Нормализованные теги материала; пустой список допустим, прежние карточки без поля читаются как []
+         * @default []
+         */
+        tags: string[];
+        /**
+         * Момент времени в UTC
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        updatedAt: string;
+        /**
+         * Количество прямых прикреплений документа: relations и совместимые links вместе; 0 — без прикреплений
+         * @min 0
+         * @max 9007199254740991
+         */
+        linkCount: number;
+        /** Фрагмент совпадения полнотекстового поиска */
+        excerpt?: string;
+      };
+    };
+    /** Документ находится в архиве */
+    archived: boolean;
+    /**
+     * Связи документа с этой сущностью
+     * @minItems 1
+     */
+    relations: {
+      /** references — контекст для сущности; documents — документ описывает сущность */
+      type: EntityDocumentsPageTypeEnum;
+      /** Пояснение Markdown; пусто для links */
+      description: string;
+      /** relations — адресная связь; links — совместимая продуктовая область */
+      source: EntityDocumentsPageSourceEnum;
+    }[];
+  }[];
+  /**
+   * Полное число материалов сущности
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Смещение продолжения; null в конце */
+  nextOffset: number | null;
+  /** Версия согласованного снимка */
+  version: string;
 }
 
 export interface GraphPage {
@@ -6469,7 +7152,7 @@ export interface ProductState {
           name: string;
           /** Краткое обычное описание документа */
           summary: string;
-          /** Полный текст документа в Markdown */
+          /** Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке */
           body: string;
           /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
           documentKind: ProductStateDocumentKindEnum;
@@ -6479,6 +7162,19 @@ export interface ProductState {
           documentStatus?: ProductStateDocumentStatusEnum;
           /** Закреплён для всех участников проекта */
           pinned?: boolean;
+          /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+          documentFormat?: ProductStateDocumentFormatEnum;
+          /**
+           * Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown
+           * @format uri
+           * @maxLength 2048
+           */
+          url?: string;
+          /**
+           * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+           * @maxItems 20
+           */
+          tags?: string[];
           /**
            * Адресные связи документа; текст и связи сохраняются атомарно
            * @maxItems 100
@@ -6789,7 +7485,7 @@ export type ProductEntity =
             name: string;
             /** Краткое обычное описание документа */
             summary: string;
-            /** Полный текст документа в Markdown */
+            /** Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке */
             body: string;
             /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
             documentKind: ProductEntityDocumentKindEnum;
@@ -6799,6 +7495,19 @@ export type ProductEntity =
             documentStatus?: ProductEntityDocumentStatusEnum;
             /** Закреплён для всех участников проекта */
             pinned?: boolean;
+            /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+            documentFormat?: ProductEntityDocumentFormatEnum;
+            /**
+             * Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown
+             * @format uri
+             * @maxLength 2048
+             */
+            url?: string;
+            /**
+             * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+             * @maxItems 20
+             */
+            tags?: string[];
             /**
              * Адресные связи документа; текст и связи сохраняются атомарно
              * @maxItems 100
@@ -7101,7 +7810,7 @@ export interface ProductMutation {
         name: string;
         /** Краткое обычное описание документа */
         summary: string;
-        /** Полный текст документа в Markdown */
+        /** Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке */
         body: string;
         /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
         documentKind: ProductMutationDocumentKindEnum;
@@ -7111,6 +7820,19 @@ export interface ProductMutation {
         documentStatus?: ProductMutationDocumentStatusEnum;
         /** Закреплён для всех участников проекта */
         pinned?: boolean;
+        /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+        documentFormat?: ProductMutationDocumentFormatEnum;
+        /**
+         * Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown
+         * @format uri
+         * @maxLength 2048
+         */
+        url?: string;
+        /**
+         * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+         * @maxItems 20
+         */
+        tags?: string[];
         /**
          * Адресные связи документа; текст и связи сохраняются атомарно
          * @maxItems 100
@@ -7454,7 +8176,7 @@ export interface ProductContext {
             name: string;
             /** Краткое обычное описание документа */
             summary: string;
-            /** Полный текст документа в Markdown */
+            /** Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке */
             body: string;
             /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
             documentKind: ProductContextDocumentKindEnum;
@@ -7464,6 +8186,19 @@ export interface ProductContext {
             documentStatus?: ProductContextDocumentStatusEnum;
             /** Закреплён для всех участников проекта */
             pinned?: boolean;
+            /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+            documentFormat?: ProductContextDocumentFormatEnum;
+            /**
+             * Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown
+             * @format uri
+             * @maxLength 2048
+             */
+            url?: string;
+            /**
+             * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+             * @maxItems 20
+             */
+            tags?: string[];
             /**
              * Адресные связи документа; текст и связи сохраняются атомарно
              * @maxItems 100
@@ -10681,7 +11416,7 @@ export interface ProductList {
           name: string;
           /** Краткое обычное описание документа */
           summary: string;
-          /** Полный текст документа в Markdown */
+          /** Содержание в Markdown: непустое для формата markdown; для link — необязательное пояснение к ссылке */
           body: string;
           /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
           documentKind: ProductListDocumentKindEnum;
@@ -10691,6 +11426,19 @@ export interface ProductList {
           documentStatus?: ProductListDocumentStatusEnum;
           /** Закреплён для всех участников проекта */
           pinned?: boolean;
+          /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+          documentFormat?: ProductListDocumentFormatEnum;
+          /**
+           * Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown
+           * @format uri
+           * @maxLength 2048
+           */
+          url?: string;
+          /**
+           * Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет
+           * @maxItems 20
+           */
+          tags?: string[];
           /**
            * Адресные связи документа; текст и связи сохраняются атомарно
            * @maxItems 100
@@ -11877,6 +12625,12 @@ export type EntityDeletionPreviewKindEnum1 =
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type EntityDeletionPreviewStatusEnum = "draft" | "active" | "archived";
 
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntityDeletionPreviewFormatEnum = "markdown" | "link";
+
 /** Вид основной сущности */
 export type EntityDeletionPreviewKindEnum2 =
   | "project"
@@ -11904,6 +12658,12 @@ export type EntityDeletionPreviewKindEnum3 =
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type EntityDeletionPreviewStatusEnum1 = "draft" | "active" | "archived";
 
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntityDeletionPreviewFormatEnum1 = "markdown" | "link";
+
 /** Вид основной сущности */
 export type EntityDeletionPreviewKindEnum4 =
   | "project"
@@ -11930,6 +12690,12 @@ export type EntityDeletionPreviewKindEnum5 =
 
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type EntityDeletionPreviewStatusEnum2 = "draft" | "active" | "archived";
+
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntityDeletionPreviewFormatEnum2 = "markdown" | "link";
 
 /** Вид удаляемой сущности; проект, паспорт и системные доски не удаляются */
 export type DeleteEntityKindEnum =
@@ -12044,6 +12810,12 @@ export type EntitiesQueryDocumentKindEnum =
   | "decision"
   | "research";
 
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type EntitiesQueryDocumentFormatEnum = "markdown" | "link";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type EntitiesQueryUnattachedEnum = "true" | "false";
+
 /** Только закреплённые либо незакреплённые документы */
 export type EntitiesQueryPinnedEnum = "true" | "false";
 
@@ -12051,7 +12823,7 @@ export type EntitiesQueryPinnedEnum = "true" | "false";
 export type EntitiesQueryArchivedEnum = "true" | "false";
 
 /**
- * Сортировка по ключу, названию или последнему обновлению
+ * Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)
  * @default "key"
  */
 export type EntitiesQuerySortEnum = "key" | "title" | "updated";
@@ -12082,6 +12854,12 @@ export type EntitiesPageKindEnum1 =
 
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type EntitiesPageStatusEnum = "draft" | "active" | "archived";
+
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntitiesPageFormatEnum = "markdown" | "link";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
 export type EntityGetQueryKindEnum =
@@ -12124,6 +12902,12 @@ export type EntitySummaryKindEnum1 =
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type EntitySummaryStatusEnum = "draft" | "active" | "archived";
 
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntitySummaryFormatEnum = "markdown" | "link";
+
 /** Вид основной сущности */
 export type EntityDetailKindEnum =
   | "project"
@@ -12150,6 +12934,12 @@ export type EntityDetailKindEnum1 =
 
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type EntityDetailStatusEnum = "draft" | "active" | "archived";
+
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntityDetailFormatEnum = "markdown" | "link";
 
 /** Вид области воздействия; не является целью реализации задачи */
 export type EntityDetailKindEnum2 =
@@ -12207,6 +12997,9 @@ export type EntityDetailDocumentKindEnum =
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type EntityDetailDocumentStatusEnum = "draft" | "active" | "archived";
 
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type EntityDetailDocumentFormatEnum = "markdown" | "link";
+
 /** Вид связанной сущности проекта */
 export type EntityDetailKindEnum4 =
   | "project"
@@ -12250,6 +13043,12 @@ export type EntityDetailKindEnum6 =
 
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type EntityDetailStatusEnum4 = "draft" | "active" | "archived";
+
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntityDetailFormatEnum1 = "markdown" | "link";
 
 /** Уточнение ожидаемого вида при разрешении адреса */
 export type EntityKeysQueryKindEnum =
@@ -12341,6 +13140,9 @@ export type CreateEntityDocumentKindEnum =
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type CreateEntityDocumentStatusEnum = "draft" | "active" | "archived";
 
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type CreateEntityDocumentFormatEnum = "markdown" | "link";
+
 /** Вид связанной сущности проекта */
 export type CreateEntityKindEnum =
   | "project"
@@ -12375,6 +13177,9 @@ export type UpdateEntityDocumentKindEnum =
 
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type UpdateEntityDocumentStatusEnum = "draft" | "active" | "archived";
+
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type UpdateEntityDocumentFormatEnum = "markdown" | "link";
 
 /** Вид связанной сущности проекта */
 export type UpdateEntityKindEnum =
@@ -12426,6 +13231,154 @@ export type EntitySavedActionEnum =
   | "rename"
   | "move"
   | "link";
+
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type DocumentFacetsQueryDocumentFormatEnum = "markdown" | "link";
+
+/** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+export type DocumentFacetsQueryDocumentKindEnum =
+  | "specification"
+  | "description"
+  | "rules"
+  | "instruction"
+  | "proposal"
+  | "decision"
+  | "research";
+
+/** Только закреплённые либо незакреплённые документы */
+export type DocumentFacetsQueryPinnedEnum = "true" | "false";
+
+/** Включить только архив либо исключить архивные документы */
+export type DocumentFacetsQueryArchivedEnum = "true" | "false";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type DocumentFacetsQueryUnattachedEnum = "true" | "false";
+
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type DocumentFacetsFormatEnum = "markdown" | "link";
+
+/** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+export type DocumentFacetsKindEnum =
+  | "specification"
+  | "description"
+  | "rules"
+  | "instruction"
+  | "proposal"
+  | "decision"
+  | "research";
+
+/** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
+export type DocumentFacetsStatusEnum = "draft" | "active" | "archived";
+
+/** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
+export type DocumentBulkDocumentStatusEnum = "draft" | "active" | "archived";
+
+/** applied — сохранено; unchanged — ревизия совпала, изменений нет, запись не создана; conflict — ревизия устарела; not_found — документ не найден; invalid — нарушено правило данных; error — прочий отказ */
+export type DocumentBulkResultStatusEnum =
+  | "applied"
+  | "unchanged"
+  | "conflict"
+  | "not_found"
+  | "invalid"
+  | "error";
+
+/** Вид основной сущности */
+export type DocumentBulkResultKindEnum =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Прикрепить, изменить тип или пояснение, открепить одну связь */
+export type DocumentRelationChangeActionEnum = "attach" | "update" | "detach";
+
+/** Тип новой связи (attach) или текущей изменяемой связи (update, detach) */
+export type DocumentRelationChangeTypeEnum = "references" | "documents";
+
+/** Только update: новый тип связи; отсутствие сохраняет текущий */
+export type DocumentRelationChangeNextTypeEnum = "references" | "documents";
+
+/** Включить только архив либо исключить архивные документы */
+export type EntityDocumentsQueryArchivedEnum = "true" | "false";
+
+/** Вид основной сущности */
+export type EntityDocumentsPageKindEnum =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+export type EntityDocumentsPageKindEnum1 =
+  | "specification"
+  | "description"
+  | "rules"
+  | "instruction"
+  | "proposal"
+  | "decision"
+  | "research";
+
+/** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
+export type EntityDocumentsPageStatusEnum = "draft" | "active" | "archived";
+
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntityDocumentsPageFormatEnum = "markdown" | "link";
+
+/** Вид основной сущности */
+export type EntityDocumentsPageKindEnum2 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+export type EntityDocumentsPageKindEnum3 =
+  | "specification"
+  | "description"
+  | "rules"
+  | "instruction"
+  | "proposal"
+  | "decision"
+  | "research";
+
+/** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
+export type EntityDocumentsPageStatusEnum1 = "draft" | "active" | "archived";
+
+/**
+ * Эффективный формат материала; прежние записи и карточки без поля читаются как markdown
+ * @default "markdown"
+ */
+export type EntityDocumentsPageFormatEnum1 = "markdown" | "link";
+
+/** references — контекст для сущности; documents — документ описывает сущность */
+export type EntityDocumentsPageTypeEnum = "references" | "documents";
+
+/** relations — адресная связь; links — совместимая продуктовая область */
+export type EntityDocumentsPageSourceEnum = "relations" | "links";
 
 /**
  * Направление обхода относительно каждого узла
@@ -12579,6 +13532,9 @@ export type ProductStateDocumentKindEnum =
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type ProductStateDocumentStatusEnum = "draft" | "active" | "archived";
 
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type ProductStateDocumentFormatEnum = "markdown" | "link";
+
 /** Вид связанной сущности проекта */
 export type ProductStateKindEnum =
   | "project"
@@ -12644,6 +13600,9 @@ export type ProductEntityDocumentKindEnum =
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type ProductEntityDocumentStatusEnum = "draft" | "active" | "archived";
 
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type ProductEntityDocumentFormatEnum = "markdown" | "link";
+
 /** Вид связанной сущности проекта */
 export type ProductEntityKindEnum =
   | "project"
@@ -12684,6 +13643,9 @@ export type ProductMutationDocumentKindEnum =
 
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type ProductMutationDocumentStatusEnum = "draft" | "active" | "archived";
+
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type ProductMutationDocumentFormatEnum = "markdown" | "link";
 
 /** Вид связанной сущности проекта */
 export type ProductMutationKindEnum =
@@ -12728,6 +13690,9 @@ export type ProductContextDocumentKindEnum =
 
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type ProductContextDocumentStatusEnum = "draft" | "active" | "archived";
+
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type ProductContextDocumentFormatEnum = "markdown" | "link";
 
 /** Вид связанной сущности проекта */
 export type ProductContextKindEnum =
@@ -13131,6 +14096,9 @@ export type ProductListDocumentKindEnum =
 
 /** Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста */
 export type ProductListDocumentStatusEnum = "draft" | "active" | "archived";
+
+/** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
+export type ProductListDocumentFormatEnum = "markdown" | "link";
 
 /** Вид связанной сущности проекта */
 export type ProductListKindEnum =
@@ -14469,7 +15437,7 @@ export interface ListEntitiesParams {
   /** Вид основной сущности */
   kind?: KindEnum4;
   /**
-   * Поиск по ключам, ID, названию и краткому описанию
+   * Поиск по ключам, ID, названию и краткому описанию; у документов также по Markdown-содержанию, url и тегам
    * @maxLength 4096
    */
   q?: string;
@@ -14534,12 +15502,21 @@ export interface ListEntitiesParams {
   section?: string;
   /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
   documentKind?: DocumentKindEnum;
+  /** Формат документа; прежние записи без поля относятся к markdown */
+  documentFormat?: DocumentFormatEnum;
+  /**
+   * Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются
+   * @maxItems 20
+   */
+  tags?: string[];
+  /** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+  unattached?: UnattachedEnum;
   /** Только закреплённые либо незакреплённые документы */
   pinned?: PinnedEnum;
   /** Включить только архив либо исключить архивные документы */
   archived?: ArchivedEnum;
   /**
-   * Сортировка по ключу, названию или последнему обновлению
+   * Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)
    * @default "key"
    */
   sort?: SortEnum;
@@ -14572,6 +15549,12 @@ export type DocumentKindEnum =
   | "decision"
   | "research";
 
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type DocumentFormatEnum = "markdown" | "link";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type UnattachedEnum = "true" | "false";
+
 /** Только закреплённые либо незакреплённые документы */
 export type PinnedEnum = "true" | "false";
 
@@ -14579,7 +15562,7 @@ export type PinnedEnum = "true" | "false";
 export type ArchivedEnum = "true" | "false";
 
 /**
- * Сортировка по ключу, названию или последнему обновлению
+ * Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)
  * @default "key"
  */
 export type SortEnum = "key" | "title" | "updated";
@@ -14611,6 +15594,12 @@ export type ListEntitiesParams1DocumentKindEnum =
   | "decision"
   | "research";
 
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type ListEntitiesParams1DocumentFormatEnum = "markdown" | "link";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type ListEntitiesParams1UnattachedEnum = "true" | "false";
+
 /** Только закреплённые либо незакреплённые документы */
 export type ListEntitiesParams1PinnedEnum = "true" | "false";
 
@@ -14618,12 +15607,141 @@ export type ListEntitiesParams1PinnedEnum = "true" | "false";
 export type ListEntitiesParams1ArchivedEnum = "true" | "false";
 
 /**
- * Сортировка по ключу, названию или последнему обновлению
+ * Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)
  * @default "key"
  */
 export type ListEntitiesParams1SortEnum = "key" | "title" | "updated";
 
 export type CreateEntityOkEnum = true;
+
+export type GetDocumentFacetsOkEnum = true;
+
+export interface GetDocumentFacetsParams {
+  /**
+   * Поиск по ключам, ID, названию и краткому описанию; у документов также по Markdown-содержанию, url и тегам
+   * @maxLength 4096
+   */
+  q?: string;
+  /**
+   * Явная цель задачи, реализации или документа: ключ или ID
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  target?: string;
+  /**
+   * Раздел документов; none — без раздела
+   * @maxLength 64
+   */
+  section?: string;
+  /**
+   * Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются
+   * @maxItems 20
+   */
+  tags?: string[];
+  /** Формат документа; прежние записи без поля относятся к markdown */
+  documentFormat?: DocumentFormatEnum1;
+  /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+  documentKind?: DocumentKindEnum1;
+  /**
+   * Предметное состояние выбранного вида
+   * @maxLength 128
+   */
+  status?: string;
+  /** Только закреплённые либо незакреплённые документы */
+  pinned?: PinnedEnum1;
+  /** Включить только архив либо исключить архивные документы */
+  archived?: ArchivedEnum1;
+  /** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+  unattached?: UnattachedEnum1;
+}
+
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type DocumentFormatEnum1 = "markdown" | "link";
+
+/** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+export type DocumentKindEnum1 =
+  | "specification"
+  | "description"
+  | "rules"
+  | "instruction"
+  | "proposal"
+  | "decision"
+  | "research";
+
+/** Только закреплённые либо незакреплённые документы */
+export type PinnedEnum1 = "true" | "false";
+
+/** Включить только архив либо исключить архивные документы */
+export type ArchivedEnum1 = "true" | "false";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type UnattachedEnum1 = "true" | "false";
+
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type GetDocumentFacetsParams1DocumentFormatEnum = "markdown" | "link";
+
+/** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+export type GetDocumentFacetsParams1DocumentKindEnum =
+  | "specification"
+  | "description"
+  | "rules"
+  | "instruction"
+  | "proposal"
+  | "decision"
+  | "research";
+
+/** Только закреплённые либо незакреплённые документы */
+export type GetDocumentFacetsParams1PinnedEnum = "true" | "false";
+
+/** Включить только архив либо исключить архивные документы */
+export type GetDocumentFacetsParams1ArchivedEnum = "true" | "false";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type GetDocumentFacetsParams1UnattachedEnum = "true" | "false";
+
+export type GetEntityDocumentsOkEnum = true;
+
+export interface GetEntityDocumentsParams {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+  /**
+   * Ключ, ID или kind:ID сущности
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /** Включить только архив либо исключить архивные документы */
+  archived?: ArchivedEnum2;
+}
+
+/** Включить только архив либо исключить архивные документы */
+export type ArchivedEnum2 = "true" | "false";
+
+/** Включить только архив либо исключить архивные документы */
+export type GetEntityDocumentsParams1ArchivedEnum = "true" | "false";
+
+export type BulkChangeDocumentsOkEnum = true;
+
+export type RelateDocumentOkEnum = true;
 
 export type GetEntityOkEnum = true;
 
@@ -16281,7 +17399,7 @@ export interface ListEntitiesForProjectParams {
   /** Вид основной сущности */
   kind?: KindEnum13;
   /**
-   * Поиск по ключам, ID, названию и краткому описанию
+   * Поиск по ключам, ID, названию и краткому описанию; у документов также по Markdown-содержанию, url и тегам
    * @maxLength 4096
    */
   q?: string;
@@ -16345,13 +17463,22 @@ export interface ListEntitiesForProjectParams {
    */
   section?: string;
   /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
-  documentKind?: DocumentKindEnum1;
-  /** Только закреплённые либо незакреплённые документы */
-  pinned?: PinnedEnum1;
-  /** Включить только архив либо исключить архивные документы */
-  archived?: ArchivedEnum1;
+  documentKind?: DocumentKindEnum2;
+  /** Формат документа; прежние записи без поля относятся к markdown */
+  documentFormat?: DocumentFormatEnum2;
   /**
-   * Сортировка по ключу, названию или последнему обновлению
+   * Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются
+   * @maxItems 20
+   */
+  tags?: string[];
+  /** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+  unattached?: UnattachedEnum2;
+  /** Только закреплённые либо незакреплённые документы */
+  pinned?: PinnedEnum2;
+  /** Включить только архив либо исключить архивные документы */
+  archived?: ArchivedEnum3;
+  /**
+   * Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)
    * @default "key"
    */
   sort?: SortEnum1;
@@ -16377,7 +17504,7 @@ export type KindEnum13 =
 export type ActiveEnum3 = "true" | "false";
 
 /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
-export type DocumentKindEnum1 =
+export type DocumentKindEnum2 =
   | "specification"
   | "description"
   | "rules"
@@ -16386,14 +17513,20 @@ export type DocumentKindEnum1 =
   | "decision"
   | "research";
 
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type DocumentFormatEnum2 = "markdown" | "link";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type UnattachedEnum2 = "true" | "false";
+
 /** Только закреплённые либо незакреплённые документы */
-export type PinnedEnum1 = "true" | "false";
+export type PinnedEnum2 = "true" | "false";
 
 /** Включить только архив либо исключить архивные документы */
-export type ArchivedEnum1 = "true" | "false";
+export type ArchivedEnum3 = "true" | "false";
 
 /**
- * Сортировка по ключу, названию или последнему обновлению
+ * Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)
  * @default "key"
  */
 export type SortEnum1 = "key" | "title" | "updated";
@@ -16425,6 +17558,14 @@ export type ListEntitiesForProjectParams1DocumentKindEnum =
   | "decision"
   | "research";
 
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type ListEntitiesForProjectParams1DocumentFormatEnum =
+  | "markdown"
+  | "link";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type ListEntitiesForProjectParams1UnattachedEnum = "true" | "false";
+
 /** Только закреплённые либо незакреплённые документы */
 export type ListEntitiesForProjectParams1PinnedEnum = "true" | "false";
 
@@ -16432,7 +17573,7 @@ export type ListEntitiesForProjectParams1PinnedEnum = "true" | "false";
 export type ListEntitiesForProjectParams1ArchivedEnum = "true" | "false";
 
 /**
- * Сортировка по ключу, названию или последнему обновлению
+ * Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)
  * @default "key"
  */
 export type ListEntitiesForProjectParams1SortEnum = "key" | "title" | "updated";
@@ -16440,6 +17581,151 @@ export type ListEntitiesForProjectParams1SortEnum = "key" | "title" | "updated";
 export type CreateEntityForProjectOkEnum = true;
 
 export interface CreateEntityForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetDocumentFacetsForProjectOkEnum = true;
+
+export interface GetDocumentFacetsForProjectParams {
+  /**
+   * Поиск по ключам, ID, названию и краткому описанию; у документов также по Markdown-содержанию, url и тегам
+   * @maxLength 4096
+   */
+  q?: string;
+  /**
+   * Явная цель задачи, реализации или документа: ключ или ID
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  target?: string;
+  /**
+   * Раздел документов; none — без раздела
+   * @maxLength 64
+   */
+  section?: string;
+  /**
+   * Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются
+   * @maxItems 20
+   */
+  tags?: string[];
+  /** Формат документа; прежние записи без поля относятся к markdown */
+  documentFormat?: DocumentFormatEnum3;
+  /** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+  documentKind?: DocumentKindEnum3;
+  /**
+   * Предметное состояние выбранного вида
+   * @maxLength 128
+   */
+  status?: string;
+  /** Только закреплённые либо незакреплённые документы */
+  pinned?: PinnedEnum3;
+  /** Включить только архив либо исключить архивные документы */
+  archived?: ArchivedEnum4;
+  /** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+  unattached?: UnattachedEnum3;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type DocumentFormatEnum3 = "markdown" | "link";
+
+/** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+export type DocumentKindEnum3 =
+  | "specification"
+  | "description"
+  | "rules"
+  | "instruction"
+  | "proposal"
+  | "decision"
+  | "research";
+
+/** Только закреплённые либо незакреплённые документы */
+export type PinnedEnum3 = "true" | "false";
+
+/** Включить только архив либо исключить архивные документы */
+export type ArchivedEnum4 = "true" | "false";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type UnattachedEnum3 = "true" | "false";
+
+/** Формат документа; прежние записи без поля относятся к markdown */
+export type GetDocumentFacetsForProjectParams1DocumentFormatEnum =
+  | "markdown"
+  | "link";
+
+/** Тип: ТЗ, описание, правила, инструкция, проект решения, решение или исследование */
+export type GetDocumentFacetsForProjectParams1DocumentKindEnum =
+  | "specification"
+  | "description"
+  | "rules"
+  | "instruction"
+  | "proposal"
+  | "decision"
+  | "research";
+
+/** Только закреплённые либо незакреплённые документы */
+export type GetDocumentFacetsForProjectParams1PinnedEnum = "true" | "false";
+
+/** Включить только архив либо исключить архивные документы */
+export type GetDocumentFacetsForProjectParams1ArchivedEnum = "true" | "false";
+
+/** true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые */
+export type GetDocumentFacetsForProjectParams1UnattachedEnum = "true" | "false";
+
+export type GetEntityDocumentsForProjectOkEnum = true;
+
+export interface GetEntityDocumentsForProjectParams {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+  /**
+   * Ключ, ID или kind:ID сущности
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /** Включить только архив либо исключить архивные документы */
+  archived?: ArchivedEnum5;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+/** Включить только архив либо исключить архивные документы */
+export type ArchivedEnum5 = "true" | "false";
+
+/** Включить только архив либо исключить архивные документы */
+export type GetEntityDocumentsForProjectParams1ArchivedEnum = "true" | "false";
+
+export type BulkChangeDocumentsForProjectOkEnum = true;
+
+export interface BulkChangeDocumentsForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type RelateDocumentForProjectOkEnum = true;
+
+export interface RelateDocumentForProjectParams {
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }

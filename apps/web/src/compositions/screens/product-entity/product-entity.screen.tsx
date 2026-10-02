@@ -313,7 +313,9 @@ export const ProductEntityScreen = () => {
         <Text size="xs" c="dimmed">
           Ревизия {entity.revision} · ID {entity.id}
         </Text>
-        {!isEditing && <EntityDocuments target={{ kind: fields.kind, id: entity.id }} />}
+        {!isEditing && (
+          <EntityDocuments target={{ kind: fields.kind, id: entity.id }} targetTitle={title} />
+        )}
       </Stack>
     </ProductPage>
   );

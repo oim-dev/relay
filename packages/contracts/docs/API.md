@@ -119,6 +119,38 @@ project-runtime, Web). Новое обязательное поле резуль
 релиз использует `planIds`, без `applicationId`; принятое расширение описано отдельно
 в [предметных правилах](../../../docs/domain/RELEASES.md).
 
+## Каталог документов
+
+Поля материала (`documentFormat`, `url`, `tags`) входят в `documentMetadataShape`
+модуля `entities/document-library.ts`; их предметный смысл описан в
+[документах](../../../docs/domain/DOCUMENTS.md). Схемы проверяют форму: допустимые
+значения формата, абсолютный `http`/`https` адрес до 2048 символов, однострочный тег
+до 50 символов и не более 20 тегов. Сочетание формата с адресом и непустым Markdown,
+нормализацию и дедупликацию тегов и переход к `markdown` без адреса выполняет Core.
+В `entityCreateDataSchemas.document` поле `body` имеет default `""` (для ссылки),
+в update default нет: отсутствие `body` сохраняет текущее содержание.
+
+`entitiesQuerySchema` дополнен фильтрами `documentFormat`, `tags` (все выбранные, AND)
+и `unattached`. Карточка `entitySummarySchema.document` всегда содержит `format` и `tags`,
+`url` — только у ссылки; `linkCount` учитывает и `relations`, и совместимые `links`.
+Обязательные `format` и `tags` делают ответ прежнего сервера невалидным для нового
+строгого клиента: Server и клиенты обновляются одной версией.
+
+Модуль `entities/document-catalog.ts` содержит операции каталога поверх реестра сущностей:
+
+| Схема                                                      | Назначение                                                  |
+| ---------------------------------------------------------- | ----------------------------------------------------------- |
+| `documentFacetsQuerySchema` / `documentFacetsSchema`       | Счётчики по полным данным; область каждой оси в `.describe` |
+| `documentBulkSchema` / `documentBulkResultSchema`          | Массовое действие с поэлементными ревизиями и статусами     |
+| `documentRelationChangeSchema`                             | `attach`/`update`/`detach` одной связи документа            |
+| `entityDocumentsQuerySchema` / `entityDocumentsPageSchema` | Прямые материалы сущности с источником связи                |
+
+Схема не проверяет, что `nextType` передан только для `update`, а `description` —
+не для `detach`: это делает Core (`INVALID_ARGUMENT`). Результат массового действия —
+частичный по контракту; `failed` не включает `unchanged`. Методы Core — `EntityEngine`
+`documentFacets`, `documentBulk`, `relateDocument`, `entityDocuments`; транспорт и
+доступность в интерфейсах фиксируются отдельно, не по наличию схемы.
+
 ## Изменение контракта и проверка
 
 1. Уточните смысл изменения в канонической предметной странице. Добавьте схему поля,

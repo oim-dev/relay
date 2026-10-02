@@ -1,15 +1,20 @@
-import type { DocumentRelation, DocumentEntity } from "domains/documents";
+import type { DocumentEntity, DocumentRelation } from "domains/documents";
 
-/** Адресные связи документа в просмотре и редакторе. */
+/** Материал, связи которого показываются и меняются по одной под его ревизией. */
+export type RelationsMaterial = {
+  /** Постоянный ID материала. */
+  id: string;
+  /** Прочитанная ревизия, под которой выполняется изменение связи. */
+  revision: number;
+  /** Адресные связи relations. */
+  relations: DocumentRelation[];
+  /** Совместимые области links: читаются как связи «Описывает сущность» без пояснения. */
+  legacyLinks: DocumentRelation[];
+  /** Уже прочитанные карточки целей. */
+  references: DocumentEntity[];
+};
+/** Блок «Где используется» карточки материала. */
 export type DocumentRelationsProps = {
-  /** Подтверждённые либо черновые отношения. */
-  value: DocumentRelation[];
-  /** Уже прочитанные карточки сущностей. */
-  references?: DocumentEntity[];
-  /** ID документа исключается из вариантов. */
-  documentId?: string;
-  /** Применение к черновику или серверное сохранение. */
-  onChange: (value: DocumentRelation[]) => void | Promise<void>;
-  /** Связи записываются вместе с формой. */
-  isDraft?: boolean;
+  /** Подтверждённый материал. */
+  material: RelationsMaterial;
 };
