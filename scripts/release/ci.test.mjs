@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { subprocessEnv } from "./test-env.mjs";
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,17 +43,14 @@ test("план CI покрывает все фактические workspace tes
   assert.equal(rootScripts.build, "pnpm run release:check && turbo run build");
   assert.match(rootScripts["package:check"], /&& node scripts\/smoke-relay\.mjs$/);
   assert.equal(rootScripts["release:publish"], "node scripts/release/relay.mjs publish");
-  assert.equal(
-    rootScripts.check,
-    "pnpm run release:check && pnpm run release:test && pnpm run format:check && pnpm run agents:check && pnpm run skills:check && pnpm run docs:check && turbo run lint typecheck test",
-  );
+  assert.equal(rootScripts.check, "node scripts/check.mjs");
   assert.deepEqual(
     commandsFor("preflight").map((command) => command[2]),
     ["release:check", "format:check", "agents:check", "skills:check", "docs:check"],
   );
   assert.deepEqual(
     commandsFor("tooling").map((command) => command[2]),
-    ["release:test", "agents:test", "skills:test"],
+    ["check:test", "release:test", "agents:test", "skills:test"],
   );
   for (const [alias, owner] of [
     ["agents:test", "@relay/dev-agents"],
@@ -313,7 +311,10 @@ test("cold consumer получает весь dist/generated manifest, hidden и
   await restoreBuild(target, artifact, context);
   for (const [path, bytes] of expected) assert.deepEqual(await readFile(join(target, path)), bytes);
   assert.equal((await lstat(join(target, executable))).mode & 0o777, 0o755);
-  const { stdout } = await promisify(execFile)(join(target, executable), [], { cwd: target });
+  const { stdout } = await promisify(execFile)(join(target, executable), [], {
+    cwd: target,
+    env: subprocessEnv(),
+  });
   assert.equal(stdout.trim(), "из готового артефакта");
   // В cold consumer даже нет package.json/node_modules: ни генерация, ни сборка не требовались.
   await assert.rejects(() => lstat(join(target, "package.json")), { code: "ENOENT" });

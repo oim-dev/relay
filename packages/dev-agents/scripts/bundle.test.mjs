@@ -5,13 +5,13 @@ import { readFile, rm, symlink } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { test } from "node:test";
 import { buildBundle, checkBundle, lockPath, prepareBundle, repoRoot, sourceRoot } from "./lib.mjs";
-import { fixture, readAgentMarkdown, readTomlString, snapshot } from "./testing.mjs";
+import { fixture, readAgentMarkdown, readTomlString, snapshot, subprocessEnv } from "./testing.mjs";
 
 const cli = (mode, root, ...args) =>
   spawnSync(
     process.execPath,
     [join(repoRoot, `packages/dev-agents/scripts/${mode}.mjs`), "--root", root, ...args],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: subprocessEnv() },
   );
 
 test("девять профилей воспроизводятся побайтно независимо от порядка manifest; повтор не пишет файлы", async (t) => {
@@ -417,7 +417,11 @@ test("CLI и aliases сохраняют JSON, относительный root и
     },
   ];
   for (const { command, args, cwd } of commands) {
-    const result = spawnSync(command, [...args, "--format", "json"], { cwd, encoding: "utf8" });
+    const result = spawnSync(command, [...args, "--format", "json"], {
+      cwd,
+      encoding: "utf8",
+      env: subprocessEnv(),
+    });
     assert.equal(
       result.status,
       0,
