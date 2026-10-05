@@ -97,10 +97,13 @@ export const ProductFeatureScreen = () => {
         parentName="Возможности продукта"
         parentHref={`${base}/features${location.search}`}
       >
-        <FeatureScenarios key={featureData.id} feature={featureData} />
+        <FeatureScenarios key={`scenarios:${featureData.id}`} feature={featureData} />
       </ProductRequirement>
       <div style={{ marginTop: "1.5rem" }}>
-        <EntityDocuments target={{ kind: "feature", id: featureData.id }} />
+        <EntityDocuments
+          target={{ kind: "feature", id: featureData.id }}
+          targetTitle={featureData.name}
+        />
       </div>
     </ProductPage>
   );

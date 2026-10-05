@@ -30,6 +30,8 @@ export interface Runtime {
   env: NodeJS.ProcessEnv;
   output: OutputOptions;
   helpCommand?: string;
+  /** Код выхода успешно напечатанного результата с частичным отказом; по умолчанию 0. */
+  exitCode?: number;
 }
 export interface CommandContext {
   /** Версия, проверяемая Backend при продолжении offset-страницы. */
@@ -117,6 +119,7 @@ export function action(
     }
     if (globals.project) result.meta = { ...result.meta, project: globals.project };
     printResult(runtime.stdout, result, output);
+    if (result.exitCode) runtime.exitCode = result.exitCode;
   });
 }
 

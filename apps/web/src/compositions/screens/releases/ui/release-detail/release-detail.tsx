@@ -182,10 +182,11 @@ export const ReleaseDetail = (props: ReleaseDetailProps) => {
         </section>
       )}
       <ReleaseContent release={release} basePath={basePath} onEdit={() => onEdit()} />
-      <section className={styles.description}>
-        <h2>Материалы релиза</h2>
-        <EntityDocuments target={{ kind: "release", id: release.id }} />
-      </section>
+      <EntityDocuments
+        className={styles.description}
+        target={{ kind: "release", id: release.id }}
+        targetTitle={release.title}
+      />
       <Modal
         attributes={{ header: { role: "presentation" } }}
         opened={isConfirmationOpen}

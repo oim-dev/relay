@@ -277,7 +277,9 @@ function continuationCommandFor(
   const args = [...context.invocation, ...command];
   for (const [name, value] of Object.entries(filters)) {
     if (value === undefined || value === null) continue;
-    args.push(`--${kebab(name)}`, Array.isArray(value) ? value.join(",") : String(value));
+    // Массив повторяет флаг: значение может содержать запятую (например, тег).
+    if (Array.isArray(value)) for (const item of value) args.push(`--${kebab(name)}`, String(item));
+    else args.push(`--${kebab(name)}`, String(value));
   }
   args.push("--cursor", cursor);
   return shellCommand(args);

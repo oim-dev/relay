@@ -109,7 +109,10 @@ export const ProductApplicationScreen = () => {
         <ApplicationFeatures applicationId={applicationData.id} />
       </div>
       <div style={{ marginTop: "1.5rem" }}>
-        <EntityDocuments target={{ kind: "application", id: applicationData.id }} />
+        <EntityDocuments
+          target={{ kind: "application", id: applicationData.id }}
+          targetTitle={applicationData.name}
+        />
       </div>
     </ProductPage>
   );

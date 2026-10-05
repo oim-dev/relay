@@ -46,6 +46,33 @@ import {
 } from "./catalog.js";
 import type { EntityCatalog } from "./catalog.js";
 import { entityHandlers, entitySaved } from "./handlers.js";
+import {
+  changeDocumentRelation,
+  documentAxes,
+  documentFacets,
+  entityDocuments,
+  matchesTarget,
+  matchesText,
+} from "./document-library.js";
+import {
+  documentBulkSchema,
+  documentFacetsQuerySchema,
+  documentRelationChangeSchema,
+  entityDocumentsQuerySchema,
+} from "@relay/contracts/entities/document-catalog";
+import type {
+  DocumentBulk,
+  DocumentBulkResult,
+  DocumentFacets,
+  DocumentFacetsQuery,
+  DocumentRelationChange,
+  EntityDocumentsPage,
+  EntityDocumentsQuery,
+} from "@relay/contracts/entities/document-catalog";
+import { productMutationSchema } from "../../domain/product.js";
+import { ProductQueries } from "../product/queries.js";
+import { AppError } from "../../shared/errors.js";
+import { documentTagKey, normalizeDocumentTags } from "../../domain/document-library.js";
 import type { EntityOperationContext } from "./handlers.js";
 
 /** Общий движок адресации, чтения и исполнения зарегистрированных предметных операций. */
@@ -129,6 +156,9 @@ export class EntityEngine {
       sort,
       section,
       documentKind,
+      documentFormat,
+      tags,
+      unattached,
       pinned,
       archived,
       ...pagination
@@ -144,6 +174,9 @@ export class EntityEngine {
       active,
       section,
       documentKind,
+      documentFormat,
+      tags,
+      unattached,
       pinned,
       archived,
     };
@@ -169,34 +202,30 @@ export class EntityEngine {
       const resolved = Object.fromEntries(
         Object.entries({ board, application, feature, scenario, target, parent })
           .filter(([, value]) => value !== undefined)
-          .map(([name, value]) => [name, resolveEntity(catalog, value!, expected[name]).ref.id]),
+          .map(([name, value]) => [name, resolveEntity(catalog, value!, expected[name]).ref]),
       );
       const selected =
         refs === undefined
           ? undefined
           : new Set(refs.map((ref) => entityAddress(resolveEntity(catalog, ref, kind).ref)));
-      const needle = q?.trim().toLocaleLowerCase();
+      const needle = q?.trim().toLocaleLowerCase() || undefined;
+      const axes = documentAxes(query, undefined);
       const items = catalog.entries
         .filter(
           (entry) =>
             (!kind || entry.ref.kind === kind) &&
             (!selected || selected.has(entityAddress(entry.ref))) &&
-            (!needle ||
-              `${entry.key} ${entry.aliases.join(" ")} ${entityAddress(entry.ref)} ${entry.title} ${entry.summary} ${entry.context ?? ""} ${entry.data.kind === "document" ? entry.data.body : ""}`
-                .toLocaleLowerCase()
-                .includes(needle)) &&
+            matchesText(entry, needle) &&
             (status === undefined || entry.status === status) &&
             (active === undefined || entry.active === (active === "true")) &&
-            (section === undefined || (entry.document?.sectionId ?? "none") === section) &&
-            (documentKind === undefined || entry.document?.kind === documentKind) &&
-            (pinned === undefined || entry.document?.pinned === (pinned === "true")) &&
-            (archived === undefined ||
-              (entry.document?.status === "archived") === (archived === "true")) &&
-            Object.entries(resolved).every(([name, value]) =>
-              Array.isArray(entry.filters[name])
-                ? entry.filters[name].includes(value)
-                : entry.filters[name] === value,
-            ),
+            axes.section(entry) &&
+            axes.documentKind(entry) &&
+            axes.documentFormat(entry) &&
+            axes.tags(entry) &&
+            axes.unattached(entry) &&
+            axes.pinned(entry) &&
+            axes.archived(entry) &&
+            Object.entries(resolved).every(([name, ref]) => matchesTarget(entry, name, ref)),
         )
         .sort(
           (a, b) =>
@@ -499,5 +528,160 @@ export class EntityEngine {
       );
       return entitySaved("task", saved, "link", command.requestId);
     });
+  }
+  /** Счётчики библиотеки по полным данным; область каждой оси описана в контракте. */
+  async documentFacets(input: DocumentFacetsQuery = {}): Promise<DocumentFacets> {
+    const query = parse(documentFacetsQuerySchema, input, "счётчики библиотеки");
+    return this.read((catalog) => documentFacets(catalog, query));
+  }
+  /** Материалы, прикреплённые непосредственно к сущности, с признаком архива. */
+  async entityDocuments(input: EntityDocumentsQuery): Promise<EntityDocumentsPage> {
+    const { ref, archived, ...pagination } = parse(
+      entityDocumentsQuerySchema,
+      input,
+      "материалы сущности",
+    );
+    return this.read((catalog) => {
+      const { target, items } = entityDocuments(catalog, ref, archived);
+      return { target, ...this.page(items, pagination, catalog.version) };
+    });
+  }
+  /** Одна связь документа под его ревизией; прочие relations и links сохраняются. */
+  async relateDocument(input: DocumentRelationChange, actor: string) {
+    const command = parse(documentRelationChangeSchema, input, "связь документа");
+    invariant(
+      command.nextType === undefined || command.action === "update",
+      "INVALID_ARGUMENT",
+      "Новый тип задаётся только при изменении связи",
+      2,
+    );
+    invariant(
+      command.description === undefined || command.action !== "detach",
+      "INVALID_ARGUMENT",
+      "Открепление не принимает пояснение",
+      2,
+    );
+    return this.write(command, actor, async (context) => {
+      const entry = resolveEntity(context.catalog, command.ref, "document");
+      invariant(entry.data.kind === "document", "ENTITY_KIND_MISMATCH", "Ожидается документ", 4);
+      invariant(
+        entry.revision === command.ifRevision,
+        "REVISION_CONFLICT",
+        "Запись изменилась после чтения",
+        4,
+        { actual: entry.revision, expected: command.ifRevision },
+      );
+      const target = resolveEntity(context.catalog, command.target).ref;
+      const { relations, links } = changeDocumentRelation(entry.data, target, command);
+      const saved = await new ProductQueries(this.workspace).mutate(
+        productMutationSchema.parse({
+          action: "update",
+          id: entry.ref.id,
+          fields: { ...entry.data, relations, links },
+          ifRevision: command.ifRevision,
+          actor: context.actor,
+          requestId: command.requestId,
+        }),
+        context.actor,
+      );
+      return entitySaved("document", saved, "link", command.requestId);
+    });
+  }
+  /**
+   * Массовое изменение: каждый документ записывается отдельной операцией под своей ревизией.
+   * Отказ элемента не откатывает уже сохранённые; повторов нет.
+   */
+  async documentBulk(input: DocumentBulk, actor: string): Promise<DocumentBulkResult> {
+    const command = parse(documentBulkSchema, input, "массовое изменение документов");
+    const operation = command.operation;
+    const items: DocumentBulkResult["items"] = [];
+    for (const item of command.items) {
+      let found: { ref: EntityRef; key: string } | undefined;
+      try {
+        const entry = await this.read((catalog) => resolveEntity(catalog, item.ref, "document"));
+        invariant(entry.data.kind === "document", "ENTITY_KIND_MISMATCH", "Ожидается документ", 4);
+        found = { ref: entry.ref, key: entry.key };
+        invariant(
+          entry.revision === item.ifRevision,
+          "REVISION_CONFLICT",
+          "Запись изменилась после чтения",
+          4,
+          { actual: entry.revision, expected: item.ifRevision },
+        );
+        const data = entry.data;
+        const tags = data.tags ?? [];
+        let changes: Record<string, unknown> | undefined;
+        if (operation.type === "move") {
+          if ((data.sectionId ?? null) !== operation.sectionId)
+            changes = { sectionId: operation.sectionId };
+        } else if (operation.type === "addTags") {
+          const next = normalizeDocumentTags([...tags, ...operation.tags]);
+          invariant(next.length <= 20, "VALIDATION_ERROR", "У материала не более 20 тегов", 2);
+          if (next.length !== tags.length) changes = { tags: next };
+        } else if (operation.type === "removeTags") {
+          const removed = new Set(operation.tags.map(documentTagKey));
+          const next = tags.filter((tag) => !removed.has(documentTagKey(tag)));
+          if (next.length !== tags.length) changes = { tags: next };
+        } else if (operation.type === "setStatus") {
+          if ((entry.document?.status ?? "active") !== operation.documentStatus)
+            changes = { documentStatus: operation.documentStatus };
+        } else if ((entry.document?.pinned ?? false) !== operation.pinned)
+          changes = { pinned: operation.pinned };
+        if (!changes) {
+          items.push({
+            ref: item.ref,
+            status: "unchanged",
+            target: entry.ref,
+            key: entry.key,
+            revision: entry.revision,
+          });
+          continue;
+        }
+        const saved = await this.update(
+          {
+            ref: entityAddress(entry.ref),
+            ifRevision: item.ifRevision,
+            requestId: command.requestId,
+            ...(command.actor === undefined ? {} : { actor: command.actor }),
+            changes: { kind: "document", ...changes },
+          },
+          actor,
+        );
+        items.push({
+          ref: item.ref,
+          status: "applied",
+          target: saved.ref,
+          key: saved.key,
+          revision: saved.revision,
+        });
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+        const status =
+          error.code === "REVISION_CONFLICT"
+            ? "conflict"
+            : ["ENTITY_NOT_FOUND", "ENTITY_KIND_MISMATCH", "PRODUCT_RECORD_NOT_FOUND"].includes(
+                  error.code,
+                )
+              ? "not_found"
+              : ["VALIDATION_ERROR", "INVALID_REFERENCE", "INVALID_ARGUMENT"].includes(error.code)
+                ? "invalid"
+                : "error";
+        const actual = (error.details as { actual?: unknown } | undefined)?.actual;
+        items.push({
+          ref: item.ref,
+          status,
+          ...(found ? { target: found.ref, key: found.key } : {}),
+          ...(status === "conflict" && typeof actual === "number" ? { revision: actual } : {}),
+          error: { code: error.code, message: error.message },
+        });
+      }
+    }
+    const applied = items.filter((item) => item.status === "applied").length;
+    return {
+      requestId: command.requestId,
+      items,
+      applied,
+      failed: items.filter((item) => !["applied", "unchanged"].includes(item.status)).length,
+    };
   }
 }

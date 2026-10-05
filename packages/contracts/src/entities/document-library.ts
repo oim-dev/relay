@@ -18,6 +18,29 @@ export const documentStatusSchema = z
   .describe(
     "Состояние публикации: черновик, действующий или архив; не подтверждает истинность текста",
   );
+/** Формат материала независим от предметного типа; отсутствие поля означает markdown. */
+export const documentFormatSchema = z
+  .enum(["markdown", "link"])
+  .describe(
+    "Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown",
+  );
+export const documentUrlSchema = z
+  .url({ protocol: /^https?$/ })
+  .max(2048)
+  .describe(
+    "Абсолютный адрес http или https внешнего материала; обязателен для формата link и запрещён для markdown",
+  );
+export const documentTagSchema = singleLine(256, true)
+  .pipe(z.string().max(50))
+  .describe(
+    "Тег материала: одна строка до 50 символов; Core обрезает края, отбрасывает пустые и повторы без учёта регистра",
+  );
+export const documentTagsSchema = z
+  .array(documentTagSchema)
+  .max(20)
+  .describe(
+    "Теги материала, до 20; сохраняется первое написание повторяющегося без учёта регистра тега, реестра тегов нет",
+  );
 export const documentSectionSchema = z.strictObject({
   id: z
     .string()
@@ -88,5 +111,8 @@ export const documentMetadataShape = {
     .describe("Раздел; null — без раздела"),
   documentStatus: documentStatusSchema.optional(),
   pinned: z.boolean().optional().describe("Закреплён для всех участников проекта"),
+  documentFormat: documentFormatSchema.optional(),
+  url: documentUrlSchema.optional(),
+  tags: documentTagsSchema.optional(),
   relations: documentRelationsSchema.optional(),
 };

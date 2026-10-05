@@ -1,34 +1,55 @@
-import { useState } from "react";
-import { Alert, Button, Drawer, Group, Select, Skeleton, Text, TextInput } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
-import { Search, Plus, PanelLeft, BookOpen, ArrowLeft, ArrowRight } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useEntities } from "domains/entities";
-import { DOCUMENT_KIND_OPTIONS, useLibrarySettings } from "domains/documents";
-import { useProjectId, useProjectBasePath } from "domains/project";
-import { ProductPage } from "compositions/widgets/product-page";
-import { StatePanel } from "ui/state-panel";
-import { EntityPicker } from "compositions/widgets/entity-picker";
-import { isEmptyArray } from "shared/value-predicates";
-import { DocumentCard } from "./ui/document-card";
+import { useEffect, useId, useState } from "react";
+import { ActionIcon, Button, Drawer, Tooltip } from "@mantine/core";
+import { useDebouncedValue, useMediaQuery } from "@mantine/hooks";
+import { PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import {
+  DOCUMENT_KINDS,
+  DOCUMENT_STATUSES,
+  MATERIAL_FORMATS,
+  DocumentConflictError,
+  DocumentOutcomeUnknownError,
+  useLibrarySettings,
+  useMaterialCatalog,
+  useMaterialFacets,
+} from "domains/documents";
+import type { MaterialSort } from "domains/documents";
+import { useProjectBasePath, useProjectId } from "domains/project";
+import { PageStage } from "ui/page-stage";
+import { isDefined, isEmptyArray } from "shared/value-predicates";
+import { BULK_LIMIT, SCOPE_PARAMS, VIEW_LABELS } from "./config/library.config";
+import { getNavigationCounts } from "./helpers/get-navigation-counts";
+import { readLibraryParams } from "./helpers/read-library-params";
+import { uniqueMaterials } from "./helpers/unique-materials";
+import { useBulkSelection } from "./hooks/use-bulk-selection.hook";
+import { useCatalogVolume } from "./hooks/use-catalog-volume.hook";
+import { useLibraryReturn } from "./hooks/use-library-return.hook";
+import { useMaterialActions } from "./hooks/use-material-actions.hook";
+import { usePanelPreference } from "./hooks/use-panel-preference.hook";
+import { BulkActions } from "./ui/bulk-actions/bulk-actions";
+import { BulkResult } from "./ui/bulk-result/bulk-result";
+import { CatalogState } from "./ui/catalog-state/catalog-state";
+import { LibraryFilters } from "./ui/library-filters/library-filters";
+import { LibraryHeader } from "./ui/library-header/library-header";
 import { LibraryNavigation } from "./ui/library-navigation";
+import { LibraryNotice } from "./ui/library-notice/library-notice";
+import { MaterialList } from "./ui/material-list";
+import type { CatalogMaterial } from "./ui/material-list";
+import { MaterialPreview } from "./ui/material-preview";
+import { SearchScope } from "./ui/search-scope/search-scope";
 import styles from "./styles/product-documents.module.css";
 
-/** Названия системных представлений библиотеки. */
-const VIEW_LABELS: Record<string, string> = {
-  all: "Все документы",
-  draft: "Черновики",
-  pinned: "Закреплённые",
-  none: "Без раздела",
-  archived: "Архив",
-};
+/** Параметры адреса прежней постраничной навигации, заменённые продолжением выдачи. */
+const LEGACY_PARAMS = ["offset", "version"];
 
 /**
- * Собирает проектную библиотеку с серверным поиском и независимыми разделами.
+ * Собирает каталог материалов проекта: разделы и представления, поиск с понятной областью,
+ * компактную выдачу с продолжением, быстрый предпросмотр и быстрые действия.
+ * Условия, порядок и показанный объём хранятся в адресе.
  *
  * Используется для:
- *  - ориентации в знаниях проекта и черновом проектировании
- *  - поиска материалов с сохранением фильтров в URL
+ *  - поиска и выбора материала в библиотеке знаний
+ *  - упорядочивания материалов без открытия редактора
  */
 export const ProductDocumentsScreen = () => {
   const projectId = useProjectId();
@@ -36,271 +57,415 @@ export const ProductDocumentsScreen = () => {
   const settings = useLibrarySettings(projectId);
   const [params, setParams] = useSearchParams();
   const [isNavigationOpen, setNavigationOpen] = useState(false);
-  const query = params.get("q") ?? "";
-  const [search] = useDebouncedValue(query, 200);
-  const view = params.get("view") ?? "all";
-  const section = params.get("section");
-  const requestedKind = params.get("kind");
-  const selectedKind = DOCUMENT_KIND_OPTIONS.find((entry) => entry.value === requestedKind)?.value;
-  const sort = params.get("sort") === "title" ? "title" : "updated";
-  const offset = Math.max(0, Number.parseInt(params.get("offset") ?? "0", 10) || 0);
-  const response = useEntities(projectId, {
-    kind: "document",
-    q: search,
-    sort,
-    offset,
-    limit: 40,
-    ...(params.get("version") ? { version: params.get("version") ?? undefined } : {}),
-    ...(selectedKind ? { documentKind: selectedKind } : {}),
-    ...(section ? { section } : view === "none" ? { section: "none" } : {}),
-    ...(view === "draft" ? { status: "draft" } : {}),
-    ...(view === "pinned" ? { pinned: "true" } : {}),
-    archived: view === "archived" ? "true" : "false",
-    ...(params.get("target") ? { target: params.get("target") ?? undefined } : {}),
-  });
-  const sections = settings.data?.sections ?? [];
-  const selected = section ? `section:${section}` : view;
-  const title = section
-    ? (sections.find((entry) => entry.id === section)?.name ?? "Раздел")
-    : (VIEW_LABELS[view] ?? "Все документы");
-  const counts = response.data?.libraryCounts ?? {};
-  const documentItems = response.data?.items ?? [];
-  const hasNoResults = !response.isLoading && !response.error && isEmptyArray(documentItems);
-  const hasFilters = query !== "" || selectedKind !== undefined || params.has("target");
-  const hasSettings = settings.data !== undefined;
-  const hasPrevious = offset > 0;
-  const hasMore = response.data?.nextOffset !== null && response.data?.nextOffset !== undefined;
-  const hasError = response.error !== undefined || settings.error !== undefined;
-  const errorMessage = response.error?.message ?? settings.error?.message;
-  const returnTo = `${base}/documents${params.size > 0 ? `?${params}` : ""}`;
-  const createHref = `${base}/documents/new${section ? `?section=${encodeURIComponent(section)}` : ""}`;
-  const emptyTitle = hasFilters ? "Ничего не нашлось" : "Здесь пока нет документов";
-  const emptyDescription = hasFilters
-    ? "Попробуйте другое название или расширьте область поиска."
-    : "Сохраните полезное знание, инструкцию или начните проектировать решение в черновике.";
-  /** Изменяет фильтр и начинает новую согласованную выдачу. */
-  const updateFilter = (name: string, value: string | null): void => {
+  const [isFiltersOpen, setFiltersOpen] = useState(false);
+  const [isFilterPanelOpen, setFilterPanelOpen] = usePanelPreference("filters-open", false);
+  const [isSidebarCollapsed, setSidebarCollapsed] = usePanelPreference(
+    "navigation-collapsed",
+    false,
+  );
+  const filtersPanelId = useId();
+  const sidebarNavigationId = useId();
+  const [preview, setPreview] = useState<{ id: string; title: string } | null>(null);
+  const [isPreviewOpen, setPreviewOpen] = useState(false);
+  const isWide = useMediaQuery("(min-width: 75em)", true, { getInitialValueInEffect: false });
+  const isMedium = useMediaQuery("(min-width: 48em)", true, { getInitialValueInEffect: false });
+  const { filters: requested, pages: requestedPages } = readLibraryParams(params);
+  const search = params.toString();
+  const returnTo = `${base}/documents${search === "" ? "" : `?${search}`}`;
+  const volume = useCatalogVolume(
+    projectId,
+    JSON.stringify([projectId, requested]),
+    returnTo,
+    requestedPages,
+  );
+  const [debouncedQuery] = useDebouncedValue(requested.q.trim(), 250);
+  const filters = { ...requested, q: debouncedQuery };
+  const catalog = useMaterialCatalog(projectId, filters, volume.pages);
+  const navigationFilters = { ...filters, view: "all" as const, section: null, status: null };
+  const navigationFacets = useMaterialFacets(projectId, navigationFilters);
+  const filterFacets = useMaterialFacets(projectId, filters);
+  const actions = useMaterialActions(projectId);
+  const rememberMaterial = useLibraryReturn(projectId, returnTo, isDefined(catalog.data));
+  const hasLegacyParams = LEGACY_PARAMS.some((name) => params.has(name));
+  useEffect(() => {
+    if (!hasLegacyParams) return;
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
-        next.delete("offset");
-        next.delete("version");
-        if (value === null || value === "") next.delete(name);
-        else next.set(name, value);
+        LEGACY_PARAMS.forEach((name) => next.delete(name));
         return next;
       },
       { replace: true },
     );
+  }, [hasLegacyParams, setParams]);
+
+  const pageList = catalog.data ?? [];
+  const firstPage = pageList.at(0);
+  const lastPage = pageList.at(-1);
+  const materialItems = uniqueMaterials(pageList);
+  const libraryCounts = firstPage?.counts ?? {};
+  const counts = getNavigationCounts(navigationFacets.data);
+  const scopeKey = JSON.stringify({ ...filters, sort: null });
+  const bulk = useBulkSelection(projectId, scopeKey);
+  const sections = settings.data?.sections ?? [];
+  const sectionName = sections.find((section) => section.id === filters.section)?.name;
+  const areaTitle = isDefined(filters.section)
+    ? (sectionName ?? "Раздел")
+    : VIEW_LABELS[filters.view];
+  const selected = isDefined(filters.section) ? `section:${filters.section}` : filters.view;
+  const isSortFixed = filters.view === "recent" && !isDefined(filters.section);
+  const sort: MaterialSort = isSortFixed ? "updated" : filters.sort;
+  const catalogError = catalog.error;
+  /* После ошибки чтения продолжение недоступно, пока список не перечитан. */
+  const hasMore = isDefined(lastPage) && lastPage.nextOffset !== null && !isDefined(catalogError);
+  const isLoadingMore = catalog.size > pageList.length && isDefined(firstPage);
+  const isFirstLoading = !isDefined(catalog.data) && !isDefined(catalog.error);
+  const tagList = filters.tags ?? [];
+  const isStatusFixed =
+    (filters.view === "draft" || filters.view === "archived") && !isDefined(filters.section);
+  const filterCount =
+    Number(isDefined(filters.kind)) +
+    Number(isDefined(filters.target)) +
+    Number(isDefined(filters.format)) +
+    Number(isDefined(filters.status) && !isStatusFixed) +
+    tagList.length;
+  const hasCountFilters =
+    filters.q !== "" ||
+    isDefined(filters.kind) ||
+    isDefined(filters.target) ||
+    isDefined(filters.format) ||
+    tagList.length > 0;
+  const countScope = hasCountFilters
+    ? "Числа учитывают поиск, тип, формат, теги и прикрепление"
+    : "Числа — по всей библиотеке";
+  const isNarrow = filters.view !== "all" || isDefined(filters.section) || filterCount > 0;
+  const hasQuery = requested.q.trim() !== "";
+  const shouldShowScope = hasQuery || filterCount > 0;
+  const scopeParts = [
+    isDefined(filters.section) ? `раздел «${areaTitle}»` : VIEW_LABELS[filters.view],
+    ...(isDefined(filters.kind) ? [`тип «${DOCUMENT_KINDS[filters.kind]}»`] : []),
+    ...(isDefined(filters.format) ? [`формат «${MATERIAL_FORMATS[filters.format]}»`] : []),
+    ...(isDefined(filters.status) && !isStatusFixed
+      ? [`состояние «${DOCUMENT_STATUSES[filters.status]}»`]
+      : []),
+    ...(tagList.length > 0 ? [`все теги: ${tagList.join(", ")}`] : []),
+    ...(isDefined(filters.target) ? ["прикреплённые к выбранной записи"] : []),
+  ];
+  const libraryTotal = (libraryCounts.all ?? 0) + (libraryCounts.archived ?? 0);
+  const selectedList = [...bulk.selected.values()];
+  const selectedTags = [...new Set(selectedList.flatMap((material) => material.tags))];
+  const hasSelection = bulk.selected.size > 0;
+  const isLibraryEmpty = isDefined(firstPage) && libraryTotal === 0;
+  const isResultEmpty = isDefined(firstPage) && isEmptyArray(materialItems);
+  const isConflict = catalogError instanceof DocumentConflictError;
+  const sidebarToggleLabel = isSidebarCollapsed ? "Развернуть разделы" : "Свернуть разделы";
+  const SidebarToggleIcon = isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
+  const hasSidebar = isWide && isDefined(settings.data);
+  const sidebarState = hasSidebar ? (isSidebarCollapsed ? "collapsed" : "expanded") : "none";
+  const isFiltersShown = isMedium ? isFilterPanelOpen : isFiltersOpen;
+  const filtersControls = isMedium ? filtersPanelId : undefined;
+  const createHref = `${base}/documents/new${
+    isDefined(filters.section) ? `?section=${encodeURIComponent(filters.section)}` : ""
+  }`;
+
+  /** Меняет условия выдачи и начинает её заново с первой порции. */
+  const updateParams = (
+    changes: Record<string, string | string[] | null>,
+    replace = false,
+  ): void => {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("pages");
+        LEGACY_PARAMS.forEach((name) => next.delete(name));
+        Object.entries(changes).forEach(([name, value]) => {
+          next.delete(name);
+          if (Array.isArray(value)) value.forEach((entry) => next.append(name, entry));
+          else if (value !== null && value !== "") next.set(name, value);
+        });
+        return next;
+      },
+      { replace },
+    );
   };
-  /** Переключает локальную область, сохраняя запрос пользователя. */
+  /** Переключает раздел или представление, сохраняя строку поиска и фильтры. */
   const handleSelect = (value: string): void => {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("section");
-      next.delete("view");
-      next.delete("offset");
-      next.delete("version");
-      if (value.startsWith("section:")) next.set("section", value.slice(8));
-      else if (value !== "all") next.set("view", value);
-      return next;
+    const isSection = value.startsWith("section:");
+    updateParams({
+      section: isSection ? value.slice("section:".length) : null,
+      view: isSection || value === "all" ? null : value,
     });
     setNavigationOpen(false);
   };
-  /** Дочитывает страницы одной версии без неявной полной загрузки. */
-  const handlePage = (nextOffset: number): void => {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set("offset", String(nextOffset));
-      if (response.data) next.set("version", response.data.version);
-      return next;
-    });
+  /** Ищет ту же строку по всей библиотеке, снимая раздел, представление и фильтры. */
+  const handleSearchEverywhere = (): void => {
+    updateParams(Object.fromEntries(SCOPE_PARAMS.map((name) => [name, null])));
   };
-  return (
-    <ProductPage
-      title="Библиотека знаний"
-      description="Контекст, решения и инструкции — общая память проекта."
-      actions={
-        <Button
-          component={Link}
-          to={createHref}
-          state={{ returnTo }}
-          leftSection={<Plus size={16} />}
-        >
-          Документ
-        </Button>
-      }
+  /** Сбрасывает поиск и все условия области. */
+  const handleReset = (): void => {
+    updateParams(Object.fromEntries([...SCOPE_PARAMS, "q"].map((name) => [name, null])));
+  };
+  /** Показывает фильтры над выдачей либо, на телефоне, в выдвижной панели. */
+  const handleToggleFilters = (): void => {
+    if (isMedium) setFilterPanelOpen(!isFilterPanelOpen);
+    else setFiltersOpen(true);
+  };
+  /** Открывает предпросмотр выбранного материала. */
+  const handlePreview = (material: CatalogMaterial): void => {
+    setPreview({ id: material.ref.id, title: material.title });
+    setPreviewOpen(true);
+  };
+
+  const filterProps = {
+    projectId,
+    facets: filterFacets.data,
+    kind: filters.kind,
+    format: filters.format ?? null,
+    status: filters.status ?? null,
+    isStatusFixed,
+    tags: tagList,
+    target: filters.target,
+    onChange: (name: "kind" | "format" | "status" | "target", value: string | null) =>
+      updateParams({ [name]: value }),
+    onTagsChange: (tags: string[]) => updateParams({ tags }),
+  };
+  const retryButton = (
+    <Button
+      size="xs"
+      variant="default"
+      radius="xl"
+      leftSection={<RefreshCw size={13} aria-hidden="true" />}
+      loading={catalog.isValidating}
+      onClick={() => void catalog.mutate()}
     >
-      <div className={styles.root}>
-        <aside className={styles.sidebar}>
-          {hasSettings && (
-            <LibraryNavigation
-              settings={settings.data!}
-              selected={selected}
-              counts={counts}
-              onSelect={handleSelect}
-            />
-          )}
-        </aside>
-        <div className={styles.main}>
-          <div className={styles.mobileNavigation}>
-            <Button
-              variant="default"
-              leftSection={<PanelLeft size={16} />}
-              onClick={() => setNavigationOpen(true)}
-            >
-              Разделы библиотеки
-            </Button>
-          </div>
-          <div className={styles.toolbar}>
-            <TextInput
-              className={styles.search}
-              aria-label="Поиск документов"
-              placeholder="Найти в знаниях проекта…"
-              leftSection={<Search size={16} />}
-              value={query}
-              onChange={(event) => updateFilter("q", event.currentTarget.value)}
-            />
-            <Select
-              aria-label="Тип документа"
-              placeholder="Все типы"
-              clearable
-              value={selectedKind ?? null}
-              data={DOCUMENT_KIND_OPTIONS}
-              onChange={(value) => updateFilter("kind", value)}
-            />
-          </div>
-          <div className={styles.contextFilter}>
-            <EntityPicker
-              projectId={projectId}
-              label="Связано с"
-              placeholder="Любая сущность проекта"
-              value={params.get("target")}
-              onChange={(value) => updateFilter("target", value)}
-            />
-          </div>
-          <div className={styles.listHeading}>
-            <h2 className={styles.title}>
-              {title}
-              <span>{response.data?.total ?? "—"}</span>
-            </h2>
-            <Select
-              aria-label="Порядок документов"
-              size="xs"
-              className={styles.sort}
-              value={sort}
-              data={[
-                { value: "updated", label: "Сначала обновлённые" },
-                { value: "title", label: "По названию" },
-              ]}
-              onChange={(value) => updateFilter("sort", value)}
-            />
-          </div>
-          {hasFilters && (
-            <Group gap="xs" mb="sm">
-              <Text size="xs" c="dimmed">
-                Поиск в выбранной области
-              </Text>
-              <Button variant="subtle" size="compact-xs" onClick={() => setParams({})}>
-                Сбросить фильтры
-              </Button>
-            </Group>
-          )}
-          {hasError && (
-            <Alert color="orange" title="Не удалось обновить библиотеку" mb="md">
-              {errorMessage}
-              <Button
+      Перечитать список
+    </Button>
+  );
+  /* Пока показана ошибка чтения, перечитывание предлагает её сообщение, а не отчёт о записи. */
+  const refreshAfterWrite = isDefined(catalogError) ? undefined : () => void catalog.mutate();
+  const actionNoticeRetry =
+    actions.notice?.tone === "warning" && !isDefined(catalogError) ? retryButton : undefined;
+  const resultKind = isFirstLoading
+    ? "loading"
+    : isLibraryEmpty
+      ? "empty-library"
+      : isResultEmpty
+        ? "empty-result"
+        : null;
+  const resultState = isDefined(resultKind) && (
+    <CatalogState
+      kind={resultKind}
+      createHref={createHref}
+      returnTo={returnTo}
+      canSearchEverywhere={isNarrow && hasQuery}
+      onSearchEverywhere={handleSearchEverywhere}
+      onReset={handleReset}
+    />
+  );
+  const errorTitle = isConflict ? "Список изменился" : "Не удалось прочитать список";
+  const errorMessage = isConflict
+    ? "Пока читалось продолжение, материалы изменились. Перечитайте список: показанный объём сохранится."
+    : catalogError instanceof DocumentOutcomeUnknownError
+      ? "Ответ сервера не получен или не прочитан. Проверьте соединение и перечитайте список."
+      : (catalogError?.message ?? "");
+
+  return (
+    <PageStage>
+      <LibraryHeader
+        query={requested.q}
+        createHref={createHref}
+        returnTo={returnTo}
+        filterCount={filterCount}
+        isFiltersExpanded={isFiltersShown}
+        filtersControls={filtersControls}
+        onQueryChange={(value) => updateParams({ q: value }, true)}
+        onOpenNavigation={() => setNavigationOpen(true)}
+        onToggleFilters={handleToggleFilters}
+      />
+      <div className={styles.layout} data-sidebar={sidebarState}>
+        {hasSidebar && isDefined(settings.data) && (
+          <aside
+            className={styles.sidebar}
+            data-collapsed={isSidebarCollapsed}
+            aria-label="Разделы и представления"
+          >
+            <Tooltip label={sidebarToggleLabel} position="right" withArrow>
+              <ActionIcon
+                className={styles.sidebarToggle}
                 variant="subtle"
-                size="xs"
-                onClick={() => {
-                  updateFilter("offset", null);
-                  void response.mutate();
-                  void settings.mutate();
-                }}
+                color="gray"
+                size="lg"
+                radius="xl"
+                aria-label={sidebarToggleLabel}
+                aria-expanded={!isSidebarCollapsed}
+                aria-controls={sidebarNavigationId}
+                onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
               >
-                Обновить список
-              </Button>
-            </Alert>
-          )}
-          {response.isLoading && (
-            <div className={styles.loading}>
-              <Skeleton height={100} />
-              <Skeleton height={100} />
-              <Skeleton height={100} />
-            </div>
-          )}
-          {hasNoResults && (
-            <div className={styles.empty}>
-              <BookOpen size={32} strokeWidth={1.25} aria-hidden="true" />
-              <StatePanel
-                title={emptyTitle}
-                description={emptyDescription}
-                action={
-                  <Button component={Link} to={createHref} variant="default" state={{ returnTo }}>
-                    Создать документ
-                  </Button>
-                }
+                <SidebarToggleIcon size={18} aria-hidden="true" />
+              </ActionIcon>
+            </Tooltip>
+            <div id={sidebarNavigationId} hidden={isSidebarCollapsed}>
+              <LibraryNavigation
+                settings={settings.data}
+                selected={selected}
+                counts={counts}
+                countScope={countScope}
+                onSelect={handleSelect}
               />
             </div>
+          </aside>
+        )}
+        <div className={styles.main}>
+          {isMedium && (
+            <LibraryFilters
+              {...filterProps}
+              id={filtersPanelId}
+              className={styles.filters}
+              hidden={!isFilterPanelOpen}
+            />
           )}
-          <ul className={styles.list} aria-label="Документы проекта">
-            {documentItems.map((document) => (
-              <li key={document.ref.id}>
-                <DocumentCard
-                  document={document}
-                  sectionName={
-                    sections.find((entry) => entry.id === document.document?.sectionId)?.name ??
-                    "Без раздела"
-                  }
-                  href={`${base}/documents/${document.ref.id}`}
-                  returnTo={returnTo}
-                />
-              </li>
-            ))}
-          </ul>
-          <footer className={styles.footer}>
-            <Text size="xs" c="dimmed" role="status">
-              Показано {documentItems.length} из {response.data?.total ?? 0}
-            </Text>
-            <Group gap="xs">
-              <Button
-                size="xs"
-                variant="subtle"
-                color="gray"
-                leftSection={<ArrowLeft size={13} />}
-                disabled={!hasPrevious}
-                onClick={() => handlePage(Math.max(0, offset - 40))}
-              >
-                Назад
-              </Button>
-              <Button
-                size="xs"
-                variant="subtle"
-                color="gray"
-                rightSection={<ArrowRight size={13} />}
-                disabled={!hasMore}
-                onClick={() => handlePage(response.data?.nextOffset ?? 0)}
-              >
-                Далее
-              </Button>
-            </Group>
-          </footer>
+          {shouldShowScope && (
+            <SearchScope
+              query={requested.q.trim()}
+              scopeParts={scopeParts}
+              isNarrow={isNarrow}
+              onSearchEverywhere={handleSearchEverywhere}
+              onReset={handleReset}
+            />
+          )}
+          {isDefined(settings.error) && (
+            <LibraryNotice
+              tone="warning"
+              title="Не удалось прочитать разделы"
+              message={settings.error.message}
+              action={
+                <Button
+                  size="xs"
+                  variant="default"
+                  radius="xl"
+                  onClick={() => void settings.mutate()}
+                >
+                  Повторить чтение
+                </Button>
+              }
+            />
+          )}
+          {isDefined(catalogError) && (
+            <LibraryNotice
+              tone="warning"
+              title={errorTitle}
+              message={errorMessage}
+              action={retryButton}
+            />
+          )}
+          {isDefined(bulk.outcome) && (
+            <BulkResult
+              outcome={bulk.outcome}
+              isRefreshing={catalog.isValidating}
+              onRefresh={refreshAfterWrite}
+              onDismiss={bulk.dismissOutcome}
+            />
+          )}
+          {isDefined(actions.notice) && (
+            <LibraryNotice
+              tone={actions.notice.tone}
+              title={actions.notice.title}
+              message={actions.notice.message}
+              action={actionNoticeRetry}
+              onDismiss={actions.dismissNotice}
+            />
+          )}
+          <MaterialList
+            title={areaTitle}
+            total={firstPage?.total ?? null}
+            items={materialItems}
+            sections={sections}
+            query={filters.q}
+            sort={sort}
+            isSortFixed={isSortFixed}
+            getHref={(id) => `${base}/documents/${id}`}
+            returnTo={returnTo}
+            busyIds={actions.busyIds}
+            selectedIds={new Set(bulk.selected.keys())}
+            onSelect={(materials, isSelected) =>
+              bulk.toggle(
+                materials.map((material) => ({
+                  id: material.ref.id,
+                  revision: material.revision,
+                  title: material.title,
+                  tags: material.document.tags,
+                })),
+                isSelected,
+              )
+            }
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            state={resultState}
+            onSortChange={(value) => updateParams({ sort: value === "updated" ? null : value })}
+            onLoadMore={volume.loadMore}
+            onOpen={rememberMaterial}
+            onPreview={handlePreview}
+            onChange={(material, changes) =>
+              void actions.change(
+                { id: material.ref.id, revision: material.revision, title: material.title },
+                changes,
+              )
+            }
+          />
+          {hasSelection && (
+            <BulkActions
+              projectId={projectId}
+              count={bulk.selected.size}
+              isOverLimit={bulk.selected.size > BULK_LIMIT}
+              isRunning={bulk.isRunning}
+              sections={sections}
+              selectedTags={selectedTags}
+              onRun={(operation, action) => void bulk.run(operation, action)}
+              onClear={bulk.clear}
+            />
+          )}
         </div>
       </div>
       <Drawer
-        opened={isNavigationOpen}
+        opened={!isWide && isNavigationOpen}
+        position="left"
+        size="20rem"
+        title="Разделы и представления"
+        closeButtonProps={{ "aria-label": "Закрыть разделы" }}
+        classNames={{ content: styles.drawer, header: styles.drawer }}
         onClose={() => setNavigationOpen(false)}
-        title="Библиотека знаний"
-        size="xs"
       >
-        {hasSettings && (
+        {isDefined(settings.data) && (
           <LibraryNavigation
-            settings={settings.data!}
+            settings={settings.data}
             selected={selected}
             counts={counts}
+            countScope={countScope}
             onSelect={handleSelect}
           />
         )}
       </Drawer>
-    </ProductPage>
+      <Drawer
+        opened={!isMedium && isFiltersOpen}
+        position="bottom"
+        size="85%"
+        title="Фильтры"
+        closeButtonProps={{ "aria-label": "Закрыть фильтры" }}
+        classNames={{ content: styles.drawer, header: styles.drawer }}
+        onClose={() => setFiltersOpen(false)}
+      >
+        <LibraryFilters {...filterProps} />
+        <Button fullWidth radius="xl" mt="lg" onClick={() => setFiltersOpen(false)}>
+          Показать материалы
+        </Button>
+      </Drawer>
+      <MaterialPreview
+        material={preview}
+        opened={isPreviewOpen}
+        href={`${base}/documents/${preview?.id ?? ""}`}
+        returnTo={returnTo}
+        onClose={() => setPreviewOpen(false)}
+      />
+    </PageStage>
   );
 };

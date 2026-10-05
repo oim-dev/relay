@@ -11,6 +11,7 @@ import { initializeRegistry, registerProject } from "@relay/project-runtime/regi
 import { startServer } from "@relay/server-runtime";
 import { ProductService } from "@relay/core/application/product/service";
 import { saveProjectSettings } from "@relay/core/application/project-settings/service";
+import { EntityEngine } from "@relay/core/application/entities/service";
 
 test("SSE замечает прямую запись имени и slug через Core", { timeout: 10000 }, async (t) => {
   const { app, workspace } = await fixture(t);
@@ -521,5 +522,76 @@ test(
     });
     await second.next((event) => event.type === "changed" && event.data.source === "api");
     await Promise.all([app.close(), second.end()]);
+  },
+);
+
+test(
+  "SSE материалов: bulk и relate уведомляют только свой проект",
+  { timeout: 20000 },
+  async (t) => {
+    const { root, workspace } = await fixture(t);
+    await initialize(join(root, "b"), "tasks");
+    const registry = await initializeRegistry(root);
+    await registerProject(registry.configPath, "a", { path: "." });
+    await registerProject(registry.configPath, "b", { path: "b" });
+    const engine = new EntityEngine(workspace);
+    const task = await engine.create(
+      { requestId: "task", data: { kind: "task", board: "BOARD-INFRA", title: "Деплой" } },
+      "agent",
+    );
+    const document = await engine.create(
+      {
+        requestId: "doc",
+        data: {
+          kind: "document",
+          name: "Материал",
+          summary: "",
+          body: "Текст",
+          documentKind: "rules",
+        },
+      },
+      "agent",
+    );
+    const server = await startServer({ cwd: root, actor: "test", port: 0 });
+    const a = await connect(server.url, "a");
+    const b = await connect(server.url, "b");
+    try {
+      await a.next((event) => event.type === "connected");
+      await b.next((event) => event.type === "connected");
+      const bulk = await server.app.inject({
+        method: "POST",
+        url: "/api/v1/projects/a/entities/document-bulk",
+        payload: {
+          items: [{ ref: document.key, ifRevision: document.revision }],
+          operation: { type: "addTags", tags: ["sse"] },
+          requestId: "sse-bulk",
+        },
+      });
+      assert.equal(bulk.statusCode, 200, bulk.body);
+      await a.next((event) => event.type === "changed" && event.data.source === "api");
+      const relate = await server.app.inject({
+        method: "POST",
+        url: "/api/v1/projects/a/entities/relate-document",
+        payload: {
+          ref: document.key,
+          ifRevision: bulk.json().data.items[0].revision,
+          action: "attach",
+          target: task.key,
+          type: "references",
+          requestId: "sse-relate",
+        },
+      });
+      assert.equal(relate.statusCode, 200, relate.body);
+      await a.next((event) => event.type === "changed" && event.data.source === "api");
+      // Проект b не получает изменений чужой базы ни от API, ни от наблюдения хранилища.
+      await assert.rejects(b.next((event) => event.type === "changed", 1500));
+      const page = (
+        await server.app.inject(`/api/v1/projects/b/entities?kind=document&tags=sse`)
+      ).json();
+      assert.equal(page.data.total, 0);
+    } finally {
+      await Promise.all([a.close(), b.close()]);
+      await server.close();
+    }
   },
 );

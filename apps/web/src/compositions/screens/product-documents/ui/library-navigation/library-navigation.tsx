@@ -12,11 +12,13 @@ import {
 } from "@mantine/core";
 import {
   Library,
+  History,
   Pin,
   PencilLine,
   Folder,
   FolderOpen,
   Archive,
+  Unlink,
   Settings2,
   Plus,
   ArrowUp,
@@ -25,26 +27,34 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useProjectId } from "domains/project";
+import { isDefined } from "shared/value-predicates";
 import { useDeletionRefresh } from "domains/entities";
 import { saveLibrarySections, DocumentAccessError } from "domains/documents";
 import type { DocumentSection } from "domains/documents";
 import type { LibraryNavigationProps } from "./types/library-navigation-props.type";
 import styles from "./styles/library-navigation.module.css";
 
-/** Общие представления не являются разделами хранения. */
+/**
+ * Общие представления не являются разделами хранения. «Недавно обновлённые» — вся
+ * библиотека в порядке обновления, без порога давности, поэтому собственного счётчика нет.
+ */
 const VIEWS = [
-  { id: "all", label: "Все документы", icon: Library },
-  { id: "pinned", label: "Закреплённые", icon: Pin },
-  { id: "draft", label: "Черновики", icon: PencilLine },
+  { id: "all", label: "Все материалы", icon: Library, hasCount: true },
+  { id: "pinned", label: "Закреплённые", icon: Pin, hasCount: true },
+  { id: "recent", label: "Недавно обновлённые", icon: History, hasCount: false },
+  { id: "draft", label: "Черновики", icon: PencilLine, hasCount: true },
 ];
 /** Служебные представления под разделами. */
 const OTHER_VIEWS = [
-  { id: "none", label: "Без раздела", icon: FolderOpen },
-  { id: "archived", label: "Архив", icon: Archive },
+  { id: "none", label: "Без раздела", icon: FolderOpen, hasCount: true },
+  { id: "unattached", label: "Без прикреплений", icon: Unlink, hasCount: true },
+  { id: "archived", label: "Архив", icon: Archive, hasCount: true },
 ];
 
 /**
  * Организует поиск по разделам и позволяет настроить библиотеку проекта.
+ *
+ * Счётчики приходят с сервера по всей библиотеке, без поиска и фильтров выдачи.
  *
  * Используется для:
  *  - переключения представлений и разделов
@@ -54,6 +64,7 @@ export const LibraryNavigation = ({
   settings,
   selected,
   counts,
+  countScope,
   onSelect,
 }: LibraryNavigationProps) => {
   const projectId = useProjectId();
@@ -72,20 +83,20 @@ export const LibraryNavigation = ({
   const viewItems = VIEWS.map((entry) => ({
     ...entry,
     className: clsx(styles.item, selected === entry.id && styles._active),
-    count: counts[entry.id] ?? 0,
+    count: entry.hasCount ? counts[entry.id] : undefined,
     isCurrent: selected === entry.id,
   }));
   const sectionItems = settings.sections.map((entry) => ({
     ...entry,
     selectedId: `section:${entry.id}`,
-    count: counts[`section:${entry.id}`] ?? 0,
+    count: counts[`section:${entry.id}`],
     className: clsx(styles.item, selected === `section:${entry.id}` && styles._active),
     isCurrent: selected === `section:${entry.id}`,
   }));
   const otherItems = OTHER_VIEWS.map((entry) => ({
     ...entry,
     className: clsx(styles.item, selected === entry.id && styles._active),
-    count: counts[entry.id] ?? 0,
+    count: counts[entry.id],
     isCurrent: selected === entry.id,
   }));
   const editorItems = sections.map((section, index) => ({
@@ -125,16 +136,17 @@ export const LibraryNavigation = ({
   if (defect) throw defect;
   return (
     <nav className={styles.root} aria-label="Разделы библиотеки">
+      <p className={styles.scope}>{countScope}</p>
       {viewItems.map((entry) => (
         <UnstyledButton
           key={entry.id}
           className={entry.className}
-          aria-current={entry.isCurrent}
+          aria-current={entry.isCurrent && "page"}
           onClick={() => onSelect(entry.id)}
         >
           <entry.icon size={16} aria-hidden="true" />
           <span className={styles.label}>{entry.label}</span>
-          <span className={styles.count}>{entry.count}</span>
+          {isDefined(entry.count) && <span className={styles.count}>{entry.count}</span>}
         </UnstyledButton>
       ))}
       <div className={styles.heading}>
@@ -153,12 +165,12 @@ export const LibraryNavigation = ({
         <UnstyledButton
           key={entry.id}
           className={entry.className}
-          aria-current={entry.isCurrent}
+          aria-current={entry.isCurrent && "page"}
           onClick={() => onSelect(entry.selectedId)}
         >
           <Folder size={16} aria-hidden="true" />
           <span className={styles.label}>{entry.name}</span>
-          <span className={styles.count}>{entry.count}</span>
+          {isDefined(entry.count) && <span className={styles.count}>{entry.count}</span>}
         </UnstyledButton>
       ))}
       <UnstyledButton className={styles.add} onClick={handleOpen}>
@@ -170,12 +182,12 @@ export const LibraryNavigation = ({
         <UnstyledButton
           key={entry.id}
           className={entry.className}
-          aria-current={entry.isCurrent}
+          aria-current={entry.isCurrent && "page"}
           onClick={() => onSelect(entry.id)}
         >
           <entry.icon size={16} aria-hidden="true" />
           <span className={styles.label}>{entry.label}</span>
-          <span className={styles.count}>{entry.count}</span>
+          {isDefined(entry.count) && <span className={styles.count}>{entry.count}</span>}
         </UnstyledButton>
       ))}
       <Modal

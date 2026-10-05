@@ -39,7 +39,7 @@ for (const scoped of [false, true])
           );
       }
     }
-    assert.equal(operations.size, 151);
+    assert.equal(operations.size, 159);
     for (const path of [
       "/api/v1/tasks",
       "/api/v1/board",
@@ -302,6 +302,49 @@ for (const scoped of [false, true])
       ifRevision: 4,
       requestId: "entity-link",
     });
+    const material = await request("POST", "/api/v1/entities", undefined, {
+      requestId: "entity-document",
+      data: {
+        kind: "document",
+        name: "Ссылка",
+        summary: "",
+        documentKind: "description",
+        documentFormat: "link",
+        url: "https://example.com/spec",
+        tags: ["OpenAPI"],
+      },
+    });
+    await request(
+      "GET",
+      "/api/v1/entities",
+      "/api/v1/entities?kind=document&tags=openapi&documentFormat=link&unattached=true",
+    );
+    await request(
+      "GET",
+      "/api/v1/entities/document-facets",
+      "/api/v1/entities/document-facets?tags=openapi",
+    );
+    const related = await request("POST", "/api/v1/entities/relate-document", undefined, {
+      ref: material.data.key,
+      ifRevision: material.data.revision,
+      action: "attach",
+      target: entityKey,
+      type: "references",
+      requestId: "entity-relate",
+    });
+    await request("POST", "/api/v1/entities/document-bulk", undefined, {
+      items: [
+        { ref: material.data.key, ifRevision: related.data.revision },
+        { ref: "DOC-404", ifRevision: 1 },
+      ],
+      operation: { type: "addTags", tags: ["bulk"] },
+      requestId: "entity-bulk",
+    });
+    await request(
+      "GET",
+      "/api/v1/entities/documents",
+      `/api/v1/entities/documents?ref=${entityKey}`,
+    );
     await request("GET", "/api/v1/validation");
     await request(
       "GET",
@@ -422,7 +465,7 @@ for (const scoped of [false, true])
     });
     const metricSchema = document.components!.schemas!.ProductOverviewMetricPage as SchemaObject;
     assert.equal(metricSchema.oneOf?.length, 9);
-    assert.equal(visited.size, 55);
+    assert.equal(visited.size, 59);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
     assert(!("$ref" in sse) && sse.content?.["text/event-stream"]);
     const updateSchema = document.components!.schemas!.UpdateBoardTask as SchemaObject;

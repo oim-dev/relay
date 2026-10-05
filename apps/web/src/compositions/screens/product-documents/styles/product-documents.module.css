@@ -1,96 +1,66 @@
-.root {
+.layout {
   display: grid;
-  gap: 2rem;
+  gap: 1.25rem;
   min-width: 0;
-  @media (--lg) {
-    grid-template-columns: 13rem minmax(0, 1fr);
+
+  @media (--xl) {
+    align-items: start;
+
+    &[data-sidebar="expanded"] {
+      grid-template-columns: 15.5rem minmax(0, 1fr);
+    }
+
+    /* Свёрнутые разделы оставляют узкую полосу с кнопкой, выдача получает ширину. */
+    &[data-sidebar="collapsed"] {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
   }
 }
+
+/* Разделы остаются под рукой при длинной выдаче; шапка проекта закреплена сверху. */
 .sidebar {
-  display: none;
-  padding-top: 0.25rem;
-  @media (--lg) {
-    display: block;
+  position: sticky;
+  top: 5rem;
+  max-height: calc(100dvh - 6rem);
+  padding: 0.75rem 0.5rem;
+  overflow-y: auto;
+  border-radius: 1.5rem;
+  background: var(--tasks-card);
+  overscroll-behavior: contain;
+
+  &[data-collapsed="true"] {
+    padding: 0.5rem;
   }
 }
+
+/* Кнопка сворачивания стоит в углу панели и остаётся на месте в свёрнутой полосе. */
+.sidebarToggle {
+  display: flex;
+  margin: 0 0.25rem 0.25rem auto;
+
+  [data-collapsed="true"] > & {
+    margin: 0;
+  }
+}
+
+/* Фильтры над выдачей: мягкая панель того же уровня, что и разделы. */
+.filters {
+  padding: 1rem 1.25rem 1.25rem;
+  border-radius: 1.5rem;
+  background: var(--tasks-card);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
 .main {
-  min-width: 0;
-}
-.mobileNavigation {
-  margin-bottom: 1rem;
-  @media (--lg) {
-    display: none;
-  }
-}
-.toolbar {
   display: grid;
-  gap: 0.75rem;
-  @media (--md) {
-    grid-template-columns: minmax(0, 1fr) 12rem;
-  }
-}
-.search {
-  min-width: 0;
-}
-.contextFilter {
-  margin-top: 0.75rem;
-  max-width: 28rem;
-}
-.listHeading {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  margin: 1.75rem 0 1rem;
-}
-.title {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  & span {
-    color: var(--tasks-soft);
-    font-size: 0.75rem;
-    font-weight: 400;
-  }
-}
-.sort {
-  width: 11.5rem;
-}
-.list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
-  overflow: hidden;
-  &:empty {
-    display: none;
-  }
-  & > li + li {
-    border-top: 1px solid var(--tasks-border);
-  }
-}
-.empty {
-  text-align: center;
-  padding: 3rem 1rem 1rem;
-  border: 1px dashed var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  color: var(--tasks-soft);
-}
-.loading {
-  display: grid;
+  align-content: start;
   gap: 1rem;
+  min-width: 0;
 }
-.footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  padding-block: 1rem;
+
+.drawer {
+  background: var(--tasks-card);
 }

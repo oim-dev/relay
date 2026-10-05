@@ -16,13 +16,13 @@ import { tempDirectory } from "./helpers/cli.js";
 
 const cliRoot = fileURLToPath(new URL("../", import.meta.url));
 
-test("documentation: канонический справочник покрывает 129 регистраций, русские аргументы и параметры", async (t) => {
+test("documentation: канонический справочник покрывает 136 регистраций, русские аргументы и параметры", async (t) => {
   const root = await tempDirectory(t);
   const markdown = await readFile(join(cliRoot, "docs/CLI.md"), "utf8");
   const headings = [...markdown.matchAll(/^### (.+)$/gm)].map((match) => match[1]);
   const tree = commandTree(root);
   const leaves = tree.filter(({ command }) => command.commands.length === 0);
-  assert.equal(leaves.length, 129);
+  assert.equal(leaves.length, 136);
   for (const { command, path } of tree) {
     if (path.length) assert.match(command.description(), /[А-Яа-яЁё]/, path.join(" "));
     if (!command.commands.length)

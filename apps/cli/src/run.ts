@@ -61,7 +61,7 @@ export async function runCli(argv: string[], runtime: Runtime): Promise<number> 
   const program = createProgram(runtime);
   try {
     await program.parseAsync(projectArguments(argv, program), { from: "user" });
-    return 0;
+    return runtime.exitCode ?? 0;
   } catch (error) {
     if (error instanceof CommanderError && error.exitCode === 0) return 0;
     const options = program.opts<GlobalOptions>();

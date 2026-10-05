@@ -6,8 +6,10 @@ export type LibraryNavigationProps = {
   settings: LibrarySettings;
   /** Выбранное представление либо section:ID. */
   selected: string;
-  /** Полные счётчики проекта. */
-  counts: Record<string, number>;
+  /** Серверные счётчики представлений и разделов: all, pinned, draft, none, unattached, archived, section:ID. */
+  counts: Partial<Record<string, number>>;
+  /** Пояснение, по какой области посчитаны числа. */
+  countScope: string;
   /** Переход без потери поискового контекста. */
   onSelect: (value: string) => void;
 };

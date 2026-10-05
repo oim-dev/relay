@@ -135,6 +135,12 @@
   /* Совместимое имя прежнего предупреждающего текста. */
   --tasks-warning-ink: var(--tasks-warning);
 
+  /* Подсветка совпадения поиска в тексте: заметна в обеих схемах, текст сохраняет цвет ink. */
+  --tasks-search-mark: light-dark(
+    color-mix(in srgb, var(--tasks-accent) 20%, var(--mantine-color-white)),
+    color-mix(in srgb, var(--tasks-accent) 45%, var(--mantine-color-dark-7))
+  );
+
   /* Фокус и выделение текста. */
   --tasks-focus-ring: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
   --tasks-selection: light-dark(

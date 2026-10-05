@@ -34,7 +34,9 @@ npx @oim-dev/relay-cli config get
 
 - `feature`, `scenario` — требования.
 - `application` — приложения; `implementation` — реализация фичи или сценария в приложении.
-- `document` — знания и решения; `document section` — разделы библиотеки.
+- `document` — знания, решения и внешние ссылки; `document section` — разделы библиотеки,
+  `document facets` — счётчики каталога, `document materials` — материалы сущности,
+  `document bulk` — массовые изменения (exit 1 при частичном отказе).
 - `board`, `task` — доски и работа; `task criterion`, `task comment` — приёмка и обсуждение.
 - `task parent`, `task dependency` — декомпозиция и обязательные зависимости.
 - `plan`, `plan stage`, `plan stage task`, `release` — организация объёма и выпуска.

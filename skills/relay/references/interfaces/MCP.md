@@ -217,6 +217,7 @@ Discovery уточняет эти ожидания в описаниях пол�
 | [Каталог и адреса](#общие-операции-сущностей)     | `entity_types`, `entity_type_get`, `entities_list`, `entity_get`, `entity_resolve`, `entity_keys`, `entity_key_spaces`, `entity_context`, `entity_rename_key`, `entity_task_move`, `entity_task_link`                                                                                                                                            |
 | [Создание сущностей](#общие-операции-сущностей)   | `entity_product_create`, `entity_feature_create`, `entity_scenario_create`, `entity_application_create`, `entity_implementation_create`, `entity_task_create`, `entity_document_create`                                                                                                                                                          |
 | [Изменение сущностей](#общие-операции-сущностей)  | `entity_project_update`, `entity_product_update`, `entity_feature_update`, `entity_scenario_update`, `entity_application_update`, `entity_implementation_update`, `entity_task_update`, `entity_document_update`                                                                                                                                 |
+| [Материалы](#каталог-и-операции-материалов)       | `entity_document_facets`, `entity_documents_list`, `entity_document_bulk`, `entity_document_relate`                                                                                                                                                                                                                                              |
 | [Продукт](#продукт)                               | `product_overview`, `product_entities`, `product_get`, `product_implementation_update`, `product_list`, `product_context`, `product_save`, `product_passport_save`, `product_feature_save`, `product_scenario_save`, `product_application_save`, `product_document_save`, `product_scope_replace`, `product_contract_update`, `product_lint`     |
 | [Доски и задачи](#доски-и-задачи)                 | `boards_list`, `board_tasks_list`, `board_task_get`, `board_task_links`, `board_task_create`, `board_task_update`, `board_task_move`, `board_task_link`                                                                                                                                                                                          |
 | [Критерии и комментарии](#критерии-и-комментарии) | `task_criteria_list`, `task_criterion_get`, `task_criterion_add`, `task_criterion_update`, `task_criterion_complete`, `task_criterion_remove`, `task_comments_list`, `task_comment_get`, `task_comment_publish`                                                                                                                                  |
@@ -265,13 +266,16 @@ Discovery уточняет эти ожидания в описаниях пол�
 | Поле                                                              | Значение                                                                                                                |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `kind`                                                            | Один из 11 видов.                                                                                                       |
-| `q`                                                               | Поиск, до 4096 символов; для библиотеки также поиск содержания.                                                         |
+| `q`                                                               | Поиск, до 4096 символов; для библиотеки также по содержанию, адресу ссылки и тегам.                                     |
 | `refs`                                                            | До 100 строк адресов для краткого адресного чтения.                                                                     |
 | `board`, `application`, `feature`, `scenario`, `target`, `parent` | Ключи или ID соответствующих областей. `target` — явная цель; `parent` — родитель задачи. Применимость зависит от вида. |
 | `status`                                                          | Предметное состояние, строка до 128 символов. Для документа: draft/active/archived.                                     |
 | `active`                                                          | Строка `"true"` или `"false"`, активность реализации.                                                                   |
 | `section`                                                         | ID раздела до 64 символов; `none` — без раздела.                                                                        |
 | `documentKind`                                                    | Один из семи типов документа, перечисленных ниже.                                                                       |
+| `documentFormat`                                                  | `markdown` или `link`; записи без формата считаются `markdown`.                                                         |
+| `tags`                                                            | До 20 тегов; материал должен иметь **все** указанные теги, без учёта регистра.                                          |
+| `unattached`                                                      | Строка `"true"` — материалы без relations и совместимых links; `"false"` — только прикреплённые.                        |
 | `pinned`, `archived`                                              | Строки `"true"`/`"false"`, не boolean; только закреплённые/незакреплённые, только архив/исключить архив.                |
 | `sort`                                                            | `key` (по умолчанию), `title`, `updated`.                                                                               |
 
@@ -292,11 +296,11 @@ Discovery уточняет эти ожидания в описаниях пол�
 | `entity_application_create`    | `name`, `summary`, `description`, `slug`, `type`, `prefix?`.                                                                                                 |
 | `entity_implementation_create` | `application` (ключ/ID приложения), `target` (ключ/ID фичи или сценария), `title`, `description`, `status?=none`.                                            |
 | `entity_task_create`           | `board` (ключ/ID), `title?=""`, `description?=""`, `targets?=[]`, `dependencies?=[]`, `related?=[]`, `parent?=null`, `column?=inbox`, `acceptanceCriteria?`. |
-| `entity_document_create`       | `name`, `summary`, `body`, `documentKind`, `targets?=[]`, `sectionId?`, `documentStatus?`, `pinned?`, `relations?`.                                          |
+| `entity_document_create`       | `name`, `summary`, `documentKind`, `body?=""`, `documentFormat?`, `url?`, `tags?`, `targets?=[]`, `sectionId?`, `documentStatus?`, `pinned?`, `relations?`.  |
 
 Общие поля продукта и приложения: name/title до 1024 байт UTF-8, непустая строка;
-summary до 4096 байт (может быть пустым); description/body — непустой Markdown
-до 256 КиБ. `type`: `frontend`, `backend`, `internal`. `slug` приложения —
+summary до 4096 байт (может быть пустым); description — непустой Markdown
+до 256 КиБ; body документа — до 256 КиБ, правила формата приведены в разделе документов. `type`: `frontend`, `backend`, `internal`. `slug` приложения —
 неизменяемый адрес до 64 символов, `prefix` — префикс задач; при пропуске выводится
 из slug. Точный допустимый формат приведён в разделе продукта.
 `status`: `none`, `partial`, `done` — совместимые метаданные, не ручная установка
@@ -312,16 +316,16 @@ summary до 4096 байт (может быть пустым); description/body 
 Каждый инструмент принимает R. Перечисленные содержательные поля **все необязательны**;
 пропуск сохраняет значение, переданный массив заменяет соответствующий набор.
 
-| Инструмент                     | Изменяемые поля                                                                                                       |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `entity_project_update`        | `name` (1–120 символов), `documentSections` (описаны ниже). Не slug.                                                  |
-| `entity_product_update`        | `name`, `summary`, `description`.                                                                                     |
-| `entity_feature_update`        | `name`, `summary`, `description`.                                                                                     |
-| `entity_scenario_update`       | `name`, `description`. Нельзя поменять featureId.                                                                     |
-| `entity_application_update`    | `name`, `summary`, `description`, `type`. Нельзя поменять slug/prefix.                                                |
-| `entity_implementation_update` | `title`, `description`, `status`. Нельзя поменять application/target.                                                 |
-| `entity_task_update`           | `title`, `description`, `targets`; `[]` снимает цели. Критерии, колонка и зависимости меняются отдельными действиями. |
-| `entity_document_update`       | `name`, `summary`, `body`, `documentKind`, `targets`, `sectionId`, `documentStatus`, `pinned`, `relations`.           |
+| Инструмент                     | Изменяемые поля                                                                                                                              |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entity_project_update`        | `name` (1–120 символов), `documentSections` (описаны ниже). Не slug.                                                                         |
+| `entity_product_update`        | `name`, `summary`, `description`.                                                                                                            |
+| `entity_feature_update`        | `name`, `summary`, `description`.                                                                                                            |
+| `entity_scenario_update`       | `name`, `description`. Нельзя поменять featureId.                                                                                            |
+| `entity_application_update`    | `name`, `summary`, `description`, `type`. Нельзя поменять slug/prefix.                                                                       |
+| `entity_implementation_update` | `title`, `description`, `status`. Нельзя поменять application/target.                                                                        |
+| `entity_task_update`           | `title`, `description`, `targets`; `[]` снимает цели. Критерии, колонка и зависимости меняются отдельными действиями.                        |
+| `entity_document_update`       | `name`, `summary`, `body`, `documentKind`, `documentFormat`, `url`, `tags`, `targets`, `sectionId`, `documentStatus`, `pinned`, `relations`. |
 
 | Другой инструмент записи | Аргументы сверх общих                    | Действие                                                                          |
 | ------------------------ | ---------------------------------------- | --------------------------------------------------------------------------------- |
@@ -337,6 +341,9 @@ summary до 4096 байт (может быть пустым); description/body 
 | Поле                      | Формат и смысл                                                                                                                                                                     |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `documentKind`            | `specification` — ТЗ; `description` — описание; `rules` — правила; `instruction` — инструкция; `proposal` — предложение; `decision` — принятое решение; `research` — исследование. |
+| `documentFormat?`         | `markdown` (по умолчанию) — непустой `body`, `url` запрещён; `link` — обязательный `url`, `body` — необязательное пояснение. Правила проверяет Core.                               |
+| `url?`                    | Абсолютный адрес `http`/`https` до 2048 символов; только для `link`. Relay не проверяет доступность и не копирует содержание.                                                      |
+| `tags?`                   | До 20 строк по 50 символов. Core обрезает края, отбрасывает пустые и повторы без учёта регистра (первое написание). В update массив заменяет набор, `[]` очищает.                  |
 | `documentStatus?`         | `draft`, `active`, `archived`; независим от типа и не подтверждает истинность текста.                                                                                              |
 | `sectionId?`              | ID раздела либо null (без раздела).                                                                                                                                                |
 | `pinned?`                 | Boolean, закрепление для всех участников.                                                                                                                                          |
@@ -349,7 +356,10 @@ summary до 4096 байт (может быть пустым); description/body 
 | `links`                   | Только продуктовый ввод: обязательный массив до 1000 типизированных продуктовых областей, формат ниже. Для отсутствия областей передайте `[]`.                                     |
 
 При отсутствии метаданных чтение трактует состояние как active, закрепление как false,
-раздел как null. Для создания с другой семантикой задайте их явно; при частичном
+раздел как null, формат как markdown, теги как пустой список. В схеме `body` создания
+необязателен (по умолчанию `""`), но для markdown Core требует непустой текст.
+Update с `documentFormat:"markdown"` без `url` снимает прежний адрес; переход
+к `link` требует `url`. Для создания с другой семантикой задайте их явно; при частичном
 update пропущенные метаданные сохраняются.
 
 `links[]` допускает `{kind:"product"}`, `{kind:"feature",id}`,
@@ -390,9 +400,68 @@ entity_document_update({
 })
 ```
 
+Материал-ссылка с тегами создаётся без Markdown-содержания:
+
+```text
+entity_document_create({
+  project: "alpha", actor: "agent", requestId: "agent-docs-003",
+  name: "Спецификация платёжного API", summary: "Читать перед изменением оплаты",
+  documentKind: "specification", documentFormat: "link",
+  url: "https://example.com/payments/spec", tags: ["api", "оплата"]
+})
+```
+
 Примеры не предназначены для безусловного повторения. ID, ключи и ревизии заменяйте
 результатами чтения своей базы. Прикрепления требуют существующих допустимых целей;
-ссылка в Markdown не создаёт отношение.
+ссылка в Markdown и адрес материала-ссылки не создают отношение.
+
+### Каталог и операции материалов
+
+Операции требуют Relay Server с возможностью `relay-document-materials-v1`. Прежний
+Server даёт `SERVER_INCOMPATIBLE` до отправки запроса: обновите и перезапустите его.
+Правила каталога, счётчиков и связей — в [документах](../domain/DOCUMENTS.md).
+
+| Инструмент               | Аргументы сверх общих                                                                                                      | Результат / действие                                                                                                                                                                                                                               |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entity_document_facets` | `q?`, `target?`, `section?`, `tags?`, `documentFormat?`, `documentKind?`, `status?`, `pinned?`, `archived?`, `unattached?` | `{total, version, sections, tags, formats, kinds, statuses, views}` по полным данным проекта. Каждая ось — без собственного фильтра; теги — с учётом выбранных; `views` — только по q/target/tags/формату/типу. `version` совпадает со списком.    |
+| `entity_documents_list`  | `ref` (ключ, ID или `kind:ID` любого из 11 видов), `archived?`, `offset?=0`, `limit?=40`, `version?`                       | Материалы, прикреплённые **непосредственно** к сущности: карточка, отметка архива и все связи `{type, description, source}`, где `source` — `relations` или совместимые `links`. Сначала закреплённые, затем по названию; `nextOffset`, `version`. |
+| `entity_document_bulk`   | W, `items` (1–100 `{ref, ifRevision}` без повторов), `operation`                                                           | Одно действие для набора; каждый материал записывается отдельно под своей ревизией, набор не атомарен, связи не меняются. Вызов успешен и при частичном отказе: см. квитанцию ниже.                                                                |
+| `entity_document_relate` | W, `ref`, `ifRevision`, `action`, `target`, `type`, `description?`, `nextType?`                                            | Изменить одну связь материала; ответ — `EntitySaved` с `action:"link"`. Прочие relations и links сохраняются.                                                                                                                                      |
+
+`operation` массового действия — объект с полем `type`:
+
+| `type`       | Поле                                             | Действие                                            |
+| ------------ | ------------------------------------------------ | --------------------------------------------------- |
+| `move`       | `sectionId` — ID раздела или null                | Переместить в раздел или «без раздела».             |
+| `addTags`    | `tags` — 1–20 тегов                              | Добавить теги к существующим.                       |
+| `removeTags` | `tags` — 1–20 тегов                              | Снять теги без учёта регистра.                      |
+| `setStatus`  | `documentStatus` — `draft`, `active`, `archived` | Изменить состояние, например архивировать.          |
+| `pin`        | `pinned` — boolean                               | Закрепить (`true`) или снять закрепление (`false`). |
+
+Квитанция `{requestId, items, applied, failed}` перечисляет элементы в порядке запроса:
+`ref`, `status`, при наличии `target`, `key`, `revision`, `error{code,message}`. Статусы:
+`applied` — сохранено с новой ревизией; `unchanged` — уже в нужном состоянии;
+`conflict` — ревизия устарела, `revision` содержит актуальную; `not_found`; `invalid` —
+нарушено правило данных (например, предел 20 тегов); `error` — прочий отказ.
+Текст ответа повторяет каждый элемент. MCP не повторяет элементы автоматически:
+перечитайте материалы с отказом, для `conflict` сверьте содержание и решите, нужно ли
+новое действие только для них. Ошибка формы всего запроса (`VALIDATION_ERROR`) не
+выполняет ни одного элемента.
+
+`entity_document_relate` выполняет одно предметное действие под ревизией материала:
+
+- `attach` — новая связь цели с `type` и `description` (по умолчанию пусто);
+  повтор пары цель + тип даёт `ALREADY_EXISTS`;
+- `update` — у существующей связи `type` меняет тип на `nextType` и/или пояснение
+  на `description`; не переданное сохраняется; занятый тип даёт `ALREADY_EXISTS`;
+  совместимая область из links при этом становится адресной связью;
+- `detach` — снять связь `type`; материал и цель сохраняются, область links тоже можно снять.
+
+Отсутствующая связь даёт `RELATION_NOT_FOUND`, неизвестная цель — ошибку 404-класса,
+устаревшая ревизия — `REVISION_CONFLICT`. После конфликта перечитайте материал через
+`entity_get`, сверьте связи и выполните действие с новой ревизией, если оно ещё нужно.
+В отличие от `relations` в update, здесь `target` принимает ключ, ID или `kind:ID`,
+а не объект `{kind,id}`.
 
 ## Продукт
 

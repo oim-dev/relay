@@ -80,7 +80,7 @@ export const ProductRequirement = (props: ProductRequirementProps) => {
         </section>
         {children}
         <ProductTasks
-          key={targetId}
+          key={`tasks:${targetId}`}
           id="requirement-tasks"
           tabIndex={-1}
           targetId={targetId}

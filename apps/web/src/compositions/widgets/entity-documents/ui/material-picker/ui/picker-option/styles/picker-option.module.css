@@ -1,0 +1,67 @@
+.root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+  padding: 0.625rem 0.5rem 0.625rem 0.75rem;
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: 0.875rem;
+  background: var(--tasks-tile);
+
+  &[data-selected="true"] {
+    border-color: var(--tasks-selected-border);
+    background: var(--tasks-selected);
+  }
+
+  &[data-locked="true"] {
+    background: var(--tasks-surface-quiet);
+  }
+}
+
+.checkbox,
+.checkboxBody,
+.checkboxLabel {
+  min-width: 0;
+}
+
+.title {
+  color: var(--tasks-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.details {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 0.125rem;
+  min-width: 0;
+  padding-left: 1.75rem;
+}
+
+.meta {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.attached {
+  margin: 0;
+  color: var(--tasks-accent-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+}

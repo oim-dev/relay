@@ -152,8 +152,9 @@ npx @oim-dev/relay-server --open
 `createHttpBackend` читает `/context`, проверяет capability `relay-projects-v1` и
 закрепляет клиент за возвращённым `projectId`. Возможности отдельных операций
 проверяются до их вызова: `relay-full-context-v1` — полный контекст графа,
-`relay-overview-metrics-v1` — детализация метрик обзора `product.overviewMetric`;
-без них вызов даёт `SERVER_INCOMPATIBLE`, а не 404 маршрута. Переназначение ключа регистрации не
+`relay-overview-metrics-v1` — детализация метрик обзора `product.overviewMetric`,
+`relay-document-materials-v1` — `entities.documentFacets`, `documentBulk`,
+`relateDocument` и `entityDocuments`; без них вызов даёт `SERVER_INCOMPATIBLE`, а не 404 маршрута. Переназначение ключа регистрации не
 должно переносить существующий клиент на другую базу; исчезновение выбранной регистрации
 даёт ошибку. Runtime проверяет конверт и предметные ответы схемами, а не доверяет только
 типам SDK.

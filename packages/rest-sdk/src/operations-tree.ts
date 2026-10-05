@@ -4,6 +4,8 @@
  * https://github.com/gromlab-ru/rest-api-codegen
  */
 
+import { bulkChangeDocumentsForProject } from "./operations/bulk-change-documents-for-project.js";
+import { bulkChangeDocuments } from "./operations/bulk-change-documents.js";
 import { changePlanStageForProject } from "./operations/change-plan-stage-for-project.js";
 import { changePlanStage } from "./operations/change-plan-stage.js";
 import { changePlanTasksForProject } from "./operations/change-plan-tasks-for-project.js";
@@ -36,6 +38,10 @@ import { getBoardsForProject } from "./operations/get-boards-for-project.js";
 import { getBoards } from "./operations/get-boards.js";
 import { getContextForProject } from "./operations/get-context-for-project.js";
 import { getContext } from "./operations/get-context.js";
+import { getDocumentFacetsForProject } from "./operations/get-document-facets-for-project.js";
+import { getDocumentFacets } from "./operations/get-document-facets.js";
+import { getEntityDocumentsForProject } from "./operations/get-entity-documents-for-project.js";
+import { getEntityDocuments } from "./operations/get-entity-documents.js";
 import { getEntityForProject } from "./operations/get-entity-for-project.js";
 import { getEntityKeySpacesForProject } from "./operations/get-entity-key-spaces-for-project.js";
 import { getEntityKeySpaces } from "./operations/get-entity-key-spaces.js";
@@ -128,6 +134,8 @@ import { previewRelease } from "./operations/preview-release.js";
 import { publishTaskCommentForProject } from "./operations/publish-task-comment-for-project.js";
 import { publishTaskComment } from "./operations/publish-task-comment.js";
 import { registerProject } from "./operations/register-project.js";
+import { relateDocumentForProject } from "./operations/relate-document-for-project.js";
+import { relateDocument } from "./operations/relate-document.js";
 import { renameEntityKeyForProject } from "./operations/rename-entity-key-for-project.js";
 import { renameEntityKey } from "./operations/rename-entity-key.js";
 import { resolveEntityForProject } from "./operations/resolve-entity-for-project.js";
@@ -310,6 +318,10 @@ export const operationsTree = {
     describeEntityType: describeEntityType,
     listEntities: listEntities,
     createEntity: createEntity,
+    getDocumentFacets: getDocumentFacets,
+    getEntityDocuments: getEntityDocuments,
+    bulkChangeDocuments: bulkChangeDocuments,
+    relateDocument: relateDocument,
     getEntity: getEntity,
     resolveEntity: resolveEntity,
     getEntityKeys: getEntityKeys,
@@ -324,6 +336,10 @@ export const operationsTree = {
     describeEntityTypeForProject: describeEntityTypeForProject,
     listEntitiesForProject: listEntitiesForProject,
     createEntityForProject: createEntityForProject,
+    getDocumentFacetsForProject: getDocumentFacetsForProject,
+    getEntityDocumentsForProject: getEntityDocumentsForProject,
+    bulkChangeDocumentsForProject: bulkChangeDocumentsForProject,
+    relateDocumentForProject: relateDocumentForProject,
     getEntityForProject: getEntityForProject,
     resolveEntityForProject: resolveEntityForProject,
     getEntityKeysForProject: getEntityKeysForProject,

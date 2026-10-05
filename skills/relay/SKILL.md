@@ -269,7 +269,7 @@ npx @oim-dev/relay-cli task create --help
 | [Индекс предметной модели](references/domain/README.md)         | Навигация по общим правилам сущностей и операций.                            |
 | [Проекты](references/domain/PROJECTS.md)                        | Выбор проекта, local/workspace и изоляция данных.                            |
 | [Продукт](references/domain/PRODUCT.md)                         | Паспорт, фичи, сценарии, приложения и участие FI/SI.                         |
-| [Документы](references/domain/DOCUMENTS.md)                     | Типы, разделы, состояния документов и прикрепления.                          |
+| [Документы](references/domain/DOCUMENTS.md)                     | Форматы (Markdown, ссылка), типы, теги, разделы, состояния и прикрепления.   |
 | [Задачи](references/domain/TASKS.md)                            | Доски, колонки, критерии, подзадачи, зависимости и комментарии.              |
 | [Планы](references/domain/PLANNING.md)                          | Цель, этапы, включение и перенос задач, завершение плана.                    |
 | [Релизы](references/domain/RELEASES.md)                         | Состав выпуска, переходы и действующие ограничения.                          |
