@@ -101,11 +101,7 @@ OIDC. Ручная публикация с локальной авторизац
 ```bash
 pnpm run release:check v<version>
 pnpm run release:notes v<version>
-pnpm run agents:check
-pnpm run skills:check
-pnpm run build
 pnpm run check
-pnpm run package:check
 git status --short
 ```
 
@@ -115,10 +111,24 @@ git status --short
 GitHub Release. Обе команды работают и напрямую через `node scripts/release/relay.mjs`
 с действиями `check`/`notes`, без установки зависимостей.
 
-Проверки сохранённых agents/skills выполняются до сборки, чтобы не скрыть drift.
+Полный `pnpm run check` (равнозначно `npm run check`, без аргументов) обязателен
+перед push. Он последовательно выполняет все содержательные стадии PR, включая
+принудительную сборку, Web E2E, упаковку готовых `dist` и независимые npm-установки.
+Повторять `build` и `package:check` в этой последовательности не нужно.
+Окружение и порядок стадий описаны в [полной локальной проверке](../README.md#сборка-и-проверки):
+Node.js 24, pnpm 11.18.0, зависимости, Chrome for Testing с системными библиотеками,
+npm 11.16.0 и доступ к registry для smoke. Браузер заранее подготовьте командой
+`pnpm exec agent-browser install --with-deps`; автоматически она не выполняется.
+
+Проверки сохранённых agents/skills выполняются в preflight до сборки, чтобы не скрыть drift;
+автоматической перегенерации для его исправления и автоустановки зависимостей нет.
 Их содержание и восстановление описаны у [dev-agents](../../packages/dev-agents/README.md)
-и [relay-skill](../../packages/relay-skill/README.md). `check` включает release-тесты,
-форматирование, проверки генераторов и документации, lint, типизацию и тесты workspaces.
+и [relay-skill](../../packages/relay-skill/README.md). При первой ошибке `check`
+останавливается с ненулевым кодом и сообщает прогресс, время, итог и непройденные стадии
+по-русски. Он проверяет текущую рабочую копию, не создаёт чистый checkout (`check:clean`
+не реализован), не публикует пакеты и не создаёт Actions artifacts, `gate` или
+свидетельство `verified-pr`. Для самостоятельной релизной приёмки чистое окружение
+готовится отдельно, как описано выше.
 
 [Упаковщик](../package.mjs) читает скомпилированный JS из `dist`, сохраняя результаты
 компиляции, в том числе серверные metadata декораторов. Используемые приватные runtime

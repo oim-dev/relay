@@ -25,9 +25,13 @@ pnpm --filter @relay/relay-skill run test
 а если существует — также проверяется.
 
 Turbo-задачи `build`, `check`, `test` имеют `dependsOn: []` и `cache: false`;
-`lint`/`typecheck` не запускают `build`. Корневой `check` включает `skills:check` и
-`agents:check`, а тесты обоих tooling-пакетов выполняет один раз через Turbo.
-CI проверяет отслеживаемые выходы до сборки, чтобы она не скрывала расхождения.
+`lint`/`typecheck` не запускают `build`. Корневой
+[`check`](../../scripts/README.md#сборка-и-проверки) последовательно выполняет стадии
+из `requiredJobs` в `scripts/ci.mjs`: `skills:check` и `agents:check` входят в preflight
+до принудительной сборки, чтобы она не скрывала расхождения. Автоматической
+перегенерации для исправления drift нет. Стадия tooling напрямую вызывает
+`check:test`, `release:test`, `agents:test` и `skills:test`, не через Turbo.
+Тот же состав стадий используется в CI; полный корневой `check` обязателен перед push.
 CLI скилла не принимает агентские флаги `--root` и `--format`; библиотечный
 `processBundle({ root, check })` позволяет работать с независимыми fixtures, включая пути с пробелами.
 

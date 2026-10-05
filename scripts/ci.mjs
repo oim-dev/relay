@@ -64,7 +64,9 @@ export function commandsFor(phase) {
       ...typecheckOwners.map((name) => workspaceScript(name, "typecheck")),
     ];
   if (phase === "tooling")
-    return ["release:test", "agents:test", "skills:test"].map((name) => rootScript(name));
+    return ["check:test", "release:test", "agents:test", "skills:test"].map((name) =>
+      rootScript(name),
+    );
   // Браузерный suite Web не входит в `test`: ему нужен Chrome, установленный шагом workflow.
   if (phase === "web-e2e") return [workspaceScript("@relay/web", "test:e2e")];
   if (Object.hasOwn(testOwners, phase))
@@ -78,14 +80,30 @@ export function commandsFor(phase) {
   throw new Error(`Неизвестная фаза CI: ${phase}`);
 }
 
+class PhaseExitError extends Error {
+  constructor(phase, command, status) {
+    super(`Фаза ${phase} остановлена: ${command} (код ${status})`);
+    this.exitCode = status;
+  }
+}
+
 export function runPhase(phase, { root, execute = spawnSync } = {}) {
   for (const [command, ...args] of commandsFor(phase)) {
     console.log(`CI: ${[command, ...args].join(" ")}`);
     const result = execute(command, args, { cwd: root, stdio: "inherit" });
-    assert(
-      !result.error && result.status === 0,
-      `Фаза ${phase} остановлена: ${command} ${args.join(" ")}`,
-    );
+    if (result.error) throw result.error;
+    if (result.signal) {
+      console.error(`Фаза ${phase} прервана сигналом ${result.signal}`);
+      process.kill(process.pid, result.signal);
+      throw new Error(`Фаза ${phase} прервана сигналом ${result.signal}`);
+    }
+    if (result.status !== 0) {
+      assert(
+        Number.isInteger(result.status) && result.status > 0,
+        "Команда не вернула код завершения",
+      );
+      throw new PhaseExitError(phase, [command, ...args].join(" "), result.status);
+    }
   }
 }
 
@@ -261,6 +279,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     assert(!directory);
     if (action === "gate") checkGate(JSON.parse(process.env.CI_NEEDS));
     else if (action === "artifact-id") assert.match(process.env.ARTIFACT_ID ?? "", /^[1-9]\d*$/);
-    else runPhase(action, { root });
+    else {
+      try {
+        runPhase(action, { root });
+      } catch (error) {
+        if (!(error instanceof PhaseExitError)) throw error;
+        console.error(error.message);
+        process.exitCode = error.exitCode;
+      }
+    }
   }
 }

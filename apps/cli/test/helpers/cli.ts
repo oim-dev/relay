@@ -39,10 +39,11 @@ export interface RunOptions {
   timeoutMs?: number;
 }
 
-/** Не наследуем подключение к рабочей базе. Явные env теста имеют приоритет. */
+/** Не наследуем подключение к рабочей базе и настройки цвета. Явные env теста имеют приоритет. */
 export function cliEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const env = { ...process.env };
-  for (const key of ["RELAY_CONFIG", "RELAY_SERVER_URL", "INIT_CWD"]) delete env[key];
+  for (const key of ["RELAY_CONFIG", "RELAY_SERVER_URL", "INIT_CWD", "FORCE_COLOR", "NO_COLOR"])
+    delete env[key];
   return {
     ...env,
     ...(process.env.RELAY_CLI_TEST_SOURCE === "1"

@@ -413,6 +413,44 @@ test("foundation: CLI страницы обходятся без потерь; c
   assert.match(conflict.body.error.message, /без --cursor/);
 });
 
+test("foundation: cliEnv изолирует унаследованный цвет и сохраняет явные env, включая undefined", () => {
+  const keys = ["FORCE_COLOR", "NO_COLOR"] as const;
+  const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (const inherited of [
+      { FORCE_COLOR: "3" },
+      { NO_COLOR: "1" },
+      { FORCE_COLOR: "3", NO_COLOR: "1" },
+    ]) {
+      for (const key of keys) {
+        delete process.env[key];
+        if (inherited[key] !== undefined) process.env[key] = inherited[key];
+      }
+      for (const overrides of [
+        {},
+        { FORCE_COLOR: "3" },
+        { NO_COLOR: "1" },
+        { FORCE_COLOR: "0", NO_COLOR: "" },
+        { FORCE_COLOR: "3", NO_COLOR: undefined },
+        { FORCE_COLOR: undefined, NO_COLOR: "1" },
+        { FORCE_COLOR: undefined, NO_COLOR: undefined },
+      ]) {
+        const env = cliEnv(overrides);
+        for (const key of keys) {
+          assert.equal(env[key], overrides[key]);
+          assert.equal(Object.hasOwn(env, key), Object.hasOwn(overrides, key));
+          assert.equal(process.env[key], inherited[key]);
+        }
+      }
+    }
+  } finally {
+    for (const key of keys) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  }
+});
+
 test("foundation: config не переключает text; JSON сохраняет Unicode/Markdown без raw ANSI", async (t) => {
   const app = await fixture(t);
   const configPath = join(app.root, ".relay/config.json");

@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
 import { once } from "node:events";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer as createTcpServer } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { fixture } from "../../cli/test/helpers/cli.js";
 import { checkServerSurface, startServerProcess } from "../../cli/test/helpers/server-process.mjs";
 import type { ApiSuccess, ContextResponse } from "@relay/contracts";
@@ -154,3 +157,86 @@ test("API-only runtime retains JSON 404 responses without web assets", async (t)
   t.after(() => server.close());
   await checkServerSurface(server.url, { web: false });
 });
+
+test(
+  "--open и оба формата вывода используют фактический порт после конфликта",
+  {
+    skip: process.platform !== "linux" && process.platform !== "darwin",
+  },
+  async (t) => {
+    const app = await fixture(t);
+    const occupied = createTcpServer();
+    t.after(() => new Promise<void>((resolve) => occupied.close(() => resolve())));
+    occupied.listen(0, "127.0.0.1");
+    await once(occupied, "listening");
+    const address = occupied.address();
+    assert(address && typeof address === "object");
+    const bin = join(app.root, "bin");
+    await mkdir(bin);
+    await writeFile(
+      join(bin, process.platform === "darwin" ? "open" : "xdg-open"),
+      '#!/bin/sh\nprintf "%s" "$1" > "$RELAY_TEST_OPEN_URL"\n',
+      { mode: 0o755 },
+    );
+    for (const format of ["text", "json"]) {
+      const opened = join(app.root, `opened-${format}`);
+      const child: ChildProcessByStdio<null, Readable, Readable> = spawn(
+        process.execPath,
+        [binary, "--port", String(address.port), "--open", "--format", format],
+        {
+          cwd: app.root,
+          env: {
+            ...process.env,
+            RELAY_CONFIG: join(app.root, ".relay/config.json"),
+            PATH: `${bin}:${process.env.PATH ?? ""}`,
+            RELAY_TEST_OPEN_URL: opened,
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => {
+        stdout += String(chunk);
+      });
+      child.stderr.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+      const exited = once(child, "exit");
+      try {
+        let url = "";
+        const deadline = Date.now() + 15_000;
+        while (!url && Date.now() < deadline) {
+          assert.equal(child.exitCode, null, stderr);
+          try {
+            url = await readFile(opened, "utf8");
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+          if (!url || !stdout.includes("\n")) {
+            url = "";
+            await delay(25);
+          }
+        }
+        assert(url, `Браузер не получил URL: ${stdout}\n${stderr}`);
+        assert(Number(new URL(url).port) > address.port);
+        if (format === "json") {
+          assert.deepEqual(JSON.parse(stdout), { ok: true, data: { url, pid: child.pid } });
+        } else {
+          assert.equal(stdout, `Relay: ${url}\nSwagger: ${url}/api/docs\n`);
+        }
+        assert.equal((await fetch(`${url}/api/v1/health`)).status, 200);
+      } finally {
+        child.kill("SIGTERM");
+        const timeout = setTimeout(() => child.kill("SIGKILL"), 5_000);
+        try {
+          const [code, signal] = await exited;
+          assert.equal(code, 0, stderr);
+          assert.equal(signal, null);
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+    }
+  },
+);

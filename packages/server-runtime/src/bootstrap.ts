@@ -85,7 +85,14 @@ export async function createServer(options: ServerOptions): Promise<NestFastifyA
 export async function startServer(options: ServerOptions) {
   const { app, port } = await initializeServer(options);
   try {
-    await app.listen(port, "127.0.0.1");
+    for (let candidate = port; ; candidate += 1) {
+      try {
+        await app.listen(candidate, "127.0.0.1");
+        break;
+      } catch (error) {
+        if (!isErrno(error, "EADDRINUSE") || candidate === 0 || candidate >= 65535) throw error;
+      }
+    }
     return { app, url: await app.getUrl(), close: () => app.close() };
   } catch (error) {
     await app.close();

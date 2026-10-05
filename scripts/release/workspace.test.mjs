@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
+import { subprocessEnv } from "./test-env.mjs";
 import { publishPackages } from "./publish.mjs";
 import { readManifests, setWorkspaceVersion, workspaceRelease } from "./workspace.mjs";
 
@@ -145,7 +146,7 @@ test("notes описывает согласованный комплект, не
   const { stdout, stderr } = await promisify(execFile)(
     process.execPath,
     [join(root, "scripts/release/relay.mjs"), "notes", release.tag],
-    { cwd: root, encoding: "utf8", timeout: 10000 },
+    { cwd: root, encoding: "utf8", timeout: 10000, env: subprocessEnv() },
   );
   assert.equal(stderr, "");
   assert.deepEqual(stdout.split("\n\n").slice(0, 2), [
