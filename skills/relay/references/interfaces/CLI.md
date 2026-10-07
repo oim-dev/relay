@@ -1600,18 +1600,69 @@ npx @oim-dev/relay-cli doctor graph apply \
 не конверт запроса. Add: from/to/type/description; update: id/description;
 remove: id. Пакет атомарный. Невалидный JSON — INVALID_JSON; json-file не зарегистрирован.
 
+### storage status
+
+```bash
+npx @oim-dev/relay-cli --local --config /project/.relay/config.json storage status
+```
+
+Диагностика без изменения базы: минимальное чтение конфигурации и manifest, без текущей
+схемы проекта, создания базы, recovery, reindex, миграции и очистки (временный замок
+удаляется). Работает с конфигурацией любого имени и с проектом реестра:
+`--local --config relay.workspace.json --project <имя>`. Показывает проект, реальный корень,
+раскладку, фактические и целевые версии (физический формат, профиль, версии по владельцам
+с количествами действующих записей и надгробий), объём, незавершённую транзакцию,
+блокеры и предупреждения с действием. JSON `data` — `storageStatusSchema`
+(`@relay/contracts/storage-maintenance`).
+
+| status               | exit | Код ошибки                                                    |
+| -------------------- | ---- | ------------------------------------------------------------- |
+| `current`            | 0    | —                                                             |
+| `migration-required` | 0    | —                                                             |
+| `recovery-required`  | 4    | STORAGE_RECOVERY_REQUIRED                                     |
+| `unsupported`        | 4    | причина первого блокера, например STORAGE_VERSION_UNSUPPORTED |
+| `invalid`            | 4/5  | причина первого блокера, например STORAGE_DATA_CORRUPT (5)    |
+
+При ненулевом статусе `error.details` содержит тот же полный отчёт по схеме статуса.
+
+Подсказки Core (`next` блокеров и ошибок, включая отказ обычной local-команды на базе,
+требующей миграции) содержат переносимый вызов
+`npx @oim-dev/relay-cli --local --config <config> storage …`. JSON возвращает их без
+изменений. Text в local-режиме подставляет фактический путь выбранной конфигурации и
+выводит каждую встроенную команду отдельной строкой; в HTTP-режиме база находится у Server,
+поэтому плейсхолдер `<config>` сохраняется.
+
 ### storage migrate
 
 ```bash
-npx @oim-dev/relay-cli storage migrate \
-  --local
+npx @oim-dev/relay-cli --local --config /project/.relay/config.json storage migrate --dry-run
+npx @oim-dev/relay-cli --local --config /project/.relay/config.json storage migrate \
+  --backup-dir /backups/relay-project --if-plan PLAN_FINGERPRINT
 ```
 
-Локальное обслуживание без
-собственных флагов и автора. Поддерживаемые legacy и физические версии 1/2/3
-переносятся в формат 4; текущая база сообщает, что перенос не нужен. Сохраняются
-текущие тексты, ID, ключи, ревизии, комментарии и алиасы, не история запросов.
-Старые предметные версии планов/релизов не поддерживаются; автосброса нет.
+Перед запуском остановите процессы Relay. `--dry-run` строит и проверяет точный план
+изолированно: база не меняется, backup не создаётся, ответ содержит `planFingerprint`
+(`storageMigrationPlanSchema`); неприменимый план — ненулевой exit с причиной.
+Без `--dry-run` команда строит свежий план под замком; `--if-plan <fingerprint>`
+останавливает исполнение до изменений при любом расхождении. `--backup-dir <dir>`
+обязателен для изменяющего переноса (каталог вне базы; копия создаётся в отдельном
+подкаталоге, путь — `backup.path`); при no-op копия не создаётся.
+`--dry-run` и `--if-plan` несовместимы (INVALID_ARGUMENT). Второго подтверждения нет.
+Относительный `--backup-dir` разрешается от текущего каталога. Если предыдущий перенос
+прервался, повторный запуск продолжает его из незавершённой транзакции с исходной копией
+без `--backup-dir` (`resumed: true`). Ошибки возвращают машинный код и exit по
+таблице кодов обслуживания, например STORAGE_BACKUP_REQUIRED (2), STORAGE_PLAN_STALE (4),
+STORAGE_BACKUP_MISSING (5); порядок действий — в
+[восстановлении](../guides/RECOVERY.md#явная-миграция-и-резервная-копия).
+Результат — `storageMigrationResultSchema`: сохраняются `migrated`, `format`, `entities`.
+Шаги плана и результата имеют `type`: `physical`, `record`, `snapshot` или `profile`
+(`profile.1-to-2` — только метка профиля данных с полной перепроверкой; в text —
+«Метка профиля данных 1 → 2»). Счётчики: `counts.checked` — записи с надгробиями, наборы
+отношений и keyspaces, прошедшие полную проверку; `counts.changed` — файлы постоянного
+набора (без `runtime/`), созданные, изменённые или удалённые публикацией, сумма
+`counts.owners[категория].changed`; `counts.removedByRule` — удалённые распознанные
+исторические структуры. В плане `changes.files[категория]` — create/update/delete.
+ID, ключи, алиасы, тексты, ревизии и комментарии сохраняются, история запросов — нет.
 
 ### storage reindex
 
@@ -1639,8 +1690,11 @@ npx @oim-dev/relay-cli storage reconcile-relations \
 Сохраняет ID неизменённых связей, независимые диагностические рёбра и ревизии сущностей.
 Ответ: added/updated/removed и requestId. После потери ответа перечитайте связи.
 
-Все storage-команды требуют файловую рабочую область выбранного проекта, не HTTP
-и не workspace-реестр. Для нестандартного пути передавайте `--config` проекта.
+Все storage-команды выполняются только локально. В HTTP-режиме (`--server-url`,
+`RELAY_SERVER_URL`, `server.url` или реестр без `--local`) они возвращают LOCAL_REQUIRED
+(exit 2) до любого сетевого запроса и без перехода на локальные файлы. status и migrate
+принимают конфигурацию проекта любого имени и проект реестра через `--project`;
+reindex и reconcile-relations — файловую рабочую область проекта, не workspace-реестр.
 Сначала остановите записи и сохраните резерв, после — выполните doctor check.
 Команд удаления сущностей, истории запросов, product state/save/context,
 старых entities/boards/projects/progress/graph на верхнем уровне нет.
