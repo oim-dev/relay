@@ -7,7 +7,8 @@ import { resolve, join } from "node:path";
 import { API_PREFIX } from "@relay/contracts";
 import { serverPortSchema } from "@relay/core/domain/config";
 import { actorSchema, parse } from "@relay/core/domain/validation";
-import { readConfiguration, configurationMode } from "@relay/project-runtime/config";
+import { configurationMode } from "@relay/project-runtime/config";
+import { serverConfiguration } from "./modules/workspace/source.js";
 import { projectRouting } from "./modules/workspace/routing.js";
 import { isErrno } from "@relay/core/shared/errors";
 import { AppModule } from "./app.module.js";
@@ -33,7 +34,7 @@ async function initializeServer(
   options: ServerOptions,
 ): Promise<{ app: NestFastifyApplication; port: number }> {
   const actor = parse(actorSchema, options.actor, "автор");
-  const source = await readConfiguration(options.cwd, options.config);
+  const source = await serverConfiguration(options.cwd, options.config);
   const port = parse(serverPortSchema, options.port ?? source.value.server.port, "порт");
   const candidate = options.webRoot ? resolve(options.webRoot) : undefined;
   let webRoot: string | undefined;

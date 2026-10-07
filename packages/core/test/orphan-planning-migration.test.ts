@@ -6,7 +6,9 @@ import { tmpdir } from "node:os";
 import { EntityStore } from "../src/storage/entity-store/store.js";
 import { workspaceStorageRegistry } from "../src/storage/unified-adapter.js";
 import { digest } from "../src/storage/entity-store/format.js";
-import { withStorageLock } from "../src/storage/lock.js";
+import { migrateStorage } from "../src/application/storage/maintenance.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
+import { defaultConfig } from "../src/domain/config.js";
 
 for (const interrupted of [false, true])
   test(`orphan audit удаляется без allowlist и без восстановления плана; WAL=${interrupted}`, async (t) => {
@@ -49,25 +51,50 @@ for (const interrupted of [false, true])
       roots: { "file-hashes": hash },
     });
     await put("storage.json", { format: "relay-entities", schemaVersion: 1 });
-    const store = await EntityStore.open(
-      root,
-      workspaceStorageRegistry(),
-      interrupted
-        ? (stage) => {
-            if (stage === "intent") throw new Error("Сбой");
-          }
-        : undefined,
-    );
-    const migrate = () =>
-      withStorageLock(root, (owned) => store.migrateFormat(owned), join(root, "runtime"));
-    if (interrupted) await assert.rejects(migrate(), /Сбой/);
-    else await migrate();
+    // Итог переноса должен открываться обычным Workspace: конфигурация по текущей схеме
+    // и действующая запись проекта, на которую указывает её projectId.
+    await put("config.json", { ...defaultConfig, projectId: "Project1" });
+    await put("entities/projects/Project1.json", {
+      schemaVersion: 1,
+      dataVersion: 1,
+      kind: "project",
+      id: "Project1",
+      key: "PROJECT",
+      aliases: [],
+      revision: 1,
+      createdAt: at,
+      createdBy: "agent",
+      updatedAt: at,
+      updatedBy: "agent",
+      data: { name: "Проект", slug: "project" },
+    });
+    const target = { configPath: join(root, "config.json") };
+    const backupDir = await migrationBackupDir();
+    if (interrupted) {
+      await assert.rejects(
+        migrateStorage(
+          target,
+          { backupDir },
+          {
+            probe: (stage) => {
+              if (stage === "intent") throw new Error("Сбой");
+            },
+          },
+        ),
+        /Сбой/,
+      );
+      // Продолжение из WAL выполняет исполнитель миграции, не обычное открытие.
+      assert.equal((await migrateStorage(target)).resumed, true);
+    } else await migrateStorage(target, { backupDir });
     const reopened = await EntityStore.open(root, workspaceStorageRegistry());
     assert.equal(reopened.formatVersion, 4);
     await assert.rejects(readFile(join(root, path)), { code: "ENOENT" });
     await assert.rejects(reopened.get({ kind: "work-plan", id: "missing" }), {
       code: "ENTITY_NOT_FOUND",
     });
-    assert.deepEqual(await reopened.read((tx) => tx.indexEntries("records")), []);
+    assert.deepEqual(
+      (await reopened.read((tx) => tx.indexEntries("records"))).map(([key]) => key),
+      ["project:Project1"],
+    );
     assert(!(await readdir(join(root, "transactions"))).includes("pending.json"));
   });

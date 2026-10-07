@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
+import { isStorageFailure } from "infra/tasks-api";
 import type { SWRInfiniteResponse } from "swr/infinite";
 import {
   getOverviewMetricPage,
@@ -79,6 +80,7 @@ export const useOverviewMetric = (
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       shouldRetryOnError: (error) =>
+        !isStorageFailure(error) &&
         !FINAL_ERRORS.some((code) => isOverviewMetricError(error, code)),
     },
   );

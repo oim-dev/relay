@@ -12,6 +12,7 @@ import { failWal } from "./helpers/wal.js";
 import { writeLegacyMigrationFixture } from "./helpers/legacy-migration-fixture.js";
 import { openWorkspace } from "@relay/core/storage/workspace";
 import { fixture } from "./helpers/workspace.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 for (const stage of ["product", "graph-before", "graph-after"] as const) {
   test(`прикрепления: восстановление после сбоя ${stage}, перечитывание состояния без повтора`, async (t) => {
@@ -184,7 +185,7 @@ test("прикрепления: legacy-линк импортируется яв�
   assert.equal((await engine.get({ ref: document.key })).references[0]?.ref.id, feature.ref.id);
   assert.equal((await new GraphService(workspace).read()).totalEdges, 0);
   assert.equal(await readFile(path, "utf8"), before);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   const repository = new GraphRepository(workspace);
   const snapshot = await workspace.locked((owned) => repository.open(owned));
   const attached = snapshot.index.active.filter(

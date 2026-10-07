@@ -1,0 +1,233 @@
+{
+  "fixture": "physical2-plan-v1-equal-rank-43d683b",
+  "commit": "43d683be11cda57f8861468c20ae14b18cc9e419",
+  "commitShort": "43d683b",
+  "commitDate": "2026-09-24T21:42:48+03:00",
+  "commitSubject": "feat: планы и релизы (часть 1)",
+  "exactTag": null,
+  "firstContainingTag": "v0.6.1",
+  "layout": "единое хранение, history/, отдельные plan-stage с равным rank (ручная правка + reindex той же версии)",
+  "physicalFormat": 2,
+  "generator": {
+    "profile": "equal-rank",
+    "script": "generators/generate-equal-rank.mjs",
+    "cli": "node --conditions=tasks-source apps/cli/scripts/dev.mjs --local --format json (исходники того же SHA, pnpm install --frozen-lockfile)",
+    "deletion": "generators/fixture-delete.mts — EntityDeletionService того же SHA (в CLI версии нет команды удаления)",
+    "node": "v24.3.0",
+    "actorDefault": "fixture-author"
+  },
+  "entityKindsOfVersion": [
+    "work-plan",
+    "plan-stage",
+    "release",
+    "project",
+    "product",
+    "feature",
+    "scenario",
+    "application",
+    "implementation",
+    "board",
+    "task",
+    "document"
+  ],
+  "tree": {
+    "bundle": {
+      "sha256": "d16fd27a69c1639c16368e0702e4a2b4fc763eb38d2f886cf99d83382ecf2e77",
+      "bytes": 16405
+    },
+    "files": 52,
+    "directories": 128,
+    "emptyDirectories": [
+      ".relay/.indexes/segments/00",
+      ".relay/.indexes/segments/03",
+      ".relay/.indexes/segments/07",
+      ".relay/.indexes/segments/08",
+      ".relay/.indexes/segments/0b",
+      ".relay/.indexes/segments/12",
+      ".relay/.indexes/segments/16",
+      ".relay/.indexes/segments/1c",
+      ".relay/.indexes/segments/1e",
+      ".relay/.indexes/segments/1f",
+      ".relay/.indexes/segments/21",
+      ".relay/.indexes/segments/22",
+      ".relay/.indexes/segments/2e",
+      ".relay/.indexes/segments/2f",
+      ".relay/.indexes/segments/31",
+      ".relay/.indexes/segments/32",
+      ".relay/.indexes/segments/35",
+      ".relay/.indexes/segments/36",
+      ".relay/.indexes/segments/3b",
+      ".relay/.indexes/segments/3c",
+      ".relay/.indexes/segments/3d",
+      ".relay/.indexes/segments/3e",
+      ".relay/.indexes/segments/41",
+      ".relay/.indexes/segments/42",
+      ".relay/.indexes/segments/44",
+      ".relay/.indexes/segments/45",
+      ".relay/.indexes/segments/48",
+      ".relay/.indexes/segments/49",
+      ".relay/.indexes/segments/4a",
+      ".relay/.indexes/segments/54",
+      ".relay/.indexes/segments/56",
+      ".relay/.indexes/segments/59",
+      ".relay/.indexes/segments/5a",
+      ".relay/.indexes/segments/60",
+      ".relay/.indexes/segments/61",
+      ".relay/.indexes/segments/62",
+      ".relay/.indexes/segments/67",
+      ".relay/.indexes/segments/6b",
+      ".relay/.indexes/segments/6d",
+      ".relay/.indexes/segments/70",
+      ".relay/.indexes/segments/72",
+      ".relay/.indexes/segments/73",
+      ".relay/.indexes/segments/75",
+      ".relay/.indexes/segments/7a",
+      ".relay/.indexes/segments/7b",
+      ".relay/.indexes/segments/81",
+      ".relay/.indexes/segments/85",
+      ".relay/.indexes/segments/8c",
+      ".relay/.indexes/segments/94",
+      ".relay/.indexes/segments/95",
+      ".relay/.indexes/segments/9f",
+      ".relay/.indexes/segments/a1",
+      ".relay/.indexes/segments/a2",
+      ".relay/.indexes/segments/a3",
+      ".relay/.indexes/segments/a8",
+      ".relay/.indexes/segments/ab",
+      ".relay/.indexes/segments/ac",
+      ".relay/.indexes/segments/ae",
+      ".relay/.indexes/segments/af",
+      ".relay/.indexes/segments/b0",
+      ".relay/.indexes/segments/b3",
+      ".relay/.indexes/segments/b4",
+      ".relay/.indexes/segments/b5",
+      ".relay/.indexes/segments/b6",
+      ".relay/.indexes/segments/b9",
+      ".relay/.indexes/segments/ba",
+      ".relay/.indexes/segments/bd",
+      ".relay/.indexes/segments/bf",
+      ".relay/.indexes/segments/c0",
+      ".relay/.indexes/segments/c1",
+      ".relay/.indexes/segments/c5",
+      ".relay/.indexes/segments/c6",
+      ".relay/.indexes/segments/c9",
+      ".relay/.indexes/segments/ca",
+      ".relay/.indexes/segments/cf",
+      ".relay/.indexes/segments/d0",
+      ".relay/.indexes/segments/d1",
+      ".relay/.indexes/segments/d2",
+      ".relay/.indexes/segments/d5",
+      ".relay/.indexes/segments/d6",
+      ".relay/.indexes/segments/d7",
+      ".relay/.indexes/segments/da",
+      ".relay/.indexes/segments/df",
+      ".relay/.indexes/segments/e9",
+      ".relay/.indexes/segments/eb",
+      ".relay/.indexes/segments/ec",
+      ".relay/.indexes/segments/ed",
+      ".relay/.indexes/segments/f2",
+      ".relay/.indexes/segments/f6",
+      ".relay/.indexes/segments/f9",
+      ".relay/.indexes/segments/fb",
+      ".relay/.indexes/segments/fc",
+      ".relay/.indexes/segments/fd"
+    ],
+    "totalBytes": 121673,
+    "filesByTopLevel": {
+      ".relay/.indexes": 18,
+      ".relay/config.json": 1,
+      ".relay/entities": 12,
+      ".relay/history": 1,
+      ".relay/keyspaces": 7,
+      ".relay/relations": 9,
+      ".relay/runtime": 2,
+      ".relay/storage.json": 1,
+      ".relay/transactions": 1
+    },
+    "entityCollections": {
+      "boards": {
+        "records": 2,
+        "tombstones": 0,
+        "kinds": {
+          "board": 2
+        },
+        "schemaVersions": {
+          "1": 2
+        },
+        "dataVersions": {
+          "1": 2
+        }
+      },
+      "plan-stages": {
+        "records": 3,
+        "tombstones": 0,
+        "kinds": {
+          "plan-stage": 3
+        },
+        "schemaVersions": {
+          "1": 3
+        },
+        "dataVersions": {
+          "1": 3
+        }
+      },
+      "products": {
+        "records": 1,
+        "tombstones": 0,
+        "kinds": {
+          "product": 1
+        },
+        "schemaVersions": {
+          "1": 1
+        },
+        "dataVersions": {
+          "1": 1
+        }
+      },
+      "projects": {
+        "records": 1,
+        "tombstones": 0,
+        "kinds": {
+          "project": 1
+        },
+        "schemaVersions": {
+          "1": 1
+        },
+        "dataVersions": {
+          "1": 1
+        }
+      },
+      "tasks": {
+        "records": 4,
+        "tombstones": 0,
+        "kinds": {
+          "task": 4
+        },
+        "schemaVersions": {
+          "1": 4
+        },
+        "dataVersions": {
+          "1": 4
+        }
+      },
+      "work-plans": {
+        "records": 1,
+        "tombstones": 0,
+        "kinds": {
+          "work-plan": 1
+        },
+        "schemaVersions": {
+          "1": 1
+        },
+        "dataVersions": {
+          "1": 1
+        }
+      }
+    },
+    "manifest": {
+      "format": "relay-entities",
+      "schemaVersion": 2,
+      "productId": "KaYK2iaG"
+    }
+  }
+}

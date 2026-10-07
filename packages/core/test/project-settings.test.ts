@@ -8,6 +8,7 @@ import { initialize, openWorkspace } from "../src/storage/workspace.js";
 import { projectSettings } from "../src/storage/project-settings.js";
 import { saveProjectSettings } from "../src/application/project-settings/service.js";
 import { StorageService } from "../src/application/storage/service.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("настройки: случайный адрес, атомарное сохранение, повтор и конкуренция", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-settings-"));
@@ -56,7 +57,7 @@ test("старый конфиг читается без записи; перво
   const input = { name: "Прежний проект", slug: "legacy", ifRevision: 0 };
   await assert.rejects(saveProjectSettings(legacy, input), { code: "STORAGE_MIGRATION_REQUIRED" });
   assert.equal(await readFile(workspace.configPath, "utf8"), before);
-  await new StorageService(legacy).migrate();
+  await new StorageService(legacy).migrate({ backupDir: await migrationBackupDir() });
   await saveProjectSettings(legacy, input);
   const { projectSettings: stored, ...unchanged } = (await openWorkspace(root)).config;
   assert.deepEqual(unchanged, oldConfig);

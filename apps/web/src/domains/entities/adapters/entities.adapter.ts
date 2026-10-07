@@ -7,7 +7,7 @@ import {
   entityDetailSchema,
 } from "@relay/contracts/entities";
 import type { EntitiesQuery, EntitiesPage, EntitySummary } from "@relay/contracts/entities";
-import { getProjectApi, ApiError } from "infra/tasks-api";
+import { getProjectApi, ApiError, getStorageFailureMessage } from "infra/tasks-api";
 import type { EntityContent } from "../types/entity-content.type";
 
 const FAILURE_SCHEMA = z.object({ error: z.object({ message: z.string() }) });
@@ -20,7 +20,10 @@ const throwEntityFailure = (failure: unknown): never => {
   if (failure instanceof ApiError) {
     const response = FAILURE_SCHEMA.safeParse(failure.error);
     if (response.success && failure.status < 500) {
-      throw new EntityAccessError(response.data.error.message, { cause: failure });
+      throw new EntityAccessError(
+        getStorageFailureMessage(failure) ?? response.data.error.message,
+        { cause: failure },
+      );
     }
     if (failure.status === 502 || failure.status === 503) {
       throw new EntityAccessError(
@@ -92,7 +95,20 @@ export const getEntityContent = async (projectId: string, ref: string): Promise<
 };
 
 /**
+ * Виды адресов, оставшиеся после миграции только в сохранённых связях: карточки
+ * у них нет, новые прикрепления к ним Core отклоняет.
+ */
+const RELOCATED_KIND_LABELS: Readonly<Record<string, string>> = {
+  "plan-stage": "Этап плана (прежний)",
+};
+
+/**
  * Возвращает русское название зарегистрированного вида и сохраняет имя расширенного вида.
  */
 export const entityKindLabel = (kind: string): string =>
-  entityDefinitions.find((definition) => definition.kind === kind)?.title ?? kind;
+  entityDefinitions.find((definition) => definition.kind === kind)?.title ??
+  RELOCATED_KIND_LABELS[kind] ??
+  kind;
+
+/** Адрес прежнего вида: связь читается и сохраняется, но открыть или выбрать заново нельзя. */
+export const isRelocatedEntityKind = (kind: string): boolean => kind in RELOCATED_KIND_LABELS;

@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { productOverviewSchema } from "@relay/contracts/entities/product";
-import { ApiError, getProjectApi } from "infra/tasks-api";
+import { ApiError, getProjectApi, getStorageFailureMessage } from "infra/tasks-api";
 import {
   createInvalidResponseError,
   createProjectUnavailableError,
   createStorageFailureError,
+  createStorageMaintenanceError,
   createTemporarilyUnavailableError,
 } from "../errors/product-overview.error";
 import { mapProductOverviewDto } from "../mappers/product-overview.mapper";
@@ -17,6 +18,8 @@ const FAILURE_SCHEMA = z.object({ error: z.object({ message: z.string() }) });
 const toOverviewError = (error: unknown) => {
   if (!(error instanceof ApiError)) return createTemporarilyUnavailableError();
   if (error.status === 404) return createProjectUnavailableError();
+  const storageMessage = getStorageFailureMessage(error);
+  if (storageMessage !== null) return createStorageMaintenanceError(storageMessage, error);
   const failure = FAILURE_SCHEMA.safeParse(error.error);
   if (error.status >= 500 && failure.success)
     return createStorageFailureError(failure.data.error.message);

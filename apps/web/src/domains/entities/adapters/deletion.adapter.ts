@@ -6,7 +6,7 @@ import type {
   EntityDeletionQuery,
   EntityDeletionPreview,
 } from "@relay/contracts/entities";
-import { ApiError, getProjectApi } from "infra/tasks-api";
+import { ApiError, getProjectApi, getStorageFailureMessage } from "infra/tasks-api";
 
 const FAILURE_SCHEMA = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 
@@ -30,7 +30,7 @@ const throwDeletionFailure = (failure: unknown): never => {
     const response = FAILURE_SCHEMA.safeParse(failure.error);
     if (response.success && failure.status < 500) {
       throw new EntityDeletionError(
-        response.data.error.message,
+        getStorageFailureMessage(failure) ?? response.data.error.message,
         response.data.error.code === "REVISION_CONFLICT",
       );
     }

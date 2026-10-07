@@ -1,0 +1,46 @@
+{"step":1,"args":["init"],"ok":true}
+{"step":2,"args":["entities","get","PROJECT"],"ok":true}
+{"step":3,"args":["entities","create","product","--name","Relay фикстура «Миграции»","--summary","Краткое\nмногострочное описание","--description","# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n"],"ok":true}
+{"step":4,"args":["entities","create","feature","--name","Фича CRLF","--summary","Сводка фичи 1","--description","# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n"],"ok":true}
+{"step":5,"args":["entities","create","feature","--name","Фича Unicode 🚀","--summary","","--description","Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n"],"ok":true}
+{"step":6,"args":["entities","create","feature","--name","Фича для удаления","--summary","","--description","Строка без перевода в конце"],"ok":true}
+{"step":7,"args":["entities","create","scenario","--name","Сценарий 1","--feature","FEATURE-1","--description","## Требования\n\n- пункт **жирный**\n- пункт `code`\n\n```ts\nconst x = 1;\r\n```\n\n> цитата\n"],"ok":true}
+{"step":8,"args":["entities","create","scenario","--name","Сценарий 2 (mixed EOL)","--feature","FEATURE-1","--description","LF-строка\nCRLF-строка\r\n\nПустая строка выше\n\n\n"],"ok":true}
+{"step":9,"args":["entities","create","scenario","--name","Сценарий фичи 2","--feature","FEATURE-2","--description","Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n"],"ok":true}
+{"step":10,"args":["entities","get","FEATURE-2"],"ok":true}
+{"step":11,"args":["entities","rename","FEATURE-2","FEATURE-UX","--if-revision","1"],"ok":true}
+{"step":12,"args":["entities","create","application","--name","Веб-клиент","--slug","web","--prefix","WEB","--type","frontend","--description","## Требования\n\n- пункт **жирный**\n- пункт `code`\n\n```ts\nconst x = 1;\r\n```\n\n> цитата\n","--summary","Сводка web"],"ok":true}
+{"step":13,"args":["entities","create","application","--name","API-сервер","--slug","api","--prefix","API","--type","backend","--description","# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n","--summary","Сводка api"],"ok":true}
+{"step":14,"args":["entities","create","implementation","--application","WEB","--target","FEATURE-1","--title","Вклад веба в фичу","--description","# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n","--status","partial"],"ok":true}
+{"step":15,"args":["entities","create","implementation","--application","WEB","--target","SCENARIO-1","--title","Вклад веба в сценарий","--description","Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n","--status","done"],"ok":true}
+{"step":16,"args":["entities","create","implementation","--application","API","--target","FEATURE-UX","--title","Вклад API (неактивный)","--description","Строка без перевода в конце","--status","none"],"ok":true}
+{"step":17,"args":["product","overview"],"ok":true}
+{"step":18,"args":["product","scope","replace","API","--json","[]","--if-revision","1","--if-version","ffa691b77d70119df265207c8f0d47779a27a298e31ad5363504f58276e7ef00"],"ok":true}
+{"step":19,"args":["task","create","--board","web","--title","Задача с критериями «T1»","--description","# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n","--implementation","J02SWrYi","nYfLqPjh"],"ok":true}
+{"step":20,"args":["task","create","--board","web","--title","Зависимость T2","--description","LF-строка\nCRLF-строка\r\n\nПустая строка выше\n\n\n","--column","ready"],"ok":true}
+{"step":21,"args":["task","create","--board","api","--title","Связанная T3","--description","Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n"],"ok":true}
+{"step":22,"args":["task","create","--board","web","--title","Подзадача T4","--description","Строка без перевода в конце"],"ok":true}
+{"step":23,"args":["task","create","--board","product","--title","Задача для удаления","--description","удалить"],"ok":true}
+{"step":24,"args":["task","create","--board","web","--title","Задача для переноса на другую доску","--description","## Требования\n\n- пункт **жирный**\n- пункт `code`\n\n```ts\nconst x = 1;\r\n```\n\n> цитата\n"],"ok":true}
+{"step":25,"args":["task","create","--board","product","--title","Продуктовая задача","--description","Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n","--feature","CKfHYrux","--scenario","WVVHuoER"],"ok":true}
+{"step":26,"args":["task","link","WEB-1","--target","WEB-2","--relation","depends-on"],"ok":false}
+{"step":27,"args":["entities","get","WEB-1"],"ok":true}
+{"step":27,"args":["task","link","WEB-1","--target","WEB-2","--relation","depends-on","--if-revision","1"],"ok":true}
+{"step":28,"args":["task","link","WEB-1","--target","API-1","--relation","related"],"ok":false}
+{"step":29,"args":["entities","get","WEB-1"],"ok":true}
+{"step":29,"args":["task","link","WEB-1","--target","API-1","--relation","related","--if-revision","2"],"ok":true}
+{"step":30,"args":["task","get","WEB-2"],"ok":true}
+{"step":31,"args":["task","move","WEB-2","--column","done"],"ok":false}
+{"step":32,"args":["entities","get","WEB-2"],"ok":true}
+{"step":32,"args":["task","move","WEB-2","--column","done","--if-revision","1"],"ok":true}
+{"step":33,"args":["task","move","WEB-4","--board","api","--column","in-progress"],"ok":false}
+{"step":34,"args":["entities","get","WEB-4"],"ok":true}
+{"step":34,"args":["task","move","WEB-4","--board","api","--column","in-progress","--if-revision","1"],"ok":true}
+{"step":35,"args":["entities","create","document","--name","ТЗ миграции","--summary","Сводка ТЗ","--body","<text 157 chars>","--document-kind","specification","--targets","FEATURE-1","SCENARIO-1"],"ok":true}
+{"step":36,"args":["entities","create","document","--name","Правила","--body","Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n","--document-kind","rules"],"ok":true}
+{"step":37,"args":["graph","list","--limit","1"],"ok":true}
+{"step":38,"args":["graph","link","--if-version","f86e0514955059e4876a5d8d220d78dea744e8c11e3a6e3a333205e2e54a01b8","--from","DOC-2","--to","FEATURE-UX","--type","diagnostic-note","--description","Пояснение\r\nдиагностической связи\n"],"ok":true}
+{"step":39,"args":["graph","list","--limit","1"],"ok":true}
+{"step":40,"args":["graph","link","--if-version","17fd52452dd5669f43f538a81c127acbb100b31ac964f0877e95019d8d1aa047","--from","API-1","--to","API","--type","custom-temporary","--description","Будет отозвана"],"ok":true}
+{"step":41,"args":["graph","list","--limit","1"],"ok":true}
+{"step":42,"args":["graph","unlink","RMajESKv","--if-version","05db0285b3d2feedd6e0985d457c0ba9b50f701a24ae9c5f86424ce66f2ef843"],"ok":true}

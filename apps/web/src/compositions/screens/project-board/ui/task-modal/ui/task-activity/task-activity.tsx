@@ -21,6 +21,8 @@ export const TaskActivity = (props: TaskActivityProps) => {
   const { query, latest } = useTaskComments(projectId, taskId, active);
   const [actionError, setActionError] = useState("");
   const activityItems = query.data?.flatMap((page) => page.items) ?? [];
+  // Отказ чтения без данных не выдаётся за пустой результат.
+  const shownLabel = `Показано: ${isDefined(query.data) ? activityItems.length : "—"}`;
   const hasMore = isDefined(query.data?.at(-1)?.nextCursor);
   const hasNew =
     (latest.data?.items[0]?.sequence ?? 0) > (query.data?.[0]?.items[0]?.sequence ?? 0);
@@ -77,7 +79,7 @@ export const TaskActivity = (props: TaskActivityProps) => {
         />
         <Group justify="space-between">
           <Text size="xs" c="dimmed">
-            Показано: {activityItems.length}
+            {shownLabel}
           </Text>
           <Tooltip label="Обновить ленту">
             <ActionIcon

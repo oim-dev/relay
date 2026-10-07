@@ -5,6 +5,9 @@ import { selectProject, serverAddress } from "@relay/project-runtime/config";
 import { cliConfiguration } from "../configuration.js";
 import type { GlobalOptions, Runtime } from "../context.js";
 import type { Backend } from "./types.js";
+import { resolve } from "node:path";
+import { shellCommand } from "../command-kit.js";
+import { requireLocalMaintenance } from "@relay/project-runtime/maintenance";
 
 /** Выбор выполняется до openWorkspace: HTTP-команды не создают даже .tasks-runtime. */
 export async function connectBackend(
@@ -12,6 +15,13 @@ export async function connectBackend(
   globals: GlobalOptions,
   localOnly = false,
 ): Promise<Backend> {
+  if (localOnly) {
+    const serverUrl = globals.serverUrl ?? runtime.env.RELAY_SERVER_URL;
+    requireLocalMaintenance({
+      ...(globals.local ? { local: true } : {}),
+      ...(serverUrl !== undefined ? { serverUrl } : {}),
+    });
+  }
   const source = await cliConfiguration(runtime, globals).catch((error: unknown) => {
     if (
       error instanceof AppError &&
@@ -36,11 +46,8 @@ export async function connectBackend(
     runtime.env.RELAY_SERVER_URL ??
     (source?.kind === "registry" ? serverAddress(source) : target.serverUrl);
   if (!globals.local && configuredUrl !== undefined) {
-    invariant(
-      !localOnly,
-      "LOCAL_ONLY",
-      "Эта команда управляет локальным хранилищем. Укажите --local и конфиг нужной рабочей копии.",
-    );
+    // Адрес из config/реестра: тот же отказ, что и для флага, без запроса к Server.
+    if (localOnly) requireLocalMaintenance({ serverUrl: configuredUrl });
     const url = new URL(parse(serverUrlSchema, configuredUrl, "адрес сервера")).origin;
     const { createHttpBackend } = await import("@relay/project-runtime/backend/http");
     return createHttpBackend(
@@ -53,6 +60,14 @@ export async function connectBackend(
     "LOCAL_CONFIG_REQUIRED",
     "Для локальной операции нужен path или config проекта",
   );
+  // Путь известен до открытия базы: подсказки Core об обслуживании получают его в text.
+  runtime.maintenanceCommand = shellCommand([
+    "npx",
+    "@oim-dev/relay-cli",
+    "--local",
+    "--config",
+    resolve(runtime.cwd, target.configPath),
+  ]);
   const { createLocalBackend } = await import("@relay/project-runtime/backend/local");
   return createLocalBackend(runtime.cwd, target.configPath);
 }

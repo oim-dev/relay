@@ -7,7 +7,7 @@ import {
   updateReleaseSchema,
 } from "@relay/contracts/releases";
 import { planningSavedSchema } from "@relay/contracts/planning";
-import { getProjectApi, ApiError, readApiPages } from "infra/tasks-api";
+import { getProjectApi, ApiError, readApiPages, getStorageFailureMessage } from "infra/tasks-api";
 import type { PlanningPage } from "domains/planning";
 import { releaseView, releaseCompositionView } from "../helpers/release-view";
 import type { Release, ReleaseComposition, ReleaseFilters } from "../types/release.type";
@@ -21,8 +21,9 @@ export class ReleaseError extends Error {
   constructor(
     message: string,
     readonly code: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 
@@ -40,7 +41,11 @@ const request = async <Result>(
     if (error instanceof ApiError) {
       const failure = FAILURE_SCHEMA.safeParse(error.error);
       if (failure.success && error.status < 500)
-        throw new ReleaseError(failure.data.error.message, failure.data.error.code);
+        throw new ReleaseError(
+          getStorageFailureMessage(error) ?? failure.data.error.message,
+          failure.data.error.code,
+          { cause: error },
+        );
     }
     if (
       error instanceof TypeError ||

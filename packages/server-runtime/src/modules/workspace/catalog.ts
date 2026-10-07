@@ -12,13 +12,55 @@ import { saveProjectSettings } from "@relay/core/application/project-settings/se
 import { projectSettings } from "@relay/core/storage/project-settings";
 import type { SaveProjectSettings, ProjectSettings } from "@relay/core/domain/project-settings";
 import { withStorageLock } from "@relay/core/storage/lock";
+import { readJson } from "@relay/core/storage/files";
+import {
+  readStorageManifest,
+  requireCurrentProfile,
+} from "@relay/core/storage/data-model/manifest";
 import type { ProjectEntry } from "@relay/project-runtime/config";
+import { serverConfiguration } from "./source.js";
 
 export interface WorkspaceOptions {
   cwd: string;
   configPath: string;
   actor: string;
   mode?: "local" | "workspace";
+}
+
+/**
+ * Ошибка открытия проекта сохраняет причину Core (совместимость, recovery, повреждение).
+ * Только отказ схемы сохранённой конфигурации отличается от ошибки аргументов запроса.
+ */
+function openFailure(error: unknown): unknown {
+  if (error instanceof AppError && error.code === "VALIDATION_ERROR")
+    return new AppError("INVALID_CONFIG", "Конфигурация проекта некорректна", 5, error.details);
+  return error;
+}
+
+function derivedProjectId(realConfigPath: string): string {
+  return createHash("sha256").update(realConfigPath).digest("hex").slice(0, 24);
+}
+
+/**
+ * Постоянный ID проекта без разбора текущей схемой, recovery и создания каталогов.
+ * Нужен только чтобы сообщить настоящую причину недоступности проекта, выбранного по ID.
+ */
+async function rawProjectId(configPath: string): Promise<string | undefined> {
+  try {
+    const path = await realpath(configPath);
+    const value = await readJson(path);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+    const projectId = (value as Record<string, unknown>).projectId;
+    if (projectId === undefined) return derivedProjectId(path);
+    return typeof projectId === "string" && projectId.length > 0 ? projectId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function availabilityError(error: unknown): string {
+  if (error instanceof AppError) return `${error.code}: ${error.message}`;
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** Неизменяемый выбор проекта; безопасен для параллельных запросов и наблюдателей. */
@@ -32,9 +74,7 @@ export class ProjectContext {
     try {
       return await openWorkspace(this.options.cwd, this.options.configPath);
     } catch (error) {
-      if (error instanceof AppError && error.code === "VALIDATION_ERROR")
-        throw new AppError("INVALID_CONFIG", "Конфигурация проекта некорректна", 5, error.details);
-      throw error;
+      throw openFailure(error);
     }
   }
 
@@ -62,7 +102,7 @@ export class ProjectCatalog {
   constructor(readonly options: WorkspaceOptions) {}
 
   source() {
-    return readConfiguration(this.options.cwd, this.options.configPath);
+    return serverConfiguration(this.options.cwd, this.options.configPath);
   }
 
   async entries() {
@@ -84,8 +124,13 @@ export class ProjectCatalog {
 
   async at(configPath: string): Promise<ProjectContext> {
     const path = await realpath(configPath);
-    const { config } = await readWorkspaceConfig(dirname(path), path);
-    const id = config.projectId ?? createHash("sha256").update(path).digest("hex").slice(0, 24);
+    let config;
+    try {
+      ({ config } = await readWorkspaceConfig(dirname(path), path));
+    } catch (error) {
+      throw openFailure(error);
+    }
+    const id = config.projectId ?? derivedProjectId(path);
     const context = new ProjectContext({ ...this.options, configPath: path }, id);
     this.contexts.set(resolve(configPath), context);
     return context;
@@ -97,6 +142,10 @@ export class ProjectCatalog {
       entries.map(async ({ key, configPath }) => {
         try {
           const project = await this.at(configPath);
+          // Дешёвая проверка профиля по manifest без скана: база, которой нужна миграция,
+          // не объявляется доступной (запросы к ней всё равно получат код совместимости).
+          const manifest = await readStorageManifest(dirname(project.options.configPath));
+          if (manifest) requireCurrentProfile(manifest);
           const { config } = await readWorkspaceConfig(dirname(configPath), configPath);
           const settings = projectSettings(config, configPath);
           return {
@@ -114,7 +163,7 @@ export class ProjectCatalog {
             name: key,
             configPath,
             available: false,
-            error: error instanceof Error ? error.message : String(error),
+            error: availabilityError(error),
           };
         }
       }),
@@ -173,7 +222,16 @@ export class ProjectCatalog {
     if (this.options.mode === "local") {
       const context =
         this.contexts.get(resolve(this.options.configPath)) ??
-        (await this.at(this.options.configPath));
+        (await this.at(this.options.configPath).catch(async (error: unknown) => {
+          // Несовместимая база не закрывает сервер: каждый запрос получает причину
+          // от open(), SSE сообщает workspace-error и восстанавливается после migrate.
+          const id = await rawProjectId(this.options.configPath);
+          if (id === undefined) throw error;
+          return new ProjectContext(
+            { ...this.options, configPath: await realpath(this.options.configPath) },
+            id,
+          );
+        }));
       // SSE по постоянному ID должен сообщать повреждение конфига и уметь переподключаться.
       if (selector === undefined || selector === "local" || selector === context.projectId)
         return context;
@@ -197,8 +255,15 @@ export class ProjectCatalog {
     const direct = entries.find(({ key }) => key === selector);
     if (direct) return this.unique(await this.at(direct.configPath), entries);
     for (const entry of entries) {
-      const context = await this.at(entry.configPath).catch(() => undefined);
-      if (context?.projectId === selector) return this.unique(context, entries);
+      let context: ProjectContext;
+      try {
+        context = await this.at(entry.configPath);
+      } catch (error) {
+        // Недоступный проект, выбранный по постоянному ID, сообщает свою причину, а не 404.
+        if ((await rawProjectId(entry.configPath)) === selector) throw error;
+        continue;
+      }
+      if (context.projectId === selector) return this.unique(context, entries);
     }
     const matches: ProjectContext[] = [];
     for (const entry of entries) {

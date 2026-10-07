@@ -65,6 +65,11 @@ export const ProductDocumentsScreen = () => {
     : (VIEW_LABELS[view] ?? "Все документы");
   const counts = response.data?.libraryCounts ?? {};
   const documentItems = response.data?.items ?? [];
+  // Отказ чтения без данных не выдаётся за пустой результат.
+  const shownLabel =
+    response.data === undefined
+      ? "Показано: —"
+      : `Показано ${documentItems.length} из ${response.data.total}`;
   const hasNoResults = !response.isLoading && !response.error && isEmptyArray(documentItems);
   const hasFilters = query !== "" || selectedKind !== undefined || params.has("target");
   const hasSettings = settings.data !== undefined;
@@ -259,7 +264,7 @@ export const ProductDocumentsScreen = () => {
           </ul>
           <footer className={styles.footer}>
             <Text size="xs" c="dimmed" role="status">
-              Показано {documentItems.length} из {response.data?.total ?? 0}
+              {shownLabel}
             </Text>
             <Group gap="xs">
               <Button

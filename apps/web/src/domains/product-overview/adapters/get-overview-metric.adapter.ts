@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { productOverviewMetricPageSchema } from "@relay/contracts/entities/product";
-import { ApiError, getProjectApi } from "infra/tasks-api";
+import { ApiError, getProjectApi, getStorageFailureMessage } from "infra/tasks-api";
 import {
   createBlockerNotFoundError,
   createMetricInvalidResponseError,
@@ -42,6 +42,8 @@ const toMetricError = (error: unknown, request: OverviewMetricRequest | null) =>
   // Продолжение прежнего среза больше недействительно: список перечитывается целиком.
   if (code === "VERSION_CONFLICT" || code === "INVALID_CURSOR") return createSnapshotChangedError();
   if (code === "PROJECT_NOT_FOUND") return createMetricProjectUnavailableError();
+  const storageMessage = getStorageFailureMessage(error);
+  if (storageMessage !== null) return createMetricStorageFailureError(storageMessage, error);
   // Несуществующий блокер Core сообщает как NOT_FOUND с details.parameter = "blocker".
   const isMissingBlocker =
     request?.metric === "blocker-affected" &&

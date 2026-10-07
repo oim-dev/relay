@@ -4,7 +4,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { Link2, Plus, ArrowUpRight } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useProjectId, useProjectBasePath } from "domains/project";
-import { useEntities, entityKindLabel } from "domains/entities";
+import { useEntities, entityKindLabel, isRelocatedEntityKind } from "domains/entities";
 import { documentEntityHref } from "domains/documents";
 import { MarkdownView } from "ui/markdown-view";
 import { isEmptyArray } from "shared/value-predicates";
@@ -39,11 +39,14 @@ export const DocumentRelations = ({
     const entity = referenceItems.find(
       (entry) => entry.ref.kind === relation.target.kind && entry.ref.id === relation.target.id,
     );
+    // Прежний адрес после миграции: карточки нет, это не потерянная сущность.
+    const isRelocated = entity === undefined && isRelocatedEntityKind(relation.target.kind);
     return {
       ...relation,
       address: `${relation.target.kind}:${relation.target.id}:${relation.type}`,
-      title: entity?.title ?? "Сущность недоступна",
-      key: entity?.key ?? relation.target.id,
+      isRelocated,
+      title: entity?.title ?? (isRelocated ? relation.target.id : "Сущность недоступна"),
+      key: isRelocated ? "только чтение" : (entity?.key ?? relation.target.id),
       context: entity?.context,
       kind: entityKindLabel(relation.target.kind),
       href: entity
@@ -102,16 +105,19 @@ export const DocumentRelations = ({
                 {relation.label}
               </Badge>
             </Group>
-            <Anchor
-              component={Link}
-              to={relation.href}
-              state={{ returnTo }}
-              className={styles.link}
-              c="inherit"
-            >
-              {relation.title}
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </Anchor>
+            {relation.isRelocated && <span className={styles.link}>{relation.title}</span>}
+            {!relation.isRelocated && (
+              <Anchor
+                component={Link}
+                to={relation.href}
+                state={{ returnTo }}
+                className={styles.link}
+                c="inherit"
+              >
+                {relation.title}
+                <ArrowUpRight size={14} aria-hidden="true" />
+              </Anchor>
+            )}
             <span className={styles.key}>{relation.key}</span>
             {relation.hasContext && (
               <Text size="xs" c="dimmed">

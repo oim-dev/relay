@@ -2,6 +2,7 @@
 export const PRODUCT_OVERVIEW_ERROR_CODE = {
   PROJECT_UNAVAILABLE: "PRODUCT_OVERVIEW_PROJECT_UNAVAILABLE",
   STORAGE_FAILURE: "PRODUCT_OVERVIEW_STORAGE_FAILURE",
+  STORAGE_MAINTENANCE: "PRODUCT_OVERVIEW_STORAGE_MAINTENANCE",
   INVALID_RESPONSE: "PRODUCT_OVERVIEW_INVALID_RESPONSE",
   TEMPORARILY_UNAVAILABLE: "PRODUCT_OVERVIEW_TEMPORARILY_UNAVAILABLE",
 } as const;
@@ -13,14 +14,21 @@ export type ProductOverviewErrorDetails =
       code: typeof PRODUCT_OVERVIEW_ERROR_CODE.STORAGE_FAILURE;
       payload: Readonly<{ message: string }>;
     }>
+  | Readonly<{
+      code: typeof PRODUCT_OVERVIEW_ERROR_CODE.STORAGE_MAINTENANCE;
+      payload: Readonly<{ message: string }>;
+    }>
   | Readonly<{ code: typeof PRODUCT_OVERVIEW_ERROR_CODE.INVALID_RESPONSE }>
   | Readonly<{ code: typeof PRODUCT_OVERVIEW_ERROR_CODE.TEMPORARILY_UNAVAILABLE }>;
 
 class ProductOverviewDomainError extends Error {
   readonly name = "ProductOverviewDomainError";
 
-  constructor(readonly details: ProductOverviewErrorDetails) {
-    super(`product-overview:${details.code}`);
+  constructor(
+    readonly details: ProductOverviewErrorDetails,
+    options?: ErrorOptions,
+  ) {
+    super(`product-overview:${details.code}`, options);
   }
 }
 
@@ -37,6 +45,19 @@ export const createStorageFailureError = (message: string): GetProductOverviewEr
     code: PRODUCT_OVERVIEW_ERROR_CODE.STORAGE_FAILURE,
     payload: { message },
   });
+
+/**
+ * Хранилище проекта несовместимо или требует обслуживания: чтение не выполнено,
+ * пустой обзор не показывается, автоматический повтор не нужен.
+ */
+export const createStorageMaintenanceError = (
+  message: string,
+  cause: unknown,
+): GetProductOverviewError =>
+  new ProductOverviewDomainError(
+    { code: PRODUCT_OVERVIEW_ERROR_CODE.STORAGE_MAINTENANCE, payload: { message } },
+    { cause },
+  );
 
 /** Ответ сервера не соответствует контракту обзора; его нельзя показывать нулями. */
 export const createInvalidResponseError = (): GetProductOverviewError =>

@@ -8,6 +8,7 @@ import { safeText, diagnosticValueText } from "./presentation/text.js";
 import { wrap } from "./presentation/layout.js";
 import { safeJson } from "./presentation/safe.js";
 import { cardText, commandText } from "./presentation/common.js";
+import { localizeStorageCommand, storageNextText } from "./presentation/storage.js";
 import type { OutputField } from "./presentation/common.js";
 
 export interface OutputOptions {
@@ -15,6 +16,24 @@ export interface OutputOptions {
   /** Совместимость старых адаптеров; CLI больше не ограничивает размер вывода. */
   maxBytes?: number;
   text?: TextOptions;
+  /** Вызов обслуживания с фактическим config для подсказок Core; JSON не меняется. */
+  maintenanceCommand?: string;
+}
+
+/**
+ * Ошибка с собственным human-представлением (например, отчёт storage status с ненулевым
+ * exit). JSON остаётся общим конвертом ошибки с машинными details.
+ */
+export class PresentedError extends AppError {
+  constructor(
+    code: string,
+    message: string,
+    exitCode: number,
+    details: unknown,
+    readonly text: (options: TextOptions) => string,
+  ) {
+    super(code, message, exitCode, details);
+  }
 }
 
 export function printResult(stream: Writable, result: Result, options: OutputOptions): void {
@@ -23,12 +42,18 @@ export function printResult(stream: Writable, result: Result, options: OutputOpt
 }
 
 /** Машинный details не меняется; готовая help-команда в text не переносится по ширине. */
-function errorDetailsText(details: unknown, options: TextOptions): string {
+function errorDetailsText(
+  details: unknown,
+  options: TextOptions,
+  code?: string,
+  maintenanceCommand?: string,
+): string {
   if (details !== null && typeof details === "object" && !Array.isArray(details)) {
     const labels: Record<string, string> = {
       field: "Поле",
       path: "Путь",
       expected: "Ожидалось",
+      current: "Фактически",
       actual: "Получено",
       expectedRevision: "Ожидаемая ревизия",
       actualRevision: "Текущая ревизия",
@@ -41,12 +66,18 @@ function errorDetailsText(details: unknown, options: TextOptions): string {
     const steps: string[] = [];
     const rest: [string, unknown][] = [];
     for (const [name, value] of Object.entries(details)) {
-      if (["hint", "recovery", "nextCommand"].includes(name) && typeof value === "string") {
+      // Машинная причина хранилища повторяет заголовок ошибки.
+      if (name === "code" && value === code) continue;
+      if (["hint", "recovery", "nextCommand", "next"].includes(name) && typeof value === "string") {
         if (!value.trim()) continue;
         const match = /^(?:Синтаксис и примеры: )?(npx @oim-dev\/relay-cli(?:[\s].*)?)$/s.exec(
           value,
         );
-        steps.push(match ? commandText(match[1]!, options) : wrap(safeText(value), options.width));
+        steps.push(
+          match
+            ? commandText(localizeStorageCommand(match[1]!, maintenanceCommand), options)
+            : storageNextText(value, options.width, maintenanceCommand),
+        );
       } else if (Object.hasOwn(labels, name)) {
         fields.push([
           labels[name]!,
@@ -105,7 +136,7 @@ function recoveryText(error: AppError): string {
     !Array.isArray(details) &&
     Object.entries(details).some(
       ([key, value]) =>
-        ["hint", "recovery", "nextCommand"].includes(key) &&
+        ["hint", "recovery", "nextCommand", "next"].includes(key) &&
         typeof value === "string" &&
         value.trim(),
     )
@@ -133,16 +164,28 @@ export function printError(stream: Writable, error: AppError, options: OutputOpt
   const encode = () =>
     options.format === "json"
       ? `${safeJson(payload)}\n`
-      : [
-          colors.red(colors.bold(`Ошибка: ${safeText(payload.error.code)}`)),
-          wrap(safeText(payload.error.message), text.width),
-          ...(payload.error.details === undefined
-            ? []
-            : ["", errorDetailsText(payload.error.details, text)]),
-          ...(recoveryText(error)
-            ? ["", wrap(`Следующий шаг: ${recoveryText(error)}`, text.width)]
-            : []),
-          "",
-        ].join("\n");
+      : error instanceof PresentedError
+        ? [colors.bold(`Ошибка: ${safeText(error.code)}`), safeText(error.text(text)), ""].join(
+            "\n",
+          )
+        : [
+            colors.red(colors.bold(`Ошибка: ${safeText(payload.error.code)}`)),
+            wrap(safeText(payload.error.message), text.width),
+            ...(payload.error.details === undefined
+              ? []
+              : [
+                  "",
+                  errorDetailsText(
+                    payload.error.details,
+                    text,
+                    payload.error.code,
+                    options.maintenanceCommand,
+                  ),
+                ]),
+            ...(recoveryText(error)
+              ? ["", wrap(`Следующий шаг: ${recoveryText(error)}`, text.width)]
+              : []),
+            "",
+          ].join("\n");
   stream.write(encode());
 }

@@ -21,6 +21,8 @@ export interface CommandInput<Options> {
 }
 
 export interface CommandDefinition<Options> extends CommandHelp {
+  /** Обслуживание файлов базы: HTTP-режим получает LOCAL_REQUIRED до сетевого запроса. */
+  localOnly?: boolean;
   run: (context: CommandContext, input: CommandInput<Options>) => Promise<Result>;
 }
 
@@ -71,22 +73,26 @@ export function registerCommand<Options extends object = Record<string, never>>(
   definition: CommandDefinition<Options>,
 ): void {
   const command = createCommand(parent, definition);
-  action(command, runtime, (context) =>
-    definition.run(context, {
-      options: command.opts() as Options,
-      argument(index = 0) {
-        const value: unknown = command.processedArgs[index];
-        invariant(
-          typeof value === "string",
-          "INVALID_ARGUMENT",
-          `Отсутствует аргумент. Справка: ${commandPath(command)} --help`,
-        );
-        return value;
-      },
-      optionalArgument(index = 0) {
-        return command.processedArgs[index] as string | undefined;
-      },
-    }),
+  action(
+    command,
+    runtime,
+    (context) =>
+      definition.run(context, {
+        options: command.opts() as Options,
+        argument(index = 0) {
+          const value: unknown = command.processedArgs[index];
+          invariant(
+            typeof value === "string",
+            "INVALID_ARGUMENT",
+            `Отсутствует аргумент. Справка: ${commandPath(command)} --help`,
+          );
+          return value;
+        },
+        optionalArgument(index = 0) {
+          return command.processedArgs[index] as string | undefined;
+        },
+      }),
+    { localOnly: definition.localOnly ?? false },
   );
 }
 

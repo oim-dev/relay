@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getProjectApi, ApiError } from "infra/tasks-api";
+import { getProjectApi, ApiError, getStorageFailureMessage } from "infra/tasks-api";
 import {
   GOAL_PROGRESS_SCHEMA,
   GOAL_ADDRESS_SCHEMA,
@@ -47,8 +47,9 @@ export class BoardTaskError extends Error {
   constructor(
     message: string,
     readonly code: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 const failure = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
@@ -141,7 +142,11 @@ async function request<T>(
     if (error instanceof ApiError) {
       const parsed = failure.safeParse(error.error);
       if (parsed.success && error.status < 500)
-        throw new BoardTaskError(parsed.data.error.message, parsed.data.error.code);
+        throw new BoardTaskError(
+          getStorageFailureMessage(error) ?? parsed.data.error.message,
+          parsed.data.error.code,
+          { cause: error },
+        );
       throw new BoardTaskError(
         "Ответ сервера не получен. Если вы отправляли изменения, их исход неизвестен: перечитайте состояние перед новой отправкой, чтобы не создать дубликат.",
         "UNAVAILABLE",

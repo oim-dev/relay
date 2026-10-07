@@ -1,38 +1,32 @@
-# Явный переход к хранению текущего состояния
+# Явная миграция хранилища из checkout
 
-`migrate-storage.mts` вызывает `StorageService.migrate()` и показывает размеры базы.
-Целевой формат — manifest v4, оболочка сущности v3. Поддерживаются физические v1/v2/v3
-и прежние предметные базы в пределах действующих кодеков. Неподдерживаемая версия
-предметных данных останавливает перенос, а не сбрасывается.
+`migrate-storage.mts` вызывает публичный API Core
+`application/storage/maintenance.ts` (`inspectStorage`, `planStorageMigration`,
+`migrateStorage`) — ту же реализацию, что `npx @oim-dev/relay-cli --local storage status|migrate`.
+Собственных правил переноса у runner нет.
 
 ```sh
+# Диагностика без изменений
 node --conditions=tasks-source --import tsx packages/core/scripts/migrate-storage.mts \
-  --project /absolute/path/to/project-copy --apply --reindex
+  --project /absolute/path/to/project-copy --status
+# Точный план в памяти; база не меняется, backup не создаётся
+node --conditions=tasks-source --import tsx packages/core/scripts/migrate-storage.mts \
+  --project /absolute/path/to/project-copy --dry-run
+# Перенос с внешней резервной копией и проверкой отпечатка плана
+node --conditions=tasks-source --import tsx packages/core/scripts/migrate-storage.mts \
+  --project /absolute/path/to/project-copy --backup-dir /backups/relay --if-plan PLAN_FINGERPRINT
 ```
 
-Сначала запускайте на отдельной копии. Реальная очистка требует отдельного поручения
-и резервной копии **вне репозитория**. Runner сам резервных копий и журналов не создаёт.
-Символьные ссылки в выбранной базе отклоняются. Ищется только `.relay/config.json`
-указанного проекта; родительская конфигурация не выбирается.
+`--config` принимает файл конфигурации любого имени вместо `--project`. `--backup-dir`
+обязателен для изменяющего переноса и должен находиться вне базы и Git-рабочей копии;
+при no-op копия не создаётся. Продолжение незавершённой миграции выполняется без
+`--backup-dir`: используется проверенная копия, записанная в WAL. Результат — JSON по схемам
+`@relay/contracts/storage-maintenance`. Exit code совпадает с CLI: 0 — успешный исход
+(`current`/`migration-required`, применимый dry-run, перенос или no-op); статусы
+`invalid`, `unsupported`, `recovery-required`, неприменимый dry-run и ошибка переноса дают
+`{ "ok": false, "error": { code, message, details } }` и код из
+`STORAGE_MAINTENANCE_ERROR_EXIT_CODES`.
 
-Сохраняются текущее состояние, ID, ревизии, Markdown, пользовательские комментарии,
-алиасы, резервы адресов, надгробия и отношения. Автоматические события, квитанции,
-запросы и результаты прежних команд удаляются, включая audit без владельца.
-Allowlist и разрешение orphan planning больше не нужны. Отсутствующие планы не создаются.
-Новые команды не сохраняют результатов: после потери ответа перечитайте состояние.
-
-Переход и удаление прежних источников публикуются одним восстанавливаемым WAL;
-после успеха pending удаляется. Старые страницы индексов удаляются при переходе.
-`--reindex` — дополнительная проверка воспроизводимости индексов, не скрытая миграция.
-Повтор завершённого перехода возвращает `migrated: false`.
-
-Проверка неизменности пользовательской базы и сохранности данных **на временной копии**:
-
-```sh
-RELAY_MIGRATION_SOURCE=/absolute/path/to/project/.relay \
-  node --conditions=tasks-source --import tsx --test packages/core/test/playground-history-removal.test.ts
-```
-
-Тест сравнивает содержание сущностей без удаляемого audit, побайтово проверяет отношения
-и пространства ключей, выполняет reindex и проверяет неизменность исходных файлов.
-Временная копия удаляется после теста.
+Сначала запускайте на отдельной копии и остановите процессы Relay, работающие с базой.
+Порядок исполнения, состав резервной копии и восстановление описаны в
+[FORMAT](../docs/FORMAT.md) и [руководстве по восстановлению](../../../docs/guides/RECOVERY.md).

@@ -7,7 +7,12 @@ import { serverUrlSchema } from "@relay/core/domain/config";
 import { parse } from "@relay/core/domain/validation";
 
 const failure = z.object({
-  error: z.object({ code: z.string(), message: z.string(), exitCode: z.number().optional() }),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    exitCode: z.number().optional(),
+    details: z.unknown().optional(),
+  }),
 });
 
 /** Клиент реестра; проектные операции получают отдельный неизменяемый HTTP-контекст. */
@@ -27,7 +32,9 @@ export function createServerApi(url: string) {
             throw new AppError(
               parsed.data.error.code,
               parsed.data.error.message + (write && error.status >= 500 ? uncertain : ""),
-              parsed.data.error.exitCode ?? 5,
+              parsed.data.error.exitCode ??
+                (error.status === 404 ? 3 : error.status === 409 ? 4 : error.status < 500 ? 2 : 5),
+              parsed.data.error.details,
             );
         }
         throw new AppError(
