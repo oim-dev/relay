@@ -10,7 +10,8 @@ const LEAF_ENTRIES = 1024;
 const SEGMENT_BYTES = 1024 * 1024;
 const CACHE_BYTES = 64 * 1024 * 1024;
 const CACHE_ENTRIES = 4096;
-const segmentSchema = z.discriminatedUnion("type", [
+/** Строгая схема страницы индекса; её же применяет явная диагностика обслуживания. */
+export const indexSegmentSchema = z.discriminatedUnion("type", [
   z.strictObject({
     schemaVersion: z.literal(1),
     type: z.literal("leaf"),
@@ -25,6 +26,7 @@ const segmentSchema = z.discriminatedUnion("type", [
     children: z.record(z.string().regex(/^[a-f0-9]$/), hashSchema),
   }),
 ]);
+const segmentSchema = indexSegmentSchema;
 type Segment = z.infer<typeof segmentSchema>;
 type CacheEntry = { segment: Segment; bytes: number };
 // Один ограниченный кеш на процесс; реальный путь базы включён в ключ, projectId не используется.

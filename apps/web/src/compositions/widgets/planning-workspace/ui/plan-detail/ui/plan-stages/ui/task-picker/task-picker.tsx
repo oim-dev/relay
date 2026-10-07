@@ -99,6 +99,8 @@ export const TaskPicker = (props: TaskPickerProps) => {
   const total = candidates.data?.total ?? 0;
   const hasMore = isDefined(candidates.data?.nextOffset);
   const hasReadError = isDefined(candidates.error) || isDefined(boardsQuery.error);
+  // Отказ чтения без данных не выдаётся за пустой результат.
+  const foundLabel = `Найдено: ${isDefined(candidates.data) ? total : hasReadError ? "—" : 0}`;
   const isEmpty = !candidates.isLoading && !hasReadError && isEmptyArray(taskItems);
   const hasError = isDefined(error);
   const hasSelection = !isEmptyArray(selectedIds);
@@ -215,7 +217,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
               setLimit(12);
             }}
           />
-          <span role="status">Найдено: {total}</span>
+          <span role="status">{foundLabel}</span>
         </div>
         {candidates.isLoading && <p role="status">Загружаем задачи…</p>}
         {hasReadError && (

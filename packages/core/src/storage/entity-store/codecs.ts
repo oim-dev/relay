@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { JsonValue } from "@relay/contracts/storage";
 import { invariant } from "../../shared/errors.js";
 import { EntityStorageRegistry } from "./registry.js";
+import { BUILTIN_REFERENCES } from "./references.js";
 import type { EntityCodec } from "./registry.js";
 
 /** Путь '*' проходит элементы массива, не меняя остальные предметные поля. */
@@ -80,6 +81,7 @@ const definitions: EntityCodec[] = Object.entries(entityDataSchemas).map(([kind,
         ? schema.extend({ acceptanceCriteria: z.array(acceptanceCriterionSchema).max(100) })
         : schema,
     ...markdownCodec(paths),
+    ...(BUILTIN_REFERENCES[kind] ? { references: BUILTIN_REFERENCES[kind] } : {}),
     card(record) {
       const data = record.data;
       return {

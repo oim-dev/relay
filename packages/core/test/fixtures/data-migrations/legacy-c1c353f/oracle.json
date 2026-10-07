@@ -1,0 +1,230 @@
+{
+  "profile": "legacy-early",
+  "entities": {
+    "project": {
+      "kind": "project",
+      "id": "tYqE8JTY"
+    },
+    "passport": {
+      "kind": "product",
+      "id": "passport",
+      "key": "PRODUCT",
+      "name": "Relay фикстура «Миграции»",
+      "summary": "Краткое\nмногострочное описание",
+      "description": "# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n"
+    },
+    "F1": {
+      "kind": "feature",
+      "id": "CKfHYrux",
+      "key": "FEATURE-1",
+      "name": "Фича CRLF",
+      "summary": "Сводка фичи 1",
+      "description": "# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n"
+    },
+    "F2": {
+      "kind": "feature",
+      "id": "07sAAWTe",
+      "key": "FEATURE-UX",
+      "name": "Фича Unicode 🚀",
+      "summary": "",
+      "description": "Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n",
+      "aliases": ["FEATURE-2"]
+    },
+    "F3": {
+      "kind": "feature",
+      "id": "nGT0nyZ6",
+      "key": "FEATURE-3",
+      "name": "Фича для удаления"
+    },
+    "S1": {
+      "kind": "scenario",
+      "id": "WVVHuoER",
+      "key": "SCENARIO-1",
+      "featureId": "CKfHYrux",
+      "name": "Сценарий 1",
+      "description": "## Требования\n\n- пункт **жирный**\n- пункт `code`\n\n```ts\nconst x = 1;\r\n```\n\n> цитата\n"
+    },
+    "S2": {
+      "kind": "scenario",
+      "id": "J699j0KP",
+      "key": "SCENARIO-2",
+      "featureId": "CKfHYrux",
+      "name": "Сценарий 2 (mixed EOL)",
+      "description": "LF-строка\nCRLF-строка\r\n\nПустая строка выше\n\n\n"
+    },
+    "S3": {
+      "kind": "scenario",
+      "id": "iDKajobS",
+      "key": "SCENARIO-3",
+      "featureId": "07sAAWTe",
+      "name": "Сценарий фичи 2",
+      "description": "Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n"
+    },
+    "A1": {
+      "kind": "application",
+      "id": "jBVuk2QQ",
+      "key": "WEB",
+      "slug": "web",
+      "prefix": "WEB",
+      "type": "frontend",
+      "name": "Веб-клиент",
+      "description": "## Требования\n\n- пункт **жирный**\n- пункт `code`\n\n```ts\nconst x = 1;\r\n```\n\n> цитата\n"
+    },
+    "A2": {
+      "kind": "application",
+      "id": "cMy0mIcN",
+      "key": "API",
+      "slug": "api",
+      "prefix": "API",
+      "type": "backend",
+      "name": "API-сервер",
+      "description": "# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n",
+      "scope": {
+        "id": "EVoqrG5Y",
+        "implementations": []
+      }
+    },
+    "FI1": {
+      "kind": "implementation",
+      "id": "J02SWrYi",
+      "key": "WEB-FI-1",
+      "applicationId": "jBVuk2QQ",
+      "featureId": "CKfHYrux",
+      "scenarioId": null,
+      "status": "partial",
+      "description": "# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n"
+    },
+    "SI1": {
+      "kind": "implementation",
+      "id": "nYfLqPjh",
+      "key": "WEB-SI-1",
+      "applicationId": "jBVuk2QQ",
+      "featureId": "CKfHYrux",
+      "scenarioId": "WVVHuoER",
+      "status": "done",
+      "description": "Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n"
+    },
+    "FI2": {
+      "kind": "implementation",
+      "id": "1KJJ9kEd",
+      "key": "API-FI-1",
+      "applicationId": "cMy0mIcN",
+      "featureId": "07sAAWTe",
+      "scenarioId": null,
+      "status": "none",
+      "active": false
+    },
+    "T7": {
+      "title": "Продуктовая задача",
+      "description": "Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n",
+      "productLinks": [
+        ["feature", "CKfHYrux"],
+        ["scenario", "WVVHuoER"]
+      ],
+      "criteria": [],
+      "kind": "task",
+      "id": "BdRlRKRD",
+      "key": "PRODUCT-2"
+    },
+    "T1": {
+      "kind": "task",
+      "id": "IpHEq2yg",
+      "key": "WEB-1",
+      "title": "Задача с критериями «T1»",
+      "description": "# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n",
+      "criteria": [],
+      "productLinks": [
+        ["implementation", "J02SWrYi"],
+        ["implementation", "nYfLqPjh"]
+      ],
+      "dependencies": ["fk1AulMd"],
+      "related": ["4FnF2coG"],
+      "comments": [],
+      "completedCriterionId": null
+    },
+    "T2": {
+      "kind": "task",
+      "id": "fk1AulMd",
+      "key": "WEB-2",
+      "title": "Зависимость T2",
+      "description": "LF-строка\nCRLF-строка\r\n\nПустая строка выше\n\n\n",
+      "column": "done"
+    },
+    "T3": {
+      "kind": "task",
+      "id": "4FnF2coG",
+      "key": "API-1",
+      "title": "Связанная T3",
+      "description": "Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n"
+    },
+    "T4": {
+      "kind": "task",
+      "id": "75oH2TXt",
+      "key": "WEB-3",
+      "title": "Подзадача T4",
+      "description": "Строка без перевода в конце",
+      "parentId": null
+    },
+    "T5": {
+      "kind": "task",
+      "id": "yjLgOooV",
+      "key": "PRODUCT-1"
+    },
+    "T6": {
+      "kind": "task",
+      "id": "b0lSMCK0",
+      "key": "API-2",
+      "aliases": ["WEB-4"],
+      "column": "in-progress"
+    },
+    "D1": {
+      "kind": "document",
+      "id": "FzPipwPt",
+      "key": "DOC-1",
+      "name": "ТЗ миграции",
+      "body": "## Требования\n\n- пункт **жирный**\n- пункт `code`\n\n```ts\nconst x = 1;\r\n```\n\n> цитата\n# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n",
+      "documentKind": "specification",
+      "links": [
+        ["feature", "CKfHYrux"],
+        ["scenario", "WVVHuoER"]
+      ]
+    },
+    "D2": {
+      "kind": "document",
+      "id": "7k3zMZAq",
+      "key": "DOC-2",
+      "body": "Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n",
+      "documentKind": "rules"
+    }
+  },
+  "relations": {
+    "diagnosticActive": {
+      "id": "k6ODJ168",
+      "from": ["document", "7k3zMZAq"],
+      "to": ["feature", "07sAAWTe"],
+      "type": "diagnostic-note",
+      "description": "Пояснение\r\nдиагностической связи\n",
+      "active": true
+    },
+    "diagnosticRevoked": {
+      "id": "RMajESKv",
+      "from": ["task", "4FnF2coG"],
+      "to": ["application", "cMy0mIcN"],
+      "type": "custom-temporary",
+      "active": false
+    }
+  },
+  "deleted": [],
+  "aliases": {
+    "07sAAWTe": {
+      "previous": ["FEATURE-2"],
+      "key": "FEATURE-UX"
+    },
+    "b0lSMCK0": {
+      "previous": ["WEB-4"],
+      "key": "API-2"
+    }
+  },
+  "notes": ["Удаление сущностей появилось в 6e141e1; в этой версии надгробий нет"],
+  "reindex": "нет команды storage reindex в этой версии"
+}

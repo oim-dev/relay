@@ -16,6 +16,14 @@ export const storageManifestSchema = z.strictObject({
     .string()
     .optional()
     .describe("Постоянный ID прежнего продуктового агрегата для совместимости DTO"),
+  dataModelVersion: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Профиль совместимости модели данных: целевые версии всех постоянных владельцев. Отсутствует только у исторических баз профиля 1; Core требует текущее значение и не считает отсутствие разрешением",
+    ),
 });
 export const storageTokenSchema = entityRefSchema.shape.id;
 export const storageCollectionSchema = z

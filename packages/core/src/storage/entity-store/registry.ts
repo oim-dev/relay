@@ -1,3 +1,4 @@
+import type { EntityReferences } from "./references.js";
 import type { z } from "zod";
 import {
   storedEntitySchema,
@@ -19,10 +20,25 @@ export type EntityCodec = {
   schema: z.ZodType<Record<string, unknown>>;
   encode(data: Record<string, unknown>): Record<string, JsonValue>;
   decode(data: Record<string, JsonValue>): Record<string, unknown>;
+  /**
+   * Замороженная дисковая схема текущей версии (Markdown массивами строк). Если задана,
+   * реестр переходов сверяет с ней выход последнего шага вида по JSON Schema.
+   */
+  diskSchema?: z.ZodType;
+  /**
+   * Запись совместимости прежнего адреса: содержание перенесено другому владельцу.
+   * Разрешение адреса без явного ожидания этого вида возвращает ENTITY_RELOCATED с целью.
+   */
+  relocation?: (record: StoredEntity) => { ref: EntityRef; stageId: string };
   /** Явные переходы версии N → N+1 над дисковыми данными; чтение их автоматически не запускает. */
   migrations?: Readonly<
     Record<number, (data: Record<string, JsonValue>) => Record<string, JsonValue>>
   >;
+  /**
+   * Предметные ссылки данных текущей версии по постоянным ID. Явное обслуживание
+   * (`storage status`/`migrate`) проверяет, что каждая указывает на существующую запись.
+   */
+  references?: EntityReferences;
   card(
     record: EntityRecord,
   ): Pick<StorageCard, "title" | "status" | "selectors"> &
@@ -92,6 +108,29 @@ export class EntityStorageRegistry {
   validate(value: unknown): StoredRecord {
     const record = storedRecordSchema.parse(value);
     const codec = this.definition(record.kind);
+    this.validateEnvelope(record, codec.addressable !== false);
+    invariant(
+      record.dataVersion === codec.dataVersion,
+      "STORAGE_DATA_MIGRATION_REQUIRED",
+      "Версия данных вида требует явной миграции",
+      4,
+    );
+    if (!("deleted" in record)) this.currentData(record.kind, record.data);
+    return record;
+  }
+
+  /** Проверка данных текущей версии кодеком; дисковая форма возвращается без изменений. */
+  currentData(kind: string, data: Record<string, JsonValue>): Record<string, JsonValue> {
+    const codec = this.definition(kind);
+    codec.schema.parse(codec.decode(data));
+    return data;
+  }
+
+  /**
+   * Правила оболочки, не зависящие от версии данных: лента комментариев, публичность ключа,
+   * уникальность алиасов. Применяются и к историческим версиям при диагностике и миграции.
+   */
+  validateEnvelope(record: StoredRecord, addressable: boolean): void {
     invariant(
       record.kind === "task" ||
         (record.comments === undefined && record.commentSequence === undefined),
@@ -120,18 +159,10 @@ export class EntityStorageRegistry {
       );
     }
     invariant(
-      codec.addressable === false
-        ? record.key === null && record.aliases.length === 0
-        : record.key !== null,
+      addressable ? record.key !== null : record.key === null && record.aliases.length === 0,
       "INVALID_DATA",
       "Ключ не соответствует публичности владельца",
       5,
-    );
-    invariant(
-      record.dataVersion === codec.dataVersion,
-      "STORAGE_DATA_MIGRATION_REQUIRED",
-      "Версия данных вида требует явной миграции",
-      4,
     );
     invariant(
       new Set(record.aliases).size === record.aliases.length,
@@ -139,8 +170,6 @@ export class EntityStorageRegistry {
       "Алиас сущности повторяется",
       5,
     );
-    if (!("deleted" in record)) codec.schema.parse(codec.decode(record.data));
-    return record;
   }
 
   decode(value: unknown): EntityRecord {

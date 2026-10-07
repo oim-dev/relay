@@ -137,10 +137,10 @@ for (const version of [1, 2] as const)
         readUnifiedMigrationSources(root, noLock),
         code(
           failure === "missing"
-            ? "STORAGE_INDEX_CORRUPT"
+            ? "STORAGE_RECORD_MISSING"
             : failure === "changed"
               ? "STORAGE_INDEX_STALE"
-              : "INVALID_DATA",
+              : "STORAGE_DATA_CORRUPT",
         ),
       );
     });

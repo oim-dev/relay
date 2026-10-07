@@ -25,7 +25,12 @@ import {
   decodeCommandResult,
 } from "./unified-adapter.js";
 import { storedProjectSettingsSchema } from "../domain/project-settings.js";
-import { storageManifestSchema } from "@relay/contracts/storage";
+import { readStorageManifest } from "./data-model/manifest.js";
+import {
+  inspectPending,
+  migrationRecoveryRequired,
+  rejectUnknownPending,
+} from "./entity-store/transaction.js";
 import { HashIndex } from "./entity-store/hash-index.js";
 import { stateSchema, STATE_PATH } from "./entity-store/format.js";
 
@@ -129,7 +134,7 @@ export class Workspace {
   /** Публичные изменения допустимы только внутри общей сессии актуального формата. */
   assertWritableStorage(): void {
     invariant(
-      this.storageSession?.store.formatVersion === 4,
+      this.storageSession?.store.compatible === true,
       "STORAGE_MIGRATION_REQUIRED",
       "Запись прежнего формата запрещена. Выполните relay-cli --local storage migrate",
       4,
@@ -164,14 +169,57 @@ export class Workspace {
         assertOwned,
         initialize,
       );
-      if (!initialize)
-        this.storageProductId = storageManifestSchema.parse(
-          await readJson(join(root, "storage.json")),
-        ).productId;
+      if (store.manifest) this.storageProductId = store.manifest.productId;
       return operation(store, assertOwned);
     };
     if (active && (await realpath(active.runtime)) === runtime) return run(active.assertOwned);
     return withStorageLock(root, run, runtime);
+  }
+
+  /** Recovery журналов legacy-репозиториев в уже активном контексте замка. */
+  async recoverLegacyJournals(owned: {
+    assertOwned: () => void;
+    recoveringDocumentLinks?: boolean;
+  }): Promise<void> {
+    const assertOwned = owned.assertOwned;
+    await new EntityDeletionRepository(this).recover(assertOwned);
+    await new ProductTransaction(this).recover(assertOwned);
+    await new GraphTransaction(this).recover(assertOwned);
+    await recoverGraphMigration(this, assertOwned);
+    await new BoardRepository(this).recover(assertOwned);
+    await new BoardTaskRepository(this).recover(assertOwned);
+    if (await new DocumentLinksRepository(this).readPending()) {
+      const { recoverDocumentLinks } = await import("../application/documents/link-workflow.js");
+      owned.recoveringDocumentLinks = true;
+      try {
+        await recoverDocumentLinks(this, assertOwned);
+      } finally {
+        owned.recoveringDocumentLinks = false;
+      }
+    }
+  }
+
+  /**
+   * Recovery журналов legacy-раскладки исполнителем миграции под уже удерживаемым им замком
+   * (legacy → unified, тот же lockfile, что у `locked`): владение не прерывается, writer
+   * не может вклиниться между резервной копией, recovery и повторным планированием.
+   */
+  async recoverLegacyUnderHeldLock(assertOwned: () => void): Promise<void> {
+    const owned = {
+      root: this.root,
+      runtime: this.runtime,
+      assertOwned,
+      active: true,
+      recoveringDocumentLinks: false,
+    };
+    await lockContext.run(owned, async () => {
+      try {
+        assertOwned();
+        await this.recoverLegacyJournals(owned);
+      } finally {
+        owned.active = false;
+      }
+    });
   }
 
   async locked<T>(operation: (assertOwned: () => void) => Promise<T>): Promise<T> {
@@ -218,22 +266,7 @@ export class Workspace {
       return lockContext.run(owned, async () => {
         try {
           if (await this.hasUnifiedStorage()) return this.locked(operation);
-          await new EntityDeletionRepository(this).recover(assertOwned);
-          await new ProductTransaction(this).recover(assertOwned);
-          await new GraphTransaction(this).recover(assertOwned);
-          await recoverGraphMigration(this, assertOwned);
-          await new BoardRepository(this).recover(assertOwned);
-          await new BoardTaskRepository(this).recover(assertOwned);
-          if (await new DocumentLinksRepository(this).readPending()) {
-            const { recoverDocumentLinks } =
-              await import("../application/documents/link-workflow.js");
-            owned.recoveringDocumentLinks = true;
-            try {
-              await recoverDocumentLinks(this, assertOwned);
-            } finally {
-              owned.recoveringDocumentLinks = false;
-            }
-          }
+          await this.recoverLegacyJournals(owned);
           return await operation(assertOwned);
         } finally {
           owned.active = false;
@@ -264,9 +297,16 @@ async function locateConfig(cwd: string, explicit?: string): Promise<string> {
   }
 }
 
-/** Обычное чтение настроек не пишет данные; незавершённый переход восстанавливается до чтения. */
+/**
+ * Обычное чтение настроек не пишет данные; незавершённая обычная операция (WAL v1)
+ * восстанавливается до чтения. Миграционный и неизвестный WAL распознаются без recovery,
+ * блокировки и создания каталогов: проект недоступен до явного storage migrate.
+ */
 export async function readWorkspaceConfig(cwd: string, explicit?: string) {
   const located = await locateConfig(cwd, explicit);
+  const pending = await inspectPending(dirname(located));
+  rejectUnknownPending(pending);
+  if (pending.kind === "migration") throw migrationRecoveryRequired(pending.intent.migration);
   if (
     !(await exists(located)) &&
     (await exists(join(dirname(located), "transactions/pending.json")))
@@ -285,8 +325,9 @@ export async function readWorkspaceConfig(cwd: string, explicit?: string) {
     await temporary.withEntityStorage(async () => {});
     config = parse(configSchema, await readJson(configPath), configPath);
   }
-  if (await exists(join(directory, "storage.json"))) {
-    storageManifestSchema.parse(await readJson(join(directory, "storage.json")));
+  // Повреждённый, неизвестный и более новый маркер — отказ; устаревший профиль
+  // сообщает предметная операция, а явное обслуживание остаётся доступным.
+  if (await readStorageManifest(directory)) {
     try {
       const state = stateSchema.parse(await readJson(join(directory, STATE_PATH)));
       const projection = await new HashIndex(directory).get(
@@ -316,11 +357,10 @@ export async function readWorkspaceConfig(cwd: string, explicit?: string) {
 export async function openWorkspace(cwd: string, explicit?: string): Promise<Workspace> {
   const { configPath, config } = await readWorkspaceConfig(cwd, explicit);
   const dataRoot = dirname(configPath);
-  if (await exists(join(dataRoot, "storage.json"))) {
+  const manifest = await readStorageManifest(dataRoot);
+  if (manifest) {
     const workspace = new Workspace(configPath, dataRoot, config);
-    workspace.storageProductId = storageManifestSchema.parse(
-      await readJson(join(dataRoot, "storage.json")),
-    ).productId;
+    workspace.storageProductId = manifest.productId;
     return workspace;
   }
   const storage = resolve(dirname(configPath), config.storageDir);
@@ -334,10 +374,7 @@ export async function openWorkspace(cwd: string, explicit?: string): Promise<Wor
     // Несколько запросов и наблюдатель могут впервые открыть один каталог одновременно.
     await mkdir(root, { recursive: true });
   const workspace = new Workspace(configPath, root, config);
-  if (await exists(join(dirname(configPath), "storage.json")))
-    workspace.storageProductId = storageManifestSchema.parse(
-      await readJson(join(dirname(configPath), "storage.json")),
-    ).productId;
+  workspace.storageProductId = (await readStorageManifest(dirname(configPath)))?.productId;
   return workspace;
 }
 

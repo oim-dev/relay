@@ -20,6 +20,7 @@ import { DocumentLinksRepository } from "../src/storage/document-links.js";
 import type { GraphSnapshot } from "../src/storage/graph.js";
 import { HashIndex } from "../src/storage/entity-store/hash-index.js";
 import { digest, jsonValue, stateSchema } from "../src/storage/entity-store/format.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 async function files(root: string, prefix = ""): Promise<Map<string, string>> {
   const result = new Map<string, string>();
@@ -139,7 +140,11 @@ for (const version of ["legacy", 1, 2] as const)
     for (const operation of operations)
       await assert.rejects(operation(), { code: "STORAGE_MIGRATION_REQUIRED" });
     assert.deepEqual(await files(join(root, ".relay")), before);
-    assert.equal((await new StorageService(workspace).migrate()).migrated, true);
+    assert.equal(
+      (await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() }))
+        .migrated,
+      true,
+    );
     const saved = await tasks.create(command, "agent");
     assert.notEqual((await tasks.create(command, "agent")).id, saved.id);
     const after = await files(join(root, ".relay"));
@@ -230,7 +235,7 @@ for (const crash of [0, 1, 2])
       ),
     );
     assert(!recovered.has("product/.transactions/document-links.json"));
-    await new StorageService(workspace).migrate();
+    await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
     const context = await new GraphService(workspace).context({ root: task.id });
     assert.equal(
       context.edges.filter((edge) => edge.type === "references" && edge.to.id === to.id).length,

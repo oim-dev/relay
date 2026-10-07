@@ -21,6 +21,7 @@ import { RECORD_BYTES } from "../src/storage/entity-store/format.js";
 import { readOwned } from "../src/storage/entity-store/relations.js";
 import { planSummarySchema } from "@relay/contracts/planning";
 import type { PlanningSaved } from "@relay/contracts/planning";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 async function fixture(t: TestContext, legacy = false) {
   const root = await mkdtemp(join(tmpdir(), "relay-planning-"));
@@ -1279,7 +1280,7 @@ test("старый формат: существующие задачи дост�
     code: "STORAGE_MIGRATION_REQUIRED",
   });
   assert.equal((await tasks.get(task.id)).revision, task.revision);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   assert.equal((await plans.create({ title: "План", requestId: "plan" }, "agent")).revision, 1);
   assert.equal((await tasks.get(task.id)).id, task.id);
 });

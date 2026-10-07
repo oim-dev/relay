@@ -104,6 +104,8 @@ export const RelationPicker = ({
   const hasPrevious = page.offset > 0;
   const hasError = error !== "";
   const hasLoadError = response.error !== undefined;
+  // Отказ чтения без данных не выдаётся за пустой результат.
+  const foundLabel = `Найдено: ${response.data?.total ?? (hasLoadError ? "—" : 0)}`;
   const applyLabel = isDraft ? "Применить к документу" : "Сохранить прикрепления";
   const hasLimit = links.length >= 100;
   /** Переключает одну цель независимо от её родителей и соседей. */
@@ -236,7 +238,7 @@ export const RelationPicker = ({
             Назад
           </Button>
           <Text size="xs" c="dimmed">
-            Найдено: {response.data?.total ?? 0}
+            {foundLabel}
           </Text>
           <Button
             variant="subtle"

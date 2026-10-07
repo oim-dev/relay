@@ -347,6 +347,21 @@ export class ProductService {
             "Раздел библиотеки не найден",
           );
         for (const relation of fields.relations ?? []) {
+          // Прежний адрес этапа плана — только чтение: сохранённая связь остаётся с тем же
+          // текстом, а новое прикрепление к этапу запрещено (этап — запись внутри плана).
+          if (relation.target.kind === "plan-stage") {
+            invariant(
+              prior?.relations?.some(
+                (link) =>
+                  link.target.kind === "plan-stage" &&
+                  link.target.id === relation.target.id &&
+                  link.type === relation.type,
+              ),
+              "INVALID_REFERENCE",
+              "Этап плана не является целью прикрепления; прикрепите документ к плану",
+            );
+            continue;
+          }
           const target = resolveEntity(catalog, `${relation.target.kind}:${relation.target.id}`);
           invariant(
             target.ref.id !== id || target.ref.kind !== "document",

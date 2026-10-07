@@ -1,0 +1,30 @@
+{"step":1,"args":["init"],"ok":true}
+{"step":2,"args":["task","create","--board","product","--title","Задача 0","--description","# Заголовок CRLF\r\n\r\nПервая строка\r\nВторая строка с пробелами в конце   \r\n"],"ok":true}
+{"step":3,"args":["task","create","--board","product","--title","Задача 1","--description",""],"ok":true}
+{"step":4,"args":["task","create","--board","product","--title","Задача 2","--description",""],"ok":true}
+{"step":5,"args":["task","create","--board","product","--title","Задача 3","--description",""],"ok":true}
+{"step":6,"args":["plan","create","--title","План с равными rank","--goal","Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n"],"ok":true}
+{"step":7,"args":["plan","stage","create","PLN-1","--title","Этап X"],"ok":false}
+{"step":8,"args":["entities","get","PLN-1"],"ok":true}
+{"step":8,"args":["plan","stage","create","PLN-1","--title","Этап X","--if-revision","1"],"ok":true}
+{"step":9,"args":["plan","stage","create","PLN-1","--title","Этап Y"],"ok":false}
+{"step":10,"args":["entities","get","PLN-1"],"ok":true}
+{"step":10,"args":["plan","stage","create","PLN-1","--title","Этап Y","--if-revision","2"],"ok":true}
+{"step":11,"args":["plan","stage","create","PLN-1","--title","Этап Z"],"ok":false}
+{"step":12,"args":["entities","get","PLN-1"],"ok":true}
+{"step":12,"args":["plan","stage","create","PLN-1","--title","Этап Z","--if-revision","3"],"ok":true}
+{"step":13,"args":["plan","include","PLN-1","FhpruDYL","--tasks","PRODUCT-1"],"ok":false}
+{"step":14,"args":["entities","get","PLN-1"],"ok":true}
+{"step":14,"args":["plan","include","PLN-1","FhpruDYL","--tasks","PRODUCT-1","--if-revision","4"],"ok":true}
+{"step":15,"args":["plan","include","PLN-1","fAVWvbdH","--tasks","PRODUCT-2","PRODUCT-3"],"ok":false}
+{"step":16,"args":["entities","get","PLN-1"],"ok":true}
+{"step":16,"args":["plan","include","PLN-1","fAVWvbdH","--tasks","PRODUCT-2","PRODUCT-3","--if-revision","5"],"ok":true}
+{"step":17,"args":["plan","include","PLN-1","Z261Bz7a","--tasks","PRODUCT-4"],"ok":false}
+{"step":18,"args":["entities","get","PLN-1"],"ok":true}
+{"step":18,"args":["plan","include","PLN-1","Z261Bz7a","--tasks","PRODUCT-4","--if-revision","6"],"ok":true}
+{"step":19,"args":["plan","start","PLN-1"],"ok":false}
+{"step":20,"args":["entities","get","PLN-1"],"ok":true}
+{"step":20,"args":["plan","start","PLN-1","--if-revision","7"],"ok":true}
+{"step":21,"args":["plan","stages","PLN-1"],"ok":true}
+{"step":22,"args":["storage","reindex"],"ok":true}
+{"step":23,"args":["plan","stages","PLN-1"],"ok":true}

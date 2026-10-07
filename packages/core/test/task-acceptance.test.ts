@@ -7,6 +7,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import { fixture } from "./helpers/workspace.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("критерии: готовность к работе, завершение, автор, повтор, конфликт и сброс после изменения", async (t) => {
   const { workspace } = await fixture(t);
@@ -181,7 +182,11 @@ test("критерии: старые данные читаются без зап
     join(dirname(workspace.configPath), "kanban-pending.json"),
     JSON.stringify({ version: 1, writes: [{ slug: "product", task: stored }], removes: [] }),
   );
-  assert.equal((await new StorageService(workspace).migrate()).migrated, true);
+  assert.equal(
+    (await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    true,
+  );
   assert.equal(await exists(join(dirname(workspace.configPath), "kanban-pending.json")), false);
   const added = await service.changeCriterion(
     task.id,

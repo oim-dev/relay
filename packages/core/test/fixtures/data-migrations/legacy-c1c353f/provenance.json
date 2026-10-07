@@ -1,0 +1,55 @@
+{
+  "fixture": "legacy-c1c353f",
+  "commit": "c1c353f102d0ffa65681439da8286a58f3c647fe",
+  "commitShort": "c1c353f",
+  "commitDate": "2026-09-20T22:41:06+03:00",
+  "commitSubject": "refactor: удалить легаси разделов проекта",
+  "exactTag": null,
+  "firstContainingTag": "v0.6.1",
+  "layout": "legacy (до единого хранения)",
+  "physicalFormat": null,
+  "generator": {
+    "profile": "legacy-early",
+    "script": "generators/generate-unified.mjs",
+    "cli": "node --conditions=tasks-source apps/cli/scripts/dev.mjs --local --format json (исходники того же SHA, pnpm install --frozen-lockfile)",
+    "deletion": "generators/fixture-delete.mts — EntityDeletionService того же SHA (в CLI версии нет команды удаления)",
+    "node": "v24.3.0",
+    "actorDefault": "fixture-author"
+  },
+  "entityKindsOfVersion": [
+    "project",
+    "product",
+    "feature",
+    "scenario",
+    "application",
+    "implementation",
+    "board",
+    "task",
+    "document"
+  ],
+  "tree": {
+    "bundle": {
+      "sha256": "3b446c36106bcd9dbe88f0437cc98c0e48cf97d5eca71d3c4e0aa89ca6925870",
+      "bytes": 9775
+    },
+    "files": 44,
+    "directories": 42,
+    "emptyDirectories": [
+      ".relay/boards/.pending-applications",
+      ".relay/boards/infrastructure/tasks",
+      ".relay/product/.transactions",
+      ".relay/relations/transactions",
+      ".relay/tasks"
+    ],
+    "totalBytes": 33854,
+    "filesByTopLevel": {
+      ".relay/boards": 11,
+      ".relay/config.json": 1,
+      ".relay/product": 16,
+      ".relay/relations": 15,
+      ".relay/runtime": 1
+    },
+    "entityCollections": {},
+    "manifest": null
+  }
+}

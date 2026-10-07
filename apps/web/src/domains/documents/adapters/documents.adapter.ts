@@ -5,7 +5,7 @@ import {
   defaultDocumentSections,
 } from "@relay/contracts/entities";
 import type { EntitySaved } from "@relay/contracts/entities";
-import { getProjectApi, ApiError } from "infra/tasks-api";
+import { getProjectApi, ApiError, getStorageFailureMessage } from "infra/tasks-api";
 import type {
   DocumentInput,
   KnowledgeDocument,
@@ -25,7 +25,7 @@ const throwDocumentFailure = (failure: unknown): never => {
     const parsed = FAILURE_SCHEMA.safeParse(failure.error);
     throw new DocumentAccessError(
       parsed.success && failure.status < 500
-        ? parsed.data.error.message
+        ? (getStorageFailureMessage(failure) ?? parsed.data.error.message)
         : "Ответ сервера не получен. Перед новой записью перечитайте состояние: операция могла выполниться.",
       { cause: failure },
     );

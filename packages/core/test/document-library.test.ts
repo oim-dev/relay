@@ -9,6 +9,7 @@ import { EntityDeletionService } from "@relay/core/application/entities/deletion
 import { ProductRepository } from "@relay/core/storage/product";
 import { GraphService } from "@relay/core/application/graph/service";
 import { fixture } from "./helpers/workspace.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("библиотека: черновик, атомарные связи с задачей, Markdown, CAS и повтор", async (t) => {
   const { workspace } = await fixture(t);
@@ -209,8 +210,16 @@ test("библиотека: повторяемая миграция прежне
   await writeFile(path, JSON.stringify(disk));
   const before = await engine.get({ ref: saved.key });
   assert.equal(before.document?.status, "active");
-  assert.equal((await new StorageService(workspace).migrate()).migrated, true);
-  assert.equal((await new StorageService(workspace).migrate()).migrated, false);
+  assert.equal(
+    (await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    true,
+  );
+  assert.equal(
+    (await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    false,
+  );
   assert.deepEqual(await engine.get({ ref: saved.key }), before);
   assert.equal(
     JSON.parse(

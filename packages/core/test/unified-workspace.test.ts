@@ -14,6 +14,7 @@ import { GraphService } from "@relay/core/application/graph/service";
 import { initialize, openWorkspace } from "@relay/core/storage/workspace";
 import { ProductQueries } from "@relay/core/application/product/queries";
 import { EntityDeletionService } from "@relay/core/application/entities/deletion";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("новый init: единая база и одна блокировка после изменения прежнего storageDir", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-native-init-"));
@@ -49,7 +50,7 @@ test("новый init: единая база и одна блокировка п
 
 test("потеря заголовка индексов не закрывает доступ к явному reindex", async (t) => {
   const { root, workspace } = await fixture(t);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   const task = await new BoardTasksService(workspace).create(
     { board: "product", requestId: "task" },
     "agent",
@@ -67,7 +68,7 @@ test("потеря заголовка индексов не закрывает �
 
 test("после удаления создание исполняется заново, изменение удалённой сущности отклоняется", async (t) => {
   const { workspace } = await fixture(t);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   const engine = new EntityEngine(workspace);
   const input = {
     requestId: "create",
@@ -121,7 +122,7 @@ test("legacy: миграция удаляет квитанцию удалени�
   );
   await writeFile(join(directory, "../keys.json"), JSON.stringify([command.ref]));
   const deletion = new EntityDeletionService(workspace);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   await assert.rejects(deletion.delete(command, "agent"), { code: "ENTITY_NOT_FOUND" });
   await new StorageService(workspace).reindex();
   await assert.rejects(deletion.delete(command, "agent"), { code: "ENTITY_NOT_FOUND" });
@@ -242,8 +243,14 @@ test("единая база: явный перенос сохраняет про
   await writeLegacyMigrationFixture(workspace);
   const legacy = await openWorkspace(root);
   assert.equal(await legacy.hasUnifiedStorage(), false);
-  assert.equal((await new StorageService(legacy).migrate()).migrated, true);
-  assert.equal((await new StorageService(legacy).migrate()).migrated, false);
+  assert.equal(
+    (await new StorageService(legacy).migrate({ backupDir: await migrationBackupDir() })).migrated,
+    true,
+  );
+  assert.equal(
+    (await new StorageService(legacy).migrate({ backupDir: await migrationBackupDir() })).migrated,
+    false,
+  );
   const reopened = await openWorkspace(root);
   const current = new EntityEngine(reopened);
   assert.deepEqual(await current.get({ ref: document.key }), previous);
@@ -314,7 +321,7 @@ test("единая база: явный перенос сохраняет про
 
 test("единая база: пустой проект после перехода создаёт все основные виды и сохраняет ID при переносе", async (t) => {
   const { workspace, root } = await fixture(t);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   const engine = new EntityEngine(workspace);
   const task = await engine.create(
     { requestId: "create", data: { kind: "task", board: "BOARD-PRODUCT", title: "Работа" } },
@@ -369,7 +376,7 @@ for (const kind of [
 ] as const)
   test(`единая база: каскад ${kind}, снятие внешних линков, история и повтор`, async (t) => {
     const { workspace } = await fixture(t);
-    await new StorageService(workspace).migrate();
+    await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
     const engine = new EntityEngine(workspace);
     const feature = await engine.create(
       {

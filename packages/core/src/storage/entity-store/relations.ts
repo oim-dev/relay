@@ -234,6 +234,15 @@ async function saveOwned(
   for (const path of previousFiles) if (!files.has(path)) await session.writeFile(path, null);
 }
 
+/**
+ * Непустые корни индексов, которые `indexEntry` создаёт для ребра: `edges` — всегда,
+ * `adjacency` — только для активного (неактивное снимается с соседства). Явная диагностика
+ * обслуживания выводит из этого обязательность корней; пустой корректный индекс не потерян.
+ */
+export function edgeIndexRoots(active: boolean): readonly string[] {
+  return active ? ["edges", "adjacency"] : ["edges"];
+}
+
 async function indexEntry(session: StorageSession, owner: EntityRef, entry: Entry) {
   const { edge, slot } = entry;
   const existing = await session.indexGet("edges", edge.id);

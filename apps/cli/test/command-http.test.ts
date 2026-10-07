@@ -154,14 +154,11 @@ test("HTTP/local golden: проект, конфиг, задача, граф, doc
   const context = successful(await remote(["inspect", "graph", "context", "PRODUCT-1"])).data;
   assert.equal(context.complete, true);
   assert.ok(context.edges.some((edge: any) => edge.id === linked.ids[0] && edge.to.id === task.id));
-  for (const operation of ["migrate", "reindex", "reconcile-relations"]) {
+  for (const operation of ["status", "migrate", "reindex", "reconcile-relations"]) {
     const rejected = await remote(["storage", operation]);
     assert.equal(rejected.code, 2);
     assert.equal(rejected.stderr, "");
-    assert.ok(
-      !rejected.body.ok && ["LOCAL_REQUIRED", "LOCAL_ONLY"].includes(rejected.body.error.code),
-      rejected.stdout,
-    );
+    assert.ok(!rejected.body.ok && rejected.body.error.code === "LOCAL_REQUIRED", rejected.stdout);
   }
   for (const args of [
     ["project", "get"],

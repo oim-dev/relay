@@ -5,7 +5,8 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { EntityStore } from "../src/storage/entity-store/store.js";
 import { workspaceStorageRegistry } from "../src/storage/unified-adapter.js";
-import { withStorageLock } from "../src/storage/lock.js";
+import { migrateStorage } from "../src/application/storage/maintenance.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 import { digest, jsonValue } from "../src/storage/entity-store/format.js";
 import { openWorkspace } from "../src/storage/workspace.js";
 import { BoardTasksService } from "../src/application/board-tasks/service.js";
@@ -63,8 +64,11 @@ test(
     const root = await mkdtemp(join(tmpdir(), "relay-migration-"));
     t.after(() => rm(root, { recursive: true, force: true }));
     await cp(source, root, { recursive: true, force: false });
+    await migrateStorage(
+      { configPath: join(root, "config.json") },
+      { backupDir: await migrationBackupDir() },
+    );
     const store = await EntityStore.open(root, workspaceStorageRegistry());
-    await withStorageLock(root, (owned) => store.migrateFormat(owned), join(root, "runtime"));
     const after = await files(root);
     let entities = 0,
       relations = 0;

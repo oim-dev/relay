@@ -1,5 +1,5 @@
 export { useEntities, useEntitySummary, useEntityContent } from "./hooks/use-entities.hook";
-export { entityKindLabel } from "./adapters/entities.adapter";
+export { entityKindLabel, isRelocatedEntityKind } from "./adapters/entities.adapter";
 export { getEntityPresentation, ENTITY_PRESENTATION } from "./helpers/get-entity-presentation";
 export { getEntityStatusLabel } from "./helpers/get-entity-status-label";
 export type { EntitySummary, EntityKind } from "@relay/contracts/entities";
