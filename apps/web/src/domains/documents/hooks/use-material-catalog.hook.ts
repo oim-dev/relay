@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { unstable_serialize } from "swr";
 import useSWRInfinite from "swr/infinite";
 import type { SWRInfiniteResponse } from "swr/infinite";
 import { getMaterialCatalogPage } from "../adapters/documents.adapter";
@@ -53,8 +54,11 @@ export const useMaterialCatalog = (
    *  - при монтировании и смене ключа размер из кеша, отличный от pages, исправляется;
    *  - после завершения чтения число полученных порций сверяется с pages: setSize при монтировании
    *    может совпасть с уже идущей проверкой SWR старого размера и не перечитать выдачу.
-   * Одна и та же попытка не повторяется, чтобы ошибка сети не зациклила чтение.
+   * Одна и та же попытка для одной выдачи не повторяется, чтобы ошибка сети не зациклила чтение.
+   * Попытка включает ключ выдачи: при Back/Forward между разными выдачами с одинаковыми pages и
+   * размером из кеша исправление второй выдачи не должно совпасть с попыткой первой.
    */
+  const catalogKey = unstable_serialize(["material-catalog", projectId, filters]);
   const loadedPages = data?.length;
   const lastPage = data?.at(-1);
   const hasMorePages = lastPage !== undefined && lastPage.nextOffset !== null;
@@ -65,14 +69,14 @@ export const useMaterialCatalog = (
   const appliedPagesRef = useRef(pages);
   const attemptRef = useRef("");
   useEffect(() => {
-    const attempt = `${pages}:${size}:${String(loadedPages)}`;
+    const attempt = `${catalogKey}:${pages}:${size}:${String(loadedPages)}`;
     const isPagesChanged = appliedPagesRef.current !== pages;
     if (!isPagesChanged && size === pages && !hasPageMismatch) return;
     if (!isPagesChanged && attemptRef.current === attempt) return;
     appliedPagesRef.current = pages;
     attemptRef.current = attempt;
     void setSize(pages);
-  }, [pages, size, loadedPages, hasPageMismatch, setSize]);
+  }, [catalogKey, pages, size, loadedPages, hasPageMismatch, setSize]);
   useMaterialsSubscription(projectId, response.mutate);
   if (response.error !== undefined && !(response.error instanceof DocumentAccessError))
     throw response.error;
