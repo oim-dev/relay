@@ -32,6 +32,7 @@ import { useProjectId, useProjectBasePath } from "domains/project";
 import { PageHeader } from "ui/page-header";
 import { PageStage } from "ui/page-stage";
 import { StatePanel } from "ui/state-panel";
+import { useInputDraft } from "ui/input-draft";
 import { EntityDocuments } from "compositions/widgets/entity-documents";
 import { TaskKanban } from "./ui/task-kanban";
 import { TaskModal } from "./ui/task-modal";
@@ -76,13 +77,8 @@ export const ProjectBoardScreen = () => {
   const requestRef = useRef<{ board: string; column: TaskColumn; id: string } | null>(null);
   const isCreatingRef = useRef(false);
   const search = params.get("q") ?? "";
-  /*
-   * Поле поиска хранит ввод локально: адрес обновляется навигацией позже нажатий, и
-   * управляемое из адреса поле теряло символы быстрого ввода. Адрес остаётся источником
-   * для внешних изменений (Back/Forward, переход по ссылке), собственные записи пропускаются.
-   */
-  const [searchDraft, setSearchDraft] = useState(search);
-  const writtenSearches = useRef<string[]>([]);
+  // Поле поиска показывает локальный черновик, адрес синхронизирует его при Back/Forward.
+  const [searchDraft, handleSearch] = useInputDraft(search, (value) => handleFilter("q", value));
   const [debouncedSearch] = useDebouncedValue(search, 200);
   const isBlockedOnly = params.get("blocked") === "1";
   const showCancelled = params.get("cancelled") === "1";
@@ -144,20 +140,6 @@ export const ProjectBoardScreen = () => {
           replace: true,
         },
       );
-  };
-  useEffect(() => {
-    const index = writtenSearches.current.indexOf(search);
-    if (index >= 0) {
-      writtenSearches.current = writtenSearches.current.slice(index + 1);
-      return;
-    }
-    writtenSearches.current = [];
-    setSearchDraft(search);
-  }, [search]);
-  const handleSearch = (value: string): void => {
-    setSearchDraft(value);
-    writtenSearches.current.push(value);
-    handleFilter("q", value);
   };
   const handleFilter = (name: string, value: string): void => {
     const next = new URLSearchParams(params);

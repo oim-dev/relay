@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Alert, Button, CloseButton, Skeleton, TextInput, VisuallyHidden } from "@mantine/core";
 import { Plus, Search } from "lucide-react";
@@ -9,6 +9,7 @@ import { PageHeader } from "ui/page-header";
 import { FilterChips } from "ui/filter-chips";
 import { SectionPanel } from "ui/section-panel";
 import { StatePanel } from "ui/state-panel";
+import { useInputDraft } from "ui/input-draft";
 import { ReleaseCard } from "./ui/release-card/release-card";
 import type { ReleaseCatalogProps } from "./types/release-catalog-props.type";
 import styles from "./styles/release-catalog.module.css";
@@ -28,22 +29,8 @@ export const ReleaseCatalog = (props: ReleaseCatalogProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const query = searchParams.get("q") ?? "";
-  /*
-   * Поле поиска хранит ввод локально: адрес обновляется навигацией позже нажатий, и
-   * управляемое из адреса поле теряло символы быстрого ввода. Адрес остаётся источником
-   * для внешних изменений (Back/Forward, переход по ссылке), собственные записи пропускаются.
-   */
-  const [queryDraft, setQueryDraft] = useState(query);
-  const writtenQueries = useRef<string[]>([]);
-  useEffect(() => {
-    const index = writtenQueries.current.indexOf(query);
-    if (index >= 0) {
-      writtenQueries.current = writtenQueries.current.slice(index + 1);
-      return;
-    }
-    writtenQueries.current = [];
-    setQueryDraft(query);
-  }, [query]);
+  // Поле поиска показывает локальный черновик, адрес синхронизирует его при Back/Forward.
+  const [queryDraft, handleSearch] = useInputDraft(query, (value) => handleFilter("q", value));
   const status = releaseStatusFromValue(searchParams.get("status")) ?? "all";
   const limit = Math.max(12, Number(searchParams.get("limit")) || 12);
   const releasesQuery = useReleases(
@@ -121,14 +108,7 @@ export const ReleaseCatalog = (props: ReleaseCatalogProps) => {
       },
       { replace: name === "q" },
     );
-  /**
-   * Сохраняет ввод поиска сразу в поле и затем в адресе.
-   */
-  const handleSearch = (value: string): void => {
-    setQueryDraft(value);
-    writtenQueries.current.push(value);
-    handleFilter("q", value);
-  };
+
   const clearButton = queryDraft !== "" && (
     <CloseButton size="sm" aria-label="Очистить поиск" onClick={() => handleSearch("")} />
   );

@@ -3,6 +3,7 @@ import { Badge, Button, CloseButton, TextInput } from "@mantine/core";
 import { PanelLeft, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "ui/page-header";
+import { useInputDraft } from "ui/input-draft";
 import type { LibraryHeaderProps } from "./types/library-header-props.type";
 import styles from "./styles/library-header.module.css";
 
@@ -18,9 +19,11 @@ export const LibraryHeader = (props: LibraryHeaderProps) => {
   const { query, createHref, returnTo, filterCount, isFiltersExpanded, filtersControls } = props;
   const { onQueryChange, onOpenNavigation, onToggleFilters } = props;
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const hasQuery = query !== "";
+  // Поле поиска показывает локальный черновик, адрес синхронизирует его при Back/Forward.
+  const [queryDraft, handleQuery] = useInputDraft(query, onQueryChange);
+  const hasQuery = queryDraft !== "";
   const clearButton = hasQuery && (
-    <CloseButton size="sm" aria-label="Очистить поиск" onClick={() => onQueryChange("")} />
+    <CloseButton size="sm" aria-label="Очистить поиск" onClick={() => handleQuery("")} />
   );
   const hasFilters = filterCount > 0;
   const filtersVariant = isFiltersExpanded ? "light" : "default";
@@ -52,8 +55,8 @@ export const LibraryHeader = (props: LibraryHeaderProps) => {
             placeholder="Найти материал…"
             leftSection={<Search size={17} aria-hidden="true" />}
             rightSection={clearButton}
-            value={query}
-            onChange={(event) => onQueryChange(event.currentTarget.value)}
+            value={queryDraft}
+            onChange={(event) => handleQuery(event.currentTarget.value)}
           />
           <Button
             variant="default"

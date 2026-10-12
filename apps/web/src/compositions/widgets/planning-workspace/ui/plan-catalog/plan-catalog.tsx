@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Alert, Button, CloseButton, Skeleton, TextInput, VisuallyHidden } from "@mantine/core";
 import { Plus, Search } from "lucide-react";
@@ -9,6 +9,7 @@ import { PageHeader } from "ui/page-header";
 import { FilterChips } from "ui/filter-chips";
 import { SectionPanel } from "ui/section-panel";
 import { StatePanel } from "ui/state-panel";
+import { useInputDraft } from "ui/input-draft";
 import { PlanCard } from "./ui/plan-card/plan-card";
 import type { PlanCatalogProps } from "./types/plan-catalog-props.type";
 import styles from "./styles/plan-catalog.module.css";
@@ -32,22 +33,8 @@ export const PlanCatalog = (props: PlanCatalogProps) => {
   const title = "Планы";
   const createLabel = "Новый план";
   const query = searchParams.get("q") ?? "";
-  /*
-   * Поле поиска хранит ввод локально: адрес обновляется навигацией позже нажатий, и
-   * управляемое из адреса поле теряло символы быстрого ввода. Адрес остаётся источником
-   * для внешних изменений (Back/Forward, переход по ссылке), собственные записи пропускаются.
-   */
-  const [queryDraft, setQueryDraft] = useState(query);
-  const writtenQueries = useRef<string[]>([]);
-  useEffect(() => {
-    const index = writtenQueries.current.indexOf(query);
-    if (index >= 0) {
-      writtenQueries.current = writtenQueries.current.slice(index + 1);
-      return;
-    }
-    writtenQueries.current = [];
-    setQueryDraft(query);
-  }, [query]);
+  // Поле поиска показывает локальный черновик, адрес синхронизирует его при Back/Forward.
+  const [queryDraft, handleSearch] = useInputDraft(query, (value) => handleFilter("q", value));
   const state = planStatusFromValue(searchParams.get("status")) ?? "all";
   const limit = Math.max(12, Number(searchParams.get("limit")) || 12);
   const plansQuery = usePlans(
@@ -127,14 +114,7 @@ export const PlanCatalog = (props: PlanCatalogProps) => {
       { replace: name === "q" },
     );
   };
-  /**
-   * Сохраняет ввод поиска сразу в поле и затем в адресе.
-   */
-  const handleSearch = (value: string): void => {
-    setQueryDraft(value);
-    writtenQueries.current.push(value);
-    handleFilter("q", value);
-  };
+
   const clearButton = queryDraft !== "" && (
     <CloseButton size="sm" aria-label="Очистить поиск" onClick={() => handleSearch("")} />
   );

@@ -26,6 +26,7 @@ import { useCatalogVolume } from "./hooks/use-catalog-volume.hook";
 import { useLibraryReturn } from "./hooks/use-library-return.hook";
 import { useMaterialActions } from "./hooks/use-material-actions.hook";
 import { usePanelPreference } from "./hooks/use-panel-preference.hook";
+import { useRereadFocus } from "./hooks/use-reread-focus.hook";
 import { BulkActions } from "./ui/bulk-actions/bulk-actions";
 import { BulkResult } from "./ui/bulk-result/bulk-result";
 import { CatalogState } from "./ui/catalog-state/catalog-state";
@@ -118,7 +119,9 @@ export const ProductDocumentsScreen = () => {
   const catalogError = catalog.error;
   /* После ошибки чтения продолжение недоступно, пока список не перечитан. */
   const hasMore = isDefined(lastPage) && lastPage.nextOffset !== null && !isDefined(catalogError);
-  const isLoadingMore = catalog.size > pageList.length && isDefined(firstPage);
+  /* Ошибка завершает чтение продолжения: размер остаётся больше полученного, но загрузки уже нет. */
+  const isLoadingMore =
+    catalog.size > pageList.length && isDefined(firstPage) && !isDefined(catalogError);
   const isFirstLoading = !isDefined(catalog.data) && !isDefined(catalog.error);
   const tagList = filters.tags ?? [];
   const isStatusFixed =
@@ -229,13 +232,17 @@ export const ProductDocumentsScreen = () => {
       updateParams({ [name]: value }),
     onTagsChange: (tags: string[]) => updateParams({ tags }),
   };
+  const handleReread = useRereadFocus(
+    materialItems.map((material) => material.ref.id),
+    () => catalog.mutate(),
+  );
   const retryButton = (
     <Button
       size="xs"
       variant="default"
       leftSection={<RefreshCw size={13} aria-hidden="true" />}
       loading={catalog.isValidating}
-      onClick={() => void catalog.mutate()}
+      onClick={handleReread}
     >
       Перечитать список
     </Button>

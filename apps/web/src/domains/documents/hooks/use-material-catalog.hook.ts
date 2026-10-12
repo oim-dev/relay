@@ -43,18 +43,36 @@ export const useMaterialCatalog = (
       keepPreviousData: true,
     },
   );
-  const { setSize } = response;
+  const { setSize, size, data, isValidating } = response;
   /*
-   * Пока размер не задан явно, SWR берёт его из initialSize, поэтому новое число порций
-   * уже видно в size, но продолжение само не читается. Каждое изменение объёма после
-   * монтирования применяется через setSize: он дочитывает недостающие порции.
+   * Объём выдачи задаёт адрес, а SWR хранит размер в кеше ключа и при повторном открытии
+   * восстанавливает его, игнорируя initialSize. Поэтому объём сверяется с адресом:
+   *  - каждое изменение pages после монтирования применяется через setSize, даже если size
+   *    уже совпал (пока размер не задан явно, size берётся из initialSize, но недостающие
+   *    порции сами не дочитываются);
+   *  - при монтировании и смене ключа размер из кеша, отличный от pages, исправляется;
+   *  - после завершения чтения число полученных порций сверяется с pages: setSize при монтировании
+   *    может совпасть с уже идущей проверкой SWR старого размера и не перечитать выдачу.
+   * Одна и та же попытка не повторяется, чтобы ошибка сети не зациклила чтение.
    */
+  const loadedPages = data?.length;
+  const lastPage = data?.at(-1);
+  const hasMorePages = lastPage !== undefined && lastPage.nextOffset !== null;
+  const hasPageMismatch =
+    !isValidating &&
+    loadedPages !== undefined &&
+    (loadedPages > pages || (loadedPages < pages && hasMorePages));
   const appliedPagesRef = useRef(pages);
+  const attemptRef = useRef("");
   useEffect(() => {
-    if (appliedPagesRef.current === pages) return;
+    const attempt = `${pages}:${size}:${String(loadedPages)}`;
+    const isPagesChanged = appliedPagesRef.current !== pages;
+    if (!isPagesChanged && size === pages && !hasPageMismatch) return;
+    if (!isPagesChanged && attemptRef.current === attempt) return;
     appliedPagesRef.current = pages;
+    attemptRef.current = attempt;
     void setSize(pages);
-  }, [pages, setSize]);
+  }, [pages, size, loadedPages, hasPageMismatch, setSize]);
   useMaterialsSubscription(projectId, response.mutate);
   if (response.error !== undefined && !(response.error instanceof DocumentAccessError))
     throw response.error;

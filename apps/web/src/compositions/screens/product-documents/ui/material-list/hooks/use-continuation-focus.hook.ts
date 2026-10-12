@@ -10,11 +10,23 @@ type ContinuationFocus = {
   loadMore: () => void;
 };
 
+/** Переводит фокус к ссылке записи каталога. */
+const focusMaterial = (materialId: string): void => {
+  document
+    .querySelector<HTMLElement>(
+      `[data-material-id="${CSS.escape(materialId)}"] [data-material-link]`,
+    )
+    ?.focus();
+};
+
 /**
- * Не теряет фокус при продолжении выдачи: пока кнопка недоступна во время загрузки,
- * браузер снимает с неё фокус. После загрузки фокус переходит к первой новой записи,
- * а если новых записей нет (ошибка) — обратно к кнопке. Фокус, переведённый человеком
- * в другое место, не перехватывается.
+ * Не теряет фокус при продолжении выдачи. Намерение фиксируется нажатием «Показать ещё»:
+ * как только появились новые записи, фокус переходит к первой из них — даже если кнопка
+ * исчезла, потому что это была последняя порция, или загрузка завершилась быстрее, чем её
+ * начало успели заметить. Если загрузка завершилась без новых записей (ошибка, пустая
+ * порция), фокус возвращается к кнопке, а если её скрыли (после ошибки продолжение
+ * недоступно, сообщение объявляет alert) — к последней показанной записи. Фокус,
+ * переведённый человеком в другое место, не перехватывается.
  */
 export const useContinuationFocus = (
   itemIds: string[],
@@ -28,27 +40,32 @@ export const useContinuationFocus = (
   useEffect(() => {
     const from = pendingRef.current;
     if (!isDefined(from)) return;
-    /* Решение принимается после завершения начатой загрузки, а не до её начала. */
     if (isLoadingMore) {
       hasStartedRef.current = true;
       return;
     }
-    if (!hasStartedRef.current) return;
+    const firstNewId = itemIds[from];
+    /* Без новых записей решение ждёт завершения начатой загрузки. */
+    if (!isDefined(firstNewId) && !hasStartedRef.current) return;
     pendingRef.current = null;
     hasStartedRef.current = false;
     const active = document.activeElement;
-    const isFocusFree = active === null || active === document.body || active === buttonRef.current;
+    const isFocusFree =
+      active === null ||
+      active === document.body ||
+      !active.isConnected ||
+      active === buttonRef.current;
     if (!isFocusFree) return;
-    const firstNewId = itemIds[from];
     if (isDefined(firstNewId)) {
-      document
-        .querySelector<HTMLElement>(
-          `[data-material-id="${CSS.escape(firstNewId)}"] [data-material-link]`,
-        )
-        ?.focus();
+      focusMaterial(firstNewId);
       return;
     }
-    buttonRef.current?.focus();
+    const button = buttonRef.current;
+    if (button?.isConnected === true) button.focus();
+    else {
+      const lastShownId = itemIds[from - 1];
+      if (isDefined(lastShownId)) focusMaterial(lastShownId);
+    }
   }, [isLoadingMore, itemIds]);
   const loadMore = (): void => {
     pendingRef.current = shownCount;
