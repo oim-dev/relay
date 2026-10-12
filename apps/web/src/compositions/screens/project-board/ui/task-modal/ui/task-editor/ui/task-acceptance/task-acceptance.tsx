@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import clsx from "clsx";
-import { Alert, Button, Group, Stack, Text, Title } from "@mantine/core";
+import { Alert, Button, Group, Progress, Stack, Text } from "@mantine/core";
 import { Plus } from "lucide-react";
 import {
   BoardTaskError,
@@ -12,6 +12,7 @@ import {
 import type { ChangeCriterionInput, CriterionSummary, TaskSaved } from "domains/board-tasks";
 import { readSessionStored, removeSessionStored } from "infra/browser-storage";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
+import { SectionPanel } from "ui/section-panel";
 import { ACCEPTANCE_DRAFT_SCHEMA } from "./config/acceptance-draft.schema";
 import type { AcceptanceDraft } from "./config/acceptance-draft.schema";
 import { CriterionRow } from "./ui/criterion-row/criterion-row";
@@ -53,6 +54,8 @@ export const TaskAcceptance = (props: TaskAcceptanceProps) => {
   const isDisabled = isBusy || isLocked || hasEditor;
   const canAdd = !isDisabled && task.acceptance.total < 100;
   const progressLabel = `Выполнено ${task.acceptance.completed} из ${task.acceptance.total}`;
+  const hasCriteria = task.acceptance.total > 0;
+  const progressValue = hasCriteria ? (task.acceptance.completed / task.acceptance.total) * 100 : 0;
   const removalLabel = `Удалить критерий «${removalData?.title ?? ""}»?`;
 
   /**
@@ -142,26 +145,30 @@ export const TaskAcceptance = (props: TaskAcceptanceProps) => {
   };
   if (isDefined(defect)) throw defect;
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)} aria-label="Критерии приёмки">
-      <Group justify="space-between" align="flex-start" gap="xs">
-        <Stack gap={2}>
-          <Title order={3} size="sm">
-            Критерии приёмки
-          </Title>
-          <Text size="xs" c="dimmed" aria-live="polite">
-            {progressLabel}
-          </Text>
-        </Stack>
+    <SectionPanel
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      titleAs="h3"
+      title="Критерии приёмки"
+      actions={
         <Button
-          size="xs"
-          variant="subtle"
-          leftSection={<Plus size={14} />}
+          variant="default"
+          leftSection={<Plus size={16} aria-hidden="true" />}
           onClick={handleAdd}
           disabled={!canAdd}
         >
           Добавить критерий
         </Button>
-      </Group>
+      }
+    >
+      <div className={styles.progress}>
+        <Text size="sm" c="dimmed" aria-live="polite" className={styles.progressLabel}>
+          {progressLabel}
+        </Text>
+        {hasCriteria && (
+          <Progress variant="accent" value={progressValue} aria-label="Критерии приёмки" />
+        )}
+      </div>
       {isLocked && (
         <Text size="xs" c="dimmed">
           Для изменения критериев верните задачу из «Готово».
@@ -173,7 +180,7 @@ export const TaskAcceptance = (props: TaskAcceptanceProps) => {
         </Text>
       )}
       {hasLoadError && (
-        <Alert color="red" title="Критерии недоступны">
+        <Alert color="danger" title="Критерии недоступны">
           <Button size="xs" variant="subtle" onClick={() => void query.mutate()}>
             Повторить загрузку
           </Button>
@@ -184,7 +191,7 @@ export const TaskAcceptance = (props: TaskAcceptanceProps) => {
           Критерии приёмки не заданы.
         </Text>
       )}
-      <Stack gap={0}>
+      <Stack gap={0} className={styles.list}>
         {criteriaItems.map((criterion) => (
           <CriterionRow
             key={criterion.id}
@@ -209,11 +216,11 @@ export const TaskAcceptance = (props: TaskAcceptanceProps) => {
         </Button>
       )}
       {isDefined(removalData) && (
-        <Alert color="orange" title={removalLabel}>
+        <Alert color="warning" title={removalLabel}>
           <Group gap="xs">
             <Button
               size="xs"
-              color="red"
+              color="danger"
               loading={isBusy}
               disabled={isLocked}
               onClick={() => void handleQuickChange(removalData.id)}
@@ -232,7 +239,7 @@ export const TaskAcceptance = (props: TaskAcceptanceProps) => {
         </Alert>
       )}
       {hasError && (
-        <Alert color="red" title="Действие не сохранено" role="alert">
+        <Alert color="danger" title="Действие не сохранено" role="alert">
           {error}
         </Alert>
       )}
@@ -247,6 +254,6 @@ export const TaskAcceptance = (props: TaskAcceptanceProps) => {
           onClose={handleCloseEditor}
         />
       )}
-    </section>
+    </SectionPanel>
   );
 };

@@ -1,8 +1,13 @@
 import { Button } from "@mantine/core";
 import { Link, useLocation, useMatch } from "react-router-dom";
-import { useProductRoute } from "compositions/widgets/product-page";
 import { useProductDemo } from "domains/product-demo";
-import { getProductReturn, ProductPage, useProductPath } from "compositions/widgets/product-page";
+import {
+  getProductReturn,
+  ProductPage,
+  useProductPath,
+  useProductRoute,
+} from "compositions/widgets/product-page";
+import { PageStage } from "ui/page-stage";
 import { StatePanel } from "ui/state-panel";
 import { getEditorInput } from "./helpers/get-editor-input";
 import { DocumentForm } from "./ui/document-form";
@@ -25,23 +30,29 @@ export const ProductEditorScreen = () => {
       : (collection ?? creationMatch?.params.collection ?? "passport");
   if (kind !== "passport" && kind !== "features" && kind !== "applications" && kind !== "scenarios")
     return (
-      <StatePanel
-        title="Редактор не найден"
-        description="Откройте редактирование из нужного подраздела продукта."
-      />
+      <PageStage>
+        <StatePanel
+          titleAs="h1"
+          title="Редактор не найден"
+          description="Откройте редактирование из нужного подраздела продукта."
+        />
+      </PageStage>
     );
   const initialData = getEditorInput(snapshot, kind, scenarioId ?? entityId ?? "", featureId);
   if (initialData === undefined)
     return (
-      <StatePanel
-        title="Документ не найден"
-        description="Запись отсутствует в выбранном наборе."
-        action={
-          <Button component={Link} to={`${base}/passport`}>
-            К паспорту
-          </Button>
-        }
-      />
+      <PageStage>
+        <StatePanel
+          titleAs="h1"
+          title="Запись не найдена"
+          description="Редактируемой записи нет в продукте: её удалили или адрес неверен."
+          action={
+            <Button component={Link} to={`${base}/passport`} variant="default">
+              К паспорту
+            </Button>
+          }
+        />
+      </PageStage>
     );
   const isNew = kind !== "passport" && initialData.id === "";
   const title =
@@ -74,14 +85,7 @@ export const ProductEditorScreen = () => {
       ? `Фича «${parentFeature?.name}». Опишите поведение и результат сценария. Его статус определяет готовность фичи.`
       : "Опишите смысл и ожидаемое поведение. Сохранённые изменения доступны всем участникам продукта.";
   return (
-    <ProductPage
-      title={title}
-      description={description}
-      eyebrow="ПРОДУКТ / РЕДАКТОР"
-      backTo={backTo}
-      backState={location.state}
-      backLabel="Вернуться к просмотру"
-    >
+    <ProductPage title={title} description={description}>
       <DocumentForm
         key={draftScope}
         initial={initialData}

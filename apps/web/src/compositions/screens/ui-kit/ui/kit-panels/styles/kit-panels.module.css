@@ -1,0 +1,62 @@
+.sample {
+  width: 100%;
+}
+
+.note {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.metric {
+  margin: 0;
+  font-size: var(--tasks-font-size-metric-max);
+  font-weight: 700;
+  line-height: var(--tasks-line-height-metric);
+  font-variant-numeric: tabular-nums;
+}
+
+.rows {
+  display: grid;
+  width: 100%;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.decor {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--tasks-space-2);
+  width: 100%;
+}
+
+.decorSample {
+  min-height: 6rem;
+  padding: var(--tasks-space-3);
+  border-radius: var(--tasks-radius-metric);
+  background-color: var(--tasks-feature-surface);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+
+  &[data-decor="gradient"] {
+    background-image: var(--tasks-feature-image);
+  }
+
+  /* Значение допустимо для custom property, но недействительно как изображение. */
+  &[data-decor="invalid"] {
+    --tasks-feature-image: unsupported-image(1);
+
+    background-image: var(--tasks-feature-image);
+  }
+
+  &[data-decor="hatch"] {
+    background-color: var(--tasks-hatch-surface);
+    background-image: var(--tasks-hatch-image);
+  }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
+}

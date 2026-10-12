@@ -1,29 +1,62 @@
-/* Серая область экрана вокруг светлой сцены с содержимым. */
+/*
+ * Серая область экрана вокруг светлой сцены с содержимым. В колонке каркаса (flex-колонка
+ * на высоту окна) область и сцена растягиваются на остаток высоты: на короткой странице
+ * сцена доходит до нижнего поля, а не обрывается под содержимым. Вне flex-родителя
+ * (галерея, вложенные примеры) flex не действует и высота равна содержимому.
+ */
 .root {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
   padding: 0.5rem 0.5rem 2.5rem;
   background: var(--tasks-backdrop);
 
   @media (--md) {
     padding: 1rem var(--tasks-page-gutter) 3rem;
   }
+
+  /*
+   * Рабочее поле от 768px заполняет остаток высоты колонки каркаса (каркас — flex-колонка
+   * на высоту окна). contain: size убирает вклад содержимого в высоту: сцена не растёт
+   * за окно, колонки и граф прокручиваются внутри. Нижнее поле равно верхнему.
+   */
+  &[data-layout="workspace"] {
+    @media (--md) {
+      flex: 1 1 auto;
+      min-height: 36rem;
+      padding-bottom: 1rem;
+      contain: size;
+    }
+  }
 }
 
 .stage {
   display: grid;
+  flex: 1 0 auto;
+  align-content: start;
   gap: 1.25rem;
+  width: 100%;
   max-width: 90rem;
   margin-inline: auto;
   padding: 1.25rem 0.625rem 1rem;
-  border-radius: 1.5rem;
+  border-radius: var(--tasks-radius-stage);
   background: var(--tasks-stage);
 
   @media (--md) {
     gap: 1.5rem;
     padding: 1.75rem 1.5rem 1.5rem;
-    border-radius: 2rem;
   }
 
   @media (--xl) {
     padding: 2rem;
+  }
+
+  .root[data-layout="workspace"] & {
+    @media (--md) {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+    }
   }
 }

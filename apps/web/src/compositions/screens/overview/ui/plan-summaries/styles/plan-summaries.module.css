@@ -12,11 +12,11 @@
   padding: 0;
   list-style: none;
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 
   & li {
     padding: 0.1875rem 0.625rem;
-    border-radius: 999px;
+    border-radius: var(--tasks-radius-pill);
     background: var(--tasks-tile);
     white-space: nowrap;
   }
@@ -36,7 +36,7 @@
   border-radius: var(--mantine-radius-md);
   background: var(--tasks-warning-surface);
   color: var(--tasks-warning);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
   font-weight: 550;
 }
 
@@ -54,9 +54,9 @@
   margin: 0;
   padding: 0.875rem 1rem;
   border: 1px dashed var(--tasks-border-strong);
-  border-radius: 0.875rem;
+  border-radius: var(--tasks-radius-row);
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 
   & a {
     color: var(--tasks-accent-ink);

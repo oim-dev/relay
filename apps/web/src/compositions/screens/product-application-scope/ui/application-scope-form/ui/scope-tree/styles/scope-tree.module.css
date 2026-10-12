@@ -1,31 +1,40 @@
+/* Панель выбора состава: поиск и вид, затем дерево с собственной прокруткой на широком экране. */
 .root {
+  display: grid;
   min-width: 0;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
+  border-radius: var(--tasks-radius-panel);
+  background: var(--tasks-card);
   overflow: hidden;
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
 }
 
 .controls {
   display: grid;
-  gap: 0.875rem;
-  padding: 1rem;
-  border-bottom: 1px solid var(--tasks-border);
+  gap: var(--tasks-space-3);
+  padding: var(--tasks-space-5) var(--tasks-space-4) var(--tasks-space-3);
 }
 
 .title {
   margin: 0;
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: var(--tasks-font-size-panel-title);
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .items {
   min-width: 0;
-  padding: 0.5rem;
+  padding: 0 var(--tasks-space-2) var(--tasks-space-3);
 
   @media (--lg) {
     max-height: 36rem;
     overflow-y: auto;
     scrollbar-gutter: stable;
   }
+}
+
+.noResults {
+  padding: var(--tasks-space-3);
 }

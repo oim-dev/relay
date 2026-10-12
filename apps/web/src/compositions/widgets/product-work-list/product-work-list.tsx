@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { Text } from "@mantine/core";
 import { useLocation } from "react-router-dom";
 import { useProductDemo } from "domains/product-demo";
+import { SectionPanel } from "ui/section-panel";
 import { isEmptyArray } from "shared/value-predicates";
 import { WorkPlan } from "./ui/work-plan";
 import type { ProductWorkListProps } from "./types/product-work-list-props.type";
@@ -34,17 +35,18 @@ export const ProductWorkList = (props: ProductWorkListProps) => {
   const hasNoWork = isEmptyArray(taskItems);
   const returnTo = location.pathname + location.search;
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)}>
-      <h2 className={styles.title}>Связанная работа</h2>
-      <Text size="sm" c="dimmed" mb="lg">
-        Что меняется сейчас и в каких планах появился результат.
-      </Text>
+    <SectionPanel
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      title="Связанная работа"
+      description="Что меняется сейчас и в каких планах появился результат."
+    >
       {hasNoWork && (
         <div className={styles.empty}>
           <Text size="sm" fw={550}>
             Работа ещё не запланирована
           </Text>
-          <Text size="sm" c="dimmed" mt="xs">
+          <Text size="sm" c="dimmed">
             Планы, этапы и задачи появятся, когда работа над этой частью продукта войдёт в очередной
             цикл.
           </Text>
@@ -61,6 +63,6 @@ export const ProductWorkList = (props: ProductWorkListProps) => {
           />
         ))}
       </div>
-    </section>
+    </SectionPanel>
   );
 };

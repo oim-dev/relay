@@ -8,6 +8,6 @@
 
 .title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   font-weight: 650;
 }

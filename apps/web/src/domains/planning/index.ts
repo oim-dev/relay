@@ -10,8 +10,9 @@ export type {
 } from "./types/planning.type";
 export {
   PLAN_STATUS_LABELS,
-  PLAN_STATUS_COLORS,
+  PLAN_STATUS_TONES,
   PLANNING_TASK_LABELS,
+  PLANNING_TASK_TONES,
   EMPTY_PLAN_SUMMARY,
   planStatusFromValue,
   isPlanScope,

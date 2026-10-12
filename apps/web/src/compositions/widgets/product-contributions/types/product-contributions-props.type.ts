@@ -6,6 +6,6 @@ export type ProductContributionsParams = {
   targetId: string;
 };
 /** Атрибуты области реализации. */
-type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children">;
+type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children" | "title">;
 /** Свойства списка вкладов. */
 export type ProductContributionsProps = RootAttrs & ProductContributionsParams;

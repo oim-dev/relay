@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useMatch, useNavigate } from "react-router-dom";
 import { Badge, Button, Group, Select, Text } from "@mantine/core";
+import { Layers3 } from "lucide-react";
 import { useWorkspace } from "domains/workspace";
 import { ProjectScope } from "domains/project";
 import { StatePanel } from "ui/state-panel";
@@ -93,6 +94,7 @@ export const RelayScreen = () => {
   ]);
 
   if (workspaceData === undefined) {
+    const isConnecting = workspace.isLoading;
     return (
       <main>
         <PageBreadcrumbs
@@ -101,12 +103,27 @@ export const RelayScreen = () => {
             { id: "connection", label: "Подключение" },
           ]}
         />
-        <StatePanel
-          title="Подключение к Relay"
-          description="Запустите relay-server и проверьте подключение."
-          isLoading={workspace.isLoading}
-          action={<Button onClick={() => void workspace.mutate()}>Повторить</Button>}
-        />
+        {isConnecting && (
+          <StatePanel
+            state="loading"
+            titleAs="h1"
+            title="Подключаемся к Relay"
+            description="Читаем список проектов на сервере."
+          />
+        )}
+        {!isConnecting && (
+          <StatePanel
+            state="error"
+            titleAs="h1"
+            title="Нет подключения к Relay"
+            description="Запустите relay-server и проверьте подключение."
+            action={
+              <Button loading={workspace.isValidating} onClick={() => void workspace.mutate()}>
+                Повторить
+              </Button>
+            }
+          />
+        )}
       </main>
     );
   }
@@ -123,12 +140,20 @@ export const RelayScreen = () => {
           aria-label="Проекты Relay"
           className={styles.selector}
           justify="space-between"
+          gap="sm"
         >
-          <Group>
-            <Text fw={700}>Relay</Text>
-            <Badge variant="light">workspace</Badge>
+          <Group gap="sm" wrap="nowrap">
+            <Layers3 size={22} className={styles.brandIcon} aria-hidden="true" />
+            <Text fw={750} className={styles.brand}>
+              Relay
+            </Text>
+            <Badge variant="light" color="gray">
+              workspace
+            </Badge>
           </Group>
           <Select
+            className={styles.projectSelect}
+            comboboxProps={{ width: 288, position: "bottom-end" }}
             aria-label="Выбрать проект"
             placeholder="Выберите проект"
             data={selectItems}
@@ -156,7 +181,7 @@ export const RelayScreen = () => {
               { id: "selection", label: stateTitle },
             ]}
           />
-          <StatePanel title={stateTitle} description={stateDescription} />
+          <StatePanel titleAs="h1" title={stateTitle} description={stateDescription} />
         </main>
       )}
     </div>

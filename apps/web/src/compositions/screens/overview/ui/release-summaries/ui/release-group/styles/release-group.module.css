@@ -9,17 +9,17 @@
   align-items: center;
   gap: 0.5rem;
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   font-weight: 650;
 }
 
 .count {
   min-width: 1.5rem;
   padding: 0 0.4375rem;
-  border-radius: 999px;
+  border-radius: var(--tasks-radius-pill);
   background: var(--tasks-tile);
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   font-weight: 650;
   line-height: 1.375rem;
   text-align: center;
@@ -37,5 +37,5 @@
 .note {
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 }

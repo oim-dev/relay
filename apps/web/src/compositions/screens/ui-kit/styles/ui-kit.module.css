@@ -1,0 +1,9 @@
+/* Отключённый декор: образцы и панели должны остаться читаемыми на сплошной основе. */
+.root {
+  &[data-decor="off"] {
+    --tasks-feature-image: none;
+    --tasks-feature-fade-image: none;
+    --tasks-hatch-image: none;
+    --tasks-card-fade-image: none;
+  }
+}

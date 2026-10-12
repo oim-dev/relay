@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ActionIcon, Checkbox, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Checkbox, UnstyledButton, VisuallyHidden } from "@mantine/core";
 import { ChevronRight, ListChecks } from "lucide-react";
 import { ProductReadiness } from "domains/product-demo";
 import { ProductKey } from "domains/product";
@@ -34,8 +34,8 @@ export const ScopeNode = (props: ScopeNodeProps) => {
         {hasChildren && (
           <ActionIcon
             variant="subtle"
-            color="gray"
             size="xs"
+            className={styles.touchControl}
             aria-label={toggleLabel}
             aria-expanded={expanded}
             onClick={(event) => {
@@ -54,17 +54,20 @@ export const ScopeNode = (props: ScopeNodeProps) => {
           </ActionIcon>
         )}
       </span>
+      {/*
+       * Скрытая подпись — доступное имя checkbox; на touch она растягивается на область
+       * 44×44px вокруг квадрата. Клик внутри не выбирает узел дерева и не уводит фокус.
+       */}
       <Checkbox
-        size="xs"
-        color="gray"
         checked={isEnabled}
-        aria-label={`Реализует ${item.name}`}
+        label={<VisuallyHidden>Реализует {item.name}</VisuallyHidden>}
         onChange={(event) => onToggle(feature.id, scenario?.id, event.currentTarget.checked)}
-        onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === " ") event.stopPropagation();
         }}
+        wrapperProps={{ onClick: (event) => event.stopPropagation() }}
         className={styles.checkbox}
+        classNames={{ labelWrapper: styles.checkboxLabelWrapper, label: styles.checkboxLabel }}
       />
       <UnstyledButton
         className={styles.label}
@@ -87,8 +90,8 @@ export const ScopeNode = (props: ScopeNodeProps) => {
       {hasScenarioSelection && (
         <ActionIcon
           variant="subtle"
-          color="gray"
           size="sm"
+          className={styles.touchControl}
           title="Выбрать все сценарии"
           aria-label={`Выбрать все сценарии: ${feature.name}`}
           onClick={(event) => {

@@ -94,7 +94,6 @@ export const BulkResult = (props: BulkResultProps) => {
           <Button
             size="xs"
             variant="default"
-            radius="xl"
             leftSection={<RefreshCw size={13} aria-hidden="true" />}
             loading={isRefreshing}
             onClick={onRefresh}

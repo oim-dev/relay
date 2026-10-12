@@ -21,7 +21,7 @@ const MODE_TEXT = {
 
 /**
  * Собирает набор тегов для одного массового действия и применяет его явной кнопкой.
- * Кнопка стоит над полем, чтобы список подсказок её не закрывал.
+ * Действие идёт после поля в порядке чтения и Tab; список подсказок закрывается Tab или Escape.
  *
  * Используется для:
  *  - добавления и снятия тегов у выбранных материалов в панели и на телефоне
@@ -33,9 +33,6 @@ export const BulkTagsForm = (props: BulkTagsFormProps) => {
   const suggestions = mode === "removeTags" ? selectedTags : undefined;
   return (
     <div className={styles.root}>
-      <Button size="xs" disabled={isEmptyArray(tags)} onClick={() => onApply(tags)}>
-        {text.action}
-      </Button>
       <MaterialTagsInput
         projectId={projectId}
         label={text.label}
@@ -44,6 +41,14 @@ export const BulkTagsForm = (props: BulkTagsFormProps) => {
         suggestions={suggestions}
         onChange={setTags}
       />
+      <Button
+        size="xs"
+        disabled={isEmptyArray(tags)}
+        onClick={() => onApply(tags)}
+        className={styles.action}
+      >
+        {text.action}
+      </Button>
     </div>
   );
 };

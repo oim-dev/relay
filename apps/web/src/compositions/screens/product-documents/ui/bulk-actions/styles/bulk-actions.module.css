@@ -13,14 +13,14 @@
     padding: 0.625rem 0.75rem 0.625rem 1rem;
   }
   border: 1px solid var(--tasks-border);
-  border-radius: 1.25rem;
+  border-radius: var(--tasks-radius-metric);
   background: var(--tasks-raised);
   box-shadow: var(--tasks-raised-shadow);
 }
 
 .count {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
@@ -42,5 +42,5 @@
   flex-basis: 100%;
   margin: 0;
   color: var(--tasks-warning);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 }

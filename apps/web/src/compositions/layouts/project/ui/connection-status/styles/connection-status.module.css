@@ -1,0 +1,129 @@
+/*
+ * Индикатор подключения в шапке: значок или точка с ролью состояния. Подпись видна
+ * от 1200px, а для проблемных состояний — от 768px; ниже она скрыта только визуально.
+ */
+.root {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.trigger {
+  --connection-color: var(--tasks-soft);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--tasks-space-2);
+  min-width: var(--tasks-control-height-compact);
+  min-height: var(--tasks-control-height-compact);
+  padding-inline: var(--tasks-space-2);
+  border-radius: var(--tasks-radius-control);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
+
+  &:hover {
+    background-color: var(--tasks-subtle);
+    color: var(--tasks-ink);
+  }
+
+  &[data-state="connected"] {
+    --connection-color: var(--tasks-success);
+  }
+
+  &[data-state="reconnecting"] {
+    --connection-color: var(--tasks-warning);
+  }
+
+  &[data-state="disconnected"],
+  &[data-state="storage-error"] {
+    --connection-color: var(--tasks-danger);
+  }
+
+  &[data-problem="true"] {
+    color: var(--connection-color);
+  }
+
+  @media (pointer: coarse) {
+    min-width: var(--tasks-touch-target);
+    min-height: var(--tasks-touch-target);
+  }
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: var(--connection-color);
+
+  @media (--forced-colors) {
+    background-color: CanvasText;
+  }
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--connection-color);
+}
+
+/* Видимая подпись; на узком экране остаётся в доступном имени кнопки. */
+.label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+
+  .trigger[data-problem="true"] & {
+    @media (--md) {
+      position: static;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      clip-path: none;
+    }
+  }
+
+  @media (--xl) {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+}
+
+/* Пояснение для screen reader внутри видимой подписи. */
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dropdown {
+  display: grid;
+  gap: var(--tasks-space-1);
+
+  /* Фокус переходит в пояснение для чтения; сам контейнер не действие. */
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.message {
+  margin-top: var(--tasks-space-1);
+  padding: var(--tasks-space-2) var(--tasks-space-3);
+  border-radius: var(--tasks-radius-control);
+  background-color: var(--tasks-danger-surface);
+  color: var(--tasks-ink);
+  overflow-wrap: anywhere;
+}

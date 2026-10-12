@@ -1,308 +1,271 @@
-.root {
-  display: block;
-}
+/* Возврат к каталогу: ссылка-переход над шапкой страницы. */
 .back {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  margin-bottom: 1.5rem;
+  justify-self: start;
+  gap: 0.375rem;
+  min-height: var(--tasks-control-height-compact);
   color: var(--tasks-muted);
-  text-decoration: none;
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+
   &:hover {
     color: var(--tasks-ink);
   }
 }
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 1.25rem;
-  margin-bottom: 2rem;
-}
-.identity {
-  flex: 1 1 26rem;
-  min-width: 0;
-}
-.meta {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  margin-bottom: 0.8rem;
-}
-.typeIcon {
-  display: grid;
-  place-items: center;
-  width: 1.8rem;
-  height: 1.8rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-sm);
-  background: var(--tasks-surface);
-  color: var(--tasks-muted);
-}
+
 .key {
-  font-size: 0.6875rem;
-  font-family: var(--mantine-font-family-monospace);
-  color: var(--tasks-soft);
-}
-.badge {
-  font-size: 0.625rem;
-  text-transform: none;
-  font-weight: 500;
-  letter-spacing: 0;
-}
-.title {
-  margin: 0;
-  max-width: 48rem;
-  font-size: 1.65rem;
-  line-height: 1.3;
-  letter-spacing: -0.04em;
-  font-weight: 650;
-  outline: none;
-  &:focus-visible {
-    outline: none;
-  }
-  overflow-wrap: anywhere;
-  @media (--md) {
-    font-size: 1.85rem;
-  }
-}
-.summary {
-  margin: 0.7rem 0 0;
-  max-width: 43rem;
-  font-size: 0.8125rem;
-  line-height: 1.75;
   color: var(--tasks-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Краткое описание сохраняет переносы строк автора. */
+.summary {
   white-space: pre-line;
 }
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  align-self: flex-start;
-  padding-top: 0.15rem;
-  @media (--md) {
-    gap: 0.5rem;
-  }
-}
-.layout {
-  display: grid;
-  gap: 1.75rem;
-  @media (--xl) {
-    grid-template-columns: minmax(0, 1fr) 16.5rem;
-  }
-}
-.main {
-  min-width: 0;
-}
-.goal {
-  padding: 1.2rem 1.35rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
-}
-.sectionLabel {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.85rem;
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--tasks-muted);
-}
-.tabs {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-}
-.tab {
-  flex-shrink: 0;
-  padding: 0.8rem 0.7rem;
-  font-size: 0.75rem;
-  @media (--md) {
-    padding-inline: 1rem;
-  }
-}
-.tabCount {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1rem;
-  margin-left: 0.5rem;
-  padding: 0.05rem 0.2rem;
-  border-radius: 4px;
-  background: var(--tasks-selected);
-  font-size: 0.625rem;
-}
-.aside {
-  scroll-margin-top: 5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  min-width: 0;
-  @media (--xl) {
-    align-self: start;
-    position: sticky;
-    top: 5.5rem;
-  }
-}
+
+/* Компактная сводка выполнения до широкой раскладки, где сводка стоит сбоку. */
 .mobileProgress {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  margin-block: -0.75rem 1.5rem;
-  color: var(--tasks-muted);
-  font-size: 0.625rem;
-  & a {
-    flex-shrink: 0;
-    color: var(--tasks-muted);
-    text-underline-offset: 3px;
-  }
+  gap: var(--tasks-space-2) var(--tasks-space-3);
+
   @media (--xl) {
     display: none;
   }
 }
+
 .mobileTrack {
-  flex: 1;
-  min-width: 1rem;
+  flex: 1 1 8rem;
+  min-width: 0;
 }
-.progressPanel {
-  padding: 1.25rem;
-  background: var(--tasks-surface);
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
+
+.mobileLink {
+  flex: none;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  text-underline-offset: 0.2em;
+
+  &:hover {
+    color: var(--tasks-ink);
+  }
 }
-.asideTitle {
-  margin: 0 0 1rem;
-  font-size: 0.75rem;
-  font-weight: 550;
+
+.layout {
+  display: grid;
+  gap: var(--tasks-space-5);
+  min-width: 0;
+
+  @media (--xl) {
+    grid-template-columns: minmax(0, 1fr) 19rem;
+    align-items: start;
+  }
 }
+
+.main {
+  display: grid;
+  align-content: start;
+  gap: var(--tasks-space-5);
+  min-width: 0;
+}
+
+/* Рабочее поле плана: вкладки состава и материалов на панели сцены. */
+.workspace {
+  min-width: 0;
+  padding: var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-5);
+  border-radius: var(--tasks-radius-panel);
+  background: var(--tasks-card);
+
+  @media (--md) {
+    padding: var(--tasks-space-4) var(--tasks-space-6) var(--tasks-space-6);
+  }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
+}
+
+.tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.tabCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  margin-left: var(--tasks-space-2);
+  padding: 0 0.375rem;
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-tile);
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+  line-height: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Сводка закреплена сбоку на широком экране и уходит вниз на узком. */
+.aside {
+  display: grid;
+  gap: var(--tasks-space-4);
+  min-width: 0;
+  scroll-margin-top: 5rem;
+
+  @media (--xl) {
+    position: sticky;
+    top: 5.5rem;
+  }
+}
+
+.summaryPanel {
+  padding-inline: var(--tasks-space-4);
+
+  @media (--md) {
+    padding-inline: var(--tasks-space-5);
+  }
+}
+
 .progressValue {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.85rem;
+  gap: var(--tasks-space-2);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  font-variant-numeric: tabular-nums;
+
   & strong {
-    font-size: 2rem;
-    letter-spacing: -0.05em;
-    font-weight: 600;
-    line-height: 1.2;
+    color: var(--tasks-ink);
+    font-size: var(--tasks-font-size-metric-min);
+    font-weight: 700;
+    line-height: var(--tasks-line-height-metric);
+    letter-spacing: -0.03em;
+
     & span {
-      font-size: 1rem;
-      font-weight: 400;
-      padding-left: 2px;
-      color: var(--tasks-soft);
+      padding-left: 0.125rem;
+      color: var(--tasks-muted);
+      font-size: var(--tasks-font-size-panel-title);
+      font-weight: 500;
     }
   }
-  & > span {
-    font-size: 0.625rem;
-    color: var(--tasks-soft);
-  }
 }
+
 .counts {
   display: grid;
-  gap: 0.75rem;
-  margin: 1.3rem 0 0;
-  font-size: 0.6875rem;
+  gap: var(--tasks-space-2);
+  margin: 0;
+  font-size: var(--mantine-font-size-sm);
+
   & div {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--tasks-space-2);
   }
+
   & dt {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--tasks-space-2);
     color: var(--tasks-muted);
   }
+
   & dd {
     margin: 0;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Цвет колонки задачи дублирует подпись рядом и не является единственным признаком. */
 .dot {
-  width: 6px;
-  height: 6px;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 50%;
-  background: var(--tasks-border);
+  background: var(--tasks-column-inbox);
+
   &[data-state="done"] {
-    background: var(--mantine-color-teal-6);
+    background: var(--tasks-column-done);
   }
+
   &[data-state="active"] {
-    background: var(--mantine-color-blue-5);
+    background: var(--tasks-column-in-progress);
   }
+
   &[data-state="review"] {
-    background: var(--mantine-color-orange-5);
+    background: var(--tasks-column-review);
+  }
+
+  @media (--forced-colors) {
+    background: CanvasText;
   }
 }
-.hint {
-  margin: 1rem 0 0;
-  color: var(--tasks-soft);
-  font-size: 0.6875rem;
-  line-height: 1.7;
-}
+
 .blocker {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 1.2rem;
-  padding-top: 1rem;
+  gap: var(--tasks-space-2);
+  margin: 0;
+  padding-top: var(--tasks-space-3);
   border-top: 1px solid var(--tasks-border);
-  color: var(--tasks-warning-ink);
-  font-size: 0.6875rem;
+  color: var(--tasks-warning);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+
+  & svg {
+    flex: none;
+    margin-top: 0.0625rem;
+  }
+
   & small {
     display: block;
-    margin-top: 0.25rem;
-    font-size: 0.625rem;
+    margin-top: var(--tasks-space-1);
     color: var(--tasks-muted);
+    font-size: var(--mantine-font-size-xs);
+    font-weight: 400;
   }
 }
-.asideSection {
-  padding-inline: 0.3rem;
+
+.finishHint {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.45;
 }
-.scope {
+
+.finishReady {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  & span {
-    padding: 0.25rem 0.5rem;
-    border: 1px solid var(--tasks-border);
-    border-radius: 5px;
-    font-size: 0.6875rem;
-    color: var(--tasks-muted);
-    background: var(--tasks-surface);
+  align-items: flex-start;
+  gap: var(--tasks-space-2);
+  margin: 0;
+  color: var(--tasks-success);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+
+  & svg {
+    flex: none;
+    margin-top: 0.0625rem;
   }
 }
-.next {
-  padding: 1.1rem;
-  border-radius: var(--mantine-radius-md);
-  background: var(--tasks-selected);
-  & h2 {
-    font-size: 0.8125rem;
-    font-weight: 550;
-    margin: 0;
-    line-height: 1.6;
-  }
-  & p {
-    font-size: 0.6875rem;
-    line-height: 1.7;
-    color: var(--tasks-muted);
-    margin: 0.6rem 0 0;
-  }
-}
+
 .updated {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding-inline: 0.3rem;
-  color: var(--tasks-soft);
-  font-size: 0.625rem;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
 }
-.result {
-  margin-top: 1.5rem;
-  padding: 1.25rem;
-  border: 1px solid light-dark(var(--mantine-color-teal-2), var(--mantine-color-teal-8));
-  border-radius: var(--mantine-radius-lg);
-  background: light-dark(var(--mantine-color-teal-0), #202722);
+
+.form {
+  display: grid;
+  gap: var(--tasks-space-4);
+}
+
+.hint {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.5;
 }

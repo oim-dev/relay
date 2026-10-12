@@ -1,163 +1,180 @@
+/*
+ * Карточка плана — плитка выдачи на панели каталога. Вся плитка переходит по ссылке
+ * заголовка; наведение меняет фон, не сдвигая карточку.
+ */
 .root {
   position: relative;
   display: flex;
-  min-width: 0;
   flex-direction: column;
-  padding: 1.25rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
-  box-shadow: var(--tasks-card-shadow);
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+  gap: var(--tasks-space-3);
+  min-width: 0;
+  padding: var(--tasks-space-4);
+  border-radius: var(--tasks-radius-row);
+  background: var(--tasks-tile);
+  transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
+
   &:hover {
-    border-color: var(--tasks-selected-border);
-    box-shadow: var(--tasks-card-hover);
+    background: var(--tasks-tile-hover);
   }
-  &:focus-within {
-    border-color: var(--tasks-focus-ring);
-  }
+
   @media (--xl) {
-    padding: 1.5rem;
+    padding: var(--tasks-space-5);
   }
+
   @media (prefers-reduced-motion: reduce) {
     transition: none;
   }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
 }
+
 .topline {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: var(--tasks-space-2);
 }
-.type {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  color: var(--tasks-soft);
-  font-size: 0.6875rem;
+
+.key {
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
 }
-.badge {
-  text-transform: none;
-  font-weight: 500;
-  letter-spacing: 0;
-}
+
 .title {
+  min-width: 0;
   margin: 0;
-  font-size: 1rem;
-  line-height: 1.5;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-size: var(--tasks-font-size-record-title);
+  font-weight: var(--tasks-font-weight-record-title);
+  line-height: var(--tasks-line-height-record-title);
+  overflow-wrap: break-word;
 }
+
 .link {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  color: inherit;
+  color: var(--tasks-ink);
   text-decoration: none;
+
+  /* Область нажатия — вся карточка; текст остаётся выделяемым. */
   &::after {
-    content: "";
     position: absolute;
     inset: 0;
-    border-radius: var(--mantine-radius-lg);
+    border-radius: var(--tasks-radius-row);
+    content: "";
   }
+
+  &:hover {
+    color: var(--tasks-accent-ink);
+    text-decoration: underline;
+  }
+
   &:focus-visible {
     outline: none;
+
     &::after {
       outline: 2px solid var(--tasks-focus-ring);
-      outline-offset: 3px;
+      outline-offset: 2px;
     }
   }
 }
-.arrow {
-  flex-shrink: 0;
-  margin-top: 3px;
-  color: var(--tasks-soft);
-}
+
 .summary {
-  margin: 0.6rem 0 1rem;
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
-  line-height: 1.75;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+  overflow-wrap: break-word;
   white-space: pre-line;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
-.scope {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-bottom: 1.5rem;
-}
-.scopeItem {
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-  background: var(--tasks-subtle);
-  border: 1px solid var(--tasks-border);
-  color: var(--tasks-muted);
-  font-size: 0.625rem;
-}
+
 .progress {
+  display: grid;
+  gap: var(--tasks-space-2);
   margin-top: auto;
 }
+
 .progressLabel {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.55rem;
-  color: var(--tasks-soft);
-  font-size: 0.6875rem;
+  gap: var(--tasks-space-2);
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+
   & strong {
     color: var(--tasks-ink);
-    font-weight: 550;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
-  & strong span {
-    color: var(--tasks-soft);
-    font-weight: 400;
-  }
 }
+
 .percent {
-  padding-left: 0.75rem;
+  padding-left: var(--tasks-space-3);
+  color: var(--tasks-muted);
+  font-weight: 500;
 }
+
 .next {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 1rem;
-  margin-block: 0.9rem 1.2rem;
+  align-items: flex-start;
+  gap: var(--tasks-space-2);
+  margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.6875rem;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+  overflow-wrap: break-word;
+
+  & svg {
+    flex: none;
+    margin-top: 0.0625rem;
+  }
+
+  &[data-warning="true"] {
+    color: var(--tasks-warning);
+    font-weight: 550;
+  }
 }
+
 .footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.7rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--tasks-border);
-  color: var(--tasks-soft);
-  font-size: 0.625rem;
+  gap: var(--tasks-space-2) var(--tasks-space-3);
+  padding-top: var(--tasks-space-3);
+  border-top: 1px solid var(--tasks-tile-border);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
 }
-.key {
-  font-family: var(--mantine-font-family-monospace);
-}
+
 .stageCount {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  margin-left: auto;
+  gap: var(--tasks-space-1);
 }
+
 .stageDots {
   display: flex;
-  gap: 3px;
+  flex-wrap: wrap;
+  gap: 0.1875rem;
+  margin-left: auto;
 }
+
+/* Декоративная сводка этапов; число этапов и выполнение переданы текстом. */
 .stageDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 2px;
-  background: var(--tasks-border);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 0.125rem;
+  background: var(--tasks-chart-track);
+
   &[data-done="true"] {
-    background: var(--mantine-color-teal-6);
+    background: var(--tasks-completed);
   }
 }

@@ -1,16 +1,6 @@
 import clsx from "clsx";
 import { useRef, useState } from "react";
-import {
-  Alert,
-  Badge,
-  Button,
-  Group,
-  Modal,
-  NativeSelect,
-  Stack,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { Alert, Button, Group, Modal, NativeSelect, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useHotkeys } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -20,6 +10,7 @@ import { APPLICATION_SLUG_SCHEMA } from "domains/product";
 import { useProductPath } from "compositions/widgets/product-page";
 import { readSessionStored, writeSessionStored, removeSessionStored } from "infra/browser-storage";
 import { MarkdownField } from "ui/markdown-field";
+import { StatusBadge } from "ui/status-badge";
 import { PRODUCT_DRAFT_SCHEMA } from "./config/form.schema";
 import { createFormValues } from "./helpers/create-form-values";
 import type { ProductFormValues } from "./types/product-form-values.type";
@@ -51,6 +42,7 @@ export const DocumentForm = (props: DocumentFormProps) => {
   const [isDiscardOpen, setDiscardOpen] = useState(false);
   const canLeaveRef = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const saveErrorRef = useRef<HTMLDivElement>(null);
   const isFeature = initial.kind === "features";
   const isScenario = initial.kind === "scenarios";
   const hasSummary = !isScenario;
@@ -88,8 +80,14 @@ export const DocumentForm = (props: DocumentFormProps) => {
   const hasSaveError = saveError !== "";
   const hasNewerSnapshot = baseRevision !== revision;
   const draftLabel = isDirty ? "Есть несохранённые изменения" : "Изменений нет";
-  const draftColor = isDirty ? "orange" : "gray";
-  const draftTextColor = isDirty ? "var(--tasks-warning-ink)" : undefined;
+  const draftTone = isDirty ? "warning" : "neutral";
+  const recordLabel = isScenario
+    ? "сценария"
+    : isFeature
+      ? "фичи"
+      : isApplication
+        ? "приложения"
+        : "паспорта продукта";
   useBeforeUnload((event) => {
     if (isDirty && !canPersist) {
       event.preventDefault();
@@ -116,6 +114,9 @@ export const DocumentForm = (props: DocumentFormProps) => {
       const saveResult = await saveDocument({ ...initial, ...values }, baseRevision);
       if (!saveResult.isSaved) {
         setSaveError(saveResult.message);
+        // Кнопка «Сохранить» была недоступна во время запроса и потеряла фокус:
+        // переводим его к сообщению об ошибке, после него — к той же кнопке.
+        requestAnimationFrame(() => saveErrorRef.current?.focus());
         return;
       }
       canLeaveRef.current = true;
@@ -137,7 +138,7 @@ export const DocumentForm = (props: DocumentFormProps) => {
         message: isScenario
           ? "Сценарий сохранён. Готовность фичи пересчитана."
           : "Описание продукта обновлено.",
-        color: "teal",
+        color: "success",
         closeButtonProps: { "aria-label": "Закрыть уведомление" },
       });
       navigate(nextPath, { replace: true, state: location.state });
@@ -199,117 +200,111 @@ export const DocumentForm = (props: DocumentFormProps) => {
       onSubmit={form.onSubmit(handleSubmit, handleInvalid)}
       className={clsx(styles.root, className)}
     >
-      {hasRestoredDraft && (
-        <Alert color="gray" mb="md">
-          Восстановлен несохранённый черновик этой вкладки.
-        </Alert>
-      )}
+      {hasRestoredDraft && <Alert>Восстановлен несохранённый черновик этой вкладки.</Alert>}
       {hasNewerSnapshot && (
-        <Alert color="orange" mb="md" title="Данные продукта изменились">
+        <Alert color="warning" title="Данные продукта изменились" role="alert">
           Ваш ввод сохранён. Выберите, с какой версией продолжить.
           <Group mt="sm" gap="xs">
             <Button variant="default" size="xs" onClick={handleKeepDraft}>
               Оставить мой ввод
             </Button>
-            <Button variant="subtle" color="gray" size="xs" onClick={handleUseCurrent}>
+            <Button variant="subtle" size="xs" onClick={handleUseCurrent}>
               Загрузить актуальную версию
             </Button>
           </Group>
         </Alert>
       )}
       {!canPersist && (
-        <Alert color="orange" mb="md" role="alert">
+        <Alert color="warning" role="alert">
           Браузер не смог сохранить черновик. Не закрывайте страницу до успешного сохранения.
         </Alert>
       )}
       <fieldset disabled={form.submitting} className={styles.fields}>
-        <Stack gap="lg">
+        <TextInput
+          key={form.key("name")}
+          label="Название"
+          required
+          {...form.getInputProps("name")}
+        />
+        {hasSummary && (
           <TextInput
-            key={form.key("name")}
-            label="Название"
+            key={form.key("summary")}
+            label="Краткий смысл"
+            description="Одна фраза для быстрого чтения списка."
             required
-            {...form.getInputProps("name")}
+            {...form.getInputProps("summary")}
           />
-          {hasSummary && (
-            <TextInput
-              key={form.key("summary")}
-              label="Краткий смысл"
-              description="Одна фраза для быстрого чтения списка."
-              required
-              {...form.getInputProps("summary")}
-            />
-          )}
-          {isFeature && (
-            <Text size="sm" c="dimmed">
-              Готовность вычисляется по контрактам всех приложений и сценариям. Сценарии добавляются
-              и редактируются на странице фичи.
-            </Text>
-          )}
-          {isScenario && (
-            <Text size="sm" c="dimmed">
-              Сценарий готов, когда все участвующие приложения подтвердили реализацию его актуальных
-              требований.
-            </Text>
-          )}
-          {isApplication && (
-            <TextInput
-              key={form.key("slug")}
-              label="Адрес приложения и доски"
-              description="Slug в URL и имя папки доски. Задаётся при создании и не меняется при переименовании приложения."
-              placeholder="storefront"
-              required
-              readOnly={isExistingApplication}
-              {...form.getInputProps("slug")}
-            />
-          )}
-          {isApplication && (
-            <TextInput
-              key={form.key("prefix")}
-              label="Префикс задач доски"
-              description="Например WEB или API. Если оставить пустым, создаётся из адреса доски. После создания не меняется."
-              placeholder="WEB"
-              readOnly={isExistingApplication}
-              {...form.getInputProps("prefix")}
-            />
-          )}
-          {isApplication && (
-            <NativeSelect
-              key={form.key("type")}
-              label="Тип приложения"
-              data={APPLICATION_TYPES}
-              {...form.getInputProps("type")}
-            />
-          )}
-          <MarkdownField
-            key={form.key("description")}
-            label="Описание в Markdown"
-            minRows={12}
-            {...form.getInputProps("description")}
+        )}
+        {isFeature && (
+          <Text size="sm" c="dimmed">
+            Готовность вычисляется по контрактам всех приложений и сценариям. Сценарии добавляются и
+            редактируются на странице фичи.
+          </Text>
+        )}
+        {isScenario && (
+          <Text size="sm" c="dimmed">
+            Сценарий готов, когда все участвующие приложения подтвердили реализацию его актуальных
+            требований.
+          </Text>
+        )}
+        {isApplication && (
+          <TextInput
+            key={form.key("slug")}
+            label="Адрес приложения и доски"
+            description="Slug в URL и имя папки доски. Задаётся при создании и не меняется при переименовании приложения."
+            placeholder="storefront"
+            required
+            readOnly={isExistingApplication}
+            {...form.getInputProps("slug")}
           />
-          {isApplication && (
-            <Text size="sm" c="dimmed">
-              Выбрать фичи и сценарии и описать свой вклад можно на странице приложения после
-              сохранения.
-            </Text>
-          )}
-        </Stack>
+        )}
+        {isApplication && (
+          <TextInput
+            key={form.key("prefix")}
+            label="Префикс задач доски"
+            description="Например WEB или API. Если оставить пустым, создаётся из адреса доски. После создания не меняется."
+            placeholder="WEB"
+            readOnly={isExistingApplication}
+            {...form.getInputProps("prefix")}
+          />
+        )}
+        {isApplication && (
+          <NativeSelect
+            key={form.key("type")}
+            label="Тип приложения"
+            data={APPLICATION_TYPES}
+            {...form.getInputProps("type")}
+          />
+        )}
+        <MarkdownField
+          key={form.key("description")}
+          label="Описание в Markdown"
+          minRows={12}
+          {...form.getInputProps("description")}
+        />
+        {isApplication && (
+          <Text size="sm" c="dimmed">
+            Выбрать фичи и сценарии и описать свой вклад можно на странице приложения после
+            сохранения.
+          </Text>
+        )}
       </fieldset>
       {hasSaveError && (
-        <Alert color="red" role="alert" mt="lg" title="Не удалось сохранить">
+        <Alert
+          ref={saveErrorRef}
+          color="danger"
+          role="alert"
+          title="Не удалось сохранить"
+          tabIndex={-1}
+        >
           {saveError}
         </Alert>
       )}
       <footer className={styles.footer}>
         <div>
-          <Badge
-            color={draftColor}
-            c={draftTextColor}
-            variant="light"
-            className={styles.dirty}
-            role="status"
-          >
+          <StatusBadge tone={draftTone} role="status">
             {draftLabel}
-          </Badge>
+          </StatusBadge>
           <Text size="xs" c="dimmed" mt={6}>
             Черновик остаётся в этой вкладке · Ctrl/⌘ + Enter
           </Text>
@@ -349,7 +344,7 @@ export const DocumentForm = (props: DocumentFormProps) => {
         title="Отменить правки?"
         centered
       >
-        <Text size="sm">Несохранённый ввод и локальный черновик документа будут удалены.</Text>
+        <Text size="sm">Несохранённый ввод и локальный черновик {recordLabel} будут удалены.</Text>
         <Group justify="flex-end" mt="lg">
           <Button variant="default" onClick={() => setDiscardOpen(false)}>
             Продолжить редактирование

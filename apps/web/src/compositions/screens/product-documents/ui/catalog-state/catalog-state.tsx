@@ -34,7 +34,6 @@ export const CatalogState = (props: CatalogStateProps) => {
             component={Link}
             to={createHref}
             state={{ returnTo }}
-            radius="xl"
             leftSection={<Plus size={15} aria-hidden="true" />}
           >
             Добавить материал
@@ -51,7 +50,6 @@ export const CatalogState = (props: CatalogStateProps) => {
         <div className={styles.actions}>
           {canSearchEverywhere && (
             <Button
-              radius="xl"
               variant="light"
               leftSection={<Globe size={15} aria-hidden="true" />}
               onClick={onSearchEverywhere}
@@ -59,7 +57,7 @@ export const CatalogState = (props: CatalogStateProps) => {
               Искать во всей библиотеке
             </Button>
           )}
-          <Button radius="xl" variant="default" onClick={onReset}>
+          <Button variant="default" onClick={onReset}>
             Сбросить условия
           </Button>
         </div>

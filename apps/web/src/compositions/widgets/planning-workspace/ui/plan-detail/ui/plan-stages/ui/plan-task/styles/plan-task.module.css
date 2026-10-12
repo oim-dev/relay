@@ -1,89 +1,106 @@
+/* Строка задачи этапа: открывает просмотр задачи, наведение меняет только фон. */
 .root {
   display: flex;
   align-items: flex-start;
-  gap: 0.7rem;
+  gap: var(--tasks-space-3);
   width: 100%;
-  padding: 0.9rem 0.35rem;
+  min-width: 0;
+  padding: var(--tasks-space-3) var(--tasks-space-2);
   border: 0;
-  border-bottom: 1px solid var(--tasks-border);
+  border-radius: var(--tasks-radius-control);
   background: transparent;
   color: var(--tasks-ink);
+  font: inherit;
   text-align: left;
   cursor: pointer;
-  &:last-child {
-    border-bottom: 0;
-  }
+  transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
+
   &:hover {
-    background: var(--tasks-subtle);
+    background: var(--tasks-tile-hover);
   }
+
   &:focus-visible {
     outline: 2px solid var(--tasks-focus-ring);
-    border-radius: var(--mantine-radius-sm);
+    outline-offset: -2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }
+
+/* Значок повторяет подпись бейджа; цвет колонки — не единственный признак. */
 .statusIcon {
-  flex-shrink: 0;
-  color: var(--tasks-soft);
-  margin-top: 0.15rem;
-  &[data-status="done"] {
-    color: light-dark(var(--mantine-color-teal-7), var(--mantine-color-teal-3));
+  flex: none;
+  margin-top: 0.0625rem;
+  color: var(--tasks-column-inbox);
+
+  &[data-state="ready"] {
+    color: var(--tasks-column-ready);
   }
-  &[data-status="active"] {
-    color: light-dark(var(--mantine-color-blue-9), var(--mantine-color-blue-3));
+
+  &[data-state="active"] {
+    color: var(--tasks-accent-ink);
   }
-  &[data-status="review"] {
-    color: var(--tasks-warning-ink);
+
+  &[data-state="review"],
+  &[data-state="unmet"] {
+    color: var(--tasks-warning);
+  }
+
+  &[data-state="completed"] {
+    color: var(--tasks-success);
   }
 }
+
 .body {
+  display: grid;
   flex: 1;
+  gap: var(--tasks-space-1);
   min-width: 0;
 }
+
+/* Название переносится целиком, в том числе длинное слово без пробелов. */
 .title {
-  display: block;
-  font-size: 0.75rem;
-  line-height: 1.65;
-  font-weight: 450;
+  min-width: 0;
+  font-size: var(--mantine-font-size-md);
+  font-weight: 550;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
+
 .meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
-  margin-top: 0.3rem;
-  color: var(--tasks-soft);
-  font-size: 0.625rem;
+  gap: 0 var(--tasks-space-3);
+  min-width: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  overflow-wrap: anywhere;
 }
+
 .key {
-  font-family: var(--mantine-font-family-monospace);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
-.status {
-  align-self: center;
-  flex-shrink: 0;
-  max-width: 4.7rem;
-  font-size: 0.5625rem;
-  color: var(--tasks-soft);
-  text-align: right;
-  &[data-status="active"] {
-    color: light-dark(var(--mantine-color-blue-9), var(--mantine-color-blue-3));
-  }
-  &[data-status="review"] {
-    color: var(--tasks-warning-ink);
-  }
-  @media (--md) {
-    font-size: 0.625rem;
-    max-width: none;
-  }
-}
+
 .blocker {
   display: flex;
   align-items: flex-start;
-  gap: 0.35rem;
-  margin-top: 0.5rem;
-  font-size: 0.625rem;
-  line-height: 1.6;
-  color: var(--tasks-warning-ink);
+  gap: var(--tasks-space-1);
+  margin-top: var(--tasks-space-1);
+  color: var(--tasks-warning);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 550;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+
   & svg {
-    flex-shrink: 0;
-    margin-top: 2px;
+    flex: none;
+    margin-top: 0.0625rem;
   }
+}
+
+.status {
+  flex: none;
 }

@@ -26,6 +26,9 @@ export class DocumentConflictError extends DocumentAccessError {}
  */
 export class DocumentOutcomeUnknownError extends DocumentAccessError {}
 
+/** Материала с таким адресом нет в проекте: удалён или адрес неверен; повтор чтения не поможет. */
+export class DocumentNotFoundError extends DocumentAccessError {}
+
 /** Отказ изменения связи: такая связь уже есть или изменяемой связи больше нет. */
 export class DocumentRelationError extends DocumentAccessError {
   /** Стабильный код Core. */
@@ -48,6 +51,7 @@ export const throwDocumentFailure = (failure: unknown): never => {
     const code = parsed.success ? (parsed.data.error.code ?? "") : "";
     const message = parsed.success ? parsed.data.error.message : "";
     if (CONFLICT_CODES.has(code)) throw new DocumentConflictError(message, { cause: failure });
+    if (code === "ENTITY_NOT_FOUND") throw new DocumentNotFoundError(message, { cause: failure });
     if (code === "ALREADY_EXISTS" || code === "RELATION_NOT_FOUND")
       throw new DocumentRelationError(code, message, { cause: failure });
     if (parsed.success && failure.status < 500)

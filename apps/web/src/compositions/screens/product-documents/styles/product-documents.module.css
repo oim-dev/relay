@@ -24,7 +24,7 @@
   max-height: calc(100dvh - 6rem);
   padding: 0.75rem 0.5rem;
   overflow-y: auto;
-  border-radius: 1.5rem;
+  border-radius: var(--tasks-radius-panel);
   background: var(--tasks-card);
   overscroll-behavior: contain;
 
@@ -46,7 +46,7 @@
 /* Фильтры над выдачей: мягкая панель того же уровня, что и разделы. */
 .filters {
   padding: 1rem 1.25rem 1.25rem;
-  border-radius: 1.5rem;
+  border-radius: var(--tasks-radius-panel);
   background: var(--tasks-card);
 
   &[hidden] {

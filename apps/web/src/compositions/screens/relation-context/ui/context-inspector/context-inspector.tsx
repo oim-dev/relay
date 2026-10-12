@@ -2,7 +2,6 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Alert,
   Anchor,
-  Badge,
   Button,
   Divider,
   Group,
@@ -16,12 +15,14 @@ import { ArrowUpRight, GitFork, Route } from "lucide-react";
 import {
   getEntityPresentation,
   getEntityStatusLabel,
+  getEntityStatusTone,
   useEntityContent,
   ENTITY_PRESENTATION,
 } from "domains/entities";
 import { getRelationLabel, relationAddress } from "domains/relations";
 import { useProjectBasePath } from "domains/project";
 import { MarkdownView } from "ui/markdown-view";
+import { StatusBadge } from "ui/status-badge";
 import { isDefined } from "shared/value-predicates";
 import { getContextEntityHref } from "../../helpers/get-context-entity-href";
 import { ContextNodeRelations } from "./ui/context-node-relations/context-node-relations";
@@ -69,8 +70,8 @@ export const ContextInspector = ({
     const createdAt = new Date(edge.createdAt).toLocaleString("ru-RU");
     return (
       <section className={styles.root} aria-label="Сведения о связи">
-        <Text size="xs" c="dimmed">
-          СОХРАНЁННАЯ СВЯЗЬ
+        <Text size="xs" c="dimmed" fw={600}>
+          Сохранённая связь
         </Text>
         <Title order={2} size="h4">
           {getRelationLabel(edge.type)}
@@ -126,20 +127,17 @@ export const ContextInspector = ({
   const hasNoMarkdown = isDefined(content.data) && !hasMarkdown;
   const hasStatus = node.status !== "";
   const statusLabel = getEntityStatusLabel(node.status);
+  const statusTone = getEntityStatusTone(node.status);
   return (
     <section className={styles.root} aria-label="Сведения о сущности">
       <Group gap="xs">
-        <ThemeIcon color={presentation.color} variant="light">
+        <ThemeIcon color="accent" variant="light">
           <presentation.icon size={18} aria-hidden="true" />
         </ThemeIcon>
         <Text size="xs" c="dimmed">
           {presentation.label}
         </Text>
-        {isRoot && (
-          <Badge size="xs" variant="light" tt="none">
-            Исходная
-          </Badge>
-        )}
+        {isRoot && <span className={styles.origin}>Исходная</span>}
       </Group>
       <div>
         <Text size="xs" c="dimmed">
@@ -149,11 +147,16 @@ export const ContextInspector = ({
           {node.title || "Без названия"}
         </Title>
       </div>
-      {hasStatus && <Text size="sm">Состояние: {statusLabel}</Text>}
+      {hasStatus && (
+        <p className={styles.status}>
+          Состояние: <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>
+        </p>
+      )}
       <Stack gap="xs">
         <Button
           variant="light"
-          leftSection={<GitFork size={16} />}
+          color="accent"
+          leftSection={<GitFork size={16} aria-hidden="true" />}
           disabled={!canExpand || isBusy}
           onClick={onExpand}
         >
@@ -167,8 +170,8 @@ export const ContextInspector = ({
         {canChangeRoot && (
           <Button
             variant="subtle"
-            color="teal"
-            leftSection={<Route size={16} />}
+            color="gray"
+            leftSection={<Route size={16} aria-hidden="true" />}
             disabled={!hasPath}
             onClick={onPath}
           >
@@ -182,7 +185,7 @@ export const ContextInspector = ({
             state={{ returnTo }}
             variant="subtle"
             color="gray"
-            rightSection={<ArrowUpRight size={16} />}
+            rightSection={<ArrowUpRight size={16} aria-hidden="true" />}
           >
             Открыть сущность
           </Button>
@@ -203,11 +206,13 @@ export const ContextInspector = ({
         </Group>
       )}
       {hasContentError && (
-        <Alert color="red" title="Описание недоступно">
+        <Alert color="danger" title="Описание недоступно">
           {content.error?.message}
           <Button
             size="xs"
             variant="subtle"
+            color="gray"
+            mt="xs"
             onClick={() => void content.mutate().catch(() => undefined)}
           >
             Повторить загрузку описания

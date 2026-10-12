@@ -1,0 +1,78 @@
+/*
+ * Общие правила контролов Mantine, подключённые через Styles API в config/theme.config.ts.
+ * Потребители не передают эти классы сами.
+ */
+
+/*
+ * Иконка-действие остаётся компактной, но на touch получает область нажатия 44×44px.
+ * Mantine обрезает содержимое ActionIcon (overflow: hidden) ради анимации загрузки,
+ * поэтому на touch вне загрузки обрезка снимается: иначе псевдо-область не принимает касание.
+ * Визуал не меняется — иконка меньше кнопки, фокус-кольцо рисует outline.
+ */
+.touchTarget {
+  @media (pointer: coarse) {
+    &:not([data-loading]) {
+      overflow: visible;
+    }
+
+    &::after {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--tasks-touch-target));
+      height: max(100%, var(--tasks-touch-target));
+      transform: translate(-50%, -50%);
+      content: "";
+    }
+  }
+}
+
+/* Граница поля — значимая граница контрола: не ниже 3:1 к поверхности в обеих схемах. */
+.field {
+  &:where([data-variant="default"]):not([data-error], :focus, :focus-within) {
+    --input-bd: var(--tasks-field-border);
+  }
+
+  /* Фокус поля — кольцо 2px (рамка и тень) цвета фокуса, а не только смена цвета рамки. */
+  &:focus,
+  &:focus-within {
+    box-shadow: 0 0 0 1px var(--tasks-focus-ring);
+  }
+}
+
+/* Описание и ошибка поля — значимые подписи: не меньше 12px при любом размере поля. */
+.fieldNote {
+  font-size: max(var(--mantine-font-size-xs), var(--input-description-size, 0px));
+}
+
+.fieldError {
+  font-size: max(var(--mantine-font-size-xs), var(--input-error-size, 0px));
+}
+
+.checkbox {
+  &:not(:checked, :disabled, [data-indeterminate], [data-error]) {
+    border-color: var(--tasks-field-border);
+  }
+}
+
+.menuItem {
+  @media (pointer: coarse) {
+    min-height: var(--tasks-touch-target);
+  }
+}
+
+.option {
+  &[data-combobox-selected] {
+    color: var(--tasks-action-primary-text);
+  }
+}
+
+/* Ссылка Anchor: тот же акцент и подчёркивание, что у ссылки в Markdown. */
+.anchor {
+  text-decoration-thickness: from-font;
+  text-underline-offset: 0.2em;
+
+  &:hover {
+    text-decoration-thickness: 2px;
+  }
+}

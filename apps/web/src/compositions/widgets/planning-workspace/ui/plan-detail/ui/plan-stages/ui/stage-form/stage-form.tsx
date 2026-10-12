@@ -144,12 +144,12 @@ export const StageForm = (props: StageFormProps) => {
           {...form.getInputProps("completionConditions")}
         />
         {!canPersist && (
-          <Alert color="orange">
+          <Alert color="warning">
             Черновик не сохранился. Не закрывайте окно до сохранения этапа.
           </Alert>
         )}
         {hasError && (
-          <Alert color="red">
+          <Alert color="danger" title="Этап не сохранён">
             {error}
             <Button
               size="xs"

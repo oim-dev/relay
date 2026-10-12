@@ -1,4 +1,5 @@
 import { entityDefinitions } from "@relay/contracts/entities";
+import type { StatusBadgeTone } from "ui/status-badge";
 import type { DocumentInput, MaterialFormat, MaterialTargetKind } from "../types/document.type";
 
 /** Названия типов, одинаковые при чтении, создании и поиске. */
@@ -23,6 +24,15 @@ export const DOCUMENT_KIND_OPTIONS: { value: DocumentInput["documentKind"]; labe
 ];
 /** Состояние документа, не состояние локального ввода. */
 export const DOCUMENT_STATUSES = { draft: "Черновик", active: "Действующий", archived: "Архив" };
+/**
+ * Тон бейджа состояния материала: черновик требует внимания, действующий подтверждён,
+ * архив нейтрален и отличается подписью.
+ */
+export const DOCUMENT_STATUS_TONES: Record<keyof typeof DOCUMENT_STATUSES, StatusBadgeTone> = {
+  draft: "warning",
+  active: "success",
+  archived: "neutral",
+};
 /** Варианты состояния публикации. */
 export const DOCUMENT_STATUS_OPTIONS = Object.entries(DOCUMENT_STATUSES).map(([value, label]) => ({
   value,

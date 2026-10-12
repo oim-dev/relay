@@ -32,7 +32,6 @@ export const SearchScope = (props: SearchScopeProps) => {
         {isNarrow && hasQuery && (
           <Button
             size="xs"
-            radius="xl"
             variant="light"
             leftSection={<Globe size={13} aria-hidden="true" />}
             onClick={onSearchEverywhere}
@@ -42,7 +41,6 @@ export const SearchScope = (props: SearchScopeProps) => {
         )}
         <Button
           size="xs"
-          radius="xl"
           variant="subtle"
           color="gray"
           leftSection={<X size={13} aria-hidden="true" />}

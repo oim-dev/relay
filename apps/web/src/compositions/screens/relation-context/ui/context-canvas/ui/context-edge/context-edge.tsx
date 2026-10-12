@@ -28,7 +28,7 @@ export const ContextEdge = (props: ContextEdgeProps) => {
       label={label}
       labelX={labelX}
       labelY={labelY}
-      labelStyle={{ fill: "var(--tasks-muted)", fontSize: 11 }}
+      labelStyle={{ fill: "var(--tasks-muted)", fontSize: "var(--mantine-font-size-xs)" }}
       labelBgStyle={{ fill: "var(--tasks-surface)", fillOpacity: 0.96 }}
       labelBgPadding={[7, 5]}
       labelBgBorderRadius={5}

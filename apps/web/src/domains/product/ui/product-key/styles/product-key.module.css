@@ -1,14 +1,15 @@
+/* Ключ — технический идентификатор: моноширинный, компактная подпись 12px. */
 .root {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--tasks-space-1);
   flex-shrink: 0;
   white-space: nowrap;
   font-family: var(--mantine-font-family-monospace);
   font-size: var(--mantine-font-size-xs);
   font-weight: 500;
-  color: var(--mantine-color-dimmed);
-  line-height: 1.6;
+  color: var(--tasks-muted);
+  line-height: 1.4;
 }
 
 .announcement {

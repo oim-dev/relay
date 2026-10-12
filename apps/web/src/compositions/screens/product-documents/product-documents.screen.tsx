@@ -233,7 +233,6 @@ export const ProductDocumentsScreen = () => {
     <Button
       size="xs"
       variant="default"
-      radius="xl"
       leftSection={<RefreshCw size={13} aria-hidden="true" />}
       loading={catalog.isValidating}
       onClick={() => void catalog.mutate()}
@@ -295,7 +294,6 @@ export const ProductDocumentsScreen = () => {
                 variant="subtle"
                 color="gray"
                 size="lg"
-                radius="xl"
                 aria-label={sidebarToggleLabel}
                 aria-expanded={!isSidebarCollapsed}
                 aria-controls={sidebarNavigationId}
@@ -339,12 +337,7 @@ export const ProductDocumentsScreen = () => {
               title="Не удалось прочитать разделы"
               message={settings.error.message}
               action={
-                <Button
-                  size="xs"
-                  variant="default"
-                  radius="xl"
-                  onClick={() => void settings.mutate()}
-                >
+                <Button size="xs" variant="default" onClick={() => void settings.mutate()}>
                   Повторить чтение
                 </Button>
               }
@@ -455,7 +448,7 @@ export const ProductDocumentsScreen = () => {
         onClose={() => setFiltersOpen(false)}
       >
         <LibraryFilters {...filterProps} />
-        <Button fullWidth radius="xl" mt="lg" onClick={() => setFiltersOpen(false)}>
+        <Button fullWidth mt="lg" onClick={() => setFiltersOpen(false)}>
           Показать материалы
         </Button>
       </Drawer>

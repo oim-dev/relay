@@ -1,6 +1,6 @@
 import { Button, Skeleton } from "@mantine/core";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
-import { useDocument, DOCUMENT_INPUT_SCHEMA } from "domains/documents";
+import { DocumentNotFoundError, useDocument, DOCUMENT_INPUT_SCHEMA } from "domains/documents";
 import type { DocumentInput } from "domains/documents";
 import { entityKindLabel, useEntitySummary } from "domains/entities";
 import { useProjectBasePath, useProjectId } from "domains/project";
@@ -35,25 +35,38 @@ export const ProductDocumentEditorScreen = () => {
     return (
       <PageStage aria-busy="true">
         <Skeleton height={40} width="40%" />
-        <Skeleton height={420} radius="xl" />
+        <Skeleton height={420} />
       </PageStage>
     );
   const loadError = isNew ? target.error : query.error;
-  const errorTitle = isNew ? "Не найдена запись для прикрепления" : "Не удалось открыть редактор";
-  const errorFallback = isNew
-    ? "Сущность, к которой нужно прикрепить материал, недоступна."
-    : "Материал не найден.";
+  const isMissingDocument = !isNew && query.error instanceof DocumentNotFoundError;
+  const errorTitle = isNew
+    ? "Не найдена запись для прикрепления"
+    : isMissingDocument
+      ? "Материал не найден"
+      : "Не удалось открыть редактор";
+  const errorDescription = isMissingDocument
+    ? "Материала с этим адресом нет в проекте: его удалили или адрес неверен."
+    : (loadError?.message ??
+      (isNew
+        ? "Сущность, к которой нужно прикрепить материал, недоступна."
+        : "Материал не найден."));
+  const errorAction = isMissingDocument ? "Вернуться в библиотеку" : "Назад";
+  const errorReturn = isMissingDocument ? catalogReturn : (editorParams.returnTo ?? catalogReturn);
   if ((!isNew && !isDefined(query.data)) || isDefined(target.error))
     return (
-      <StatePanel
-        title={errorTitle}
-        description={loadError?.message ?? errorFallback}
-        action={
-          <Button component={Link} to={editorParams.returnTo ?? catalogReturn}>
-            Назад
-          </Button>
-        }
-      />
+      <PageStage>
+        <StatePanel
+          titleAs="h1"
+          title={errorTitle}
+          description={errorDescription}
+          action={
+            <Button component={Link} to={errorReturn} variant="default">
+              {errorAction}
+            </Button>
+          }
+        />
+      </PageStage>
     );
   const attachment = isNew && isDefined(target.data) ? target.data : null;
   const initialData: DocumentInput = isDefined(query.data)

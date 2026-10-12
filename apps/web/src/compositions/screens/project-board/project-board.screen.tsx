@@ -3,18 +3,13 @@ import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
   Checkbox,
   Drawer,
-  Group,
   Menu,
   Popover,
-  Skeleton,
   Stack,
-  Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { useDebouncedValue, useHotkeys, useMediaQuery } from "@mantine/hooks";
 import {
@@ -26,9 +21,17 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useBoard } from "domains/boards";
-import { BoardTaskError, useBoardTask, useBoardTaskCreation } from "domains/board-tasks";
+import {
+  BoardTaskError,
+  BoardTaskNotFoundError,
+  useBoardTask,
+  useBoardTaskCreation,
+} from "domains/board-tasks";
 import type { TaskColumn, TaskFilters } from "domains/board-tasks";
 import { useProjectId, useProjectBasePath } from "domains/project";
+import { PageHeader } from "ui/page-header";
+import { PageStage } from "ui/page-stage";
+import { StatePanel } from "ui/state-panel";
 import { EntityDocuments } from "compositions/widgets/entity-documents";
 import { TaskKanban } from "./ui/task-kanban";
 import { TaskModal } from "./ui/task-modal";
@@ -73,6 +76,13 @@ export const ProjectBoardScreen = () => {
   const requestRef = useRef<{ board: string; column: TaskColumn; id: string } | null>(null);
   const isCreatingRef = useRef(false);
   const search = params.get("q") ?? "";
+  /*
+   * Поле поиска хранит ввод локально: адрес обновляется навигацией позже нажатий, и
+   * управляемое из адреса поле теряло символы быстрого ввода. Адрес остаётся источником
+   * для внешних изменений (Back/Forward, переход по ссылке), собственные записи пропускаются.
+   */
+  const [searchDraft, setSearchDraft] = useState(search);
+  const writtenSearches = useRef<string[]>([]);
   const [debouncedSearch] = useDebouncedValue(search, 200);
   const isBlockedOnly = params.get("blocked") === "1";
   const showCancelled = params.get("cancelled") === "1";
@@ -81,7 +91,13 @@ export const ProjectBoardScreen = () => {
     q: debouncedSearch,
     ...(isBlockedOnly ? { readiness: "blocked" } : {}),
   };
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const openedTaskRef = useRef<string | null>(null);
+  const hadTaskRef = useRef(false);
   const handleOpen = (taskId: string, targetBoard = boardSlug, edit = false): void => {
+    if (selected === null && document.activeElement instanceof HTMLElement)
+      openerRef.current = document.activeElement;
     const filterSearch = params.size === 0 ? "" : `?${params.toString()}`;
     navigate(
       `${base}/boards/${encodeURIComponent(targetBoard)}/${encodeURIComponent(taskId)}${filterSearch}`,
@@ -129,6 +145,20 @@ export const ProjectBoardScreen = () => {
         },
       );
   };
+  useEffect(() => {
+    const index = writtenSearches.current.indexOf(search);
+    if (index >= 0) {
+      writtenSearches.current = writtenSearches.current.slice(index + 1);
+      return;
+    }
+    writtenSearches.current = [];
+    setSearchDraft(search);
+  }, [search]);
+  const handleSearch = (value: string): void => {
+    setSearchDraft(value);
+    writtenSearches.current.push(value);
+    handleFilter("q", value);
+  };
   const handleFilter = (name: string, value: string): void => {
     const next = new URLSearchParams(params);
     if (value === "") next.delete(name);
@@ -146,6 +176,31 @@ export const ProjectBoardScreen = () => {
       },
     ],
   ]);
+  useEffect(() => {
+    if (selected !== null) {
+      hadTaskRef.current = true;
+      openedTaskRef.current = opened.data?.id ?? openedTaskRef.current;
+      return;
+    }
+    // Окно задачи снимается вместе с маршрутом, поэтому фокус возвращает экран:
+    // к вызвавшему элементу, иначе к карточке закрытой задачи, иначе к заголовку доски
+    // (так и после окна отсутствующей задачи, открытой прямым адресом).
+    const opener = openerRef.current;
+    const taskId = openedTaskRef.current;
+    const hadTask = hadTaskRef.current;
+    openerRef.current = null;
+    openedTaskRef.current = null;
+    hadTaskRef.current = false;
+    if (!hadTask) return;
+    const card =
+      taskId === null
+        ? null
+        : document.querySelector<HTMLElement>(
+            `[data-task-id="${CSS.escape(taskId)}"] [data-open-task]`,
+          );
+    const target = opener?.isConnected === true ? opener : (card ?? headingRef.current);
+    target?.focus({ preventScroll: true });
+  }, [selected, opened.data?.id]);
   const legacyTask = new URLSearchParams(location.search).get("task");
   useEffect(() => {
     if (!routeBoard || !legacyTask || legacyTask === "new") return;
@@ -190,30 +245,56 @@ export const ProjectBoardScreen = () => {
   const hasError = error !== "";
   const filterCount = Number(isBlockedOnly) + Number(showCancelled);
   const filterLabel = filterCount > 0 ? `Фильтры · ${filterCount}` : "Фильтры";
+  const isTaskMissing = opened.error instanceof BoardTaskNotFoundError;
+  const taskErrorState = isTaskMissing ? "empty" : "error";
+  const taskErrorTitle = isTaskMissing ? "Задача не найдена" : "Задача недоступна";
+  const taskErrorDescription = isTaskMissing
+    ? "В проекте нет задачи с таким адресом: её удалили или адрес неверен."
+    : (opened.error?.message ?? "");
   if (defect !== undefined) throw defect;
   if (opened.error !== undefined && board === undefined)
     return (
-      <Alert color="red" m="md" title="Задача недоступна">
-        {opened.error.message}
-        <Button component={Link} to={`${base}/boards/product`} variant="subtle">
-          К доске
-        </Button>
-      </Alert>
+      <PageStage layout="workspace" className={styles.stage}>
+        <StatePanel
+          state={taskErrorState}
+          titleAs="h1"
+          title={taskErrorTitle}
+          description={taskErrorDescription}
+          action={
+            <Button component={Link} to={`${base}/boards/product`} variant="default">
+              К доске
+            </Button>
+          }
+        />
+      </PageStage>
     );
-  if (query.error !== undefined || board === undefined) {
+  if (query.error !== undefined)
     return (
-      <section className={styles.root}>
-        <Skeleton height={40} mb="md" />
-        <Skeleton height={280} />
-        {query.error !== undefined && (
-          <Alert color="red" title="Не удалось открыть доску">
-            {query.error.message}
-            <Button onClick={() => void query.mutate().catch(() => undefined)}>Повторить</Button>
-          </Alert>
-        )}
-      </section>
+      <PageStage layout="workspace" className={styles.stage}>
+        <StatePanel
+          state="error"
+          titleAs="h1"
+          title="Не удалось открыть доску"
+          description={query.error.message}
+          action={
+            <Button variant="default" onClick={() => void query.mutate().catch(() => undefined)}>
+              Повторить
+            </Button>
+          }
+        />
+      </PageStage>
     );
-  }
+  if (board === undefined)
+    return (
+      <PageStage layout="workspace" className={styles.stage}>
+        <StatePanel
+          state="loading"
+          titleAs="h1"
+          title="Загружаем доску"
+          description="Получаем колонки и задачи доски."
+        />
+      </PageStage>
+    );
   const applicationPath = `${base}/product/applications/${board.applicationId ?? ""}`;
   const isApplication = board.kind === "application";
   const boardDescription = isApplication
@@ -222,67 +303,65 @@ export const ProjectBoardScreen = () => {
       ? "Возможности, сценарии и развитие продукта"
       : "Окружение, инструменты и надёжность проекта";
   const allVariant = isBlockedOnly ? "subtle" : "light";
+  const allColor = isBlockedOnly ? "gray" : "accent";
   const blockedVariant = isBlockedOnly ? "light" : "subtle";
-  const blockedColor = isBlockedOnly ? "red" : "gray";
+  const blockedColor = isBlockedOnly ? "accent" : "gray";
+  const filterVariant = filterCount > 0 ? "light" : "subtle";
+  const filterColor = filterCount > 0 ? "accent" : "gray";
   return (
-    <section className={styles.root}>
-      <header className={styles.toolbar}>
-        <Stack gap={6} className={styles.heading}>
-          <Group gap="sm" wrap="nowrap">
-            <Title order={1} className={styles.title}>
-              {board.name}
-            </Title>
-            <Badge color="gray" variant="light" size="sm" className={styles.prefix}>
-              {board.prefix}
-            </Badge>
-          </Group>
-          <Text size="sm" c="dimmed" className={styles.subtitle}>
-            {boardDescription}
-          </Text>
-        </Stack>
-        <Group gap="xs" className={styles.actions}>
+    <PageStage layout="workspace" className={styles.stage}>
+      <PageHeader
+        meta={
+          <>
+            <span>Доска</span>
+            <span className={styles.prefix}>{board.prefix}</span>
+          </>
+        }
+        title={board.name}
+        titleRef={headingRef}
+        description={boardDescription}
+        actionsLayout="inline"
+        actions={
+          <>
+            <Button
+              ref={materialsButtonRef}
+              variant="default"
+              leftSection={<BookOpen size={16} aria-hidden="true" />}
+              aria-haspopup="dialog"
+              onClick={() => setMaterialsOpened(true)}
+            >
+              Материалы
+            </Button>
+            <Button
+              leftSection={<Plus size={16} aria-hidden="true" />}
+              loading={creatingColumn !== null}
+              onClick={() => void handleCreate("inbox")}
+            >
+              Создать задачу
+            </Button>
+          </>
+        }
+      />
+      <div className={styles.filters} role="search" aria-label="Поиск и фильтры доски">
+        <TextInput
+          type="search"
+          aria-label="Поиск задач на доске"
+          placeholder="Поиск задач…"
+          leftSection={<Search size={16} aria-hidden="true" />}
+          value={searchDraft}
+          onChange={(event) => handleSearch(event.currentTarget.value)}
+          className={styles.search}
+        />
+        <div className={styles.toggles}>
           <Button
-            ref={materialsButtonRef}
-            size="sm"
-            variant="default"
-            leftSection={<BookOpen size={15} aria-hidden="true" />}
-            aria-haspopup="dialog"
-            onClick={() => setMaterialsOpened(true)}
-          >
-            Материалы
-          </Button>
-          <Button
-            size="sm"
-            leftSection={<Plus size={16} />}
-            loading={creatingColumn !== null}
-            onClick={() => void handleCreate("inbox")}
-          >
-            Создать задачу
-          </Button>
-        </Group>
-      </header>
-      <div className={styles.filterbar}>
-        <Group gap="xs" className={styles.controls}>
-          <TextInput
-            aria-label="Поиск задач на доске"
-            placeholder="Поиск задач…"
-            size="sm"
-            leftSection={<Search size={14} />}
-            value={search}
-            onChange={(event) => handleFilter("q", event.currentTarget.value)}
-            className={styles.search}
-          />
-          <Button
-            size="xs"
             variant={allVariant}
-            color="gray"
+            color={allColor}
             onClick={() => handleFilter("blocked", "")}
             aria-pressed={!isBlockedOnly}
           >
             Все задачи
           </Button>
           <Button
-            size="xs"
             variant={blockedVariant}
             color={blockedColor}
             onClick={() => handleFilter("blocked", isBlockedOnly ? "" : "1")}
@@ -293,10 +372,9 @@ export const ProjectBoardScreen = () => {
           <Popover position="bottom-end" withArrow>
             <Popover.Target>
               <Button
-                size="xs"
-                variant="subtle"
-                color="gray"
-                leftSection={<SlidersHorizontal size={14} />}
+                variant={filterVariant}
+                color={filterColor}
+                leftSection={<SlidersHorizontal size={16} aria-hidden="true" />}
               >
                 {filterLabel}
               </Button>
@@ -323,25 +401,25 @@ export const ProjectBoardScreen = () => {
           {isApplication && (
             <Menu position="bottom-end">
               <Menu.Target>
-                <ActionIcon variant="subtle" color="gray" aria-label="Действия доски">
-                  <MoreHorizontal size={18} />
+                <ActionIcon aria-label="Действия доски">
+                  <MoreHorizontal size={18} aria-hidden="true" />
                 </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Item
                   component={Link}
                   to={applicationPath}
-                  leftSection={<ExternalLink size={14} />}
+                  leftSection={<ExternalLink size={16} aria-hidden="true" />}
                 >
                   Открыть приложение
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
           )}
-        </Group>
+        </div>
       </div>
       {hasError && (
-        <Alert color="red" title="Не удалось создать задачу" mb="sm">
+        <Alert color="danger" title="Не удалось создать задачу">
           {error}
         </Alert>
       )}
@@ -381,6 +459,6 @@ export const ProjectBoardScreen = () => {
           onOpen={handleOpen}
         />
       )}
-    </section>
+    </PageStage>
   );
 };

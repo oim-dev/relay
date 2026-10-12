@@ -1,9 +1,20 @@
 import { useState } from "react";
-import { Alert, Button, Checkbox, Group, Modal, Select, Switch, TextInput } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Group,
+  Modal,
+  Select,
+  Skeleton,
+  Switch,
+  TextInput,
+} from "@mantine/core";
 import { Search } from "lucide-react";
 import { z } from "zod";
 import {
   PLANNING_TASK_LABELS,
+  PLANNING_TASK_TONES,
   usePlanningCandidates,
   changePlanTasks,
   usePlanningRefresh,
@@ -12,6 +23,7 @@ import {
 import { useBoards } from "domains/boards";
 import { useProjectId } from "domains/project";
 import { readSessionValue, removeSessionStored, writeSessionStored } from "infra/browser-storage";
+import { StatusBadge } from "ui/status-badge";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
 import type { TaskPickerProps } from "./types/task-picker-props.type";
 import styles from "./styles/task-picker.module.css";
@@ -92,6 +104,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
         ? `В плане ${task.assignment?.label}`
         : "Отменённую задачу нельзя добавить в этап",
       statusLabel: PLANNING_TASK_LABELS[task.status],
+      statusTone: PLANNING_TASK_TONES[task.status],
     };
   });
   const hiddenCount = selectedIds.filter((id) => !taskItems.some((task) => task.id === id)).length;
@@ -164,12 +177,11 @@ export const TaskPicker = (props: TaskPickerProps) => {
       title="Выбрать задачи"
       size="lg"
       closeButtonProps={{ "aria-label": "Свернуть выбор задач" }}
-      classNames={{ title: styles.modalTitle, body: styles.modalBody }}
     >
       <div className={styles.root}>
         <div className={styles.destination}>
-          <span>ЭТАП</span>
-          <strong>{stage.title}</strong>
+          <span className={styles.destinationLabel}>Этап</span>
+          <strong className={styles.destinationTitle}>{stage.title}</strong>
           <p>Задачи сохраняют свою доску и колонку.</p>
         </div>
         <div className={styles.toolbar}>
@@ -177,7 +189,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
             className={styles.search}
             placeholder="Название или ключ задачи"
             aria-label="Поиск задач"
-            leftSection={<Search size={14} />}
+            leftSection={<Search size={16} aria-hidden="true" />}
             value={query}
             onChange={(event) => {
               setQuery(event.currentTarget.value);
@@ -208,7 +220,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
         <div className={styles.options}>
           <Switch
             label="Только свободные задачи"
-            size="xs"
+            size="sm"
             checked={isAvailableOnly}
             onChange={(event) => {
               setAvailableOnly(event.currentTarget.checked);
@@ -217,9 +229,8 @@ export const TaskPicker = (props: TaskPickerProps) => {
           />
           <span role="status">Найдено: {total}</span>
         </div>
-        {candidates.isLoading && <p role="status">Загружаем задачи…</p>}
         {hasReadError && (
-          <Alert color="red">
+          <Alert color="danger" title="Список задач не прочитан">
             {candidates.error?.message ?? boardsQuery.error?.message}
             <Button
               size="xs"
@@ -234,6 +245,13 @@ export const TaskPicker = (props: TaskPickerProps) => {
           </Alert>
         )}
         <div className={styles.list}>
+          {candidates.isLoading && (
+            <div className={styles.loading} role="status" aria-label="Загружаем задачи">
+              <Skeleton height={44} />
+              <Skeleton height={44} />
+              <Skeleton height={44} />
+            </div>
+          )}
           {taskItems.map((task) => (
             <label
               className={styles.task}
@@ -245,7 +263,6 @@ export const TaskPicker = (props: TaskPickerProps) => {
                 checked={task.isSelected}
                 disabled={task.isDisabled}
                 aria-label={`Выбрать ${task.key}`}
-                size="xs"
                 onChange={(event) =>
                   handleSelection(
                     event.currentTarget.checked
@@ -258,8 +275,8 @@ export const TaskPicker = (props: TaskPickerProps) => {
                 <span className={styles.taskTitle}>{task.title}</span>
                 <span className={styles.taskMeta}>
                   <span className={styles.key}>{task.key}</span>
-                  {task.board}
-                  <span>{task.statusLabel}</span>
+                  <span>{task.board}</span>
+                  <StatusBadge tone={task.statusTone}>{task.statusLabel}</StatusBadge>
                 </span>
                 {task.isUnavailable && (
                   <span className={styles.assignment}>{task.unavailabilityLabel}</span>
@@ -269,7 +286,7 @@ export const TaskPicker = (props: TaskPickerProps) => {
           ))}
           {isEmpty && (
             <div className={styles.empty}>
-              <Search size={22} />
+              <Search size={24} aria-hidden="true" />
               <strong>Задачи не найдены</strong>
               <span>Измените запрос, доску или включите занятые задачи.</span>
             </div>
@@ -286,12 +303,12 @@ export const TaskPicker = (props: TaskPickerProps) => {
           )}
         </div>
         {!canPersist && (
-          <Alert color="orange">
+          <Alert color="warning">
             Выбор не удалось сохранить в черновике. Примените его, прежде чем закрыть окно.
           </Alert>
         )}
         {hasError && (
-          <Alert color="red">
+          <Alert color="danger" title="Выбор не применён">
             {error}
             <Button
               size="xs"
@@ -310,9 +327,15 @@ export const TaskPicker = (props: TaskPickerProps) => {
             <strong>Выбрано: {selectedIds.length}</strong>
             {hasHiddenSelection && <span>Вне текущего списка: {hiddenCount}</span>}
             {hasSelection && (
-              <button type="button" disabled={isSaving} onClick={() => handleSelection([])}>
+              <Button
+                variant="subtle"
+                size="xs"
+                className={styles.clear}
+                disabled={isSaving}
+                onClick={() => handleSelection([])}
+              >
                 Снять выбор
-              </button>
+              </Button>
             )}
           </div>
           <Group gap="xs">

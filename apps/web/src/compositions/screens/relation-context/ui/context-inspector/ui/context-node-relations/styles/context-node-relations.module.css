@@ -1,6 +1,6 @@
 .root {
   display: grid;
-  gap: var(--mantine-spacing-xs);
+  gap: var(--tasks-space-2);
   min-width: 0;
 }
 
@@ -12,8 +12,8 @@
 
 .relation {
   width: 100%;
-  padding: 8px;
-  border-radius: var(--mantine-radius-sm);
+  padding: var(--tasks-space-2);
+  border-radius: var(--tasks-radius-control);
   overflow-wrap: anywhere;
 
   &:hover {
@@ -21,11 +21,11 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--mantine-color-blue-6);
+    outline: 2px solid var(--tasks-focus-ring);
     outline-offset: 1px;
   }
 }
 
 .identifier {
-  margin-top: 3px;
+  margin-top: 0.125rem;
 }

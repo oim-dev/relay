@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { ActionIcon, Alert, Button, Group } from "@mantine/core";
+import { ActionIcon, Alert, Button, Group, Progress, Skeleton } from "@mantine/core";
 import { ArrowDown, ArrowUp, Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { usePlanStageTasks } from "domains/planning";
 import { useProjectId } from "domains/project";
 import { MarkdownView } from "ui/markdown-view";
-import { isDefined } from "shared/value-predicates";
+import { isDefined, isEmptyArray } from "shared/value-predicates";
 import { PlanTask } from "../plan-task/plan-task";
 import type { StageRowProps } from "./types/stage-row-props.type";
-import styles from "../../styles/plan-stages.module.css";
+import styles from "./styles/stage-row.module.css";
 
 /**
  * Сохраняет оформление этапа и независимо подгружает его реальные задачи.
@@ -52,59 +52,77 @@ export const StageRow = (props: StageRowProps) => {
   const isFirst = index === 0;
   const isLast = index + 1 >= total;
   const hasConditions = stage.completionConditions.trim() !== "";
+  const progressLabel = `${stage.progress.done} из ${stage.progress.total} задач`;
   return (
     <details
-      className={styles.stage}
+      className={styles.root}
       open={isExpanded}
       data-done={isDone}
       data-active={isActive}
       onToggle={(event) => setIsExpanded(event.currentTarget.open)}
     >
-      <summary className={styles.stageHeader}>
-        <span className={styles.marker} data-done={isDone} data-active={isActive}>
-          {isDone && <Check size={17} />}
-          {!isDone && <span>{ordinal}</span>}
+      <summary className={styles.header}>
+        <span
+          className={styles.marker}
+          data-done={isDone}
+          data-active={isActive}
+          aria-hidden="true"
+        >
+          {isDone && <Check size={18} />}
+          {!isDone && ordinal}
         </span>
-        <span className={styles.stageIdentity}>
-          <span className={styles.stageTitle}>{stage.title}</span>
-          <span className={styles.stageMeta}>
-            {label}
-            <span className={styles.metaDivider} aria-hidden="true">
-              ·
+        <span className={styles.identity}>
+          <span className={styles.title}>{stage.title}</span>
+          <span className={styles.meta}>
+            <span className={styles.state} data-done={isDone} data-active={isActive}>
+              {label}
             </span>
-            {stage.progress.done} из {stage.progress.total} задач
+            <span aria-hidden="true">·</span>
+            <span>{progressLabel}</span>
           </span>
         </span>
-        <span className={styles.miniProgress} aria-hidden="true">
-          <span style={{ width: `${stage.progress.percent}%` }} />
-        </span>
-        <ChevronDown
-          size={16}
-          className={styles.chevron}
-          data-open={isExpanded}
+        <Progress
+          variant="accent"
+          value={stage.progress.percent}
+          className={styles.miniProgress}
           aria-hidden="true"
         />
+        <ChevronDown size={18} className={styles.chevron} aria-hidden="true" />
       </summary>
-      <div className={styles.stageBody}>
+      <div className={styles.body}>
         <div className={styles.outcome}>
-          <span className={styles.outcomeLabel}>РЕЗУЛЬТАТ ЭТАПА</span>
+          <span className={styles.outcomeLabel}>Результат этапа</span>
           <MarkdownView text={stage.outcome} compact emptyText="Результат этапа ещё не описан." />
-          {hasConditions && <MarkdownView text={stage.completionConditions} compact />}
+          {hasConditions && (
+            <>
+              <span className={styles.outcomeLabel}>Условия завершения</span>
+              <MarkdownView text={stage.completionConditions} compact />
+            </>
+          )}
         </div>
-        {query.isLoading && <p role="status">Загружаем задачи…</p>}
+        {query.isLoading && (
+          <div className={styles.loading} role="status" aria-label="Загружаем задачи этапа">
+            <Skeleton height={48} radius="md" />
+            <Skeleton height={48} radius="md" />
+          </div>
+        )}
         {hasError && (
-          <Alert color="red">
+          <Alert color="danger" title="Задачи этапа не прочитаны" className={styles.alert}>
             {query.error?.message}
             <Button size="xs" variant="subtle" onClick={() => void query.mutate()}>
-              Повторить
+              Повторить чтение
             </Button>
           </Alert>
         )}
-        <div className={styles.taskList} role="group" aria-label={`Задачи этапа «${stage.title}»`}>
-          {taskItems.map((task) => (
-            <PlanTask key={task.id} task={task} onOpen={() => onOpenTask(task.id)} />
-          ))}
-        </div>
+        {!isEmptyArray(taskItems) && (
+          <ul className={styles.taskList} aria-label={`Задачи этапа «${stage.title}»`}>
+            {taskItems.map((task) => (
+              <li key={task.id}>
+                <PlanTask task={task} onOpen={() => onOpenTask(task.id)} />
+              </li>
+            ))}
+          </ul>
+        )}
         {isEmpty && (
           <p className={styles.noTasks}>
             Задач пока нет. Выберите существующие задачи с любой доски.
@@ -114,7 +132,7 @@ export const StageRow = (props: StageRowProps) => {
           <Button
             variant="subtle"
             size="xs"
-            fullWidth
+            className={styles.more}
             loading={query.isValidating}
             onClick={() => setLimit(limit + 12)}
           >
@@ -122,46 +140,46 @@ export const StageRow = (props: StageRowProps) => {
           </Button>
         )}
         {canEdit && (
-          <div className={styles.stageActions}>
+          <div className={styles.actions}>
             <Button
-              variant="subtle"
+              variant="default"
               size="xs"
-              leftSection={<Plus size={13} />}
+              leftSection={<Plus size={16} aria-hidden="true" />}
               disabled={isBusy}
               onClick={onChoose}
             >
               Выбрать задачи
             </Button>
-            <Group gap={2}>
+            <Group gap={4}>
               <ActionIcon
                 disabled={isBusy}
                 aria-label={`Изменить этап «${stage.title}»`}
                 onClick={onEdit}
               >
-                <Pencil size={13} />
+                <Pencil size={16} aria-hidden="true" />
               </ActionIcon>
               <ActionIcon
                 disabled={isBusy || isFirst}
                 aria-label={`Поднять этап «${stage.title}»`}
                 onClick={() => onMove("up")}
               >
-                <ArrowUp size={13} />
+                <ArrowUp size={16} aria-hidden="true" />
               </ActionIcon>
               <ActionIcon
                 disabled={isBusy || isLast}
                 aria-label={`Опустить этап «${stage.title}»`}
                 onClick={() => onMove("down")}
               >
-                <ArrowDown size={13} />
+                <ArrowDown size={16} aria-hidden="true" />
               </ActionIcon>
               {isEmpty && (
                 <ActionIcon
-                  color="red"
+                  color="danger"
                   disabled={isBusy}
                   aria-label={`Удалить пустой этап «${stage.title}»`}
                   onClick={onRemove}
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={16} aria-hidden="true" />
                 </ActionIcon>
               )}
             </Group>

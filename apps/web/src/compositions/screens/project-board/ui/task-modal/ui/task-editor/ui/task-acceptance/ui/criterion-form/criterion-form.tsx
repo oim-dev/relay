@@ -121,7 +121,7 @@ export const CriterionForm = (props: CriterionFormProps) => {
             {titleLabel}
           </Title>
           {hasConflict && (
-            <Alert color="orange" title="Задача изменилась">
+            <Alert color="warning" title="Задача изменилась">
               Ввод сохранён. Сверьте критерий с актуальными данными перед сохранением.
               <Button size="xs" variant="light" mt="sm" onClick={handleRebase}>
                 Применить ввод к новой ревизии
@@ -129,7 +129,7 @@ export const CriterionForm = (props: CriterionFormProps) => {
             </Alert>
           )}
           {!canPersist && (
-            <Alert color="orange">
+            <Alert color="warning">
               Не удалось сохранить черновик в браузере. Сохраните критерий перед закрытием окна.
             </Alert>
           )}
@@ -160,7 +160,7 @@ export const CriterionForm = (props: CriterionFormProps) => {
             {...form.getInputProps("description")}
           />
           {hasError && (
-            <Alert color="red" title="Критерий не сохранён" role="alert">
+            <Alert color="danger" title="Критерий не сохранён" role="alert">
               {error}
             </Alert>
           )}

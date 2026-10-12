@@ -1,11 +1,11 @@
 import clsx from "clsx";
-import { Alert, Anchor, Button, Group, Stack, Text, ThemeIcon } from "@mantine/core";
-import { BookOpen, Layers, Puzzle, Route } from "lucide-react";
+import { Alert, Anchor, Button, Text } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { useProductEntity, ProductKey, productError } from "domains/product";
 import { useProjectId, useProjectBasePath } from "domains/project";
 import { ProductTasks } from "compositions/widgets/product-tasks";
 import { MarkdownView } from "ui/markdown-view";
+import { SectionPanel } from "ui/section-panel";
 import { ProductDependencies } from "compositions/widgets/product-dependencies";
 import type { ImplementationDetailsProps } from "./types/implementation-details-props.type";
 import styles from "./styles/implementation-details.module.css";
@@ -42,9 +42,7 @@ export const ImplementationDetails = (props: ImplementationDetailsProps) => {
   const sourceFields = source.data?.fields;
   const hasSource = sourceFields?.kind === "feature" || sourceFields?.kind === "scenario";
   const isScenario = sourceFields?.kind === "scenario";
-  const SourceIcon = isScenario ? Route : Puzzle;
   const sourceLabel = isScenario ? "Описание сценария" : "Описание фичи";
-  const sourceColor = isScenario ? "teal" : "violet";
   const sourceDescription = hasSource ? sourceFields.description : "";
   const sourceTitle = hasSource ? sourceFields.name : "Исходное требование";
   const hasSourceError = source.error !== undefined;
@@ -52,71 +50,49 @@ export const ImplementationDetails = (props: ImplementationDetailsProps) => {
   return (
     <div {...rootAttrs} className={clsx(styles.root, className)}>
       <nav className={styles.navigation} aria-label="Разделы реализации">
-        <Anchor href="#requirement" size="sm">
-          Описание
-        </Anchor>
-        <Anchor href="#contribution" size="sm">
-          Вклад приложения
-        </Anchor>
-        <Anchor href="#implementation-tasks" size="sm">
-          Задачи реализации
-        </Anchor>
-        <Anchor href="#implementation-dependencies" size="sm">
-          Зависимости
-        </Anchor>
+        <Anchor href="#requirement">Описание</Anchor>
+        <Anchor href="#contribution">Вклад приложения</Anchor>
+        <Anchor href="#implementation-tasks">Задачи реализации</Anchor>
+        <Anchor href="#implementation-dependencies">Зависимости</Anchor>
       </nav>
       <div className={styles.content}>
-        <section
+        <SectionPanel
           id="requirement"
           tabIndex={-1}
-          className={styles.document}
-          aria-label={sourceLabel}
+          className={styles.anchor}
+          title={sourceLabel}
+          actions={<ProductKey value={source.data?.key} />}
         >
-          <Group gap="sm" mb="lg">
-            <ThemeIcon color={sourceColor} variant="light" size="lg" radius="md">
-              <SourceIcon size={20} aria-hidden="true" />
-            </ThemeIcon>
-            <div>
-              <Text component="h2" size="lg" fw={650}>
-                {sourceLabel}
-              </Text>
-              <ProductKey value={source.data?.key} />
-            </div>
-          </Group>
           {isSourceLoading && (
-            <Text role="status" c="dimmed">
+            <Text role="status" size="sm" c="dimmed">
               Загружаем полное требование…
             </Text>
           )}
           {hasSourceError && (
-            <Alert color="orange" title="Не удалось обновить требование">
+            <Alert color="warning" title="Не удалось обновить требование">
               {productError(source.error)}{" "}
-              <Button variant="subtle" size="xs" onClick={() => void source.mutate()}>
+              <Button variant="subtle" size="compact-sm" onClick={() => void source.mutate()}>
                 Повторить
               </Button>
             </Alert>
           )}
-          {hasSource && <MarkdownView text={sourceDescription} />}
-        </section>
-        <section
+          {hasSource && (
+            <div className={styles.document}>
+              <MarkdownView text={sourceDescription} />
+            </div>
+          )}
+        </SectionPanel>
+        <SectionPanel
           id="contribution"
           tabIndex={-1}
-          className={styles.document}
-          aria-label="Вклад приложения"
+          className={styles.anchor}
+          title="Вклад приложения"
         >
-          <Group gap="sm" mb="lg">
-            <ThemeIcon variant="light" color="blue" size="lg" radius="md">
-              <Layers size={20} aria-hidden="true" />
-            </ThemeIcon>
-            <Text component="h2" size="lg" fw={650}>
-              Вклад приложения
-            </Text>
-          </Group>
-          <Text fw={600} mb="md">
-            {title}
-          </Text>
-          <MarkdownView text={description} />
-        </section>
+          <div className={styles.document}>
+            <p className={styles.lead}>{title}</p>
+            <MarkdownView text={description} />
+          </div>
+        </SectionPanel>
         <ProductTasks
           id="implementation-tasks"
           tabIndex={-1}
@@ -128,38 +104,30 @@ export const ImplementationDetails = (props: ImplementationDetailsProps) => {
       <aside
         id="implementation-dependencies"
         tabIndex={-1}
-        className={styles.sidebar}
+        className={clsx(styles.sidebar, styles.anchor)}
         aria-label="Контекст и зависимости"
       >
-        <section className={styles.context}>
-          <Group gap="xs">
-            <BookOpen size={17} aria-hidden="true" />
-            <Text component="h2" size="sm" fw={650}>
-              Контекст реализации
-            </Text>
-          </Group>
-          <Stack gap={4} mt="md">
-            <Text size="xs" c="dimmed">
-              Приложение
-            </Text>
-            <Anchor component={Link} to={applicationHref} size="sm">
-              {applicationName}
-            </Anchor>
-          </Stack>
-          <Stack gap={4} mt="md">
-            <Text size="xs" c="dimmed">
-              Исходное требование
-            </Text>
-            <Anchor component={Link} to={sourceHref ?? applicationHref} size="sm">
-              {sourceTitle}
-            </Anchor>
-          </Stack>
+        <SectionPanel title="Контекст реализации" tone="feature">
+          <dl className={styles.context}>
+            <dt>Приложение</dt>
+            <dd>
+              <Anchor component={Link} to={applicationHref}>
+                {applicationName}
+              </Anchor>
+            </dd>
+            <dt>Исходное требование</dt>
+            <dd>
+              <Anchor component={Link} to={sourceHref ?? applicationHref}>
+                {sourceTitle}
+              </Anchor>
+            </dd>
+          </dl>
           {hasBoard && (
-            <Button component={Link} to={boardHref} variant="default" size="xs" mt="lg" fullWidth>
+            <Button component={Link} to={boardHref} variant="default" fullWidth>
               Открыть доску приложения
             </Button>
           )}
-        </section>
+        </SectionPanel>
         <ProductDependencies
           reference={`implementation:${implementationId}`}
           title="Зависимости реализации"

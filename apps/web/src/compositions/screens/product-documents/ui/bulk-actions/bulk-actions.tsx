@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import clsx from "clsx";
 import { ActionIcon, Button, Menu, Modal, Popover } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
@@ -51,6 +51,8 @@ export const BulkActions = (props: BulkActionsProps) => {
   } = props;
   const isWide = useMediaQuery("(min-width: 48em)", true, { getInitialValueInEffect: false });
   const [tagsMode, setTagsMode] = useState<"addTags" | "removeTags" | null>(null);
+  const actionsRef = useRef<HTMLButtonElement>(null);
+  const pendingTagsRef = useRef<{ mode: "addTags" | "removeTags"; tags: string[] } | null>(null);
   const isDisabled = isRunning || isOverLimit;
   const hasNoSelectedTags = isEmptyArray(selectedTags);
   const sectionItems = [{ id: null, name: "Без раздела" }, ...sections].map((section) => ({
@@ -59,11 +61,29 @@ export const BulkActions = (props: BulkActionsProps) => {
     name: section.name,
   }));
   const tagsTitle = tagsMode === "removeTags" ? "Снять теги" : "Добавить теги";
-  /** Применяет набор тегов и закрывает поле. */
-  const handleTags = (mode: "addTags" | "removeTags", tags: string[]): void => {
+  /** Запускает действие с тегами. */
+  const runTags = (mode: "addTags" | "removeTags", tags: string[]): void => {
     const label = mode === "addTags" ? "Добавить теги" : "Снять теги";
     onRun({ type: mode, tags }, `${label}: ${tags.join(", ")}`);
+  };
+  /**
+   * Применяет набор тегов и закрывает поле. На телефоне действие запускается после закрытия
+   * окна: иначе исчезающее окно уносит фокус с результата операции.
+   */
+  const handleTags = (mode: "addTags" | "removeTags", tags: string[]): void => {
+    if (isWide) runTags(mode, tags);
+    else pendingTagsRef.current = { mode, tags };
     setTagsMode(null);
+  };
+  /**
+   * После закрытия окна: запускает отложенное действие (результат сам получит фокус) или,
+   * при отмене, возвращает фокус к «Действия» — пункта меню, открывшего окно, уже нет.
+   */
+  const handleTagsClosed = (): void => {
+    const pending = pendingTagsRef.current;
+    pendingTagsRef.current = null;
+    if (pending === null) actionsRef.current?.focus();
+    else runTags(pending.mode, pending.tags);
   };
   const sectionMenuItems = sectionItems.map((section) => (
     <Menu.Item
@@ -95,8 +115,8 @@ export const BulkActions = (props: BulkActionsProps) => {
           <Menu position="top-end" withinPortal>
             <Menu.Target>
               <Button
+                ref={actionsRef}
                 size="xs"
-                radius="xl"
                 variant="default"
                 disabled={isDisabled}
                 leftSection={<MoreHorizontal size={14} aria-hidden="true" />}
@@ -134,7 +154,6 @@ export const BulkActions = (props: BulkActionsProps) => {
             <Menu.Target>
               <Button
                 size="xs"
-                radius="xl"
                 variant="default"
                 disabled={isDisabled}
                 leftSection={<FolderInput size={14} aria-hidden="true" />}
@@ -156,7 +175,6 @@ export const BulkActions = (props: BulkActionsProps) => {
             <Popover.Target>
               <Button
                 size="xs"
-                radius="xl"
                 variant="default"
                 disabled={isDisabled}
                 leftSection={<Tag size={14} aria-hidden="true" />}
@@ -185,7 +203,6 @@ export const BulkActions = (props: BulkActionsProps) => {
             <Popover.Target>
               <Button
                 size="xs"
-                radius="xl"
                 variant="default"
                 disabled={isDisabled || hasNoSelectedTags}
                 leftSection={<TagsIcon size={14} aria-hidden="true" />}
@@ -207,7 +224,6 @@ export const BulkActions = (props: BulkActionsProps) => {
             <Menu.Target>
               <Button
                 size="xs"
-                radius="xl"
                 variant="default"
                 disabled={isDisabled}
                 rightSection={<ChevronDown size={13} aria-hidden="true" />}
@@ -219,7 +235,6 @@ export const BulkActions = (props: BulkActionsProps) => {
           </Menu>
           <Button
             size="xs"
-            radius="xl"
             variant="subtle"
             color="gray"
             disabled={isRunning}
@@ -236,7 +251,9 @@ export const BulkActions = (props: BulkActionsProps) => {
       <Modal
         opened={!isWide && tagsMode !== null}
         title={tagsTitle}
+        returnFocus={false}
         onClose={() => setTagsMode(null)}
+        onExitTransitionEnd={handleTagsClosed}
       >
         {tagsMode !== null && (
           <BulkTagsForm

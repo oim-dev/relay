@@ -337,7 +337,7 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
                 {resultLabel}. Архивные материалы не предлагаются.
               </p>
               {hasCatalogError && (
-                <Alert color="orange" title="Не удалось прочитать библиотеку">
+                <Alert color="warning" title="Не удалось прочитать библиотеку">
                   {catalog.error?.message}
                   <Button
                     size="xs"
@@ -355,7 +355,7 @@ export const MaterialPicker = (props: MaterialPickerProps) => {
                 </p>
               )}
               {hasAttachmentsError && (
-                <Alert color="orange" title="Не удалось проверить прикрепления">
+                <Alert color="warning" title="Не удалось проверить прикрепления">
                   Связи материалов с этой записью не прочитаны. Выбор недоступен, пока не известно,
                   что уже прикреплено.
                   <Button

@@ -1,13 +1,17 @@
+import type { StatusBadgeTone } from "ui/status-badge";
 import type { ReleaseStatus } from "../types/release.type";
 export const RELEASE_STATUS_LABELS: Record<ReleaseStatus, string> = {
   planned: "Запланирован",
   released: "Выпущен",
   cancelled: "Отменён",
 };
-export const RELEASE_STATUS_COLORS: Record<ReleaseStatus, string> = {
-  planned: "blue",
-  released: "teal",
-  cancelled: "gray",
+/**
+ * Тон бейджа собственного статуса выпуска; готовность состава показывается отдельно.
+ */
+export const RELEASE_STATUS_TONES: Record<ReleaseStatus, StatusBadgeTone> = {
+  planned: "info",
+  released: "success",
+  cancelled: "neutral",
 };
 export const RELEASE_STATUS_OPTIONS = [
   { value: "planned", label: "Запланирован" },

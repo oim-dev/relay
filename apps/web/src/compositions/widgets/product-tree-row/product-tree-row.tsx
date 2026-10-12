@@ -56,7 +56,6 @@ export const ProductTreeRow = (props: ProductTreeRowProps) => {
           {hasChildren && (
             <ActionIcon
               variant="subtle"
-              color="gray"
               size="sm"
               aria-label={toggleLabel}
               aria-expanded={expanded}
@@ -100,7 +99,6 @@ export const ProductTreeRow = (props: ProductTreeRowProps) => {
           to={sourceHref}
           state={{ returnTo }}
           variant="subtle"
-          color="gray"
           size="sm"
           className={styles.source}
           aria-label={sourceLabel}

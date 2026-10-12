@@ -15,14 +15,14 @@
 
 .title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   font-weight: 600;
 }
 
 .count {
   margin-left: auto;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
 }
 
 .note {
@@ -30,7 +30,7 @@
   padding-top: 1rem;
   border-top: 1px solid var(--tasks-border);
   color: var(--tasks-muted);
-  font-size: 0.6875rem;
+  font-size: var(--mantine-font-size-xs);
   line-height: 1.75;
 }
 
@@ -63,13 +63,13 @@
 }
 
 .optionName {
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
   line-height: 1.4;
 }
 
 .optionPath {
   color: var(--tasks-muted);
-  font-size: 0.6875rem;
+  font-size: var(--mantine-font-size-xs);
   line-height: 1.5;
 }
 

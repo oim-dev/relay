@@ -1,14 +1,15 @@
+/* Форма критерия — вложенная плитка на секции, той же геометрии, что и список критериев. */
 .root {
-  padding: var(--mantine-spacing-md);
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-md);
-  background: var(--mantine-color-default);
   min-width: 0;
+  padding: var(--tasks-space-4);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-row);
+  background-color: var(--tasks-tile);
 }
 
 .fields {
-  padding: 0;
-  margin: 0;
-  border: 0;
   min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }

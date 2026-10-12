@@ -1,3 +1,7 @@
+/*
+ * Форма раздела на сцене: светлый лист формы (tile) с шапкой, полями, сообщениями
+ * и строкой состояния сохранения. Подписи не меньше 12px.
+ */
 .root {
   min-width: 0;
   scroll-margin-top: 5.5rem;
@@ -5,37 +9,46 @@
 
 .card {
   overflow: hidden;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
-  box-shadow: var(--tasks-card-shadow);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-panel);
+  background-color: var(--tasks-tile);
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
+  }
 }
 
 .introduction {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1.4rem;
+  gap: var(--tasks-space-4);
+  padding: var(--tasks-space-5) var(--tasks-space-4);
   border-bottom: 1px solid var(--tasks-border);
 
   @media (--md) {
-    padding: 1.75rem 2rem;
+    padding: var(--tasks-space-6) var(--tasks-space-8);
   }
 }
 
 .monogram {
   display: grid;
-  place-items: center;
   flex-shrink: 0;
+  place-items: center;
   width: 3rem;
   height: 3rem;
   border: 1px solid var(--tasks-border);
-  border-radius: 0.9rem;
-  background: var(--tasks-subtle);
+  border-radius: var(--tasks-radius-compact);
+  background-color: var(--tasks-card);
   color: var(--tasks-muted);
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   font-weight: 650;
   letter-spacing: -0.03em;
+}
+
+/* Заголовок раздела — цель возврата фокуса после сохранения и отмены; не прячется под шапкой. */
+.title {
+  scroll-margin-top: 6rem;
+  border-radius: var(--tasks-radius-control);
 }
 
 .introductionText {
@@ -44,35 +57,35 @@
 
 .fields {
   display: grid;
-  gap: 1.75rem;
+  gap: var(--tasks-space-6);
   min-width: 0;
   margin: 0;
-  padding: 1.5rem 1.4rem 1.75rem;
+  padding: var(--tasks-space-6) var(--tasks-space-4);
   border: 0;
 
   @media (--md) {
-    padding: 2rem;
-    gap: 2rem;
+    gap: var(--tasks-space-8);
+    padding: var(--tasks-space-8);
   }
 }
 
 .fieldRow {
   display: grid;
-  gap: 0.85rem;
+  gap: var(--tasks-space-3);
   min-width: 0;
 
   @media (--md) {
-    grid-template-columns: 9.5rem minmax(0, 1fr);
-    gap: 1.5rem;
+    grid-template-columns: 10rem minmax(0, 1fr);
+    gap: var(--tasks-space-6);
   }
 }
 
 .fieldLabel {
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-md);
   font-weight: 550;
 
   @media (--md) {
-    padding-top: 0.7rem;
+    padding-top: var(--tasks-space-2);
   }
 }
 
@@ -82,24 +95,24 @@
 
 .addressPreview {
   display: grid;
-  gap: 0.45rem;
-  margin-top: 1rem;
-  padding: 0.85rem 1rem;
-  border-radius: var(--mantine-radius-md);
-  background: var(--tasks-subtle);
+  gap: var(--tasks-space-1);
+  margin-top: var(--tasks-space-4);
+  padding: var(--tasks-space-3) var(--tasks-space-4);
+  border-radius: var(--tasks-radius-control);
+  background-color: var(--tasks-card);
 }
 
 .addressLabel {
-  font-size: 0.5625rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
   color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .address {
-  overflow-wrap: anywhere;
-  font-size: 0.75rem;
   color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-sm);
+  overflow-wrap: anywhere;
 }
 
 .footer {
@@ -107,32 +120,37 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.4rem;
+  gap: var(--tasks-space-3) var(--tasks-space-4);
+  padding: var(--tasks-space-4);
   border-top: 1px solid var(--tasks-border);
-  background: var(--tasks-subtle);
+  background-color: var(--tasks-card);
 
   @media (--md) {
-    padding-inline: 2rem;
+    padding-inline: var(--tasks-space-8);
   }
 }
 
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: var(--tasks-space-2);
   color: var(--tasks-muted);
-  font-size: 0.6875rem;
+  font-size: var(--mantine-font-size-sm);
 }
 
 .statusDot {
-  width: 5px;
-  height: 5px;
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 50%;
-  background: var(--tasks-soft);
+  background-color: var(--tasks-success);
 
   &._changed {
-    background: var(--mantine-color-orange-6);
+    background-color: var(--tasks-warning);
+  }
+
+  @media (--forced-colors) {
+    background-color: CanvasText;
   }
 }
 
@@ -141,10 +159,10 @@
 }
 
 .feedback {
-  margin: 0 1.4rem 1rem;
+  margin: 0 var(--tasks-space-4) var(--tasks-space-4);
 
   @media (--md) {
-    margin-inline: 2rem;
+    margin-inline: var(--tasks-space-8);
   }
 }
 
@@ -152,17 +170,17 @@
   display: flex;
   flex-wrap: wrap;
   align-items: start;
-  gap: 0.75rem;
-  padding: 1.4rem 0.25rem;
+  gap: var(--tasks-space-3);
+  padding: var(--tasks-space-5) var(--tasks-space-1);
 
   @media (--md) {
-    padding: 1.6rem 0.5rem;
+    padding: var(--tasks-space-6) var(--tasks-space-2);
   }
 }
 
 .identityIcon {
   flex-shrink: 0;
-  margin-top: 0.1rem;
+  margin-top: 0.125rem;
   color: var(--tasks-soft);
 }
 
@@ -173,6 +191,6 @@
 
 .identityValue {
   color: var(--tasks-muted);
-  font-size: 0.6875rem;
+  font-size: var(--mantine-font-size-xs);
   overflow-wrap: anywhere;
 }

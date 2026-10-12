@@ -1,27 +1,35 @@
+/*
+ * Путь страницы под шапкой каркаса. Уровни переносятся на следующую строку, а не
+ * сжимаются до нескольких букв: на узком экране путь занимает две строки.
+ */
 .root {
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 3rem;
-  padding-inline: var(--tasks-page-gutter);
+  min-height: 3rem;
+  padding: var(--tasks-space-1) var(--tasks-page-gutter);
   border-bottom: 1px solid var(--tasks-border);
-  background: var(--tasks-chrome);
+  background-color: var(--tasks-chrome);
 
   &._embedded {
+    min-height: 0;
+    margin-bottom: var(--tasks-space-4);
     padding-inline: 0;
-    margin-bottom: var(--mantine-spacing-md);
-    background: transparent;
+    border-bottom: 0;
+    background-color: transparent;
   }
 }
 
 .trail {
   flex: 1;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  row-gap: 0.125rem;
   min-width: 0;
 }
 
 .crumb {
   min-width: 0;
+  max-width: 100%;
   flex: 0 1 auto;
 }
 

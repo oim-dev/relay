@@ -50,7 +50,6 @@ export const MaterialPreview = (props: MaterialPreviewProps) => {
         to={href}
         state={{ returnTo }}
         size="xs"
-        radius="xl"
         className={styles.open}
         rightSection={<ArrowUpRight size={14} aria-hidden="true" />}
       >
@@ -64,7 +63,7 @@ export const MaterialPreview = (props: MaterialPreviewProps) => {
         </div>
       )}
       {hasError && (
-        <Alert color="orange" title="Не удалось прочитать материал">
+        <Alert color="warning" title="Не удалось прочитать материал">
           {query.error?.message}
           <Button size="xs" variant="subtle" onClick={() => void query.mutate()}>
             Повторить чтение

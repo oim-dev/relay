@@ -8,6 +8,7 @@ import {
   DOCUMENT_KINDS,
   DOCUMENT_RELATION_TYPES,
   DOCUMENT_STATUSES,
+  DOCUMENT_STATUS_TONES,
   DocumentConflictError,
   MATERIAL_FORMATS,
   useMaterialMutations,
@@ -15,6 +16,7 @@ import {
 import type { DocumentRelation } from "domains/documents";
 import { useProjectId } from "domains/project";
 import { MarkdownView } from "ui/markdown-view";
+import { StatusBadge } from "ui/status-badge";
 import { isDefined } from "shared/value-predicates";
 import { describeRelationFailure } from "../../helpers/relation-failure";
 import { RelationForm } from "../relation-form/relation-form";
@@ -82,7 +84,7 @@ export const MaterialEntry = (props: MaterialEntryProps) => {
     takenTypes: presentTypes.filter((type) => type !== relation.type),
   }));
   const hasError = error !== "";
-  /** Возвращает фокус к кнопке, открывшей форму или подтверждение. */
+  /** Переводит фокус после отрисовки: к источнику действия или безопасному выбору. */
   const restoreFocus = (key: string): void => {
     pendingFocus.current = key;
     setFocusRequest((value) => value + 1);
@@ -177,10 +179,10 @@ export const MaterialEntry = (props: MaterialEntryProps) => {
               <VisuallyHidden>Формат: </VisuallyHidden>
               {formatLabel}
             </span>
-            <span className={styles.status} data-status={status}>
+            <StatusBadge tone={DOCUMENT_STATUS_TONES[status]}>
               <VisuallyHidden>Состояние: </VisuallyHidden>
               {statusLabel}
-            </span>
+            </StatusBadge>
             <span className={styles.key}>{summary.key}</span>
           </p>
           {hasSummary && <p className={styles.summary}>{summary.summary}</p>}
@@ -255,7 +257,8 @@ export const MaterialEntry = (props: MaterialEntryProps) => {
                     setEditingType(null);
                     openedRevision.current = summary.revision;
                     setDetachingType(relation.type);
-                    restoreFocus(`confirm:${relation.type}`);
+                    // Начальный фокус — на безопасном действии, а не на разрушительном.
+                    restoreFocus(`cancel-detach:${relation.type}`);
                   }}
                 >
                   Открепить
@@ -289,11 +292,8 @@ export const MaterialEntry = (props: MaterialEntryProps) => {
                 <div className={styles.confirmActions}>
                   <Button
                     size="xs"
-                    color="red"
+                    color="danger"
                     variant="light"
-                    ref={(node) => {
-                      triggers.current.set(`confirm:${relation.type}`, node);
-                    }}
                     loading={isBusy}
                     onKeyDown={(event) => handleConfirmKey(event, relation.type)}
                     data-mantine-stop-propagation
@@ -302,6 +302,9 @@ export const MaterialEntry = (props: MaterialEntryProps) => {
                     Открепить
                   </Button>
                   <Button
+                    ref={(node) => {
+                      triggers.current.set(`cancel-detach:${relation.type}`, node);
+                    }}
                     size="xs"
                     variant="default"
                     disabled={isBusy}
@@ -330,7 +333,7 @@ export const MaterialEntry = (props: MaterialEntryProps) => {
         ))}
       </ul>
       {hasError && (
-        <Alert color="orange" className={styles.error} role="alert">
+        <Alert color="warning" className={styles.error} role="alert">
           {error}
         </Alert>
       )}

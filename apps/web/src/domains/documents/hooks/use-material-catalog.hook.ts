@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import useSWRInfinite from "swr/infinite";
 import type { SWRInfiniteResponse } from "swr/infinite";
 import { getMaterialCatalogPage } from "../adapters/documents.adapter";
@@ -43,10 +43,18 @@ export const useMaterialCatalog = (
       keepPreviousData: true,
     },
   );
-  const { size, setSize } = response;
+  const { setSize } = response;
+  /*
+   * Пока размер не задан явно, SWR берёт его из initialSize, поэтому новое число порций
+   * уже видно в size, но продолжение само не читается. Каждое изменение объёма после
+   * монтирования применяется через setSize: он дочитывает недостающие порции.
+   */
+  const appliedPagesRef = useRef(pages);
   useEffect(() => {
-    if (size !== pages) void setSize(pages);
-  }, [pages, size, setSize]);
+    if (appliedPagesRef.current === pages) return;
+    appliedPagesRef.current = pages;
+    void setSize(pages);
+  }, [pages, setSize]);
   useMaterialsSubscription(projectId, response.mutate);
   if (response.error !== undefined && !(response.error instanceof DocumentAccessError))
     throw response.error;

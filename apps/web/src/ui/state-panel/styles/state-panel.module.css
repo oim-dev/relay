@@ -1,10 +1,15 @@
+/* Состояние раздела по центру области; ошибка отличается значком, тоном и ролью alert. */
 .root {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4rem 1.5rem;
+  padding: var(--tasks-space-12) var(--tasks-space-6);
   text-align: center;
+
+  @media (--md) {
+    padding-block: 4rem;
+  }
 }
 
 .icon {
@@ -12,25 +17,38 @@
   place-items: center;
   width: 3.5rem;
   height: 3.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: var(--tasks-space-4);
   border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
+  border-radius: var(--tasks-radius-compact);
   color: var(--tasks-muted);
-  background: var(--tasks-surface);
+  background-color: var(--tasks-surface);
+
+  .root[data-state="error"] & {
+    border-color: var(--tasks-danger-border);
+    color: var(--tasks-danger);
+    background-color: var(--tasks-danger-surface);
+  }
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
+  }
 }
 
 .title {
   margin: 0;
   color: var(--tasks-ink);
-  font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-size: var(--tasks-font-size-panel-title);
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
+  overflow-wrap: anywhere;
 }
 
 .description {
-  max-width: 26rem;
-  margin: 0.625rem 0 1.5rem;
+  max-width: 28rem;
+  margin: var(--tasks-space-3) 0 var(--tasks-space-6);
   color: var(--tasks-muted);
-  font-size: 0.875rem;
-  line-height: 1.7;
+  font-size: var(--mantine-font-size-md);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }

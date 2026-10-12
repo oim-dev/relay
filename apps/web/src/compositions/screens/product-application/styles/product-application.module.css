@@ -1,9 +1,31 @@
-.root {
-  display: grid;
-  gap: 2rem;
-  min-width: 0;
+/* Тип приложения — нейтральная метка контекста, не состояние. */
+.type {
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-card);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  line-height: 1.25rem;
 }
 
-.description {
+/* Раскрываемое описание — панель сцены: сплошной тон без рамки. */
+.about {
+  border: 0;
+  border-radius: var(--tasks-radius-panel);
+  background: var(--tasks-card);
+
+  &[data-active] {
+    background: var(--tasks-card);
+  }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
+}
+
+.document {
+  max-width: var(--tasks-reading-measure-max);
   min-width: 0;
+  overflow-wrap: anywhere;
 }

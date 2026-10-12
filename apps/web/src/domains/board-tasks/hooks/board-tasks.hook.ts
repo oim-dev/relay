@@ -1,8 +1,9 @@
 import { useEffect, useCallback } from "react";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR, { unstable_serialize, useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
 import { subscribeWorkspace } from "infra/workspace-events";
 import {
+  BoardTaskNotFoundError,
   getBoardTask,
   getTaskLinks,
   listBoardTasks,
@@ -167,15 +168,27 @@ export const useTaskCriterion = (
   return query;
 };
 
-/** Сохраняет предыдущую проекцию, count и прокрутку при подгрузке и SSE, как прежняя доска. */
+/** Выдача колонки вместе с фильтром, на который она ответила. */
+type BoardTaskSlice = TasksPage & {
+  /** Сериализованные проект и фильтр запроса без объёма выдачи. */
+  filtersKey: string;
+};
+
+/**
+ * Сохраняет предыдущую проекцию, count и прокрутку при подгрузке и SSE, как прежняя доска.
+ * Пока у нового фильтра нет собственного ответа (загрузка или ошибка), прежняя выдача
+ * отмечается `isOutdated`: её нельзя показывать как результат нового фильтра.
+ */
 export const useBoardTaskSlice = (project: string, filters: TaskFilters, count = 40) => {
-  const query = useSWR<TasksPage, Error>(
+  const filtersKey = unstable_serialize([project, filters]);
+  const query = useSWR<BoardTaskSlice, Error>(
     ["board-task-slice", project, filters, count],
-    () => getBoardTaskSlice(project, filters, count),
+    async () => ({ ...(await getBoardTaskSlice(project, filters, count)), filtersKey }),
     { keepPreviousData: true },
   );
   useKanbanSync(project, query.mutate);
-  return query;
+  const isOutdated = query.data !== undefined && query.data.filtersKey !== filtersKey;
+  return { query, isOutdated };
 };
 
 /** Первоначальная задача из ответа создания сразу становится данными редактора. */
@@ -228,8 +241,13 @@ export const useBoardTask = (
   const query = useSWR<BoardTask, Error>(
     reference ? ["board-task", project, reference] : null,
     () => getBoardTask(project, reference!),
-    // Только первоначальный ответ создания уже заведомо свежий и не требует второго GET.
-    { revalidateOnMount, revalidateIfStale: revalidateOnMount },
+    {
+      // Только первоначальный ответ создания уже заведомо свежий и не требует второго GET.
+      revalidateOnMount,
+      revalidateIfStale: revalidateOnMount,
+      // Повтор не вернёт удалённую задачу.
+      shouldRetryOnError: (error) => !(error instanceof BoardTaskNotFoundError),
+    },
   );
   const { mutate } = query;
   useKanbanSync(project, mutate);

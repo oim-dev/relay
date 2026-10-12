@@ -3,7 +3,9 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useProductDemo } from "domains/product-demo";
 import { findProductEntry } from "domains/product";
 import { useProjectBasePath } from "domains/project";
+import { PageStage } from "ui/page-stage";
 import { StatePanel } from "ui/state-panel";
+import styles from "./styles/product-outlet.module.css";
 
 /**
  * Различает состояния чтения продукта и открывает выбранный подраздел.
@@ -25,14 +27,27 @@ export const ProductOutlet = () => {
     : "Не удалось прочитать документы";
   const hasNotice = notice !== "";
   if (mode === "loading")
-    return <StatePanel isLoading title={loadingTitle} description={loadingDescription} />;
+    return (
+      <PageStage>
+        <StatePanel
+          titleAs="h1"
+          state="loading"
+          title={loadingTitle}
+          description={loadingDescription}
+        />
+      </PageStage>
+    );
   if (mode === "read-error")
     return (
-      <StatePanel
-        title={errorTitle}
-        description="Проверьте соединение с сервером. Несохранённый ввод остаётся в черновике."
-        action={<Button onClick={() => setMode("filled")}>Повторить загрузку</Button>}
-      />
+      <PageStage>
+        <StatePanel
+          titleAs="h1"
+          state="error"
+          title={errorTitle}
+          description="Проверьте соединение с сервером. Несохранённый ввод остаётся в черновике."
+          action={<Button onClick={() => setMode("filled")}>Повторить загрузку</Button>}
+        />
+      </PageStage>
     );
   const parts = isProductRoute ? location.pathname.slice(base.length + 1).split("/") : [];
   const collection = parts[0];
@@ -47,10 +62,13 @@ export const ProductOutlet = () => {
   const isAmbiguous = matches.length > 1 && !targets.some((entry) => entry.id === ref);
   if (isAmbiguous)
     return (
-      <StatePanel
-        title="Ключ используется несколькими записями"
-        description="Откройте нужную запись по ID и назначьте ей свободный ключ."
-      />
+      <PageStage>
+        <StatePanel
+          titleAs="h1"
+          title="Ключ используется несколькими записями"
+          description="Откройте нужную запись по ID и назначьте ей свободный ключ."
+        />
+      </PageStage>
     );
   const selected = findProductEntry<{ id: string; key?: string }>(targets, ref);
   if (
@@ -86,9 +104,11 @@ export const ProductOutlet = () => {
   return (
     <>
       {hasNotice && (
-        <Alert color="orange" title="Проверьте актуальность реализации" m="lg">
-          {notice}
-        </Alert>
+        <div className={styles.notice}>
+          <Alert color="warning" title="Проверьте актуальность реализации" className={styles.alert}>
+            {notice}
+          </Alert>
+        </div>
       )}
       <Outlet />
     </>

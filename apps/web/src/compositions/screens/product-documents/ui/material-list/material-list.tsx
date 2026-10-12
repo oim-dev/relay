@@ -1,9 +1,9 @@
-import { useId } from "react";
-import clsx from "clsx";
 import { Button, Checkbox, Select, VisuallyHidden } from "@mantine/core";
 import { ChevronDown } from "lucide-react";
 import { isDefined, isNonEmptyArray } from "shared/value-predicates";
+import { SectionPanel } from "ui/section-panel";
 import { SORT_OPTIONS } from "./config/sort.config";
+import { useContinuationFocus } from "./hooks/use-continuation-focus.hook";
 import { MaterialRow } from "./ui/material-row/material-row";
 import type { MaterialListProps } from "./types/material-list-props.type";
 import styles from "./styles/material-list.module.css";
@@ -40,7 +40,6 @@ export const MaterialList = (props: MaterialListProps) => {
     className,
     ...rootAttrs
   } = props;
-  const titleId = useId();
   const sectionNames = new Map(sections.map((section) => [section.id, section.name]));
   const rowItems = items.map((material) => ({
     material,
@@ -54,16 +53,23 @@ export const MaterialList = (props: MaterialListProps) => {
   const totalLabel = isDefined(total) ? String(total) : "—";
   const shownLabel = isDefined(total) ? `Показано ${items.length} из ${total}` : "";
   const hasItems = isNonEmptyArray(items);
+  const continuation = useContinuationFocus(
+    items.map((material) => material.ref.id),
+    isLoadingMore,
+    onLoadMore,
+  );
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)} aria-labelledby={titleId}>
-      <header className={styles.header}>
-        <h2 id={titleId} className={styles.title}>
-          {title}
-        </h2>
-        <span className={styles.total}>
+    <SectionPanel
+      {...rootAttrs}
+      className={className}
+      title={title}
+      count={
+        <>
           <VisuallyHidden>Материалов: </VisuallyHidden>
           {totalLabel}
-        </span>
+        </>
+      }
+      actions={
         <Select
           className={styles.sort}
           aria-label="Порядок материалов"
@@ -74,7 +80,10 @@ export const MaterialList = (props: MaterialListProps) => {
           data={SORT_OPTIONS}
           onChange={(value) => onSortChange(value === "title" ? "title" : "updated")}
         />
-      </header>
+      }
+      tone="feature-header"
+      density="compact"
+    >
       {state}
       {hasItems && (
         <Checkbox
@@ -120,16 +129,16 @@ export const MaterialList = (props: MaterialListProps) => {
           {hasMore && (
             <Button
               variant="default"
-              radius="xl"
+              ref={continuation.buttonRef}
               loading={isLoadingMore}
               rightSection={<ChevronDown size={15} aria-hidden="true" />}
-              onClick={onLoadMore}
+              onClick={continuation.loadMore}
             >
               Показать ещё
             </Button>
           )}
         </footer>
       )}
-    </section>
+    </SectionPanel>
   );
 };

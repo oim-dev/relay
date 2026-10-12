@@ -1,15 +1,20 @@
 .root {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--tasks-space-2);
   flex-shrink: 0;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.4;
 }
 
+/*
+ * Готовность различается формой и подписью, цвет её дублирует: пустой круг — впереди,
+ * заливка состояния «предупреждение» — частично, заливка успеха — реализовано.
+ */
 .icon {
-  --readiness-color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+  --readiness-color: var(--tasks-border-strong);
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -17,21 +22,25 @@
   width: 1.125rem;
   height: 1.125rem;
   border: 1.5px solid var(--readiness-color);
-  border-radius: 50%;
+  border-radius: var(--tasks-radius-pill);
   background: transparent;
-  color: white;
+  color: var(--tasks-status-contrast);
 
   &._done {
-    --readiness-color: light-dark(var(--mantine-color-teal-6), var(--mantine-color-teal-5));
+    --readiness-color: var(--tasks-success);
+
     background: var(--readiness-color);
   }
 
   &._partial {
-    --readiness-color: light-dark(
-      color-mix(in srgb, var(--mantine-color-yellow-5) 30%, var(--mantine-color-gray-6)),
-      color-mix(in srgb, var(--mantine-color-yellow-5) 38%, var(--mantine-color-gray-6))
-    );
+    --readiness-color: var(--tasks-warning);
+
     background: var(--readiness-color);
+  }
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
+    color: CanvasText;
   }
 }
 

@@ -134,7 +134,7 @@ export const RelationForm = (props: RelationFormProps) => {
         />
       </fieldset>
       {error !== "" && (
-        <Alert color="orange" role="alert">
+        <Alert color="warning" role="alert">
           {error}
         </Alert>
       )}

@@ -11,6 +11,6 @@ export type TaskAcceptanceParams = {
   onOwnRevision: (revision: number) => void;
 };
 /** Атрибуты корневого элемента. */
-type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children">;
+type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children" | "title">;
 /** Свойства визуальной области. */
 export type TaskAcceptanceProps = RootAttrs & TaskAcceptanceParams;

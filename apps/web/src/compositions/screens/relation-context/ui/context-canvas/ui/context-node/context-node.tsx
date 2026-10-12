@@ -1,7 +1,8 @@
 import clsx from "clsx";
 import { Handle } from "@xyflow/react";
-import { Badge, Group, Text, ThemeIcon } from "@mantine/core";
-import { getEntityPresentation, getEntityStatusLabel } from "domains/entities";
+import { Group, Text, ThemeIcon } from "@mantine/core";
+import { getEntityPresentation, getEntityStatusLabel, getEntityStatusTone } from "domains/entities";
+import { StatusBadge } from "ui/status-badge";
 import type { ContextNodeProps } from "./types/context-node-props.type";
 import styles from "./styles/context-node.module.css";
 
@@ -18,6 +19,7 @@ export const ContextNode = ({ data, selected }: ContextNodeProps) => {
   const presentation = getEntityPresentation(entity.ref.kind);
   const hasStatus = entity.status !== "";
   const statusLabel = getEntityStatusLabel(entity.status);
+  const statusTone = getEntityStatusTone(entity.status);
   const hasDistance = !isRoot;
   const distanceLabel = distance === null ? "Путь не загружен" : `Шагов: ${distance}`;
   const hasAdditionalRelations = additionalCount > 0;
@@ -35,17 +37,13 @@ export const ContextNode = ({ data, selected }: ContextNodeProps) => {
       )}
     >
       <Group gap="xs" wrap="nowrap">
-        <ThemeIcon color={presentation.color} variant="light" size={28} radius="md">
+        <ThemeIcon color="accent" variant="light" size={28}>
           <presentation.icon size={16} aria-hidden="true" />
         </ThemeIcon>
         <Text size="xs" c="dimmed">
           {presentation.label}
         </Text>
-        {isRoot && (
-          <Badge size="xs" variant="light" color="blue" tt="none">
-            Исходная
-          </Badge>
-        )}
+        {isRoot && <span className={styles.origin}>Исходная</span>}
       </Group>
       <Text size="xs" c="dimmed" className={styles.key} title={entity.key}>
         {entity.key}
@@ -59,11 +57,7 @@ export const ContextNode = ({ data, selected }: ContextNodeProps) => {
             {distanceLabel}
           </Text>
         )}
-        {hasStatus && (
-          <Text size="xs" c="dimmed">
-            {statusLabel}
-          </Text>
-        )}
+        {hasStatus && <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>}
         {isBoundary && (
           <Text size="xs" c="dimmed">
             Есть продолжение

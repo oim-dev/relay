@@ -1,8 +1,10 @@
-import { ActionIcon, Anchor, Checkbox, Highlight, Tooltip, VisuallyHidden } from "@mantine/core";
+import { ActionIcon, Checkbox, Highlight, Tooltip, VisuallyHidden } from "@mantine/core";
 import { Eye, FileText, Link2, PencilLine, Pin } from "lucide-react";
 import { Link } from "react-router-dom";
-import { DOCUMENT_KINDS, DOCUMENT_STATUSES } from "domains/documents";
+import { DOCUMENT_KINDS, DOCUMENT_STATUSES, DOCUMENT_STATUS_TONES } from "domains/documents";
 import { isNonEmptyArray } from "shared/value-predicates";
+import { RecordRow } from "ui/record-row";
+import { StatusBadge } from "ui/status-badge";
 import { MaterialActions } from "../material-actions/material-actions";
 import type { MaterialRowProps } from "./types/material-row-props.type";
 import styles from "./styles/material-row.module.css";
@@ -65,32 +67,27 @@ export const MaterialRow = (props: MaterialRowProps) => {
   const hasHiddenTags = hiddenTagCount > 0;
   const hasTags = isNonEmptyArray(data.tags);
   return (
-    <article
-      className={styles.root}
+    <RecordRow
+      component="article"
+      selected={isSelected}
       data-status={data.status}
-      data-selected={isSelected}
       aria-busy={isBusy}
-    >
-      <Checkbox
-        className={styles.check}
-        size="sm"
-        aria-label={`Выбрать: ${material.title}`}
-        checked={isSelected}
-        onChange={(event) => onSelectChange(event.currentTarget.checked)}
-      />
-      <span className={styles.icon} data-format={data.format}>
-        <Icon size={18} strokeWidth={1.6} aria-hidden="true" />
-      </span>
-      <div className={styles.main}>
-        <div className={styles.titleLine}>
-          <Anchor
-            component={Link}
-            to={href}
-            state={{ returnTo }}
-            className={styles.title}
-            data-material-link
-            onClick={onOpen}
-          >
+      leading={
+        <>
+          <Checkbox
+            size="sm"
+            aria-label={`Выбрать: ${material.title}`}
+            checked={isSelected}
+            onChange={(event) => onSelectChange(event.currentTarget.checked)}
+          />
+          <span className={styles.icon} data-format={data.format}>
+            <Icon size={18} strokeWidth={1.6} aria-hidden="true" />
+          </span>
+        </>
+      }
+      title={
+        <span className={styles.titleLine}>
+          <Link to={href} state={{ returnTo }} data-material-link onClick={onOpen}>
             <Highlight
               component="span"
               inherit
@@ -100,108 +97,116 @@ export const MaterialRow = (props: MaterialRowProps) => {
             >
               {material.title}
             </Highlight>
-          </Anchor>
+          </Link>
           {data.pinned && <Pin size={13} className={styles.pin} aria-label="Закреплён" />}
-        </div>
-        {hasSummary && (
-          <Highlight
-            component="p"
-            className={styles.summary}
-            highlight={query}
-            color="var(--tasks-search-mark)"
-            highlightStyles={HIGHLIGHT_STYLES}
-          >
-            {summary}
-          </Highlight>
-        )}
-        {hasExcerpt && (
-          <p className={styles.excerpt}>
-            <span className={styles.excerptLabel}>В тексте: </span>
+        </span>
+      }
+      meta={
+        <>
+          {hasSummary && (
             <Highlight
-              component="span"
-              inherit
+              component="p"
+              className={styles.summary}
               highlight={query}
               color="var(--tasks-search-mark)"
               highlightStyles={HIGHLIGHT_STYLES}
             >
-              {`…${excerpt}…`}
+              {summary}
             </Highlight>
+          )}
+          {hasExcerpt && (
+            <p className={styles.excerpt}>
+              <span className={styles.excerptLabel}>В тексте: </span>
+              <Highlight
+                component="span"
+                inherit
+                highlight={query}
+                color="var(--tasks-search-mark)"
+                highlightStyles={HIGHLIGHT_STYLES}
+              >
+                {`…${excerpt}…`}
+              </Highlight>
+            </p>
+          )}
+          <p className={styles.meta}>
+            <span className={styles.kind}>
+              <VisuallyHidden>Тип: </VisuallyHidden>
+              {DOCUMENT_KINDS[data.kind]}
+            </span>
+            {isLink && <span className={styles.format}>ссылка</span>}
+            {hasUrlHost && (
+              <span className={styles.domain} title={data.url}>
+                <VisuallyHidden>Адрес: </VisuallyHidden>
+                {urlHost}
+              </span>
+            )}
+            <StatusBadge tone={DOCUMENT_STATUS_TONES[data.status]}>
+              <VisuallyHidden>Состояние: </VisuallyHidden>
+              {DOCUMENT_STATUSES[data.status]}
+            </StatusBadge>
+            <span className={styles.section}>
+              <VisuallyHidden>Раздел: </VisuallyHidden>
+              {sectionName}
+            </span>
+            {hasTags && (
+              <span className={styles.tags} title={data.tags.join(", ")}>
+                <VisuallyHidden>Теги: </VisuallyHidden>
+                {tagItems.map((tag) => (
+                  <Highlight
+                    key={tag}
+                    component="span"
+                    className={styles.tag}
+                    highlight={query}
+                    color="var(--tasks-search-mark)"
+                    highlightStyles={HIGHLIGHT_STYLES}
+                  >
+                    {tag}
+                  </Highlight>
+                ))}
+                {hasHiddenTags && <span className={styles.tag}>{hiddenTagsLabel}</span>}
+              </span>
+            )}
           </p>
-        )}
-        <p className={styles.meta}>
-          <span className={styles.kind}>
-            <VisuallyHidden>Тип: </VisuallyHidden>
-            {DOCUMENT_KINDS[data.kind]}
-          </span>
-          {isLink && <span className={styles.format}>ссылка</span>}
-          {hasUrlHost && (
-            <span className={styles.domain} title={data.url}>
-              <VisuallyHidden>Адрес: </VisuallyHidden>
-              {urlHost}
+        </>
+      }
+      trailing={
+        <>
+          <p className={styles.facts}>
+            <span className={styles.usage} data-empty={data.linkCount === 0}>
+              {usageLabel}
             </span>
-          )}
-          <span className={styles.statusChip} data-status={data.status}>
-            <VisuallyHidden>Состояние: </VisuallyHidden>
-            {DOCUMENT_STATUSES[data.status]}
-          </span>
-          <span className={styles.section}>
-            <VisuallyHidden>Раздел: </VisuallyHidden>
-            {sectionName}
-          </span>
-          {hasTags && (
-            <span className={styles.tags} title={data.tags.join(", ")}>
-              <VisuallyHidden>Теги: </VisuallyHidden>
-              {tagItems.map((tag) => (
-                <Highlight
-                  key={tag}
-                  component="span"
-                  className={styles.tag}
-                  highlight={query}
-                  color="var(--tasks-search-mark)"
-                  highlightStyles={HIGHLIGHT_STYLES}
-                >
-                  {tag}
-                </Highlight>
-              ))}
-              {hasHiddenTags && <span className={styles.tag}>{hiddenTagsLabel}</span>}
+            <span className={styles.date}>
+              <VisuallyHidden>Обновлён </VisuallyHidden>
+              <time dateTime={data.updatedAt} title={updatedFull}>
+                {formatUpdated(data.updatedAt)}
+              </time>
             </span>
-          )}
-        </p>
-      </div>
-      <p className={styles.facts}>
-        <span className={styles.usage} data-empty={data.linkCount === 0}>
-          {usageLabel}
-        </span>
-        <span className={styles.date}>
-          <VisuallyHidden>Обновлён </VisuallyHidden>
-          <time dateTime={data.updatedAt} title={updatedFull}>
-            {formatUpdated(data.updatedAt)}
-          </time>
-        </span>
-      </p>
-      <div className={styles.actions}>
-        <Tooltip label="Предпросмотр">
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="lg"
-            aria-label={`Предпросмотр: ${material.title}`}
-            aria-haspopup="dialog"
-            onClick={onPreview}
-          >
-            <Eye size={17} aria-hidden="true" />
-          </ActionIcon>
-        </Tooltip>
-        <MaterialActions
-          title={material.title}
-          isPinned={data.pinned}
-          isArchived={data.status === "archived"}
-          sectionId={data.sectionId}
-          sections={sections}
-          isBusy={isBusy}
-          onChange={onChange}
-        />
-      </div>
-    </article>
+          </p>
+          <div className={styles.actions}>
+            <Tooltip label="Предпросмотр">
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="lg"
+                aria-label={`Предпросмотр: ${material.title}`}
+                aria-haspopup="dialog"
+                onClick={onPreview}
+              >
+                <Eye size={17} aria-hidden="true" />
+              </ActionIcon>
+            </Tooltip>
+            <MaterialActions
+              title={material.title}
+              isPinned={data.pinned}
+              isArchived={data.status === "archived"}
+              sectionId={data.sectionId}
+              sections={sections}
+              isBusy={isBusy}
+              onChange={onChange}
+            />
+          </div>
+        </>
+      }
+    />
   );
 };

@@ -20,8 +20,10 @@ import { useProjectBasePath, useProjectId } from "domains/project";
 import {
   DOCUMENT_KINDS,
   DOCUMENT_STATUSES,
+  DOCUMENT_STATUS_TONES,
   DocumentAccessError,
   DocumentConflictError,
+  DocumentNotFoundError,
   MATERIAL_FORMATS,
   useDocument,
   useLibrarySettings,
@@ -33,8 +35,10 @@ import { EntityDelete } from "compositions/widgets/entity-delete";
 import { DocumentRelations } from "compositions/widgets/document-relations";
 import { EntityDocuments } from "compositions/widgets/entity-documents";
 import { MarkdownView } from "ui/markdown-view";
+import { PageHeader } from "ui/page-header";
 import { PageStage } from "ui/page-stage";
 import { StatePanel } from "ui/state-panel";
+import { StatusBadge } from "ui/status-badge";
 import { isDefined } from "shared/value-predicates";
 import { DocumentContext } from "./ui/document-context";
 import { LinkResource } from "./ui/link-resource/link-resource";
@@ -140,14 +144,29 @@ export const ProductDocumentScreen = () => {
       <PageStage aria-busy="true">
         <Skeleton height={24} width={120} />
         <Skeleton height={48} />
-        <Skeleton height={320} radius="xl" />
+        <Skeleton height={320} />
       </PageStage>
     );
-  if (!isDefined(documentData))
-    return (
+  if (!isDefined(documentData)) {
+    // Отсутствующий материал — состояние адреса, а не сбой чтения: повтор не поможет.
+    const isMissing = query.error instanceof DocumentNotFoundError;
+    const unavailableState = isMissing ? (
       <StatePanel
+        titleAs="h1"
+        title="Материал не найден"
+        description="Материала с этим адресом нет в проекте: его удалили или адрес неверен."
+        action={
+          <Button component={Link} to={backTo} variant="default">
+            Вернуться в библиотеку
+          </Button>
+        }
+      />
+    ) : (
+      <StatePanel
+        state="error"
+        titleAs="h1"
         title="Материал недоступен"
-        description={query.error?.message ?? "Материал не найден в этом проекте."}
+        description={query.error?.message ?? "Не удалось прочитать материал."}
         action={
           <Button variant="default" onClick={() => void query.mutate()}>
             Повторить чтение
@@ -155,6 +174,8 @@ export const ProductDocumentScreen = () => {
         }
       />
     );
+    return <PageStage className={styles.stage}>{unavailableState}</PageStage>;
+  }
   const isLink = documentData.documentFormat === "link";
   const isDraft = documentData.documentStatus === "draft";
   const isArchived = documentData.documentStatus === "archived";
@@ -180,110 +201,114 @@ export const ProductDocumentScreen = () => {
       <MarkdownView text={documentData.body} />
     </article>
   );
-  const noticeColor = notice?.tone === "warning" ? "orange" : "red";
+  const summary =
+    documentData.summary === "" ? undefined : (
+      <span className={styles.summary}>{documentData.summary}</span>
+    );
+  const noticeColor = notice?.tone === "warning" ? "warning" : "danger";
   return (
     <PageStage className={styles.stage}>
       <Anchor component={Link} to={backTo} className={styles.back}>
         <ArrowLeft size={15} aria-hidden="true" />
         Библиотека знаний
       </Anchor>
-      <header className={styles.header}>
-        <div className={styles.identity}>
-          <div className={styles.chips}>
+      <PageHeader
+        title={documentData.name}
+        titleRef={headingRef}
+        meta={
+          <>
             <span className={styles.format} data-format={documentData.documentFormat}>
               <FormatIcon size={14} aria-hidden="true" />
               {MATERIAL_FORMATS[documentData.documentFormat]}
             </span>
             <span className={styles.chip}>{DOCUMENT_KINDS[documentData.documentKind]}</span>
-            <span className={styles.chip} data-status={documentData.documentStatus}>
+            <StatusBadge tone={DOCUMENT_STATUS_TONES[documentData.documentStatus]}>
               {DOCUMENT_STATUSES[documentData.documentStatus]}
-            </span>
+            </StatusBadge>
             {documentData.pinned && (
               <span className={styles.chip}>
                 <Pin size={12} aria-hidden="true" />
                 Закреплён
               </span>
             )}
-          </div>
-          <h1 ref={headingRef} tabIndex={-1} className={styles.title}>
-            {documentData.name}
-          </h1>
-          {documentData.summary !== "" && <p className={styles.summary}>{documentData.summary}</p>}
-        </div>
-        <div className={styles.actions}>
-          <Button
-            component={Link}
-            to={editHref}
-            state={{ returnTo: backTo }}
-            radius="xl"
-            variant="default"
-            leftSection={<Pencil size={15} aria-hidden="true" />}
-          >
-            Редактировать
-          </Button>
-          <Menu position="bottom-end" withinPortal>
-            <Menu.Target>
-              <ActionIcon
-                variant="default"
-                size={36}
-                radius="xl"
-                aria-label="Действия с материалом"
-                loading={isSaving}
-              >
-                <MoreHorizontal size={18} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item leftSection={<Copy size={14} />} onClick={handleCopyLink}>
-                Скопировать ссылку
-              </Menu.Item>
-              <Menu.Item
-                leftSection={pinIcon}
-                onClick={() => void handleChange({ pinned: !documentData.pinned })}
-              >
-                {pinLabel}
-              </Menu.Item>
-              {isDraft && (
-                <Menu.Item
-                  leftSection={<Check size={14} />}
-                  onClick={() => void handleChange({ documentStatus: "active" })}
+          </>
+        }
+        description={summary}
+        actionsLayout="inline"
+        actions={
+          <>
+            <Button
+              component={Link}
+              to={editHref}
+              state={{ returnTo: backTo }}
+              variant="default"
+              leftSection={<Pencil size={15} aria-hidden="true" />}
+            >
+              Редактировать
+            </Button>
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <ActionIcon
+                  variant="default"
+                  size={36}
+                  aria-label="Действия с материалом"
+                  loading={isSaving}
                 >
-                  Сделать действующим
+                  <MoreHorizontal size={18} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item leftSection={<Copy size={14} />} onClick={handleCopyLink}>
+                  Скопировать ссылку
                 </Menu.Item>
-              )}
-              {!isDraft && !isArchived && (
                 <Menu.Item
-                  leftSection={<PencilLine size={14} />}
-                  onClick={() => void handleChange({ documentStatus: "draft" })}
+                  leftSection={pinIcon}
+                  onClick={() => void handleChange({ pinned: !documentData.pinned })}
                 >
-                  Вернуть в черновики
+                  {pinLabel}
                 </Menu.Item>
-              )}
-              {isArchived && (
-                <Menu.Item
-                  leftSection={<ArchiveRestore size={14} />}
-                  onClick={() => void handleChange({ documentStatus: "active" })}
-                >
-                  Вернуть из архива
-                </Menu.Item>
-              )}
-              {!isArchived && (
-                <Menu.Item
-                  leftSection={<Archive size={14} />}
-                  onClick={() => void handleChange({ documentStatus: "archived" })}
-                >
-                  В архив
-                </Menu.Item>
-              )}
-            </Menu.Dropdown>
-          </Menu>
-          <EntityDelete
-            kind="document"
-            entityId={documentData.id}
-            onDeleted={() => navigate(backTo, { replace: true })}
-          />
-        </div>
-      </header>
+                {isDraft && (
+                  <Menu.Item
+                    leftSection={<Check size={14} />}
+                    onClick={() => void handleChange({ documentStatus: "active" })}
+                  >
+                    Сделать действующим
+                  </Menu.Item>
+                )}
+                {!isDraft && !isArchived && (
+                  <Menu.Item
+                    leftSection={<PencilLine size={14} />}
+                    onClick={() => void handleChange({ documentStatus: "draft" })}
+                  >
+                    Вернуть в черновики
+                  </Menu.Item>
+                )}
+                {isArchived && (
+                  <Menu.Item
+                    leftSection={<ArchiveRestore size={14} />}
+                    onClick={() => void handleChange({ documentStatus: "active" })}
+                  >
+                    Вернуть из архива
+                  </Menu.Item>
+                )}
+                {!isArchived && (
+                  <Menu.Item
+                    leftSection={<Archive size={14} />}
+                    onClick={() => void handleChange({ documentStatus: "archived" })}
+                  >
+                    В архив
+                  </Menu.Item>
+                )}
+              </Menu.Dropdown>
+            </Menu>
+            <EntityDelete
+              kind="document"
+              entityId={documentData.id}
+              onDeleted={() => navigate(backTo, { replace: true })}
+            />
+          </>
+        }
+      />
       {isDefined(notice) && (
         <Alert
           color={noticeColor}
@@ -296,7 +321,7 @@ export const ProductDocumentScreen = () => {
         </Alert>
       )}
       {hasReadError && (
-        <Alert color="orange" title="Не удалось обновить материал">
+        <Alert color="warning" title="Не удалось обновить материал">
           Показана последняя прочитанная версия. {query.error?.message}
           <Button size="xs" variant="subtle" onClick={() => void query.mutate()}>
             Повторить чтение
@@ -304,7 +329,7 @@ export const ProductDocumentScreen = () => {
         </Alert>
       )}
       {isDraft && isProposal && (
-        <Alert color="yellow" title="Проект решения">
+        <Alert color="warning" title="Проект решения">
           Проектируется, ещё не принято. Чтобы принять решение, смените тип на «Решение» и сделайте
           материал действующим в редакторе.
         </Alert>

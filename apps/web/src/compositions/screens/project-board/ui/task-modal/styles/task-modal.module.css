@@ -1,8 +1,63 @@
+/*
+ * Окно задачи: шапка с ключом и действиями, заголовок задачи и вкладки, под ними —
+ * прокручиваемая панель вкладки. Фон окна — сцена (`stage`), как у страницы: секции-панели
+ * `card` различимы на нём в обеих схемах. Радиус и тень окна — из темы (Modal), высота —
+ * геометрия окна: до 51.25rem и не больше 90% высоты экрана; на телефоне — весь экран.
+ */
+.content {
+  display: flex;
+  flex-direction: column;
+  height: min(51.25rem, 90dvh);
+  max-height: 90dvh;
+  overflow: hidden;
+  border: 1px solid var(--tasks-border);
+  background-color: var(--tasks-stage);
+
+  &[data-expanded="true"] {
+    height: calc(100dvh - 2rem);
+    max-height: calc(100dvh - 2rem);
+  }
+
+  @media (max-width: 48em) {
+    &,
+    &[data-expanded="true"] {
+      height: 100dvh;
+      max-height: 100dvh;
+      border: 0;
+    }
+  }
+}
+
+.header {
+  flex-shrink: 0;
+  min-height: 3.25rem;
+  padding: var(--tasks-space-3) var(--tasks-space-4) var(--tasks-space-3) var(--tasks-space-5);
+  border-bottom: 1px solid var(--tasks-border);
+  background-color: var(--tasks-stage);
+}
+
+/* Ключ задачи в шапке окна; заголовком читается название задачи ниже. */
+.title {
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
 .body {
-  padding: 0;
   flex: 1;
   min-height: 0;
+  padding: 0;
   overflow: hidden;
+}
+
+.state {
+  margin: var(--tasks-space-4);
+
+  @media (--sm) {
+    margin: var(--tasks-space-6) var(--tasks-space-8);
+  }
 }
 
 .tabs {
@@ -14,35 +69,35 @@
 
 .heading {
   flex-shrink: 0;
-  padding: 20px 16px 16px;
   max-height: 28dvh;
+  padding: var(--tasks-space-5) var(--tasks-space-4) var(--tasks-space-4);
   overflow: auto;
 
   @media (--sm) {
-    padding: 24px 32px 20px;
+    padding: var(--tasks-space-6) var(--tasks-space-8) var(--tasks-space-5);
   }
 }
 
 .taskTitle {
   flex: 1;
   min-width: 0;
-  font-size: 20px;
-  line-height: 1.35;
-  font-weight: 650;
+  font-size: var(--tasks-font-size-panel-title);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
   overflow-wrap: anywhere;
-  letter-spacing: -0.03em;
+}
 
-  @media (--sm) {
-    font-size: 24px;
-  }
+.blocked {
+  margin-top: var(--tasks-space-3);
 }
 
 .tabList {
   flex-shrink: 0;
-  padding-inline: 16px;
+  padding-inline: var(--tasks-space-4);
 
   @media (--sm) {
-    padding-inline: 32px;
+    padding-inline: var(--tasks-space-8);
   }
 }
 
@@ -50,40 +105,4 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-.header {
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--tasks-border);
-  min-height: 52px;
-  flex-shrink: 0;
-}
-.title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tasks-muted);
-}
-.content {
-  display: flex;
-  flex-direction: column;
-  height: min(820px, 90dvh);
-  max-height: 90dvh;
-  overflow: hidden;
-  border: 1px solid var(--tasks-border);
-  border-radius: 14px;
-}
-.content[data-expanded="true"] {
-  height: calc(100dvh - 32px);
-  max-height: calc(100dvh - 32px);
-}
-@media (max-width: 48em) {
-  .body {
-    padding: 0;
-  }
-  .content,
-  .content[data-expanded="true"] {
-    height: 100dvh;
-    max-height: 100dvh;
-    border: 0;
-    border-radius: 0;
-  }
 }

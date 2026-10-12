@@ -1,26 +1,57 @@
+/*
+ * Каркас проекта: липкая шапка, боковая навигация от 1024px и Drawer ниже.
+ * Шапка остаётся в слое приложения Mantine: выпадающие списки, окна и Drawer выше неё.
+ * Каркас — flex-колонка на высоту окна: рабочее поле (PageStage layout="workspace")
+ * заполняет остаток высоты под шапкой и крошками без расчёта их размеров.
+ */
 .root {
+  display: flex;
+  flex-direction: column;
   min-height: 100dvh;
   color: var(--tasks-ink);
-  background: var(--tasks-canvas);
+  background-color: var(--tasks-canvas);
 }
 
 .header {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: var(--mantine-z-index-app);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--tasks-space-3);
   min-height: 4rem;
-  padding: 0.75rem 1rem;
+  padding: var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-2);
   border-bottom: 1px solid var(--tasks-border);
-  background: var(--tasks-chrome);
+  background-color: var(--tasks-chrome);
+
+  @media (--sm) {
+    padding-inline: var(--tasks-space-4);
+  }
+}
+
+.identity {
+  flex: 1;
+  min-width: 0;
+}
+
+.actions {
+  flex-shrink: 0;
+}
+
+.brandIcon {
+  display: none;
+  flex-shrink: 0;
+  color: var(--tasks-muted);
+
+  @media (--sm) {
+    display: block;
+  }
 }
 
 .brand {
   display: none;
-  font-size: 1rem;
+  font-size: var(--mantine-font-size-lg);
   font-weight: 750;
   letter-spacing: -0.045em;
 
@@ -28,27 +59,7 @@
     display: inline;
   }
 }
-.identity {
-  flex: 1;
-  min-width: 0;
-}
-.actions {
-  flex-shrink: 0;
-}
-.projectName {
-  min-width: 0;
-  max-width: 16rem;
-  &[data-workspace="true"] {
-    display: none;
-    @media (--md) {
-      display: block;
-    }
-  }
-}
-.brandIcon {
-  color: var(--tasks-muted);
-  flex-shrink: 0;
-}
+
 .divider {
   display: none;
   color: var(--tasks-soft);
@@ -57,66 +68,66 @@
     display: inline;
   }
 }
+
+.projectName {
+  min-width: 0;
+  max-width: 16rem;
+}
+
+/*
+ * Выбор проекта занимает доступное место шапки: короткое название видно целиком,
+ * длинное сокращается многоточием (полное — в подсказке и в списке).
+ */
 .selector {
-  width: 7rem;
-  flex-shrink: 0;
+  flex: 0 1 36rem;
+  min-width: 8rem;
 }
-.connection {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--tasks-soft);
-  font-size: 0.6875rem;
+
+.selectorInput {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
 }
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mantine-color-orange-5);
-}
-.connection[data-state="connected"] .dot {
-  background: var(--mantine-color-teal-5);
-}
-.connectionText {
-  display: none;
-  @media (--xl) {
-    display: inline;
-  }
-}
+
 .workspace {
   display: flex;
+  flex: 1 0 auto;
   flex-direction: column;
+
   @media (--lg) {
     flex-direction: row;
   }
 }
+
 .sidebar {
   display: none;
-  background: var(--tasks-chrome);
+  background-color: var(--tasks-chrome);
+
   @media (--lg) {
     position: sticky;
     top: 4rem;
-    align-self: flex-start;
-    flex: 0 0 13.75rem;
-    height: calc(100dvh - 4rem);
-    overflow-y: auto;
-    border-right: 1px solid var(--tasks-border);
-    padding: 1.5rem 0.75rem;
     display: flex;
     flex-direction: column;
+    flex: 0 0 13.75rem;
+    align-self: flex-start;
+    height: calc(100dvh - 4rem);
+    padding: var(--tasks-space-6) var(--tasks-space-3);
+    overflow-y: auto;
+    border-right: 1px solid var(--tasks-border);
   }
 }
+
 .sectionLabel {
-  display: none;
-  @media (--lg) {
-    display: block;
-    padding: 0 0.75rem 0.75rem;
-    color: var(--tasks-soft);
-    font-size: 0.625rem;
-    letter-spacing: 0.14em;
-    font-weight: 600;
-  }
+  margin: 0;
+  padding: 0 var(--tasks-space-3) var(--tasks-space-3);
+  color: var(--tasks-soft);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
+
 .menuToggle {
   flex-shrink: 0;
 
@@ -126,27 +137,34 @@
 }
 
 .drawer {
-  background: var(--tasks-chrome);
+  background-color: var(--tasks-chrome);
 }
 
 .drawerHeader {
-  margin-bottom: 0.5rem;
+  min-height: 4rem;
+  margin-bottom: var(--tasks-space-2);
   border-bottom: 1px solid var(--tasks-border);
-  background: var(--tasks-chrome);
+  background-color: var(--tasks-chrome);
 }
+
+.drawerTitle {
+  font-size: var(--mantine-font-size-md);
+  font-weight: 650;
+}
+
 .sidebarFooter {
-  display: none;
-  @media (--lg) {
-    display: flex;
-    gap: 0.6rem;
-    align-items: center;
-    margin-top: auto;
-    padding: 1.5rem 0.75rem 0;
-    border-top: 1px solid var(--tasks-border);
-    color: var(--tasks-soft);
-  }
+  display: flex;
+  align-items: center;
+  gap: var(--tasks-space-3);
+  margin-top: auto;
+  padding: var(--tasks-space-6) var(--tasks-space-3) 0;
+  border-top: 1px solid var(--tasks-border);
+  color: var(--tasks-soft);
 }
+
 .content {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
 }

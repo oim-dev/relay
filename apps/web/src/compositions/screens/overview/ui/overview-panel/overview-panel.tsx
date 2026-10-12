@@ -1,8 +1,8 @@
-import { useId } from "react";
 import clsx from "clsx";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { isDefined } from "shared/value-predicates";
+import { SectionPanel } from "ui/section-panel";
 import type { OverviewPanelProps } from "./types/overview-panel-props.type";
 import styles from "./styles/overview-panel.module.css";
 
@@ -22,37 +22,32 @@ export const OverviewPanel = (props: OverviewPanelProps) => {
     link,
     preview,
     description,
-    tone = "default",
+    tone,
     children,
     className,
     ...rootAttrs
   } = props;
-  const titleId = useId();
   const hasMore = isDefined(preview) && preview.shown < preview.total;
   const previewNote = hasMore ? `Показано ${preview.shown} из ${preview.total}` : null;
-  const totalText = isDefined(totalLabel) ? `${totalLabel}: ${total}` : total;
+  const linkAction = isDefined(link) && (
+    <Link to={link.to} className={styles.link}>
+      {link.label}
+      <ArrowRight size={14} aria-hidden="true" />
+    </Link>
+  );
   return (
-    <section
+    <SectionPanel
       {...rootAttrs}
       className={clsx(styles.root, className)}
-      data-tone={tone}
-      aria-labelledby={titleId}
+      title={title}
+      count={total}
+      countLabel={totalLabel}
+      actions={linkAction || undefined}
+      description={description}
+      tone={tone}
     >
-      <header className={styles.header}>
-        <h2 id={titleId} className={styles.title}>
-          {title}
-        </h2>
-        {isDefined(total) && <span className={styles.total}>{totalText}</span>}
-        {isDefined(link) && (
-          <Link to={link.to} className={styles.link}>
-            {link.label}
-            <ArrowRight size={14} aria-hidden="true" />
-          </Link>
-        )}
-      </header>
-      {isDefined(description) && <p className={styles.description}>{description}</p>}
       {children}
       {isDefined(previewNote) && <p className={styles.note}>{previewNote}</p>}
-    </section>
+    </SectionPanel>
   );
 };

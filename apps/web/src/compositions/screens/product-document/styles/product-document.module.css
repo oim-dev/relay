@@ -9,7 +9,7 @@
   gap: 0.375rem;
   min-height: 2rem;
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
   font-weight: 550;
 
   &:hover {
@@ -17,41 +17,20 @@
   }
 }
 
-.header {
-  display: grid;
-  gap: 1rem 2rem;
-  min-width: 0;
-
-  @media (--lg) {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-  }
-}
-
-.identity {
-  display: grid;
-  gap: 0.625rem;
-  min-width: 0;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-}
-
+/* Метки свойств одной высоты с бейджем состояния. */
 .chip,
 .format {
   display: inline-flex;
   align-items: center;
   gap: 0.3125rem;
-  padding: 0.0625rem 0.625rem;
-  border-radius: 999px;
+  min-height: 1.25rem;
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
   background: var(--tasks-card);
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   font-weight: 600;
-  line-height: 1.5rem;
+  line-height: 1.125rem;
 }
 
 .format[data-format="link"] {
@@ -59,43 +38,9 @@
   color: var(--tasks-accent-ink);
 }
 
-.chip[data-status="draft"] {
-  background: var(--tasks-warning-surface);
-  color: var(--tasks-warning-ink);
-}
-
-.title {
-  margin: 0;
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
-
-  &:focus {
-    outline: none;
-  }
-
-  @media (--md) {
-    font-size: 2rem;
-  }
-}
-
+/* Краткое описание сохраняет переносы строк автора. */
 .summary {
-  max-width: 48rem;
-  margin: 0;
-  color: var(--tasks-muted);
-  font-size: 0.9375rem;
-  line-height: 1.55;
   white-space: pre-line;
-  overflow-wrap: anywhere;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .layout {
@@ -118,7 +63,7 @@
 .document {
   min-width: 0;
   padding: 1.25rem 1rem;
-  border-radius: 1.5rem;
+  border-radius: var(--tasks-radius-panel);
   background: var(--tasks-card);
   overflow-wrap: anywhere;
 

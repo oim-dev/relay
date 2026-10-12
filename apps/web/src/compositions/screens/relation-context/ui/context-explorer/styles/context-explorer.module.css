@@ -1,7 +1,7 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: var(--mantine-spacing-sm);
+  gap: var(--tasks-space-3);
   min-width: 0;
 }
 
@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: var(--mantine-spacing-md);
+  gap: var(--tasks-space-4);
 }
 
 .identity {
@@ -18,31 +18,43 @@
   overflow-wrap: anywhere;
 }
 
+.rootTitle {
+  margin: 0;
+  color: var(--tasks-ink);
+  font-size: var(--tasks-font-size-record-title);
+  font-weight: var(--tasks-font-weight-record-title);
+  line-height: var(--tasks-line-height-record-title);
+}
+
 .boundaries {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--mantine-spacing-xs);
+  gap: var(--tasks-space-2);
   color: var(--tasks-muted);
 }
 
+/*
+ * Рабочее поле: граф или список прокручиваются внутри собственной области заданной высоты,
+ * страница не получает горизонтальной прокрутки. Высота области — геометрия графа.
+ */
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-panel);
   overflow: hidden;
-  background: var(--tasks-surface);
+  background: var(--tasks-tile);
 
   @media (--xl) {
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr) 20rem;
   }
 }
 
 .main {
   position: relative;
   min-width: 0;
-  height: max(470px, calc(100dvh - 470px));
+  height: max(29.375rem, calc(100dvh - 29.375rem));
   overflow: auto;
 }
 
@@ -59,8 +71,8 @@
 }
 
 .inspector {
-  height: max(470px, calc(100dvh - 470px));
-  border-left: 1px solid var(--tasks-border);
+  height: max(29.375rem, calc(100dvh - 29.375rem));
+  border-left: 1px solid var(--tasks-tile-border);
   overflow-y: auto;
   min-width: 0;
 }

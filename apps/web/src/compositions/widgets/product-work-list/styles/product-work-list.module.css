@@ -1,22 +1,16 @@
 .root {
-  margin-top: 2.5rem;
   scroll-margin-top: 5.5rem;
-}
-
-.title {
-  margin: 0 0 0.625rem;
-  font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
 }
 
 .plans {
   display: grid;
-  gap: 1rem;
+  gap: var(--tasks-space-3);
 }
 
 .empty {
-  padding: 1.5rem;
-  border: 1px dashed var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
+  display: grid;
+  gap: var(--tasks-space-1);
+  padding: var(--tasks-space-5);
+  border: 1px dashed var(--tasks-border-strong);
+  border-radius: var(--tasks-radius-row);
 }

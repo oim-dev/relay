@@ -1,9 +1,28 @@
 .root {
   display: block;
+  min-height: 100dvh;
+  background-color: var(--tasks-canvas);
 }
 
+/* Шапка выбора проекта повторяет шапку каркаса проекта. */
 .selector {
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
+  min-height: 4rem;
+  padding: var(--tasks-space-3) var(--tasks-page-gutter);
+  border-bottom: 1px solid var(--tasks-border);
+  background-color: var(--tasks-chrome);
+}
+
+.brandIcon {
+  flex-shrink: 0;
+  color: var(--tasks-muted);
+}
+
+.brand {
+  font-size: var(--mantine-font-size-lg);
+  letter-spacing: -0.045em;
+}
+
+.projectSelect {
+  flex: 1 1 16rem;
+  max-width: 20rem;
 }

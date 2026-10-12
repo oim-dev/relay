@@ -1,8 +1,9 @@
-import { Badge, Button, Text } from "@mantine/core";
+import { Button, Text, VisuallyHidden } from "@mantine/core";
 import { ArrowRight, AppWindow, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useProductDemo } from "domains/product-demo";
 import { ProductPage, useProductPath } from "compositions/widgets/product-page";
+import { SectionPanel } from "ui/section-panel";
 import { StatePanel } from "ui/state-panel";
 import { isEmptyArray } from "shared/value-predicates";
 import { ApplicationProgress } from "./ui/application-progress/application-progress";
@@ -54,43 +55,54 @@ export const ProductApplicationsScreen = () => {
           }
         />
       )}
-      <ul className={styles.root} aria-label="Приложения продукта">
-        {applicationItems.map((application) => (
-          <li key={application.id} className={styles.application}>
-            <div className={styles.cardHeader}>
-              <span className={styles.icon}>
-                <AppWindow size={21} aria-hidden="true" />
-              </span>
-              <Badge color="gray" variant="light" size="sm">
-                {application.type}
-              </Badge>
-              <ArrowRight size={16} aria-hidden="true" className={styles.arrow} />
-            </div>
-            <h2 className={styles.name}>
-              <Link to={`${base}/applications/${application.id}`} className={styles.link}>
-                {application.name}
-              </Link>
-            </h2>
-            <Text size="sm" c="dimmed" lh={1.7} className={styles.summary}>
-              {application.summary}
-            </Text>
-            <div className={styles.scope}>
-              <span>
-                Фичи: <strong>{application.featureCount}</strong>
-              </span>
-              <span>
-                Сценарии: <strong>{application.scenarioCount}</strong>
-              </span>
-            </div>
-            {!application.hasScope && (
-              <Text size="xs" c="dimmed">
-                Начните с выбора фич и сценариев
-              </Text>
-            )}
-            <ApplicationProgress board={application.slug} />
-          </li>
-        ))}
-      </ul>
+      {!hasNoApplications && (
+        <SectionPanel
+          title="Части продукта"
+          count={
+            <>
+              <VisuallyHidden>Приложений: </VisuallyHidden>
+              {applicationItems.length}
+            </>
+          }
+          description="Готовность считается по задачам на доске каждого приложения."
+        >
+          <ul className={styles.grid} aria-label="Приложения продукта">
+            {applicationItems.map((application) => (
+              <li key={application.id} className={styles.application}>
+                <div className={styles.cardHeader}>
+                  <span className={styles.icon} aria-hidden="true">
+                    <AppWindow size={20} />
+                  </span>
+                  <span className={styles.type}>{application.type}</span>
+                  <ArrowRight size={16} aria-hidden="true" className={styles.arrow} />
+                </div>
+                <h3 className={styles.name}>
+                  <Link to={`${base}/applications/${application.id}`} className={styles.link}>
+                    {application.name}
+                  </Link>
+                </h3>
+                <Text size="sm" c="dimmed" className={styles.summary}>
+                  {application.summary}
+                </Text>
+                <div className={styles.scope}>
+                  <span>
+                    Фичи: <strong>{application.featureCount}</strong>
+                  </span>
+                  <span>
+                    Сценарии: <strong>{application.scenarioCount}</strong>
+                  </span>
+                </div>
+                {!application.hasScope && (
+                  <Text size="xs" c="dimmed">
+                    Начните с выбора фич и сценариев
+                  </Text>
+                )}
+                <ApplicationProgress board={application.slug} />
+              </li>
+            ))}
+          </ul>
+        </SectionPanel>
+      )}
     </ProductPage>
   );
 };

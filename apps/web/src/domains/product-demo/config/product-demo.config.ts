@@ -17,12 +17,3 @@ export const PRODUCT_STATUS_OPTIONS = [
 ];
 /** Назначения приложений. */
 export const APPLICATION_TYPES = ["Фронтенд", "Бэкенд", "Внутренний инструмент"];
-/** Варианты для проверки состояний раздела. */
-export const DEMO_MODE_OPTIONS = [
-  { value: "filled", label: "Заполненный раздел" },
-  { value: "empty", label: "Пустой раздел" },
-  { value: "no-results", label: "Нет результатов поиска" },
-  { value: "loading", label: "Загрузка" },
-  { value: "read-error", label: "Ошибка чтения" },
-  { value: "save-error", label: "Ошибка сохранения" },
-];

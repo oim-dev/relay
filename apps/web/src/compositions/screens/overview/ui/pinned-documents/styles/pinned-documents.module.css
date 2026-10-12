@@ -8,7 +8,7 @@
 .stats {
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -25,7 +25,7 @@
   display: grid;
   gap: 0.125rem;
   padding: 0.625rem 0.875rem;
-  border-radius: 0.875rem;
+  border-radius: var(--tasks-radius-row);
   background: var(--tasks-tile);
   color: var(--tasks-ink);
   text-decoration: none;
@@ -41,7 +41,7 @@
 }
 
 .name {
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -50,7 +50,7 @@
   display: -webkit-box;
   overflow: hidden;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   line-height: 1.45;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -61,9 +61,9 @@
   margin: 0;
   padding: 0.875rem 1rem;
   border: 1px dashed var(--tasks-border-strong);
-  border-radius: 0.875rem;
+  border-radius: var(--tasks-radius-row);
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 
   & a {
     color: var(--tasks-accent-ink);

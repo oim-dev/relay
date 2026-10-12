@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { useRef, useState } from "react";
-import { Alert, Button, Group, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Group, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useBeforeUnload } from "react-router-dom";
 import { z } from "zod";
@@ -97,30 +97,33 @@ export const ImplementationEditor = (props: ImplementationEditorProps) => {
   return (
     <form
       {...rootAttrs}
+      noValidate
       className={clsx(styles.root, className)}
       onSubmit={form.onSubmit(handleSubmit)}
     >
-      <Stack gap="md">
-        {hasConflict && (
-          <Alert color="orange" title="Реализация изменилась">
-            Ввод сохранён. Выберите основу для продолжения.
-            <Group mt="sm">
-              <Button variant="default" size="xs" onClick={handleUseCurrent}>
-                Загрузить актуальное
-              </Button>
-              <Button variant="default" size="xs" onClick={handleKeepDraft}>
-                Оставить мой ввод
-              </Button>
-            </Group>
-          </Alert>
-        )}
-        {!canPersist && (
-          <Alert color="orange">
-            Черновик не удалось сохранить в браузере. Не закрывайте страницу до сохранения.
-          </Alert>
-        )}
+      {hasConflict && (
+        <Alert color="warning" title="Реализация изменилась" role="alert">
+          Ввод сохранён. Выберите основу для продолжения.
+          <Group gap="xs" mt="sm">
+            <Button variant="default" size="xs" onClick={handleKeepDraft}>
+              Оставить мой ввод
+            </Button>
+            <Button variant="subtle" size="xs" onClick={handleUseCurrent}>
+              Загрузить актуальное
+            </Button>
+          </Group>
+        </Alert>
+      )}
+      {!canPersist && (
+        <Alert color="warning" role="alert">
+          Черновик не удалось сохранить в браузере. Не закрывайте страницу до сохранения.
+        </Alert>
+      )}
+      <fieldset disabled={form.submitting} className={styles.fields}>
+        <legend className={styles.legend}>Вклад приложения</legend>
         <TextInput
           label="Название вклада"
+          required
           key={form.key("title")}
           {...form.getInputProps("title")}
         />
@@ -132,20 +135,25 @@ export const ImplementationEditor = (props: ImplementationEditorProps) => {
           key={form.key("description")}
           {...form.getInputProps("description")}
         />
-        {hasError && (
-          <Alert color="red" title="Не удалось сохранить">
-            {error}
-          </Alert>
-        )}
-        <Group justify="flex-end">
-          <Button variant="subtle" onClick={onClose} disabled={!canClose || form.submitting}>
+      </fieldset>
+      {hasError && (
+        <Alert color="danger" role="alert" title="Не удалось сохранить">
+          {error}
+        </Alert>
+      )}
+      <footer className={styles.footer}>
+        <Text size="xs" c="dimmed">
+          Черновик остаётся в этой вкладке
+        </Text>
+        <Group gap="xs">
+          <Button variant="default" onClick={onClose} disabled={!canClose || form.submitting}>
             Закрыть редактор
           </Button>
           <Button type="submit" loading={form.submitting} disabled={hasConflict}>
             Сохранить вклад
           </Button>
         </Group>
-      </Stack>
+      </footer>
     </form>
   );
 };

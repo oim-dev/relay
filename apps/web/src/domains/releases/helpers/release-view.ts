@@ -40,6 +40,7 @@ export const releaseCompositionView = (
     done: plan?.counts.completed ?? 0,
     total: plan?.counts.total ?? 0,
     percent: plan?.counts.percent ?? 0,
+    isReady: plan?.ready ?? false,
     isMissing: plan === null,
   })),
 });

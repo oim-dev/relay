@@ -70,7 +70,7 @@ export const PreviewDetails = (props: PreviewDetailsProps) => {
     ...(isNonEmptyArray(document.tags) ? [{ term: "Теги", value: document.tags.join(", ") }] : []),
     { term: "Закреплён", value: pinnedLabel },
     { term: "Обновлён", value: updatedLabel },
-    { term: "Ключ", value: document.key },
+    { term: "Ключ", value: <span className={styles.key}>{document.key}</span> },
   ];
   const propertiesId = useId();
   const usageId = useId();

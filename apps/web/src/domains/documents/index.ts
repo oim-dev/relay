@@ -27,6 +27,7 @@ export {
   DOCUMENT_KIND_OPTIONS,
   DOCUMENT_STATUSES,
   DOCUMENT_STATUS_OPTIONS,
+  DOCUMENT_STATUS_TONES,
   DOCUMENT_RELATION_TYPES,
   DOCUMENT_RELATION_TYPE_OPTIONS,
   MATERIAL_FORMATS,
@@ -48,6 +49,7 @@ export type { MaterialTagsInputProps } from "./ui/material-tags-input/types/mate
 export {
   DocumentAccessError,
   DocumentConflictError,
+  DocumentNotFoundError,
   DocumentOutcomeUnknownError,
   DocumentRelationError,
 } from "./errors/document-errors";

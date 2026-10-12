@@ -1,92 +1,48 @@
-/* Карточка блока на сцене экрана, в ритме карточек «Обзора». */
-.root {
-  display: grid;
-  align-content: start;
-  gap: 1rem;
-  min-width: 0;
-  padding: 1.125rem 1rem 1.25rem;
-  border-radius: 1.5rem;
-  background: var(--tasks-card);
-
-  @media (--md) {
-    padding: 1.375rem 1.5rem 1.5rem;
-  }
-}
-
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.625rem;
-}
-
-.title {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.012em;
-
-  @media (--md) {
-    font-size: 1.25rem;
-  }
-}
-
-.total,
-.groupCount {
-  min-width: 1.75rem;
-  padding: 0 0.5rem;
-  border-radius: 999px;
-  background: var(--tasks-tile);
-  color: var(--tasks-ink);
-  font-size: 0.8125rem;
-  font-weight: 650;
-  line-height: 1.5rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.add {
-  margin-left: auto;
-}
-
+/* Блок — панель SectionPanel на сцене карточки материала: группы связей по видам сущностей. */
 .empty {
   display: flex;
   align-items: flex-start;
   gap: 0.625rem;
-  padding: 0.875rem 1rem;
+  padding: 0.875rem var(--tasks-space-4);
   border: 1px dashed var(--tasks-border-strong);
-  border-radius: 1rem;
+  border-radius: var(--tasks-radius-row);
   color: var(--tasks-muted);
   line-height: 1.6;
 }
 
 .group {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--tasks-space-2);
   min-width: 0;
 }
 
 .groupTitle {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--tasks-space-2);
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
   font-weight: 650;
 }
 
 .groupCount {
   min-width: 1.5rem;
-  font-size: 0.75rem;
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-tile);
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
   line-height: 1.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .list {
   container: relations / inline-size;
   display: grid;
-  gap: 0.5rem;
+  gap: var(--tasks-space-2);
   margin: 0;
   padding: 0;
   list-style: none;

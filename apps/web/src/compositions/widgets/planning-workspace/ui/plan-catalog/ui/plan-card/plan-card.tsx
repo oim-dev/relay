@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom";
-import { Badge, Progress } from "@mantine/core";
-import { ArrowUpRight, Ban, Check, CircleAlert, CircleDashed, Flag, Layers3 } from "lucide-react";
-import { getPlanSummary, PLAN_STATUS_COLORS, PLAN_STATUS_LABELS } from "domains/planning";
+import { Progress } from "@mantine/core";
+import { Ban, Check, CircleAlert, CircleDashed, Layers3 } from "lucide-react";
+import { getPlanSummary, PLAN_STATUS_LABELS, PLAN_STATUS_TONES } from "domains/planning";
+import { StatusBadge } from "ui/status-badge";
 import type { PlanCardProps } from "./types/plan-card-props.type";
 import styles from "./styles/plan-card.module.css";
 
 /**
  * Показывает цель, собственный прогресс и ближайший этап плана.
+ * Собственное состояние плана и фактическое выполнение задач показаны раздельно.
  *
  * Используется для:
  *  - сравнения объёма работ без открытия подробностей
@@ -18,7 +20,7 @@ export const PlanCard = (props: PlanCardProps) => {
   const hasDivergence = isCompleted && !plan.isReady;
   const isCancelled = plan.status === "cancelled";
   const statusLabel = PLAN_STATUS_LABELS[plan.status];
-  const href = `${basePath}/plans/${plan.id}`;
+  const href = `${basePath}/plans/${encodeURIComponent(plan.id)}`;
   const nextLabel = isCancelled
     ? "Работа отменена"
     : hasDivergence
@@ -35,60 +37,42 @@ export const PlanCard = (props: PlanCardProps) => {
         ? Check
         : CircleDashed;
   const nextPrefix = isCompleted || isCancelled ? "" : "Далее: ";
-  const progressLabel = "Выполнение задач";
-  const progressColor = hasDivergence ? "orange" : isCompleted ? "teal" : "var(--tasks-muted)";
+  const progressLabel = `Выполнено задач: ${summaryData.done} из ${summaryData.total} (${summaryData.percent}%)`;
+  const hasSummary = plan.summary.trim() !== "";
   const stageItems = plan.stagePreview;
 
   return (
     <article className={styles.root}>
       <div className={styles.topline}>
-        <span className={styles.type}>
-          <Flag size={14} aria-hidden="true" />
-          План работ
-        </span>
-        <Badge
-          size="sm"
-          variant="light"
-          color={PLAN_STATUS_COLORS[plan.status]}
-          className={styles.badge}
-        >
-          {statusLabel}
-        </Badge>
+        <span className={styles.key}>{plan.key}</span>
+        <StatusBadge tone={PLAN_STATUS_TONES[plan.status]}>{statusLabel}</StatusBadge>
       </div>
-      <h2 className={styles.title}>
+      <h3 className={styles.title}>
         <Link to={href} className={styles.link}>
           {plan.title}
-          <ArrowUpRight size={17} className={styles.arrow} aria-hidden="true" />
         </Link>
-      </h2>
-      <p className={styles.summary}>{plan.summary}</p>
+      </h3>
+      {hasSummary && <p className={styles.summary}>{plan.summary}</p>}
       <div className={styles.progress}>
-        <div className={styles.progressLabel}>
-          <span>{progressLabel}</span>
+        <Progress variant="accent" value={summaryData.percent} aria-label={progressLabel} />
+        <p className={styles.progressLabel}>
+          <span>Выполнено задач</span>
           <strong>
-            {summaryData.done}
-            <span> / {summaryData.total}</span>
+            {summaryData.done} из {summaryData.total}
             <span className={styles.percent}>{summaryData.percent}%</span>
           </strong>
-        </div>
-        <Progress
-          value={summaryData.percent}
-          size={4}
-          color={progressColor}
-          aria-label={`${progressLabel}: ${summaryData.done} из ${summaryData.total}`}
-        />
+        </p>
       </div>
-      <div className={styles.next}>
-        <StageIcon size={13} aria-hidden="true" />
+      <p className={styles.next} data-warning={hasDivergence}>
+        <StageIcon size={16} aria-hidden="true" />
         <span>
           {nextPrefix}
           {nextLabel}
         </span>
-      </div>
+      </p>
       <footer className={styles.footer}>
-        <span className={styles.key}>{plan.key}</span>
         <span className={styles.stageCount}>
-          <Layers3 size={12} aria-hidden="true" />
+          <Layers3 size={14} aria-hidden="true" />
           Этапов: {plan.stageCount}
         </span>
         <span className={styles.stageDots} aria-hidden="true">

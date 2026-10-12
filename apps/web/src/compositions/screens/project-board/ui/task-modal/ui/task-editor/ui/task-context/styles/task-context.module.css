@@ -1,90 +1,95 @@
+/*
+ * Продуктовые связи задачи внутри секции окна: связанные цели и найденные кандидаты —
+ * плитки на тонированной панели, выбор и материалы цели — вложенные плитки.
+ * Вид цели (фича или сценарий) передают значок и подпись, а не цвет.
+ */
 .root {
-  display: block;
-  max-width: 1100px;
-  margin-inline: auto;
+  min-width: 0;
 }
-.results {
-  max-height: 300px;
-  overflow: auto;
-  display: grid;
-  gap: 8px;
+
+.links:empty {
+  display: none;
 }
+
 .option {
   width: 100%;
-  border: 1px solid var(--tasks-border);
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--tasks-canvas);
+  padding: var(--tasks-space-3) var(--tasks-space-4);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-compact);
+  background-color: var(--tasks-tile);
   overflow-wrap: anywhere;
+  transition: border-color var(--tasks-duration-control) var(--tasks-easing-standard);
 
-  &._feature {
-    background: color-mix(in srgb, var(--mantine-color-violet-light) 25%, var(--tasks-canvas));
+  &:hover {
+    border-color: var(--tasks-selected-border);
   }
 
-  &._scenario {
-    background: color-mix(in srgb, var(--mantine-color-teal-light) 25%, var(--tasks-canvas));
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }
+
 .symbol {
   display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
   flex-shrink: 0;
-  border-radius: 9px;
-  color: var(--mantine-color-dimmed);
-  background: var(--mantine-color-gray-light);
-
-  &._feature {
-    color: var(--mantine-color-violet-text);
-    background: var(--mantine-color-violet-light);
-  }
-
-  &._scenario {
-    color: var(--mantine-color-teal-text);
-    background: var(--mantine-color-teal-light);
-  }
+  place-items: center;
+  width: var(--tasks-control-height);
+  height: var(--tasks-control-height);
+  border-radius: var(--tasks-radius-control);
+  background-color: var(--tasks-subtle);
+  color: var(--tasks-muted);
 }
+
 .target {
   min-width: 0;
 }
-.option:hover {
-  border-color: var(--tasks-selected-border);
+
+.results {
+  display: grid;
+  gap: var(--tasks-space-2);
+  max-height: 13.75rem;
+  overflow: auto;
+
+  @media (--md) {
+    max-height: 18.75rem;
+  }
 }
-.option:focus-visible {
-  outline: 2px solid var(--tasks-selected-border);
-  outline-offset: 2px;
-}
-.back {
-  align-self: flex-start;
-}
+
 .chooser {
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-md);
-  padding: 16px;
-  margin-top: 16px;
-  background: var(--mantine-color-default-hover);
+  min-width: 0;
+  padding: var(--tasks-space-4);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-row);
+  background-color: var(--tasks-tile);
 }
+
 .picker {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--tasks-space-4);
+
+  @media (--md) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
+
 .preview {
-  max-height: 300px;
+  max-height: 13.75rem;
+  padding: var(--tasks-space-4);
   overflow: auto;
-  padding: 14px;
-  border-radius: 8px;
-  background: var(--tasks-surface);
+  border-radius: var(--tasks-radius-compact);
+  background-color: var(--tasks-subtle);
+
+  @media (--md) {
+    max-height: 18.75rem;
+  }
 }
-@media (max-width: 48em) {
-  .picker {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .results {
-    max-height: 220px;
-  }
-  .preview {
-    max-height: 220px;
-  }
+
+.previewIcon {
+  color: var(--tasks-muted);
 }

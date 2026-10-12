@@ -1,58 +1,150 @@
+/*
+ * Колонка — тонированная панель рабочего поля. Цвет метки — роль колонки, как на диаграмме
+ * «Обзора»; «Отменено» дополнительно отличается формой метки, а не только цветом.
+ * Ширина колонки (16.5rem) — геометрия доски: на сцене максимальной ширины помещаются
+ * все пять рабочих колонок, «Отменено» и узкие экраны используют прокрутку доски.
+ */
 .root {
-  flex: 1 0 18rem;
-  width: 18rem;
-  max-width: 21rem;
+  --column-color: var(--tasks-column-inbox);
+
+  display: flex;
+  flex: 1 0 16.5rem;
+  flex-direction: column;
+  width: 16.5rem;
+  max-width: 22rem;
   min-width: 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in srgb, var(--tasks-ink) 3%, var(--tasks-canvas));
-  border: 1px solid color-mix(in srgb, var(--tasks-border) 50%, transparent);
+  border-radius: var(--tasks-radius-panel);
+  background-color: var(--tasks-card);
+
+  &[data-column="ready"] {
+    --column-color: var(--tasks-column-ready);
+  }
+
+  &[data-column="in-progress"] {
+    --column-color: var(--tasks-column-in-progress);
+  }
+
+  &[data-column="review"] {
+    --column-color: var(--tasks-column-review);
+  }
+
+  &[data-column="done"] {
+    --column-color: var(--tasks-column-done);
+  }
+
+  &[data-column="cancelled"] {
+    --column-color: var(--tasks-column-cancelled);
+  }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
 }
+
 .header {
+  display: flex;
   flex-shrink: 0;
-  padding: 16px 14px 12px;
+  align-items: center;
+  gap: var(--tasks-space-2);
+  min-width: 0;
+  padding: var(--tasks-space-4) var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-4);
 }
+
+/* Метка колонки: квадрат с рамкой цвета колонки; у «Отменено» — пунктир. */
+.mark {
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 2px solid var(--column-color);
+  border-radius: var(--tasks-space-1);
+
+  .root[data-column="cancelled"] & {
+    border-style: dashed;
+  }
+}
+
+.title {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--mantine-font-size-md);
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  flex: none;
+  min-width: 1.5rem;
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
+  background-color: var(--tasks-tile);
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+  line-height: 1.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.header .create {
+  margin-left: auto;
+}
+
+.create:disabled {
+  background-color: transparent;
+  opacity: 0.45;
+}
+
 .scroll {
   display: flex;
-  flex-direction: column;
-  padding: 2px 10px 12px;
-  overflow-y: auto;
   flex: 1;
+  flex-direction: column;
   min-height: 0;
+  padding: 0.125rem var(--tasks-space-3) var(--tasks-space-3);
+  overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-gutter: stable;
   overscroll-behavior-y: contain;
 }
-.create:disabled {
-  background: transparent;
-  opacity: 0.45;
+
+/* Выдача прежнего фильтра, пока не пришёл ответ нового: приглушена и не принимает действий мышью. */
+.cards {
+  transition: opacity var(--tasks-duration-control) var(--tasks-easing-standard);
+
+  &[data-outdated="true"] {
+    opacity: 0.45;
+    pointer-events: none;
+  }
 }
-.dot {
-  width: 8px;
-  height: 8px;
-  border: 2px solid currentColor;
-  border-radius: 3px;
-}
+
 .loadMore {
-  overflow-anchor: none;
   flex-shrink: 0;
+  overflow-anchor: none;
 }
+
+/* Конец колонки — место вставки и создание задачи; выделяется акцентом во время переноса. */
 .drop {
-  flex: 1 0 100px;
-  min-height: 100px;
-  margin-top: 12px;
+  flex: 1 0 6.25rem;
+  min-height: 6.25rem;
+  margin-top: var(--tasks-space-3);
+  padding: var(--tasks-space-3);
   border: 1px dashed transparent;
-  border-radius: var(--mantine-radius-md);
-  padding: 12px;
-  transition: background 150ms ease;
-}
-.drop[data-target="true"] {
-  border-color: var(--mantine-color-blue-outline);
-  background: var(--mantine-color-blue-light);
-}
-@media (prefers-reduced-motion: reduce) {
-  .drop {
+  border-radius: var(--tasks-radius-compact);
+  transition:
+    background-color var(--tasks-duration-control) var(--tasks-easing-standard),
+    border-color var(--tasks-duration-control) var(--tasks-easing-standard);
+
+  &[data-target="true"] {
+    border-color: var(--tasks-accent);
+    background-color: var(--tasks-accent-subtle);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
     transition: none;
   }
+}
+
+.empty {
+  margin-bottom: var(--tasks-space-2);
 }

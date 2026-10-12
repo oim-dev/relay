@@ -8,11 +8,12 @@ import styles from "./styles/page-stage.module.css";
  *
  * Используется для:
  *  - экранов-обзоров и каталогов с общим визуальным ритмом
+ *  - рабочих полей на всю доступную высоту окна (layout="workspace")
  */
 export const PageStage = (props: PageStageProps) => {
-  const { children, className, ...rootAttrs } = props;
+  const { children, layout = "default", className, ...rootAttrs } = props;
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-layout={layout}>
       <div {...rootAttrs} className={clsx(styles.stage, className)}>
         {children}
       </div>

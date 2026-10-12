@@ -1,0 +1,45 @@
+/* Подпись не меньше 12px: значимая компактная подпись по шкале темы. */
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tasks-space-1);
+  min-height: 1.25rem;
+  padding: 0 var(--tasks-space-2);
+  border: 1px solid var(--tasks-border-strong);
+  border-radius: var(--tasks-radius-pill);
+  background-color: var(--tasks-surface);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  line-height: 1.125rem;
+  white-space: nowrap;
+
+  &[data-tone="info"] {
+    border-color: var(--tasks-info-border);
+    background-color: var(--tasks-info-surface);
+    color: var(--tasks-info);
+  }
+
+  &[data-tone="success"] {
+    border-color: var(--tasks-success-border);
+    background-color: var(--tasks-success-surface);
+    color: var(--tasks-success);
+  }
+
+  &[data-tone="warning"] {
+    border-color: var(--tasks-warning-border);
+    background-color: var(--tasks-warning-surface);
+    color: var(--tasks-warning);
+  }
+
+  &[data-tone="danger"] {
+    border-color: var(--tasks-danger-border);
+    background-color: var(--tasks-danger-surface);
+    color: var(--tasks-danger);
+  }
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+}

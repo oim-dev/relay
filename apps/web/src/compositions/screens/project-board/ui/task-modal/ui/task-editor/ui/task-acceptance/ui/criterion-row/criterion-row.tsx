@@ -51,7 +51,7 @@ export const CriterionRow = (props: CriterionRowProps) => {
     <div {...rootAttrs} className={clsx(styles.root, className)}>
       <Group gap="sm" wrap="nowrap" align="flex-start">
         <Checkbox
-          mt={3}
+          mt="0.375rem"
           checked={criterion.completed}
           disabled={isDisabled}
           aria-label={checkboxLabel}
@@ -73,25 +73,23 @@ export const CriterionRow = (props: CriterionRowProps) => {
               </Text>
             )}
           </span>
-          <ChevronIcon size={15} className={styles.chevron} />
+          <ChevronIcon size={16} className={styles.chevron} aria-hidden="true" />
         </UnstyledButton>
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="sm"
-              aria-label={menuLabel}
-              disabled={isDisabled}
-            >
-              <MoreHorizontal size={16} />
+            <ActionIcon aria-label={menuLabel} disabled={isDisabled}>
+              <MoreHorizontal size={16} aria-hidden="true" />
             </ActionIcon>
           </Menu.Target>
           <Menu.Dropdown>
-            <Menu.Item leftSection={<Pencil size={14} />} onClick={onEdit}>
+            <Menu.Item leftSection={<Pencil size={16} aria-hidden="true" />} onClick={onEdit}>
               Изменить критерий
             </Menu.Item>
-            <Menu.Item color="red" leftSection={<Trash2 size={14} />} onClick={onRemove}>
+            <Menu.Item
+              color="danger"
+              leftSection={<Trash2 size={16} aria-hidden="true" />}
+              onClick={onRemove}
+            >
               Удалить критерий
             </Menu.Item>
           </Menu.Dropdown>
@@ -105,7 +103,7 @@ export const CriterionRow = (props: CriterionRowProps) => {
             </Text>
           )}
           {hasError && (
-            <Alert color="red" title="Описание недоступно">
+            <Alert color="danger" title="Описание недоступно">
               <Button size="xs" variant="subtle" onClick={() => void query.mutate()}>
                 Повторить загрузку описания
               </Button>

@@ -8,7 +8,7 @@
   /* Самостоятельная плитка на карточке, как группы «Требует внимания». */
   &[data-variant="tile"] {
     padding: 0.75rem 0.875rem 0.625rem;
-    border-radius: 1rem;
+    border-radius: var(--tasks-radius-row);
     background: var(--tasks-tile);
   }
 }
@@ -29,7 +29,7 @@
   }
 
   .root[data-variant="plain"] & {
-    font-size: 0.875rem;
+    font-size: var(--mantine-font-size-md);
     font-weight: 650;
   }
 }
@@ -42,10 +42,10 @@
 .count {
   min-width: 1.5rem;
   padding: 0 0.4375rem;
-  border-radius: 999px;
+  border-radius: var(--tasks-radius-pill);
   background: var(--tasks-card);
   color: var(--tasks-ink);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   font-weight: 650;
   line-height: 1.375rem;
   text-align: center;
@@ -70,7 +70,7 @@
 
 .summary {
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -78,14 +78,14 @@
 .hint {
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   line-height: 1.45;
 }
 
 .note {
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 }
 
 .toggle {

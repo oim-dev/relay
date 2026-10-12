@@ -255,7 +255,7 @@ export const LibraryNavigation = ({
             </Button>
           </fieldset>
           {hasError && (
-            <Alert color="red" mt="md">
+            <Alert color="danger" mt="md">
               {error}
               <Button
                 size="xs"

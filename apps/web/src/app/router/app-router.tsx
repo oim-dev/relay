@@ -21,7 +21,7 @@ export const appRouter = createBrowserRouter([
     Component: RelayScreen,
     errorElement: <RouteError />,
     hydrateFallbackElement: (
-      <StatePanel isLoading title="Открываем Relay" description="Загружаем раздел проекта." />
+      <StatePanel state="loading" title="Открываем Relay" description="Загружаем раздел проекта." />
     ),
     children: [
       {
@@ -305,4 +305,17 @@ export const appRouter = createBrowserRouter([
       { path: "*", element: null },
     ],
   },
+  // Галерея UI kit только в dev-сборке: в production условие ложно и импорт удаляется.
+  ...(import.meta.env.DEV
+    ? [
+        {
+          path: "/dev/ui-kit",
+          lazy: () => import("compositions/screens/ui-kit/lazy"),
+          // Первый показ ленивого маршрута — то же состояние загрузки, что у основного дерева.
+          hydrateFallbackElement: (
+            <StatePanel state="loading" title="Открываем галерею" description="Загружаем UI kit." />
+          ),
+        },
+      ]
+    : []),
 ]);

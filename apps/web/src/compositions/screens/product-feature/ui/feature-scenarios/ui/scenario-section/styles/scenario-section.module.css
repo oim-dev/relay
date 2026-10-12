@@ -1,19 +1,23 @@
+/* Строка сценария — плитка на панели фичи; цель якоря выделена рамкой выбора. */
 .root {
   min-width: 0;
-  padding: var(--mantine-spacing-md);
+  padding: var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-4);
   scroll-margin-top: 6rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
-  background: var(--tasks-surface);
+  border: 1px solid transparent;
+  border-radius: var(--tasks-radius-row);
+  background: var(--tasks-tile);
 
   &:target {
     border-color: var(--tasks-selected-border);
-    box-shadow: 0 0 0 1px var(--tasks-selected-border);
   }
 
   &:focus-visible {
     outline: 2px solid var(--tasks-focus-ring);
     outline-offset: 3px;
+  }
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
   }
 }
 
@@ -21,28 +25,42 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  flex-wrap: nowrap;
-  gap: 0.75rem;
+  gap: var(--tasks-space-3);
+}
+
+.icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--tasks-radius-control);
+  background: var(--tasks-accent-subtle);
+  color: var(--tasks-accent-ink);
 }
 
 .meaning {
+  display: grid;
   flex: 1;
+  gap: var(--tasks-space-1);
+  justify-items: start;
   min-width: 0;
 }
 
 .title {
-  margin: 0 0 0.5rem;
-  font-size: var(--mantine-font-size-sm);
-  font-weight: 600;
-  line-height: 1.5;
+  margin: 0;
+  font-size: var(--tasks-font-size-record-title);
+  font-weight: var(--tasks-font-weight-record-title);
+  line-height: var(--tasks-line-height-record-title);
   overflow-wrap: anywhere;
 }
 
 .link {
-  color: var(--mantine-color-text);
+  color: var(--tasks-ink);
   text-decoration: none;
 
   &:hover {
     text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
 }

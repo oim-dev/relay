@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { useProjectId } from "domains/project";
 import { useFeatureExpansion } from "domains/product";
-import { Button, Group, NativeSelect, Text, TextInput, Tree, useTree } from "@mantine/core";
+import {
+  Button,
+  NativeSelect,
+  Text,
+  TextInput,
+  Tree,
+  useTree,
+  VisuallyHidden,
+} from "@mantine/core";
 import type { ReactNode } from "react";
 import type { RenderTreeNodePayload } from "@mantine/core";
 import { ChevronsDown, ChevronsUp, Plus, Search, X } from "lucide-react";
@@ -13,6 +21,7 @@ import {
   useProductDemo,
 } from "domains/product-demo";
 import { ProductPage, useProductPath } from "compositions/widgets/product-page";
+import { SectionPanel } from "ui/section-panel";
 import { StatePanel } from "ui/state-panel";
 import { isEmptyArray } from "shared/value-predicates";
 import { FeatureRow } from "./ui/feature-row";
@@ -126,130 +135,148 @@ export const ProductFeaturesScreen = () => {
     if (entry === undefined) return null;
     return <FeatureRow {...entry} payload={payload} search={filterSearch} />;
   };
+  const catalogStatus = hasFilters
+    ? `Показано ${treeData.nodes.length} из ${snapshot.features.length} по условиям поиска.`
+    : "Откройте фичу, чтобы прочитать описание, сценарии и задачи реализации.";
+  const filterControls = (
+    <div className={styles.filters} role="search" aria-label="Поиск и фильтры фич">
+      <TextInput
+        type="search"
+        aria-label="Найти фичу или сценарий"
+        placeholder="Найти фичу или сценарий…"
+        value={query}
+        onChange={(event) => handleFilter("q", event.currentTarget.value)}
+        leftSection={<Search size={16} aria-hidden="true" />}
+        className={styles.search}
+      />
+      <NativeSelect
+        aria-label="Готовность фичи"
+        value={status}
+        data={[{ value: "", label: "Любая готовность" }, ...PRODUCT_STATUS_OPTIONS]}
+        onChange={(event) => handleFilter("status", event.currentTarget.value)}
+        className={styles.filter}
+      />
+      <NativeSelect
+        aria-label="Приложение"
+        value={applicationId}
+        data={[{ value: "", label: "Все приложения" }, ...applicationOptions]}
+        onChange={(event) => handleFilter("app", event.currentTarget.value)}
+        className={styles.filter}
+      />
+    </div>
+  );
+  const createAction = (
+    <Button
+      component={Link}
+      to={`${base}/features/new`}
+      leftSection={<Plus size={15} aria-hidden="true" />}
+      className={styles.create}
+    >
+      Добавить фичу
+    </Button>
+  );
   return (
     <ProductPage
       title="Возможности"
       description="Возможности продукта и их сценарии. Фича готова, когда готовы все её сценарии."
+      actionsLayout="toolbar"
       actions={
-        <Button
-          component={Link}
-          to={`${base}/features/new`}
-          leftSection={<Plus size={15} aria-hidden="true" />}
-        >
-          Добавить фичу
-        </Button>
+        <>
+          {filterControls}
+          {createAction}
+        </>
       }
     >
-      <div className={styles.root}>
-        {!expansion.canPersist && (
-          <Text size="xs" c="dimmed" role="status">
-            Раскрытие сохранено до закрытия страницы: браузерное хранилище недоступно.
-          </Text>
-        )}
-        <div className={styles.filters} role="search" aria-label="Поиск и фильтры фич">
-          <TextInput
-            aria-label="Найти фичу или сценарий"
-            placeholder="Найти фичу или сценарий…"
-            value={query}
-            onChange={(event) => handleFilter("q", event.currentTarget.value)}
-            leftSection={<Search size={16} aria-hidden="true" />}
-            className={styles.search}
-          />
-          <NativeSelect
-            aria-label="Готовность фичи"
-            value={status}
-            data={[{ value: "", label: "Любая готовность фичи" }, ...PRODUCT_STATUS_OPTIONS]}
-            onChange={(event) => handleFilter("status", event.currentTarget.value)}
-          />
-          <NativeSelect
-            aria-label="Приложение"
-            value={applicationId}
-            data={[{ value: "", label: "Все приложения" }, ...applicationOptions]}
-            onChange={(event) => handleFilter("app", event.currentTarget.value)}
-          />
-        </div>
-        <div className={styles.listMeta}>
-          <Text size="xs" c="dimmed" role="status">
-            Фичи: {treeData.nodes.length} из {snapshot.features.length}
-          </Text>
-          {hasFilters && (
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              color="gray"
-              leftSection={<X size={12} aria-hidden="true" />}
-              onClick={handleClear}
-            >
-              Сбросить фильтры
+      {!expansion.canPersist && (
+        <Text size="xs" c="dimmed" role="status">
+          Раскрытие сохранено до закрытия страницы: браузерное хранилище недоступно.
+        </Text>
+      )}
+      {hasNoFeatures && (
+        <StatePanel
+          title="Фич пока нет"
+          description="Добавьте первую возможность продукта. Её можно описать заранее, даже если план и задачи ещё не созданы."
+          action={
+            <Button component={Link} to={`${base}/features/new`} variant="default">
+              Добавить первую фичу
             </Button>
-          )}
-        </div>
-        {hasNoFeatures && (
-          <StatePanel
-            title="Фич пока нет"
-            description="Добавьте первую возможность продукта. Её можно описать заранее, даже если план и задачи ещё не созданы."
-            action={
-              <Button component={Link} to={`${base}/features/new`} variant="default">
-                Добавить первую фичу
-              </Button>
-            }
-          />
-        )}
-        {hasNoResults && (
-          <StatePanel
-            title="Фичи не найдены"
-            description="Попробуйте другое название или измените фильтры. В каталоге есть фичи, но они не подходят под эти условия."
-            action={
-              <Button variant="default" onClick={handleClear}>
-                Показать все фичи
-              </Button>
-            }
-          />
-        )}
-        {hasTree && (
-          <section className={styles.catalog} aria-label="Дерево фич и сценариев">
-            <div className={styles.toolbar}>
-              <Group gap="md" role="group" aria-label="Обозначения готовности">
-                <ProductReadiness status="done" />
-                <ProductReadiness status="partial" />
-                <ProductReadiness status="none" />
-              </Group>
+          }
+        />
+      )}
+      {hasNoResults && (
+        <StatePanel
+          title="Фичи не найдены"
+          description="Попробуйте другое название или измените фильтры. В каталоге есть фичи, но они не подходят под эти условия."
+          action={
+            <Button variant="default" onClick={handleClear}>
+              Показать все фичи
+            </Button>
+          }
+        />
+      )}
+      {hasTree && (
+        <SectionPanel
+          title="Фичи и сценарии"
+          density="compact"
+          count={
+            <>
+              <VisuallyHidden>Фич: </VisuallyHidden>
+              {treeData.nodes.length}
+            </>
+          }
+          description={<span role="status">{catalogStatus}</span>}
+          actions={
+            <>
+              {hasFilters && (
+                <Button
+                  size="compact-sm"
+                  variant="subtle"
+                  leftSection={<X size={14} aria-hidden="true" />}
+                  onClick={handleClear}
+                >
+                  Сбросить фильтры
+                </Button>
+              )}
               <Button
-                size="compact-xs"
+                size="compact-sm"
                 variant="default"
-                fw={450}
                 leftSection={<ToggleAllIcon size={14} aria-hidden="true" />}
                 onClick={handleToggleAll}
                 disabled={!hasExpandableNodes}
-                className={styles.toggleAll}
               >
                 {toggleAllLabel}
               </Button>
-            </div>
-            <Tree
-              data={treeData.nodes}
-              tree={tree}
-              levelOffset={0}
-              expandOnClick
-              aria-label="Фичи и сценарии"
-              renderNode={renderNode}
-              className={styles.tree}
-              onKeyDownCapture={(event) => {
-                if (event.key !== "Enter" || !(event.target instanceof HTMLElement)) return;
-                if (event.target.getAttribute("role") !== "treeitem") return;
-                event.preventDefault();
-                event.stopPropagation();
-                const entry = treeData.entries.get(event.target.dataset.value ?? "");
-                if (entry !== undefined && entry.scenario === undefined) {
-                  tree.toggleExpanded(entry.feature.id);
-                  return;
-                }
-                event.target.querySelector<HTMLAnchorElement>("a[data-tree-link]")?.click();
-              }}
-            />
-          </section>
-        )}
-      </div>
+            </>
+          }
+        >
+          <div className={styles.legend} role="group" aria-label="Обозначения готовности">
+            <ProductReadiness status="done" />
+            <ProductReadiness status="partial" />
+            <ProductReadiness status="none" />
+          </div>
+          <Tree
+            data={treeData.nodes}
+            tree={tree}
+            levelOffset={0}
+            expandOnClick
+            aria-label="Фичи и сценарии"
+            renderNode={renderNode}
+            className={styles.tree}
+            onKeyDownCapture={(event) => {
+              if (event.key !== "Enter" || !(event.target instanceof HTMLElement)) return;
+              if (event.target.getAttribute("role") !== "treeitem") return;
+              event.preventDefault();
+              event.stopPropagation();
+              const entry = treeData.entries.get(event.target.dataset.value ?? "");
+              if (entry !== undefined && entry.scenario === undefined) {
+                tree.toggleExpanded(entry.feature.id);
+                return;
+              }
+              event.target.querySelector<HTMLAnchorElement>("a[data-tree-link]")?.click();
+            }}
+          />
+        </SectionPanel>
+      )}
     </ProductPage>
   );
 };

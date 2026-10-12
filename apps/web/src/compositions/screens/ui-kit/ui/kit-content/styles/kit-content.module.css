@@ -1,0 +1,25 @@
+.reading {
+  width: 100%;
+  max-width: var(--tasks-reading-measure);
+}
+
+.long {
+  max-width: var(--tasks-reading-measure);
+  margin: 0;
+  font-size: var(--tasks-font-size-reading);
+  line-height: var(--tasks-line-height-reading);
+  overflow-wrap: anywhere;
+}
+
+.numbers {
+  margin: 0;
+  font-size: var(--tasks-font-size-metric-min);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.breadcrumbs {
+  width: 100%;
+  border: 1px solid var(--tasks-border);
+  border-radius: var(--tasks-radius-control);
+}

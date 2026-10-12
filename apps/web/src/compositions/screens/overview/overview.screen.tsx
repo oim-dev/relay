@@ -53,6 +53,7 @@ export const OverviewScreen = () => {
   if (!isDefined(data) && isDefined(error)) {
     return (
       <StatePanel
+        state="error"
         title="Не удалось загрузить обзор"
         titleAs="h1"
         description={getOverviewErrorMessage(error)}
@@ -62,7 +63,9 @@ export const OverviewScreen = () => {
   }
 
   if (!isDefined(data)) {
-    return <StatePanel title="Обзор" titleAs="h1" description="Читаем срез проекта…" isLoading />;
+    return (
+      <StatePanel title="Обзор" titleAs="h1" description="Читаем срез проекта…" state="loading" />
+    );
   }
 
   const refreshError = isDefined(error) ? getOverviewErrorMessage(error) : null;

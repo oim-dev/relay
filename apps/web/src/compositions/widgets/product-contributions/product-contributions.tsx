@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { useState } from "react";
-import { Alert, Button, Group, Text } from "@mantine/core";
+import { Alert, Button, Text } from "@mantine/core";
 import { ArrowUpRight } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { ProductReadiness } from "domains/product-demo";
@@ -8,6 +8,7 @@ import { ProductKey, useProductEntities, productEntityPath } from "domains/produ
 import { useEntities } from "domains/entities";
 import { useProjectId } from "domains/project";
 import { useProductPath } from "compositions/widgets/product-page";
+import { SectionPanel } from "ui/section-panel";
 import { isNonEmptyArray } from "shared/value-predicates";
 import type { ProductContributionsProps } from "./types/product-contributions-props.type";
 import styles from "./styles/product-contributions.module.css";
@@ -65,63 +66,69 @@ export const ProductContributions = (props: ProductContributionsProps) => {
     void metadata.mutate().catch(() => undefined);
   };
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)}>
-      <h2 className={styles.title}>Реализации в приложениях</h2>
-      <Text size="xs" c="dimmed" mb="md" lh={1.7}>
-        Вклад каждого приложения и готовность по его задачам.
-      </Text>
+    <SectionPanel
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      title="Реализации в приложениях"
+      description="Вклад каждого приложения и готовность по его задачам."
+    >
       {hasNoContributions && (
         <Text size="sm" c="dimmed">
           Участие пока не объявлено. Выберите это требование в составе нужного приложения.
         </Text>
       )}
       {isLoading && (
-        <Text role="status" size="sm">
+        <Text size="sm" c="dimmed" role="status">
           Загружаем реализации…
         </Text>
       )}
       {hasError && (
-        <Alert color="orange">
-          Не удалось прочитать реализации.{" "}
-          <Button variant="subtle" size="compact-xs" onClick={handleRetry}>
+        <Alert color="warning" title="Не удалось прочитать реализации">
+          <Button variant="subtle" size="compact-sm" onClick={handleRetry}>
             Повторить
           </Button>
         </Alert>
       )}
-      <ul className={styles.list}>
-        {contributionItems.map((contribution) => (
-          <li key={contribution.id} className={styles.contribution}>
-            <Link to={contribution.href} state={{ returnTo }} className={styles.link}>
-              {contribution.name}
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </Link>
-            <ProductKey value={contribution.key} />
-            <ProductReadiness status={contribution.status} />
-            <p className={styles.description}>
-              {contribution.title || "Заголовок вклада ещё не задан."}
-            </p>
-          </li>
-        ))}
-      </ul>
-      <Group gap="xs" mt="sm">
-        {hasMore && (
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            onClick={() => {
-              setOffset(query.data?.nextOffset ?? 0);
-              setVersion(query.data?.version);
-            }}
-          >
-            Следующие реализации
-          </Button>
-        )}
-        {canGoBack && (
-          <Button size="compact-xs" variant="subtle" onClick={handleRetry}>
-            В начало списка
-          </Button>
-        )}
-      </Group>
-    </section>
+      {isNonEmptyArray(contributionItems) && (
+        <ul className={styles.list}>
+          {contributionItems.map((contribution) => (
+            <li key={contribution.id} className={styles.contribution}>
+              <Link to={contribution.href} state={{ returnTo }} className={styles.link}>
+                {contribution.name}
+                <ArrowUpRight size={15} aria-hidden="true" />
+              </Link>
+              <div className={styles.meta}>
+                <ProductKey value={contribution.key} />
+                <ProductReadiness status={contribution.status} />
+              </div>
+              <p className={styles.description}>
+                {contribution.title || "Заголовок вклада ещё не задан."}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(hasMore || canGoBack) && (
+        <div className={styles.pager}>
+          {hasMore && (
+            <Button
+              size="compact-sm"
+              variant="subtle"
+              onClick={() => {
+                setOffset(query.data?.nextOffset ?? 0);
+                setVersion(query.data?.version);
+              }}
+            >
+              Следующие реализации
+            </Button>
+          )}
+          {canGoBack && (
+            <Button size="compact-sm" variant="subtle" onClick={handleRetry}>
+              В начало списка
+            </Button>
+          )}
+        </div>
+      )}
+    </SectionPanel>
   );
 };

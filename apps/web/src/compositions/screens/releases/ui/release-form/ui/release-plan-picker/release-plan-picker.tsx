@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { Alert, Badge, Button, Checkbox, Select, TextInput } from "@mantine/core";
+import { Alert, Button, Checkbox, Select, Skeleton, TextInput } from "@mantine/core";
 import { Search } from "lucide-react";
 import {
   getPlanSummary,
   PLAN_STATUS_LABELS,
-  PLAN_STATUS_COLORS,
+  PLAN_STATUS_TONES,
   usePlans,
   planStatusFromValue,
 } from "domains/planning";
 import { useProjectId } from "domains/project";
+import { StatusBadge } from "ui/status-badge";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
 import type { ReleasePlanPickerProps } from "./types/release-plan-picker-props.type";
 import styles from "./styles/release-plan-picker.module.css";
@@ -66,7 +67,7 @@ export const ReleasePlanPicker = (props: ReleasePlanPickerProps) => {
           className={styles.search}
           aria-label="Поиск планов для релиза"
           placeholder="Название или ключ плана"
-          leftSection={<Search size={14} />}
+          leftSection={<Search size={16} aria-hidden="true" />}
           value={query}
           onChange={(event) => {
             setQuery(event.currentTarget.value);
@@ -93,13 +94,12 @@ export const ReleasePlanPicker = (props: ReleasePlanPickerProps) => {
       </div>
       {hasHidden && <p className={styles.hidden}>Вне текущего списка выбрано: {hiddenCount}</p>}
       {hasSelection && (
-        <Button size="xs" variant="subtle" onClick={() => onChange([])}>
+        <Button size="xs" variant="subtle" className={styles.clear} onClick={() => onChange([])}>
           Снять весь выбор
         </Button>
       )}
-      {plansQuery.isLoading && <p role="status">Загружаем планы…</p>}
       {hasReadError && (
-        <Alert color="red">
+        <Alert color="danger" title="Планы не прочитаны">
           {plansQuery.error?.message}
           <Button size="xs" variant="subtle" onClick={() => void plansQuery.mutate()}>
             Повторить
@@ -107,6 +107,12 @@ export const ReleasePlanPicker = (props: ReleasePlanPickerProps) => {
         </Alert>
       )}
       <div className={styles.list}>
+        {plansQuery.isLoading && (
+          <div className={styles.loading} role="status" aria-label="Загружаем планы">
+            <Skeleton height={44} />
+            <Skeleton height={44} />
+          </div>
+        )}
         {planItems.map((plan) => (
           <div key={plan.id} className={styles.choice} data-selected={plan.isSelected}>
             <Checkbox
@@ -117,14 +123,9 @@ export const ReleasePlanPicker = (props: ReleasePlanPickerProps) => {
               disabled={plan.isDisabled}
               onChange={(event) => handleSelect(plan.id, event.currentTarget.checked)}
             />
-            <Badge
-              className={styles.badge}
-              color={PLAN_STATUS_COLORS[plan.status]}
-              size="sm"
-              variant="light"
-            >
+            <StatusBadge tone={PLAN_STATUS_TONES[plan.status]}>
               {PLAN_STATUS_LABELS[plan.status]}
-            </Badge>
+            </StatusBadge>
           </div>
         ))}
         {isEmpty && (

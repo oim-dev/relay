@@ -1,0 +1,19 @@
+.states {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--tasks-space-3);
+  width: 100%;
+}
+
+.alerts {
+  display: grid;
+  gap: var(--tasks-space-2);
+  width: 100%;
+}
+
+.skeleton {
+  display: grid;
+  gap: var(--tasks-space-2);
+  width: 100%;
+  max-width: 28rem;
+}

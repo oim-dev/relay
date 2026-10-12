@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, Outlet, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { ActionIcon, Drawer, Group, Select, Text, Tooltip } from "@mantine/core";
 import { ClipboardList, Layers3, Menu, Moon, Settings, Sun } from "lucide-react";
 import {
@@ -11,6 +11,7 @@ import {
 import { useWorkspace } from "domains/workspace";
 import { useThemeColorScheme } from "ui/themes";
 import { ProjectBreadcrumbs } from "compositions/widgets/page-breadcrumbs";
+import { ConnectionStatus } from "./ui/connection-status/connection-status";
 import { ProjectNavigation } from "./ui/project-navigation";
 import styles from "./styles/project.module.css";
 
@@ -28,8 +29,11 @@ export const ProjectLayout = () => {
   const connection = useProjectConnection();
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const [isNavigationOpen, setNavigationOpen] = useState(false);
-  const { colorScheme, setColorScheme } = useThemeColorScheme();
+  const selectorRef = useRef<HTMLInputElement>(null);
+  const hasPlacedFocusRef = useRef(false);
+  const { computedColorScheme, setColorScheme } = useThemeColorScheme();
   const base = useProjectBasePath();
   const currentProject = workspace.data?.projects.find((item) => item.id === projectId);
   const projectName = currentProject?.name ?? project.data?.name ?? "Проект";
@@ -46,20 +50,23 @@ export const ProjectLayout = () => {
     ).values(),
   ];
   const isWorkspace = workspace.data?.mode === "workspace";
-  const isDark = colorScheme === "dark";
+  const isDark = computedColorScheme === "dark";
   const ThemeIcon = isDark ? Sun : Moon;
   const nextTheme = isDark ? "light" : "dark";
-  const state = connection.data?.state ?? "connecting";
-  const connectionLabel = {
-    connected: "Синхронизировано",
-    connecting: "Соединяемся",
-    reconnecting: "Переподключаемся",
-    disconnected: "Нет соединения",
-    "storage-error": "Ошибка хранилища",
-  }[state];
+  const connectionState = connection.data?.state ?? "connecting";
+  const themeLabel = isDark ? "Включить светлую тему" : "Включить тёмную тему";
   const isSettingsPage = location.pathname === `${base}/settings`;
   const settingsVariant = isSettingsPage ? "light" : "subtle";
   const settingsCurrent = isSettingsPage ? "page" : undefined;
+  // Каркас монтируется заново при смене проекта: выбор в шапке или на стартовом экране
+  // удаляет нажатый контрол, и фокус падает на body. После такого перехода фокус
+  // возвращается к выбору проекта; при открытии по прямой ссылке (POP) не трогается.
+  useEffect(() => {
+    if (hasPlacedFocusRef.current || !isWorkspace) return;
+    hasPlacedFocusRef.current = true;
+    const isFocusLost = document.activeElement === null || document.activeElement === document.body;
+    if (navigationType === "PUSH" && isFocusLost) selectorRef.current?.focus();
+  }, [isWorkspace, navigationType]);
   return (
     <div className={styles.root}>
       <header className={styles.header}>
@@ -75,22 +82,21 @@ export const ProjectLayout = () => {
           >
             <Menu size={20} aria-hidden="true" />
           </ActionIcon>
-          <Layers3 size={22} className={styles.brandIcon} />
+          <Layers3 size={22} className={styles.brandIcon} aria-hidden="true" />
           <span className={styles.brand}>Relay</span>
-          <span className={styles.divider}>/</span>
-          <Text
-            className={styles.projectName}
-            data-workspace={isWorkspace}
-            fw={600}
-            size="sm"
-            lineClamp={1}
-          >
-            {projectName}
-          </Text>
+          <span className={styles.divider} aria-hidden="true">
+            /
+          </span>
+          {!isWorkspace && (
+            <Text className={styles.projectName} fw={600} size="sm" lineClamp={1}>
+              {projectName}
+            </Text>
+          )}
           {isWorkspace && (
             <Select
+              ref={selectorRef}
               aria-label="Выбрать проект"
-              size="xs"
+              title={projectName}
               data={projectItems}
               value={currentProject?.slug ?? projectId}
               allowDeselect={false}
@@ -98,25 +104,23 @@ export const ProjectLayout = () => {
                 if (id !== null) navigate(`/projects/${encodeURIComponent(id)}/`);
               }}
               className={styles.selector}
-              comboboxProps={{ width: 260, position: "bottom-start" }}
+              classNames={{ input: styles.selectorInput }}
+              comboboxProps={{ width: 320, position: "bottom-start" }}
             />
           )}
         </Group>
         <Group gap="sm" wrap="nowrap" className={styles.actions}>
-          <Tooltip label={connectionLabel}>
-            <span className={styles.connection} data-state={state} role="status">
-              <span className={styles.dot} />
-              <span className={styles.connectionText}>{connectionLabel}</span>
-            </span>
+          <ConnectionStatus state={connectionState} message={connection.data?.message} />
+          <Tooltip label={themeLabel}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              aria-label={themeLabel}
+              onClick={() => setColorScheme(nextTheme)}
+            >
+              <ThemeIcon size={18} aria-hidden="true" />
+            </ActionIcon>
           </Tooltip>
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            aria-label="Переключить цветовую тему"
-            onClick={() => setColorScheme(nextTheme)}
-          >
-            <ThemeIcon size={17} />
-          </ActionIcon>
           <Tooltip label="Настройки проекта">
             <ActionIcon
               component={Link}
@@ -133,10 +137,12 @@ export const ProjectLayout = () => {
       </header>
       <div className={styles.workspace}>
         <aside className={styles.sidebar}>
-          <div className={styles.sectionLabel}>ПРОЕКТ</div>
+          <p className={styles.sectionLabel} aria-hidden="true">
+            Проект
+          </p>
           <ProjectNavigation basePath={base} />
           <div className={styles.sidebarFooter}>
-            <ClipboardList size={16} />
+            <ClipboardList size={16} aria-hidden="true" />
             <Text size="xs" c="dimmed">
               Общий контекст.
               <br />
@@ -156,7 +162,11 @@ export const ProjectLayout = () => {
         size="min(20rem, calc(100vw - 2rem))"
         title="Разделы проекта"
         closeButtonProps={{ "aria-label": "Закрыть навигацию" }}
-        classNames={{ content: styles.drawer, header: styles.drawerHeader }}
+        classNames={{
+          content: styles.drawer,
+          header: styles.drawerHeader,
+          title: styles.drawerTitle,
+        }}
       >
         <ProjectNavigation basePath={base} onNavigate={() => setNavigationOpen(false)} />
       </Drawer>

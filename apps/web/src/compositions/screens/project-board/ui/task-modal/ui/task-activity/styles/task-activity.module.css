@@ -2,12 +2,12 @@
   min-width: 0;
   height: 100%;
   overflow: auto;
-  padding: 20px 16px;
+  padding: var(--tasks-space-5) var(--tasks-space-4);
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
 
   @media (--sm) {
-    padding: 24px 32px;
+    padding: var(--tasks-space-6) var(--tasks-space-8);
   }
 }
 

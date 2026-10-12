@@ -126,7 +126,6 @@ export const ReleaseForm = (props: ReleaseFormProps) => {
       size="xl"
       attributes={{ header: { role: "presentation" } }}
       closeButtonProps={{ "aria-label": "Свернуть редактор релиза" }}
-      classNames={{ title: styles.modalTitle, body: styles.modalBody }}
     >
       <form
         className={styles.root}
@@ -137,7 +136,7 @@ export const ReleaseForm = (props: ReleaseFormProps) => {
           Выберите, что войдёт в выпуск. Незавершённые планы можно включить заранее.
         </p>
         {hasDraftError && (
-          <Alert color="orange" title="Черновик требует внимания">
+          <Alert color="warning" title="Черновик требует внимания">
             {draftError}
             <Button
               size="xs"
@@ -225,7 +224,7 @@ export const ReleaseForm = (props: ReleaseFormProps) => {
           </Accordion>
         </fieldset>
         {hasPreviewError && (
-          <Alert color="orange" title="Готовность состава недоступна">
+          <Alert color="warning" title="Готовность состава недоступна">
             {preview.error?.message}
             <Button size="xs" variant="subtle" onClick={() => void preview.refresh()}>
               Повторить проверку
@@ -233,7 +232,7 @@ export const ReleaseForm = (props: ReleaseFormProps) => {
           </Alert>
         )}
         {hasError && (
-          <Alert color="red" title="Релиз не сохранён">
+          <Alert color="danger" title="Релиз не сохранён">
             {error}
             <Button
               size="xs"

@@ -3,23 +3,22 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
-  Group,
   Modal,
   NumberInput,
   SegmentedControl,
   Skeleton,
-  Stack,
-  Text,
   ThemeIcon,
-  Title,
   Tooltip,
 } from "@mantine/core";
-import { ArrowLeft, GitFork, Plus, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, GitFork, Plus, RefreshCw } from "lucide-react";
 import { useProjectId, useProjectBasePath } from "domains/project";
 import { useEntitySummary } from "domains/entities";
 import { relationAddress, relationError, saveRelations, useRelations } from "domains/relations";
+import { PageHeader } from "ui/page-header";
+import { PageStage } from "ui/page-stage";
+import { SectionPanel } from "ui/section-panel";
+import { StatePanel } from "ui/state-panel";
 import { EntityBrowser } from "./ui/entity-browser/entity-browser";
 import { RelationEditor } from "./ui/relation-editor/relation-editor";
 import { RelationExplorer } from "./ui/relation-explorer/relation-explorer";
@@ -36,7 +35,7 @@ import styles from "./styles/project-relations.module.css";
 export const ProjectRelationsScreen = () => {
   const projectId = useProjectId();
   const base = useProjectBasePath();
-  const screenRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const [params, setParams] = useSearchParams();
   const root = params.get("root");
   const selection = useEntitySummary(projectId, root);
@@ -82,7 +81,6 @@ export const ProjectRelationsScreen = () => {
   const hasError = error !== null || query.error !== undefined || selection.error !== undefined;
   const errorMessage = error ?? query.error?.message ?? selection.error?.message;
   const canEdit = version !== "" && !hasError && selectedNode !== undefined;
-  const hasNotice = notice !== "";
   const hasGraph = graph !== undefined && selectedAddress !== null && !hasError;
   const hasEditor = editorData !== null;
   const hasBoundary = isChain && graph?.depthLimited === true;
@@ -106,7 +104,7 @@ export const ProjectRelationsScreen = () => {
     setParams(address === null ? {} : { root: address });
     setError(null);
     setNotice("");
-    screenRef.current?.scrollIntoView({ block: "start" });
+    titleRef.current?.scrollIntoView({ block: "start" });
   };
   /**
    * Сохраняет режим в URL, чтобы возврат восстанавливал область чтения.
@@ -153,68 +151,55 @@ export const ProjectRelationsScreen = () => {
   const createLabel = hasEditor ? "Продолжить диагностику" : "Диагностическое ребро";
   const visualizationHref = `${base}/relations/context?${new URLSearchParams({ root: selectedAddress ?? "" })}`;
   const canVisualize = selectedNode !== undefined;
+  const kindMeta = (
+    <span className={styles.kind}>
+      <ThemeIcon variant="light" color="accent" size={28}>
+        <presentation.icon size={16} aria-hidden="true" />
+      </ThemeIcon>
+      <span>
+        {presentation.label} · {selectedNode?.key ?? root}
+      </span>
+    </span>
+  );
   return (
-    <section ref={screenRef} className={styles.root}>
-      <div className={styles.header}>
-        <div>
-          <Title order={1} size="h2">
-            Связи проекта
-          </Title>
-          <Text c="dimmed" size="sm" mt={4}>
-            Найдите сущность и проследите, как она связана с остальным проектом.
-          </Text>
-        </div>
-        <Tooltip
-          label="Обновить связи и выбранную сущность"
-          events={{ hover: true, focus: true, touch: false }}
-        >
-          <ActionIcon
-            variant="default"
-            size="lg"
-            aria-label="Обновить связи"
-            disabled={!hasSelection}
-            loading={query.isValidating}
-            onClick={handleRefresh}
+    <PageStage className={styles.stage}>
+      <PageHeader
+        title="Связи проекта"
+        titleRef={titleRef}
+        description="Найдите сущность и проследите, как она связана с остальным проектом."
+        actionsLayout="inline"
+        actions={
+          <Tooltip
+            label="Обновить связи и выбранную сущность"
+            events={{ hover: true, focus: true, touch: false }}
           >
-            <RefreshCw size={16} aria-hidden="true" />
-          </ActionIcon>
-        </Tooltip>
-      </div>
+            <ActionIcon
+              variant="default"
+              size="lg"
+              aria-label="Обновить связи"
+              disabled={!hasSelection}
+              loading={query.isValidating}
+              onClick={handleRefresh}
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+            </ActionIcon>
+          </Tooltip>
+        }
+      />
       <div className={styles.workspace}>
         <aside className={styles.catalog} data-hidden={hasSelection}>
           <EntityBrowser projectId={projectId} selected={selectedAddress} onSelect={handleSelect} />
         </aside>
         <div className={styles.content}>
           {hasNoSelection && (
-            <div className={styles.welcome}>
-              <ThemeIcon variant="light" color="gray" size={64} radius="xl">
-                <GitFork size={30} aria-hidden="true" />
-              </ThemeIcon>
-              <Title order={2} size="h3">
-                У каждой связи есть отправная точка
-              </Title>
-              <Text c="dimmed" size="sm" maw={420}>
-                Выберите сущность в каталоге. Здесь будут её зависимости, состав, реализации и
-                связанные материалы.
-              </Text>
-              <div className={styles.steps}>
-                <Group gap="sm">
-                  <Search size={16} aria-hidden="true" />
-                  <Text size="sm">Найдите по названию или ключу</Text>
-                </Group>
-                <Group gap="sm">
-                  <GitFork size={16} aria-hidden="true" />
-                  <Text size="sm">Исследуйте связи и переходите к соседям</Text>
-                </Group>
-                <Group gap="sm">
-                  <Plus size={16} aria-hidden="true" />
-                  <Text size="sm">Проверьте сохранённые предметные отношения</Text>
-                </Group>
-              </div>
-            </div>
+            <StatePanel
+              className={styles.welcome}
+              title="У каждой связи есть отправная точка"
+              description="Выберите сущность в каталоге: найдите её по названию или ключу, затем исследуйте зависимости, состав, реализации и материалы и переходите к соседям."
+            />
           )}
           {hasSelection && (
-            <Stack gap="lg">
+            <>
               <Button
                 variant="subtle"
                 color="gray"
@@ -225,112 +210,99 @@ export const ProjectRelationsScreen = () => {
               >
                 К выбору сущности
               </Button>
-              <section className={styles.focus} aria-label="Выбранная сущность">
-                <Group wrap="nowrap" align="flex-start">
-                  <ThemeIcon color={presentation.color} variant="light" radius="md" size={44}>
-                    <presentation.icon size={23} aria-hidden="true" />
-                  </ThemeIcon>
-                  <div className={styles.focusTitle}>
-                    <Group gap="xs">
-                      <Text size="xs" c="dimmed">
-                        {selectedNode?.key ?? root}
-                      </Text>
-                      <Badge size="sm" variant="light" color={presentation.color} tt="none">
-                        {presentation.label}
-                      </Badge>
-                    </Group>
-                    <Title order={2} size="h3" mt={7}>
-                      {selectedTitle}
-                    </Title>
-                  </div>
-                </Group>
-                <Group gap="xs" className={styles.create}>
-                  {canVisualize && (
+              <SectionPanel
+                tone="feature-header"
+                title={selectedTitle}
+                description={kindMeta}
+                actions={
+                  <>
+                    {canVisualize && (
+                      <Button
+                        component={Link}
+                        to={visualizationHref}
+                        variant="light"
+                        color="accent"
+                        leftSection={<GitFork size={16} aria-hidden="true" />}
+                      >
+                        Смотреть визуализацию связей
+                      </Button>
+                    )}
                     <Button
-                      component={Link}
-                      to={visualizationHref}
-                      variant="light"
-                      leftSection={<GitFork size={16} aria-hidden="true" />}
+                      leftSection={<Plus size={16} aria-hidden="true" />}
+                      disabled={!canEdit && !hasEditor}
+                      onClick={handleCreate}
+                      variant="default"
                     >
-                      Смотреть визуализацию связей
+                      {createLabel}
                     </Button>
+                  </>
+                }
+              >
+                <div className={styles.viewBar}>
+                  <SegmentedControl
+                    aria-label="Область связей"
+                    size="sm"
+                    value={mode}
+                    onChange={handleMode}
+                    data={[
+                      { value: "direct", label: "Связи сущности" },
+                      { value: "chain", label: "Цепочка связей" },
+                    ]}
+                  />
+                  {isChain && (
+                    <NumberInput
+                      aria-label="Глубина цепочки"
+                      prefix="Шагов: "
+                      min={2}
+                      max={100}
+                      allowDecimal={false}
+                      value={depth}
+                      w={130}
+                      onChange={(value) => {
+                        const nextParams = new URLSearchParams(params);
+                        nextParams.set("depth", String(value));
+                        setParams(nextParams, { replace: true });
+                      }}
+                    />
                   )}
-                  <Button
-                    leftSection={<Plus size={16} aria-hidden="true" />}
-                    disabled={!canEdit && !hasEditor}
-                    onClick={handleCreate}
-                    variant="default"
-                  >
-                    {createLabel}
-                  </Button>
-                </Group>
-              </section>
-              <div className={styles.viewBar}>
-                <SegmentedControl
-                  aria-label="Область связей"
-                  size="sm"
-                  value={mode}
-                  onChange={handleMode}
-                  data={[
-                    { value: "direct", label: "Связи сущности" },
-                    { value: "chain", label: "Цепочка связей" },
-                  ]}
-                />
-                {isChain && (
-                  <NumberInput
-                    aria-label="Глубина цепочки"
-                    prefix="Шагов: "
-                    min={2}
-                    max={100}
-                    allowDecimal={false}
-                    value={depth}
-                    w={130}
-                    onChange={(value) => {
-                      const nextParams = new URLSearchParams(params);
-                      nextParams.set("depth", String(value));
-                      setParams(nextParams, { replace: true });
-                    }}
+                </div>
+                <p className={styles.notice} role="status">
+                  {notice}
+                </p>
+                {hasError && (
+                  <Alert color="danger" title="Не удалось получить актуальные связи" role="alert">
+                    {errorMessage}
+                    <Button variant="subtle" color="gray" mt="xs" onClick={handleRefresh}>
+                      Повторить с начала
+                    </Button>
+                  </Alert>
+                )}
+                {isLoading && (
+                  <div className={styles.loading} role="status" aria-label="Загрузка связей">
+                    <Skeleton h={100} />
+                    <Skeleton h={100} />
+                  </div>
+                )}
+                {hasBoundary && (
+                  <p className={styles.hint}>
+                    Показана цепочка до {depth} шагов. Чтобы идти дальше, выберите соседнюю сущность
+                    или увеличьте глубину.
+                  </p>
+                )}
+                {hasGraph && (
+                  <RelationExplorer
+                    key={scope}
+                    graph={graph}
+                    root={selectedAddress}
+                    isChain={isChain}
+                    offset={currentPage.offset}
+                    onSelect={handleSelect}
+                    onRemove={handleRemove}
+                    onPage={(offset) => setPage({ scope, offset, version })}
                   />
                 )}
-              </div>
-              {hasNotice && (
-                <Text size="sm" role="status" c="teal">
-                  {notice}
-                </Text>
-              )}
-              {hasError && (
-                <Alert color="red" title="Не удалось получить актуальные связи" role="alert">
-                  {errorMessage}
-                  <Button variant="subtle" onClick={handleRefresh}>
-                    Повторить с начала
-                  </Button>
-                </Alert>
-              )}
-              {isLoading && (
-                <Stack aria-label="Загрузка связей">
-                  <Skeleton h={100} />
-                  <Skeleton h={100} />
-                </Stack>
-              )}
-              {hasBoundary && (
-                <Text size="xs" c="dimmed">
-                  Показана цепочка до {depth} шагов. Чтобы идти дальше, выберите соседнюю сущность
-                  или увеличьте глубину.
-                </Text>
-              )}
-              {hasGraph && (
-                <RelationExplorer
-                  key={scope}
-                  graph={graph}
-                  root={selectedAddress}
-                  isChain={isChain}
-                  offset={currentPage.offset}
-                  onSelect={handleSelect}
-                  onRemove={handleRemove}
-                  onPage={(offset) => setPage({ scope, offset, version })}
-                />
-              )}
-            </Stack>
+              </SectionPanel>
+            </>
           )}
         </div>
       </div>
@@ -361,6 +333,6 @@ export const ProjectRelationsScreen = () => {
           </Modal.Body>
         </Modal.Content>
       </Modal.Root>
-    </section>
+    </PageStage>
   );
 };

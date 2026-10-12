@@ -24,10 +24,10 @@
   gap: 0.125rem 0.5rem;
   min-height: 2.75rem;
   padding: 0.625rem 0.875rem;
-  border-radius: 0.875rem;
+  border-radius: var(--tasks-radius-row);
   background: var(--tasks-tile);
   color: var(--tasks-ink);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
   text-decoration: none;
 
   &:hover {
@@ -50,7 +50,7 @@
   grid-area: prefix;
   min-width: 0;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   font-weight: 550;
   overflow-wrap: break-word;
 }
@@ -66,7 +66,7 @@
 .count {
   grid-area: count;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -74,7 +74,7 @@
 .note {
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
 }
 
 .error {
@@ -82,7 +82,7 @@
   justify-items: start;
   gap: 0.375rem;
   color: var(--tasks-ink);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 
   & p {
     margin: 0;

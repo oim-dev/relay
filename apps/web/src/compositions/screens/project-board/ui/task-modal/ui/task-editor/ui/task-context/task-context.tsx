@@ -3,7 +3,6 @@ import { useRef, useState } from "react";
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
   Checkbox,
   Group,
@@ -27,6 +26,7 @@ import { useEntityContent, entityKindLabel } from "domains/entities";
 import { useDebouncedValue } from "@mantine/hooks";
 import { BoardTaskError, updateBoardTask, useBoardTaskRefresh } from "domains/board-tasks";
 import { MarkdownView } from "ui/markdown-view";
+import { SectionPanel } from "ui/section-panel";
 import { isEmptyArray } from "shared/value-predicates";
 import type { TaskContextProps } from "./types/task-context-props.type";
 import styles from "./styles/task-context.module.css";
@@ -119,12 +119,6 @@ export const TaskContext = (props: TaskContextProps) => {
       path: option?.path ?? "Продуктовая цель недоступна",
       label: option?.kind ?? "Связь",
       Icon: option?.requirementKind === "scenario" ? Route : Puzzle,
-      toneClassName:
-        option?.requirementKind === "scenario"
-          ? styles._scenario
-          : option?.requirementKind === "feature"
-            ? styles._feature
-            : undefined,
       isInactive: option !== undefined && !option.isActive,
     };
   });
@@ -160,7 +154,7 @@ export const TaskContext = (props: TaskContextProps) => {
   const hasMore = product.hasMore;
   const hasMoreLinks = task.productLinks.length > visibleLinks;
   const isEmpty = isEmptyArray(task.productLinks);
-  const hasLinks = !isEmpty;
+  const linkCount = isEmpty ? undefined : task.productLinks.length;
   const isEmptySearch =
     isEmptyArray(candidateItems) &&
     !product.isLoading &&
@@ -227,38 +221,32 @@ export const TaskContext = (props: TaskContextProps) => {
   };
   if (defect !== undefined) throw defect;
   return (
-    <div {...rootAttrs} className={clsx(styles.root, className)}>
-      <Group justify="space-between" mb="sm">
-        <Group gap="xs">
-          <Text fw={600} size="sm">
-            {heading}
-          </Text>
-          {hasLinks && (
-            <Badge variant="light" color="gray" size="sm">
-              {task.productLinks.length}
-            </Badge>
-          )}
-        </Group>
+    <SectionPanel
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      titleAs="h3"
+      title={heading}
+      count={linkCount}
+      actions={
         <Button
-          size="xs"
-          variant="subtle"
-          color="gray"
-          leftSection={<Plus size={14} />}
+          variant="default"
+          leftSection={<Plus size={16} aria-hidden="true" />}
           onClick={handleChoose}
           disabled={isBusy || !canChoose}
         >
           Связать
         </Button>
-      </Group>
+      }
+    >
       {isEmpty && (
         <Text size="sm" c="dimmed">
           {emptyText}
         </Text>
       )}
-      <Stack gap="xs">
+      <Stack gap="xs" className={styles.links}>
         {linkedItems.map((item) => (
-          <Group key={item.id} wrap="nowrap" className={clsx(styles.option, item.toneClassName)}>
-            <span className={clsx(styles.symbol, item.toneClassName)}>
+          <Group key={item.id} wrap="nowrap" className={styles.option}>
+            <span className={styles.symbol}>
               <item.Icon size={17} aria-hidden="true" />
             </span>
             <UnstyledButton
@@ -278,7 +266,7 @@ export const TaskContext = (props: TaskContextProps) => {
               </Text>
               <ProductKey value={item.key} />
               {item.isInactive && (
-                <Text size="xs" c="orange">
+                <Text size="xs" c="warning">
                   Участие приложения снято
                 </Text>
               )}
@@ -290,7 +278,7 @@ export const TaskContext = (props: TaskContextProps) => {
               disabled={isBusy || isChoosing}
               onClick={() => void handleRemove(item.id)}
             >
-              <X size={14} />
+              <X size={16} aria-hidden="true" />
             </ActionIcon>
           </Group>
         ))}
@@ -373,7 +361,7 @@ export const TaskContext = (props: TaskContextProps) => {
               <div className={styles.preview}>
                 {!hasPreview && (
                   <Stack gap="sm">
-                    <FileText size={22} />
+                    <FileText size={24} aria-hidden="true" className={styles.previewIcon} />
                     <Text size="sm" fw={500}>
                       Сначала прочитайте требования
                     </Text>
@@ -438,12 +426,12 @@ export const TaskContext = (props: TaskContextProps) => {
         </form>
       )}
       {hasError && (
-        <Alert color="red" mt="sm" title="Связи не сохранены">
+        <Alert color="danger" title="Связи не сохранены">
           {error}
         </Alert>
       )}
       {product.error !== undefined && (
-        <Alert color="red" mt="sm">
+        <Alert color="danger">
           Продукт недоступен.{" "}
           <Button variant="subtle" onClick={() => void product.mutate().catch(() => undefined)}>
             Повторить
@@ -451,7 +439,7 @@ export const TaskContext = (props: TaskContextProps) => {
         </Alert>
       )}
       {linked.error !== undefined && (
-        <Alert color="red" mt="sm">
+        <Alert color="danger">
           Не удалось прочитать сведения о связях.{" "}
           <Button variant="subtle" onClick={() => void linked.mutate()}>
             Повторить
@@ -459,7 +447,7 @@ export const TaskContext = (props: TaskContextProps) => {
         </Alert>
       )}
       {details.error !== undefined && (
-        <Alert color="red" mt="sm">
+        <Alert color="danger">
           Описание недоступно.{" "}
           <Button variant="subtle" onClick={() => void details.mutate()}>
             Повторить
@@ -475,12 +463,12 @@ export const TaskContext = (props: TaskContextProps) => {
               variant="subtle"
               onClick={() => setSelectedId(null)}
             >
-              <X size={16} />
+              <X size={16} aria-hidden="true" />
             </ActionIcon>
           </Group>
           {context.isLoading && <Text role="status">Загружаем требования…</Text>}
           {context.error !== undefined && (
-            <Alert color="red">
+            <Alert color="danger">
               {context.error.message}{" "}
               <Button variant="subtle" onClick={() => void context.mutate().catch(() => undefined)}>
                 Повторить
@@ -512,7 +500,7 @@ export const TaskContext = (props: TaskContextProps) => {
                 onClick={() => setDocumentId(entry.id)}
               >
                 <Group gap="xs">
-                  <FileText size={16} />
+                  <FileText size={16} aria-hidden="true" />
                   <Text size="sm" fw={500}>
                     {entry.title}
                   </Text>
@@ -532,7 +520,7 @@ export const TaskContext = (props: TaskContextProps) => {
             <Text role="status">Загружаем полный текст выбранной сущности…</Text>
           )}
           {hasContentError && (
-            <Alert color="red" mt="sm">
+            <Alert color="danger" mt="sm">
               {content.error?.message}
               <Button variant="subtle" onClick={() => void content.mutate()}>
                 Повторить
@@ -543,7 +531,7 @@ export const TaskContext = (props: TaskContextProps) => {
             <Stack gap="md" mt="md">
               <Button
                 variant="subtle"
-                leftSection={<ArrowLeft size={14} />}
+                leftSection={<ArrowLeft size={16} aria-hidden="true" />}
                 onClick={() => setDocumentId(null)}
               >
                 Свернуть материал
@@ -554,6 +542,6 @@ export const TaskContext = (props: TaskContextProps) => {
           )}
         </section>
       )}
-    </div>
+    </SectionPanel>
   );
 };

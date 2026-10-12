@@ -1,11 +1,11 @@
-import { useEffect, useId, useRef, useState } from "react";
-import clsx from "clsx";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Drawer, Skeleton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Library, Plus } from "lucide-react";
+import { Library, Plus } from "lucide-react";
 import { MATERIAL_TARGET_KINDS, useEntityMaterials } from "domains/documents";
 import { useProjectBasePath, useProjectId } from "domains/project";
+import { SectionPanel } from "ui/section-panel";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
 import { MaterialEntry } from "./ui/material-entry/material-entry";
 import { MaterialPicker } from "./ui/material-picker";
@@ -31,7 +31,6 @@ export const EntityDocuments = (props: EntityDocumentsProps) => {
   const base = useProjectBasePath();
   const location = useLocation();
   const isWide = useMediaQuery("(min-width: 48em)");
-  const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const returnTarget = useRef<HTMLElement | null>(null);
   const reference = `${target.kind}:${target.id}`;
@@ -98,22 +97,18 @@ export const EntityDocuments = (props: EntityDocumentsProps) => {
     if (shouldFocusHeading) headingRef.current?.focus();
   };
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)} aria-labelledby={titleId}>
-      <header className={styles.heading}>
-        <div className={styles.titleGroup}>
-          <h2 id={titleId} ref={headingRef} className={styles.title} tabIndex={-1}>
-            <BookOpen size={17} aria-hidden="true" />
-            Материалы
-            <span className={styles.count}>{total}</span>
-          </h2>
-          <p className={styles.hint}>
-            Прикреплены именно к этой записи: материалы родителя здесь не повторяются.
-          </p>
-        </div>
-        <div className={styles.actions}>
+    <SectionPanel
+      {...rootAttrs}
+      className={className}
+      title="Материалы"
+      titleRef={headingRef}
+      count={total}
+      description="Прикреплены именно к этой записи: материалы родителя здесь не повторяются."
+      actions={
+        <>
           <Button
-            size="sm"
             variant="light"
+            color="accent"
             leftSection={<Library size={14} aria-hidden="true" />}
             aria-haspopup="dialog"
             onClick={() => {
@@ -127,23 +122,24 @@ export const EntityDocuments = (props: EntityDocumentsProps) => {
           <Button
             component={Link}
             to={createHref}
-            size="sm"
             variant="default"
             leftSection={<Plus size={14} aria-hidden="true" />}
           >
             Создать материал
           </Button>
-        </div>
-      </header>
+        </>
+      }
+    >
       <p className={styles.notice} role="status" aria-live="polite">
         {notice}
       </p>
       {hasError && (
-        <Alert color="orange" title="Не удалось прочитать материалы" className={styles.alert}>
+        <Alert color="warning" title="Не удалось прочитать материалы">
           {response.error?.message}
           <Button
             size="xs"
             variant="subtle"
+            color="gray"
             mt="xs"
             onClick={() => void response.mutate().catch(() => undefined)}
           >
@@ -187,8 +183,8 @@ export const EntityDocuments = (props: EntityDocumentsProps) => {
         <Button
           variant="subtle"
           color="gray"
-          size="xs"
-          mt="sm"
+          size="sm"
+          className={styles.more}
           loading={isLoadingMore}
           onClick={() => void response.setSize(response.size + 1)}
         >
@@ -218,6 +214,6 @@ export const EntityDocuments = (props: EntityDocumentsProps) => {
       >
         {previewId !== null && <MaterialPreview materialId={previewId} returnTo={returnTo} />}
       </Drawer>
-    </section>
+    </SectionPanel>
   );
 };

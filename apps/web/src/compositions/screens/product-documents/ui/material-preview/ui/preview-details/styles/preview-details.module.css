@@ -18,13 +18,13 @@
   min-width: 0;
   padding: 1rem;
   border: 1px solid var(--tasks-border);
-  border-radius: 1.25rem;
+  border-radius: var(--tasks-radius-metric);
   background: var(--tasks-card);
 }
 
 .heading {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   font-weight: 700;
 }
 
@@ -32,7 +32,7 @@
   display: grid;
   gap: 0.375rem;
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 }
 
 .property {
@@ -63,7 +63,7 @@
 .empty {
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 }
 
 .usage {
@@ -78,19 +78,19 @@
   display: grid;
   gap: 0.125rem;
   padding: 0.5rem 0.75rem;
-  border-radius: 0.75rem;
+  border-radius: var(--tasks-radius-compact);
   background: var(--tasks-tile);
 }
 
 .usageTitle {
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
 .usageMeta {
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
 }
 
 .content {

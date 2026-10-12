@@ -2,7 +2,7 @@
 .root {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem 0.75rem;
+  gap: var(--tasks-space-2) var(--tasks-space-3);
 
   @media (--sm) {
     grid-template-columns: repeat(3, minmax(0, 1fr));

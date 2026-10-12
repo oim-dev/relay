@@ -2,7 +2,7 @@ import { Alert, Button, Drawer, Group, Skeleton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { ArrowUpRight, Pencil } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useDocument, useLibrarySettings } from "domains/documents";
+import { DocumentNotFoundError, useDocument, useLibrarySettings } from "domains/documents";
 import { useProjectId } from "domains/project";
 import { isDefined } from "shared/value-predicates";
 import { PreviewDetails } from "./ui/preview-details/preview-details";
@@ -28,6 +28,19 @@ export const MaterialPreview = (props: MaterialPreviewProps) => {
     "Без раздела";
   const isLoading = !isDefined(documentData) && !isDefined(query.error);
   const hasError = !isDefined(documentData) && isDefined(query.error);
+  const isMissing = query.error instanceof DocumentNotFoundError;
+  const readError = isMissing ? (
+    <Alert color="gray" title="Материал не найден">
+      Материала больше нет в проекте: его удалили или адрес устарел.
+    </Alert>
+  ) : (
+    <Alert color="warning" title="Не удалось прочитать материал">
+      {query.error?.message}
+      <Button size="xs" variant="subtle" onClick={() => void query.mutate()}>
+        Повторить чтение
+      </Button>
+    </Alert>
+  );
   const drawerSize = isWide ? "36rem" : "100%";
   return (
     <Drawer
@@ -49,7 +62,6 @@ export const MaterialPreview = (props: MaterialPreviewProps) => {
           component={Link}
           to={href}
           state={{ returnTo }}
-          radius="xl"
           rightSection={<ArrowUpRight size={15} aria-hidden="true" />}
         >
           Открыть полностью
@@ -59,7 +71,6 @@ export const MaterialPreview = (props: MaterialPreviewProps) => {
           to={`${href}/edit`}
           state={{ returnTo }}
           variant="default"
-          radius="xl"
           leftSection={<Pencil size={14} aria-hidden="true" />}
         >
           Редактировать
@@ -72,14 +83,7 @@ export const MaterialPreview = (props: MaterialPreviewProps) => {
           <Skeleton height={180} />
         </div>
       )}
-      {hasError && (
-        <Alert color="orange" title="Не удалось прочитать материал">
-          {query.error?.message}
-          <Button size="xs" variant="subtle" onClick={() => void query.mutate()}>
-            Повторить чтение
-          </Button>
-        </Alert>
-      )}
+      {hasError && readError}
       {isDefined(documentData) && (
         <PreviewDetails document={documentData} sectionName={sectionName} />
       )}

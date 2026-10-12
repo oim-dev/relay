@@ -1,5 +1,6 @@
 export { useProduct } from "./hooks/use-product.hook";
 export { getProduct, saveProduct, productError } from "./adapters/product.adapter";
+export { ProductNotFoundError } from "./errors/product-errors";
 export type { ProductState, ProductLink, ProductInput, ProductCommand } from "./types/product.type";
 export { PRODUCT_LINK_SCHEMA, APPLICATION_SLUG_SCHEMA } from "./config/product.schema";
 export {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Badge, Button, Drawer, Group, Loader, Text } from "@mantine/core";
+import { Alert, Button, Drawer, Group, Loader, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Info, RefreshCw } from "lucide-react";
 import {
@@ -10,6 +10,7 @@ import {
 } from "domains/relations";
 import type { RelationDiagramRequest } from "domains/relations";
 import { StatePanel } from "ui/state-panel";
+import { StatusBadge } from "ui/status-badge";
 import { isDefined, isEmptyArray, isNonEmptyArray } from "shared/value-predicates";
 import { ContextCanvas } from "../context-canvas";
 import { ContextInspector } from "../context-inspector/context-inspector";
@@ -183,9 +184,9 @@ export const ContextExplorer = ({
       <div className={styles.summary}>
         <div className={styles.identity}>
           <Text size="xs" c="dimmed">
-            {graph?.root.key ?? root}
+            Исходная · {graph?.root.key ?? root}
           </Text>
-          <Text fw={600}>{graph?.root.title ?? "Исходная сущность"}</Text>
+          <h2 className={styles.rootTitle}>{graph?.root.title ?? "Исходная сущность"}</h2>
           {hasGraph && (
             <Text size="xs" c="dimmed">
               Загружено: сущностей — {graph.nodes.length} · связей — {graph.edges.length}
@@ -196,8 +197,8 @@ export const ContextExplorer = ({
           {isMobileInspector && (
             <Button
               variant="default"
-              size="xs"
-              leftSection={<Info size={15} />}
+              size="sm"
+              leftSection={<Info size={15} aria-hidden="true" />}
               onClick={() => setInspectorOpen(true)}
               disabled={!hasGraph}
             >
@@ -206,8 +207,8 @@ export const ContextExplorer = ({
           )}
           <Button
             variant="default"
-            size="xs"
-            leftSection={<RefreshCw size={15} />}
+            size="sm"
+            leftSection={<RefreshCw size={15} aria-hidden="true" />}
             onClick={handleRefresh}
             loading={query.isValidating}
           >
@@ -216,21 +217,21 @@ export const ContextExplorer = ({
         </Group>
       </div>
       {hasError && (
-        <Alert color="orange" title="Не удалось обновить контекст" role="alert">
+        <Alert color="warning" title="Не удалось обновить контекст" role="alert">
           {query.error?.message}
           {hasGraph && (
             <Text size="sm" mt="xs">
               Ниже оставлен предыдущий согласованный снимок.
             </Text>
           )}
-          <Button variant="subtle" size="xs" onClick={handleRefresh}>
+          <Button variant="subtle" color="gray" size="xs" mt="xs" onClick={handleRefresh}>
             Повторить загрузку контекста
           </Button>
         </Alert>
       )}
       {hasNoGraphLoading && (
         <StatePanel
-          isLoading
+          state="loading"
           title="Загружаем контекст"
           description="Читаем исходную сущность и сохранённые связи."
         />
@@ -239,11 +240,7 @@ export const ContextExplorer = ({
         <>
           <div className={styles.boundaries} role="status">
             {query.isValidating && <Loader size="xs" />}
-            {hasMore && (
-              <Badge variant="light" color="orange" tt="none">
-                Есть непрочитанные страницы
-              </Badge>
-            )}
+            {hasMore && <StatusBadge tone="warning">Есть непрочитанные страницы</StatusBadge>}
             {hasDepthBoundary && (
               <Text size="xs">
                 Контекст показан частично: есть связи за выбранной глубиной. Раскройте узел или
@@ -271,7 +268,7 @@ export const ContextExplorer = ({
           )}
           {hasPathLabel && (
             <Alert
-              color="teal"
+              color="info"
               title="Путь включения"
               withCloseButton
               onClose={() => setPathShown(false)}
@@ -328,6 +325,7 @@ export const ContextExplorer = ({
                 <Button
                   key={region.root}
                   variant="light"
+                  color="accent"
                   size="xs"
                   disabled={isBusy || !hasBudget}
                   onClick={() => handleContinue(region.root)}

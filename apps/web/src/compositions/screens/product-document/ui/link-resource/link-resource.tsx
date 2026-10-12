@@ -65,7 +65,6 @@ export const LinkResource = (props: LinkResourceProps) => {
             href={webUrl.href}
             target="_blank"
             rel="noopener noreferrer"
-            radius="xl"
             size="md"
             rightSection={<ExternalLink size={16} aria-hidden="true" />}
           >
@@ -75,7 +74,6 @@ export const LinkResource = (props: LinkResourceProps) => {
         )}
         <Button
           variant="default"
-          radius="xl"
           size="md"
           leftSection={<CopyIcon size={15} aria-hidden="true" />}
           onClick={handleCopy}

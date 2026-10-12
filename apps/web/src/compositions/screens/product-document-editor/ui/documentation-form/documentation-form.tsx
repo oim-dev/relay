@@ -34,6 +34,7 @@ import type { DocumentInput } from "domains/documents";
 import { useProjectBasePath, useProjectId } from "domains/project";
 import { readSessionStored, removeSessionStored, writeSessionStored } from "infra/browser-storage";
 import { MarkdownField } from "ui/markdown-field";
+import { PageHeader } from "ui/page-header";
 import { isDefined } from "shared/value-predicates";
 import { DOCUMENTATION_DRAFT_SCHEMA } from "./config/documentation-draft.schema";
 import { AttachmentTarget } from "./ui/attachment-target/attachment-target";
@@ -152,7 +153,7 @@ export const DocumentationForm = (props: DocumentationFormProps) => {
   const bodyPlaceholder = isLink
     ? "Что важно знать о ресурсе: какая часть актуальна, доступы, ограничения"
     : "## Задача\nЧто должно получиться и для кого.\n\n## Ожидаемое поведение\n1. …\n\n## Критерии приёмки\n- [ ] …";
-  const saveErrorColor = isConflictError ? "orange" : "red";
+  const saveErrorColor = isConflictError ? "warning" : "danger";
   useEffect(() => {
     document.title = `${title} · Relay`;
     // Экран открывается с начала: прокрутка предыдущей страницы не прячет заголовок и поля.
@@ -282,15 +283,11 @@ export const DocumentationForm = (props: DocumentationFormProps) => {
       noValidate
       onSubmit={form.onSubmit(handleSubmit, handleInvalid)}
     >
-      <header className={styles.header}>
-        <h1 ref={headingRef} tabIndex={-1} className={styles.heading}>
-          {title}
-        </h1>
-        <p className={styles.lead}>
-          Материал — документ в Markdown или ссылка на внешний ресурс. Тип, раздел и теги помогут
-          найти его, а прикрепления — держать под рукой там, где он нужен.
-        </p>
-      </header>
+      <PageHeader
+        title={title}
+        titleRef={headingRef}
+        description="Материал — документ в Markdown или ссылка на внешний ресурс. Тип, раздел и теги помогут найти его, а прикрепления — держать под рукой там, где он нужен."
+      />
       {hasRestoredDraft && (
         <Alert color="gray">
           Восстановлена локальная копия этой вкладки. Сохраните материал, чтобы правки стали
@@ -298,7 +295,7 @@ export const DocumentationForm = (props: DocumentationFormProps) => {
         </Alert>
       )}
       {hasConflict && (
-        <Alert color="orange" title="Материал изменился" role="alert">
+        <Alert color="warning" title="Материал изменился" role="alert">
           Пока вы редактировали, материал сохранили в другом месте. Ваш ввод не потерян.
           <Group gap="xs" mt="sm">
             <Button size="xs" variant="default" onClick={handleKeepDraft}>
@@ -311,7 +308,7 @@ export const DocumentationForm = (props: DocumentationFormProps) => {
         </Alert>
       )}
       {!canPersist && (
-        <Alert color="orange" role="alert">
+        <Alert color="warning" role="alert">
           Не удалось сохранить черновик в браузере. Не закрывайте страницу до сохранения.
         </Alert>
       )}
@@ -466,7 +463,6 @@ export const DocumentationForm = (props: DocumentationFormProps) => {
         <Group gap="xs">
           <Button
             variant="default"
-            radius="xl"
             disabled={form.submitting}
             onClick={() => {
               if (isDirty) setDiscardOpen(true);
@@ -477,7 +473,6 @@ export const DocumentationForm = (props: DocumentationFormProps) => {
           </Button>
           <Button
             type="submit"
-            radius="xl"
             loading={form.submitting}
             leftSection={<Check size={16} aria-hidden="true" />}
           >

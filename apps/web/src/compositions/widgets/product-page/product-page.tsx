@@ -1,24 +1,32 @@
-import clsx from "clsx";
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
+import { PageHeader } from "ui/page-header";
+import { PageStage } from "ui/page-stage";
+import { isDefined } from "shared/value-predicates";
 import type { ProductPageProps } from "./types/product-page-props.type";
 import styles from "./styles/product-page.module.css";
 
 /**
- * Задаёт ритм чтения и возврат между страницами продукта.
+ * Размещает страницу продукта на общей сцене: шапка с контекстом и действиями, затем содержание.
+ * При входе объявляет страницу фокусом на заголовке или переходит к разделу из адреса.
  *
  * Используется для:
- *  - размещения восстановленных экранов внутри общего каркаса Relay
+ *  - каталогов, карточек и редакторов паспорта, фич, сценариев и приложений
  */
 export const ProductPage = (props: ProductPageProps) => {
-  const { children, className, title, description, actions, meta, ...rootAttrs } = props;
-  // Совместимые прежние параметры не являются атрибутами DOM.
-  delete rootAttrs.eyebrow;
-  delete rootAttrs.backTo;
-  delete rootAttrs.backState;
-  delete rootAttrs.backLabel;
+  const {
+    children,
+    title,
+    description,
+    meta,
+    actions,
+    actionsLayout = "inline",
+    ...rootAttrs
+  } = props;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const location = useLocation();
+  const shownDescription = description === "" ? undefined : description;
+  const shownMeta = isDefined(meta) ? <span className={styles.meta}>{meta}</span> : undefined;
   useEffect(() => {
     document.title = `${title} · Relay`;
     const target = document.getElementById(location.hash.slice(1));
@@ -30,18 +38,16 @@ export const ProductPage = (props: ProductPageProps) => {
     headingRef.current?.focus({ preventScroll: true });
   }, [location.pathname, location.hash, title]);
   return (
-    <section {...rootAttrs} className={clsx(styles.root, className)}>
-      <header className={styles.heading}>
-        <div className={styles.titleBlock}>
-          <h1 tabIndex={-1} ref={headingRef} className={styles.title}>
-            {title}
-          </h1>
-          <p className={styles.description}>{description}</p>
-          {meta}
-        </div>
-        <div className={styles.actions}>{actions}</div>
-      </header>
+    <PageStage {...rootAttrs}>
+      <PageHeader
+        title={title}
+        titleRef={headingRef}
+        meta={shownMeta}
+        description={shownDescription}
+        actions={actions}
+        actionsLayout={actionsLayout}
+      />
       {children}
-    </section>
+    </PageStage>
   );
 };

@@ -30,13 +30,15 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
   const projectId = useProjectId();
   const boards = useBoards(projectId);
   const boardsNavigationId = useId();
-  const [isBoardsOpened, setBoardsOpened] = useState(false);
+  // Группа текущего раздела раскрыта, пока человек сам не свернул или не раскрыл её.
+  const [boardsChoice, setBoardsOpened] = useState<boolean | null>(null);
   const taskReference = pathname.startsWith(`${basePath}/tasks/`)
     ? pathname.split("/").at(-1)
     : undefined;
   const isKanbanTask = taskReference !== undefined && /[A-Za-z]/.test(taskReference);
   const openedTask = useBoardTask(projectId, isKanbanTask ? taskReference : null);
   const isBoardsRoute = pathname.startsWith(`${basePath}/boards/`) || isKanbanTask;
+  const isBoardsOpened = boardsChoice ?? isBoardsRoute;
   const boardItems = boards.data?.flatMap((page) => page.items) ?? [];
   const boardNavigationItems = boardItems.map((board, index) => ({
     id: board.id,
@@ -49,9 +51,10 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
   const hasMoreBoards = boards.data?.at(-1)?.nextOffset != null;
   const hasBoardsError = boards.error !== undefined;
   const productNavigationId = useId();
-  const [isProductOpened, setProductOpened] = useState(false);
+  const [productChoice, setProductOpened] = useState<boolean | null>(null);
   const productPath = `${basePath}/product`;
   const isProductRoute = pathname === productPath || pathname.startsWith(`${productPath}/`);
+  const isProductOpened = productChoice ?? isProductRoute;
   const overviewPath = `${basePath}/`;
   const productItems = PRODUCT_NAVIGATION.map((entry) => ({
     ...entry,
@@ -154,7 +157,7 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
           ))}
           {hasBoardsError && (
             <div role="alert">
-              <Text size="xs" c="red" p="xs">
+              <Text size="xs" c="danger" p="xs">
                 Не удалось загрузить доски.
               </Text>
               <Button

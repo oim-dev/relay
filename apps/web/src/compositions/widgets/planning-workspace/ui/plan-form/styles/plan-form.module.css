@@ -1,45 +1,26 @@
 .root {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+  display: grid;
+  gap: var(--tasks-space-5);
 }
-.modalTitle {
-  font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: -0.025em;
-}
-.modalBody {
-  padding: 0 1.5rem 1.5rem;
-}
-.intro {
-  margin: 0;
-  color: var(--tasks-muted);
-  font-size: 0.75rem;
-  line-height: 1.8;
-}
+
 .fields {
+  min-width: 0;
+  margin: 0;
   padding: 0;
   border: 0;
-  margin: 0;
-  min-width: 0;
 }
-.optional {
-  display: block;
-  margin-top: 0.2rem;
-  color: var(--tasks-soft);
-  font-size: 0.625rem;
-  font-weight: 400;
-}
+
 .footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding-top: 1.2rem;
+  gap: var(--tasks-space-3);
+  padding-top: var(--tasks-space-4);
   border-top: 1px solid var(--tasks-border);
+
   & > span {
-    color: var(--tasks-soft);
-    font-size: 0.625rem;
+    color: var(--tasks-muted);
+    font-size: var(--mantine-font-size-xs);
   }
 }

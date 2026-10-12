@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Badge, Button, CloseButton, TextInput } from "@mantine/core";
 import { PanelLeft, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
+import { PageHeader } from "ui/page-header";
 import type { LibraryHeaderProps } from "./types/library-header-props.type";
 import styles from "./styles/library-header.module.css";
 
@@ -36,64 +37,58 @@ export const LibraryHeader = (props: LibraryHeaderProps) => {
       headingRef.current?.focus({ preventScroll: true });
   }, []);
   return (
-    <header className={styles.root}>
-      <div className={styles.identity}>
-        <h1 ref={headingRef} tabIndex={-1} className={styles.title}>
-          Библиотека знаний
-        </h1>
-        <p className={styles.description}>
-          Материалы проекта: контекст, решения, правила и инструкции для людей и агентов.
-        </p>
-      </div>
-      <div className={styles.tools}>
-        <TextInput
-          className={styles.search}
-          type="search"
-          size="md"
-          radius="xl"
-          aria-label="Поиск материалов"
-          placeholder="Найти материал…"
-          leftSection={<Search size={17} aria-hidden="true" />}
-          rightSection={clearButton}
-          value={query}
-          onChange={(event) => onQueryChange(event.currentTarget.value)}
-        />
-        <Button
-          variant="default"
-          size="md"
-          radius="xl"
-          className={styles.navigationButton}
-          leftSection={<PanelLeft size={16} aria-hidden="true" />}
-          onClick={onOpenNavigation}
-        >
-          Разделы
-        </Button>
-        <Button
-          variant={filtersVariant}
-          size="md"
-          radius="xl"
-          className={styles.filtersButton}
-          aria-label={filtersLabel}
-          aria-expanded={isFiltersExpanded}
-          aria-controls={filtersControls}
-          leftSection={<SlidersHorizontal size={16} aria-hidden="true" />}
-          rightSection={filtersBadge}
-          onClick={onToggleFilters}
-        >
-          Фильтры
-        </Button>
-        <Button
-          component={Link}
-          to={createHref}
-          state={{ returnTo }}
-          size="md"
-          radius="xl"
-          className={styles.create}
-          leftSection={<Plus size={17} aria-hidden="true" />}
-        >
-          Добавить материал
-        </Button>
-      </div>
-    </header>
+    <PageHeader
+      title="Библиотека знаний"
+      titleRef={headingRef}
+      description="Материалы проекта: контекст, решения, правила и инструкции для людей и агентов."
+      actionsLayout="toolbar"
+      actions={
+        <>
+          <TextInput
+            className={styles.search}
+            type="search"
+            size="md"
+            aria-label="Поиск материалов"
+            placeholder="Найти материал…"
+            leftSection={<Search size={17} aria-hidden="true" />}
+            rightSection={clearButton}
+            value={query}
+            onChange={(event) => onQueryChange(event.currentTarget.value)}
+          />
+          <Button
+            variant="default"
+            size="md"
+            className={styles.navigationButton}
+            leftSection={<PanelLeft size={16} aria-hidden="true" />}
+            onClick={onOpenNavigation}
+          >
+            Разделы
+          </Button>
+          <Button
+            variant={filtersVariant}
+            size="md"
+            className={styles.filtersButton}
+            aria-label={filtersLabel}
+            aria-expanded={isFiltersExpanded}
+            aria-controls={filtersControls}
+            leftSection={<SlidersHorizontal size={16} aria-hidden="true" />}
+            rightSection={filtersBadge}
+            onClick={onToggleFilters}
+          >
+            Фильтры
+          </Button>
+          <Button
+            component={Link}
+            to={createHref}
+            state={{ returnTo }}
+            size="md"
+            className={styles.create}
+            leftSection={<Plus size={17} aria-hidden="true" />}
+          >
+            Добавить материал
+          </Button>
+        </>
+      }
+    />
   );
 };

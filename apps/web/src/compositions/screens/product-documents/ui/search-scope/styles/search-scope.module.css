@@ -6,7 +6,7 @@
   gap: 0.5rem 1rem;
   padding: 0.625rem 0.75rem 0.625rem 1rem;
   border: 1px solid var(--tasks-tile-border);
-  border-radius: 1rem;
+  border-radius: var(--tasks-radius-row);
   background: var(--tasks-accent-subtle);
 }
 
@@ -14,7 +14,7 @@
   min-width: 0;
   margin: 0;
   color: var(--tasks-ink);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }

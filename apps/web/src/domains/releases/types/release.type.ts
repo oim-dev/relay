@@ -68,6 +68,8 @@ export type ReleasePlanItem = {
   total: number;
   /** Полный процент. */
   percent: number;
+  /** Весь непустой состав плана фактически выполнен; не заменяет собственный статус плана. */
+  isReady: boolean;
   /** Исходный план недоступен. */
   isMissing: boolean;
 };

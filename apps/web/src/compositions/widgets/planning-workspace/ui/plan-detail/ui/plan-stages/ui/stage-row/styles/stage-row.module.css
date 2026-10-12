@@ -1,0 +1,196 @@
+/* Этап — раскрываемая плитка рабочего поля; текущий этап выделен рамкой акцента. */
+.root {
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--tasks-radius-row);
+  background: var(--tasks-tile);
+
+  &[data-active="true"] {
+    border-color: var(--tasks-progress-track);
+  }
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--tasks-space-3);
+  min-height: var(--tasks-touch-target);
+  padding: var(--tasks-space-3);
+  border-radius: var(--tasks-radius-row);
+  list-style: none;
+  cursor: pointer;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 2px;
+  }
+
+  @media (--md) {
+    padding: var(--tasks-space-4);
+  }
+}
+
+.marker {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--tasks-control-height);
+  height: var(--tasks-control-height);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-control);
+  background: var(--tasks-surface-quiet);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+
+  &[data-active="true"] {
+    border-color: var(--tasks-progress-track);
+    background: var(--tasks-accent-subtle);
+    color: var(--tasks-accent-ink);
+  }
+
+  &[data-done="true"] {
+    border-color: var(--tasks-success-border);
+    background: var(--tasks-success-surface);
+    color: var(--tasks-success);
+  }
+}
+
+.identity {
+  display: grid;
+  flex: 1;
+  gap: var(--tasks-space-1);
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--tasks-font-size-record-title);
+  font-weight: var(--tasks-font-weight-record-title);
+  line-height: var(--tasks-line-height-record-title);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--tasks-space-2);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.state {
+  font-weight: 600;
+
+  &[data-active="true"] {
+    color: var(--tasks-accent-ink);
+  }
+
+  &[data-done="true"] {
+    color: var(--tasks-success);
+  }
+}
+
+/* Полоса дублирует «N из M задач» в подписи, поэтому скрыта от доступного дерева. */
+.miniProgress {
+  display: none;
+
+  @media (--md) {
+    display: block;
+    flex: none;
+    width: 4rem;
+  }
+}
+
+.chevron {
+  flex: none;
+  color: var(--tasks-muted);
+  transition: transform var(--tasks-duration-control) var(--tasks-easing-standard);
+
+  .root[open] & {
+    transform: rotate(180deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--tasks-space-2);
+  min-width: 0;
+  padding: 0 var(--tasks-space-2) var(--tasks-space-2);
+
+  @media (--md) {
+    padding: 0 var(--tasks-space-3) var(--tasks-space-3);
+  }
+}
+
+.outcome {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--tasks-space-1);
+  padding: var(--tasks-space-3) var(--tasks-space-4);
+  border-radius: var(--tasks-radius-compact);
+  background: var(--tasks-surface-quiet);
+}
+
+.outcomeLabel {
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+}
+
+.loading {
+  display: grid;
+  gap: var(--tasks-space-2);
+}
+
+.alert {
+  margin-inline: var(--tasks-space-1);
+}
+
+.taskList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  & li + li {
+    border-top: 1px solid var(--tasks-tile-border);
+  }
+}
+
+.noTasks {
+  margin: 0;
+  padding: var(--tasks-space-2) var(--tasks-space-3);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.5;
+}
+
+.more {
+  justify-self: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tasks-space-2);
+  padding: var(--tasks-space-2) var(--tasks-space-1) 0;
+  border-top: 1px solid var(--tasks-tile-border);
+}

@@ -15,6 +15,7 @@ import {
   useMaterialMutations,
 } from "domains/documents";
 import type { MaterialTargetKind } from "domains/documents";
+import { SectionPanel } from "ui/section-panel";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
 import { parseRelationTarget } from "./helpers/parse-relation-target";
 import { RelationForm } from "./ui/relation-form/relation-form";
@@ -172,26 +173,24 @@ export const DocumentRelations = ({ material }: DocumentRelationsProps) => {
   };
 
   return (
-    <section className={styles.root} aria-labelledby="material-usage-title">
-      <header className={styles.header}>
-        <h2 id="material-usage-title" ref={headingRef} tabIndex={-1} className={styles.title}>
-          Где используется
-        </h2>
-        <span className={styles.total}>{total}</span>
+    <SectionPanel
+      title="Где используется"
+      titleRef={headingRef}
+      count={total}
+      actions={
         <Button
-          className={styles.add}
           size="compact-sm"
-          radius="xl"
           variant="default"
           leftSection={<Plus size={14} aria-hidden="true" />}
           onClick={() => openEditing({ mode: "attach" })}
         >
           Прикрепить
         </Button>
-      </header>
+      }
+    >
       {hasLoadError && (
-        <Alert color="orange" title="Названия сущностей не загружены">
-          <Button size="xs" variant="subtle" onClick={() => void entities.mutate()}>
+        <Alert color="warning" title="Названия сущностей не загружены">
+          <Button size="xs" variant="subtle" color="gray" onClick={() => void entities.mutate()}>
             Повторить
           </Button>
         </Alert>
@@ -266,7 +265,7 @@ export const DocumentRelations = ({ material }: DocumentRelationsProps) => {
           не изменятся.
         </Text>
         {detachError !== "" && (
-          <Alert color="orange" role="alert" mt="md">
+          <Alert color="warning" role="alert" mt="md">
             {detachError}
           </Alert>
         )}
@@ -274,11 +273,11 @@ export const DocumentRelations = ({ material }: DocumentRelationsProps) => {
           <Button variant="default" onClick={() => setDetaching(null)} disabled={isDetachBusy}>
             Отмена
           </Button>
-          <Button color="red" loading={isDetachBusy} onClick={() => void handleDetach()}>
+          <Button color="danger" loading={isDetachBusy} onClick={() => void handleDetach()}>
             Открепить
           </Button>
         </Group>
       </Modal>
-    </section>
+    </SectionPanel>
   );
 };
