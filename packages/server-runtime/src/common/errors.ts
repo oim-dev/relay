@@ -3,9 +3,14 @@ import type { ArgumentsHost, ExceptionFilter } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import type { ApiFailure } from "@relay/contracts";
 import { AppError, asAppError } from "@relay/core/shared/errors";
+import {
+  isStorageCompatibility,
+  storageCompatibilityCodes,
+} from "@relay/project-runtime/storage-errors";
 
+export { storageCompatibilityCodes };
 const conflicts = new Set([
-  "STORAGE_MIGRATION_REQUIRED",
+  ...storageCompatibilityCodes,
   "PLANNING_CHANGED",
   "PLAN_CLOSED",
   "TASK_IN_PLAN",
@@ -80,6 +85,7 @@ const missing = new Set([
   "PROJECT_NOT_FOUND",
   "PROJECT_RECORD_NOT_FOUND",
   "PROJECT_REFERENCE_NOT_FOUND",
+  "ENTITY_RELOCATED",
 ]);
 const httpCodes: Record<number, string> = {
   400: "BAD_REQUEST",
@@ -121,7 +127,7 @@ export function httpFailure(error: unknown): { status: number; body: ApiFailure 
     code = failure.code;
     status = missing.has(code)
       ? 404
-      : conflicts.has(code)
+      : conflicts.has(code) || isStorageCompatibility(code, failure.exitCode)
         ? 409
         : failure.exitCode === 2 ||
             [

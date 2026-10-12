@@ -9,7 +9,17 @@ import { EntityStore } from "../src/storage/entity-store/store.js";
 import { EntityStorageRegistry } from "../src/storage/entity-store/registry.js";
 import { markdownCodec } from "../src/storage/entity-store/codecs.js";
 import { digest, jsonValue } from "../src/storage/entity-store/format.js";
-import { withStorageLock } from "../src/storage/lock.js";
+import { migrateStorage } from "../src/application/storage/maintenance.js";
+import type { MaintenanceHooks } from "../src/application/storage/maintenance.js";
+import { createTransitionRegistry } from "../src/storage/data-model/registry.js";
+import { HistoricalKindCatalog } from "../src/storage/data-model/history/catalog.js";
+import { PROFILE_2 } from "../src/storage/data-model/profiles.js";
+import {
+  physicalUnified1,
+  physicalUnified2,
+  physicalUnified3,
+} from "../src/storage/data-model/transitions/physical-unified.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 const at = "2026-09-26T00:00:00.000Z";
 const stream = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -26,6 +36,27 @@ const registry = () =>
     })),
   );
 const ref = (kind: string, id: string) => ({ kind, id });
+/** Реестр переходов теста: его кодеки — целевой профиль, физические шаги — производственные. */
+const transitions = (storage: EntityStorageRegistry) =>
+  createTransitionRegistry({
+    profiles: [{ ...PROFILE_2, owners: { project: 1, task: 1, "work-plan": 1, note: 1 } }],
+    transitions: [],
+    physical: [physicalUnified1, physicalUnified2, physicalUnified3],
+    storage,
+    historical: new HistoricalKindCatalog(storage, []),
+  });
+/** Единый исполнитель миграции Core (тот же, что CLI), с резервной копией вне базы. */
+const migrate = async (
+  root: string,
+  storage: EntityStorageRegistry,
+  hooks: MaintenanceHooks = {},
+  backup = true,
+) =>
+  migrateStorage(
+    { configPath: join(root, "config.json") },
+    backup ? { backupDir: await migrationBackupDir() } : {},
+    { registry: transitions(storage), ...hooks },
+  );
 const entity = (kind: string, id: string) => ({
   schemaVersion: 1,
   dataVersion: 1,
@@ -52,7 +83,7 @@ async function put(root: string, path: string, value: unknown) {
   await mkdir(dirname(join(root, path)), { recursive: true });
   await writeFile(join(root, path), JSON.stringify(value));
 }
-async function fixture(t: TestContext, version: 1 | 2 | 3) {
+async function fixture(t: TestContext, version: 1 | 2 | 3, foreign = false) {
   const root = await mkdtemp(join(tmpdir(), "relay-v3-migration-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const records = {
@@ -164,15 +195,6 @@ async function fixture(t: TestContext, version: 1 | 2 | 3) {
             result: { previous: "delete me" },
           },
         ],
-        ...("data" in value
-          ? {
-              data: {
-                ...value.data,
-                requests: { old: { result: "old" } },
-                events: [{ action: "update" }],
-              },
-            }
-          : {}),
         ...(value.kind === "task" ? { comments: [comment], commentSequence: 9 } : {}),
         ...(value.kind === "work-plan"
           ? { planningEvents: [{ revision: 3, actor: "agent", at, action: "create" }] }
@@ -194,7 +216,8 @@ async function fixture(t: TestContext, version: 1 | 2 | 3) {
     roots: { "file-hashes": hash },
   });
   await put(root, "storage.json", { format: "relay-entities", schemaVersion: version });
-  if (version !== 3)
+  await put(root, "config.json", { version: 1, projectId: "project" });
+  if (foreign && version !== 3)
     await put(root, version === 1 ? "operations/notes.json" : `history/${stream}/notes.json`, {
       keep: true,
     });
@@ -209,24 +232,11 @@ for (const version of [1, 2, 3] as const)
       store.read(async () => null),
       { code: "STORAGE_MIGRATION_REQUIRED" },
     );
-    const result = await withStorageLock(
-      root,
-      (owned) => store.migrateFormat(owned),
-      join(root, "runtime"),
-    );
+    const result = await migrate(root, selected);
     assert.equal(result.schemaVersion, 4);
+    assert.equal(result.migrated, true);
     for (const path of sourcePaths)
       await assert.rejects(readFile(join(root, path)), { code: "ENOENT" });
-    if (version !== 3)
-      assert.deepEqual(
-        JSON.parse(
-          await readFile(
-            join(root, version === 1 ? "operations/notes.json" : `history/${stream}/notes.json`),
-            "utf8",
-          ),
-        ),
-        { keep: true },
-      );
     const task = await store.get(ref("task", "task"));
     assert.equal(task.revision, 3);
     assert.equal(task.commentSequence, 9);
@@ -251,17 +261,50 @@ for (const version of [1, 2, 3] as const)
 
 test("v2→v4: прерывание durable WAL восстанавливает всё переключение без промежуточного журнала", async (t) => {
   const { root, selected, sourcePaths } = await fixture(t, 2);
-  const store = await EntityStore.open(root, selected, (stage) => {
-    if (stage === "intent") throw new Error("Прерывание переноса");
-  });
   await assert.rejects(
-    withStorageLock(root, (owned) => store.migrateFormat(owned), join(root, "runtime")),
+    migrate(root, selected, {
+      probe: (stage) => {
+        if (stage === "intent") throw new Error("Прерывание переноса");
+      },
+    }),
     /Прерывание переноса/,
   );
+  // Обычное открытие миграционный WAL не допубликовывает; продолжает только исполнитель.
+  await assert.rejects(EntityStore.open(root, selected), { code: "STORAGE_RECOVERY_REQUIRED" });
+  assert.equal((await migrate(root, selected, {}, false)).resumed, true);
   const recovered = await EntityStore.open(root, selected);
   assert.equal(recovered.formatVersion, 4);
   assert.equal((await recovered.get(ref("task", "task"))).commentSequence, 9);
   for (const path of sourcePaths)
     await assert.rejects(readFile(join(root, path)), { code: "ENOENT" });
   assert(!(await readdir(join(root, "transactions"))).includes("pending.json"));
+});
+
+for (const version of [1, 2] as const)
+  test(`v${version}: неизвестный файл в журнале блокирует перенос и не стирается`, async (t) => {
+    const { root, selected, sourcePaths } = await fixture(t, version, true);
+    const path = version === 1 ? "operations/notes.json" : `history/${stream}/notes.json`;
+    await assert.rejects(
+      migrate(root, selected),
+      (error: { code?: string; details?: { path?: string } }) =>
+        error.code === "STORAGE_FORMAT_UNKNOWN" && error.details?.path === path,
+    );
+    assert.deepEqual(JSON.parse(await readFile(join(root, path), "utf8")), { keep: true });
+    for (const source of sourcePaths) await readFile(join(root, source));
+    assert.equal(
+      JSON.parse(await readFile(join(root, "storage.json"), "utf8")).schemaVersion,
+      version,
+    );
+  });
+
+test("v3: поле данных с именем requests не удаляется по имени, а блокирует перенос", async (t) => {
+  const { root, selected } = await fixture(t, 3);
+  const path = "entities/tasks/task.json";
+  const raw = JSON.parse(await readFile(join(root, path), "utf8"));
+  raw.data.requests = { old: { result: "old" } };
+  await put(root, path, raw);
+  await assert.rejects(migrate(root, selected), { code: "STORAGE_DATA_CORRUPT" });
+  assert.deepEqual(JSON.parse(await readFile(join(root, path), "utf8")).data.requests, {
+    old: { result: "old" },
+  });
 });

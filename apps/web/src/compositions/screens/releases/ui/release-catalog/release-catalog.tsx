@@ -53,7 +53,10 @@ export const ReleaseCatalog = (props: ReleaseCatalogProps) => {
   const isEmpty = !releasesQuery.isLoading && !hasError && isEmptyArray(releaseItems);
   const hasFilters = query !== "" || status !== "all";
   const hasMore = isDefined(releasesQuery.data?.nextOffset);
-  const countLabel = releasesQuery.isLoading ? "Ищем…" : `Найдено: ${total}`;
+  // Отказ чтения без данных не выдаётся за пустой результат.
+  const countLabel = releasesQuery.isLoading
+    ? "Ищем…"
+    : `Найдено: ${isDefined(releasesQuery.data) ? total : "—"}`;
   const emptyTitle = hasFilters ? "Релизы не найдены" : "Запланируйте первый выпуск";
   const emptyDescription = hasFilters
     ? "Измените запрос или сбросьте фильтры."

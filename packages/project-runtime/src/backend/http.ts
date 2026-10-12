@@ -96,6 +96,7 @@ import { operationsTree } from "@relay/rest-sdk/operations-tree";
 import { configSchema } from "@relay/core/domain/config";
 import { parse } from "@relay/core/domain/validation";
 import { AppError } from "@relay/core/shared/errors";
+import { isStorageCompatibility } from "../storage-errors.js";
 import type { Backend, WorkspaceInfo } from "./types.js";
 import {
   productStateSchema,
@@ -230,7 +231,12 @@ export async function createHttpBackend(url: string, project?: string): Promise<
                 : message,
               exitCode ??
                 (error.status === 404 ? 3 : error.status === 409 ? 4 : error.status < 500 ? 2 : 5),
-              requestId === undefined ? details : { serverDetails: details, requestId, url },
+              // Отказ совместимости определён (запись не выполнена): details в той же
+              // форме, что у чтения, чтобы клиент показал next сервера.
+              requestId === undefined ||
+                (error.status === 409 && isStorageCompatibility(code, exitCode))
+                ? details
+                : { serverDetails: details, requestId, url },
             );
           }
           throw new AppError(

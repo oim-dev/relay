@@ -1,70 +1,75 @@
 import { parseArgs } from "node:util";
-import { readdir, realpath, stat, lstat } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { openWorkspace } from "../src/storage/workspace.js";
-import { StorageService } from "../src/application/storage/service.js";
+import {
+  inspectStorage,
+  maintenanceFailure,
+  migrateStorage,
+  planStorageMigration,
+} from "../src/application/storage/maintenance.js";
+import { AppError } from "../src/shared/errors.js";
 
-// Явный внутренний maintenance-вход. Сначала проверяется отдельная копия базы.
+// Внутренний maintenance-вход из checkout: та же реализация Core, что `storage status|migrate` CLI,
+// и те же exit code: 0 — успешный исход; ненулевой — причина из STORAGE_MAINTENANCE_ERROR_EXIT_CODES.
+// Сначала проверяется отдельная копия базы.
 const { values } = parseArgs({
   options: {
     project: { type: "string" },
-    apply: { type: "boolean", default: false },
-    reindex: { type: "boolean", default: false },
+    config: { type: "string" },
+    status: { type: "boolean", default: false },
+    "dry-run": { type: "boolean", default: false },
+    "backup-dir": { type: "string" },
+    "if-plan": { type: "string" },
   },
   allowPositionals: false,
   strict: true,
 });
-if (!values.apply || !values.project)
-  throw new Error("Ожидается --project <каталог проекта> --apply [--reindex]");
-const requestedProject = resolve(values.project);
-const project = await realpath(requestedProject);
-if (project !== requestedProject)
-  throw new Error("Укажите канонический путь проекта без символьных ссылок");
-const root = join(project, ".relay");
-const configPath = join(root, "config.json");
-if ((await lstat(root)).isSymbolicLink() || (await lstat(configPath)).isSymbolicLink())
-  throw new Error("Каталог базы и конфигурация не должны быть символьными ссылками");
+if (Boolean(values.project) === Boolean(values.config))
+  throw new Error(
+    "Ожидается --project <каталог проекта> или --config <файл конфигурации> и одно из: --status, --dry-run, --backup-dir DIR [--if-plan FP]",
+  );
+let configPath: string;
+if (values.project) {
+  const requested = resolve(values.project);
+  const project = await realpath(requested);
+  if (project !== requested)
+    throw new Error("Укажите канонический путь проекта без символьных ссылок");
+  configPath = join(project, ".relay", "config.json");
+  if ((await lstat(join(project, ".relay"))).isSymbolicLink())
+    throw new Error("Каталог базы не должен быть символьной ссылкой");
+} else configPath = resolve(values.config!);
 
-async function measure(directory: string) {
-  const sizes = {
-    bytes: 0,
-    persistentBytes: 0,
-    historyBytes: 0,
-    indexBytes: 0,
-    entityBytes: 0,
-    relationBytes: 0,
-    files: 0,
-  };
-  const walk = async (relative: string) => {
-    for (const entry of await readdir(join(directory, relative), { withFileTypes: true })) {
-      const path = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isSymbolicLink()) throw new Error(`Символьная ссылка в выбранной базе: ${path}`);
-      if (entry.isDirectory()) await walk(path);
-      else if (entry.isFile()) {
-        const { size } = await stat(join(directory, path));
-        sizes.bytes += size;
-        sizes.files++;
-        if (!/^(\.indexes|runtime|transactions)\//.test(path)) sizes.persistentBytes += size;
-        if (/^(history|operations)\//.test(path)) sizes.historyBytes += size;
-        if (path.startsWith(".indexes/")) sizes.indexBytes += size;
-        if (path.startsWith("entities/")) sizes.entityBytes += size;
-        if (path.startsWith("relations/")) sizes.relationBytes += size;
-      }
-    }
-  };
-  await walk("");
-  return sizes;
+const target = { configPath };
+/** Ответ как у CLI `--format json`: результат схемы или `{ ok: false, error }` с exit code. */
+const fail = (error: AppError) => {
+  console.log(
+    JSON.stringify(
+      { ok: false, error: { code: error.code, message: error.message, details: error.details } },
+      null,
+      2,
+    ),
+  );
+  process.exitCode = error.exitCode;
+};
+try {
+  let output: unknown;
+  if (values.status) {
+    const status = await inspectStorage(target);
+    const failure = maintenanceFailure(status, "База требует внимания — см. блокеры");
+    if (failure) fail(failure);
+    else output = status;
+  } else if (values["dry-run"]) {
+    const plan = await planStorageMigration(target);
+    const failure = maintenanceFailure(plan, "План переноса неприменим — база не изменена");
+    if (failure) fail(failure);
+    else output = plan;
+  } else
+    output = await migrateStorage(target, {
+      ...(values["backup-dir"] ? { backupDir: resolve(values["backup-dir"]) } : {}),
+      ...(values["if-plan"] ? { ifPlan: values["if-plan"] } : {}),
+    });
+  if (output !== undefined) console.log(JSON.stringify(output, null, 2));
+} catch (error) {
+  if (!(error instanceof AppError)) throw error;
+  fail(error);
 }
-
-const before = await measure(root);
-const workspace = await openWorkspace(project, configPath);
-const service = new StorageService(workspace);
-const result = await service.migrate();
-const afterMigration = await measure(root);
-if (values.reindex) await service.reindex();
-const after = await measure(root);
-// Повтор миграции проверяет текущую версию, но не создаёт квитанцию обслуживания.
-const verification = await service.migrate();
-console.log(
-  JSON.stringify({ project, result, verification, before, afterMigration, after }, null, 2),
-);

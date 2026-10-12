@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { JsonValue } from "@relay/contracts/storage";
 import { createEntityStorageRegistry } from "./entity-store/codecs.js";
 import type { EntityRecord } from "./entity-store/registry.js";
+import type { EntityReference } from "./entity-store/references.js";
 import { EntityStorageRegistry } from "./entity-store/registry.js";
 import type { StorageSession } from "./entity-store/store.js";
 import { digest, jsonValue } from "./entity-store/format.js";
@@ -18,6 +19,40 @@ import type { Board } from "../domain/board.js";
 import { storedProjectSettingsSchema } from "../domain/project-settings.js";
 import type { Config } from "../domain/config.js";
 import { productIdSchema } from "../domain/product.js";
+import { planningIdSchema } from "@relay/contracts/planning";
+import { releaseSnapshotEntryV1, releaseSnapshotV1 } from "./data-model/history/planning-v1.js";
+
+/**
+ * Инварианты снимка выпуска внутри записи: состав без повторов, записи плана — часть общего
+ * состава. Действуют в любом профиле при каждой проверке записи, а не только в переходе
+ * планирования; замороженная схема 43d683b не меняется.
+ */
+const releaseSnapshotStored = releaseSnapshotV1.superRefine((data, context) => {
+  const listed = new Set(data.entryIds);
+  if (listed.size !== data.entryIds.length)
+    context.addIssue({ code: "custom", path: ["entryIds"], message: "Повтор записи снимка" });
+  if (new Set(data.planEntryIds).size !== data.planEntryIds.length)
+    context.addIssue({ code: "custom", path: ["planEntryIds"], message: "Повтор записи плана" });
+  if (data.planEntryIds.some((id) => !listed.has(id)))
+    context.addIssue({
+      code: "custom",
+      path: ["planEntryIds"],
+      message: "Запись плана снимка не входит в общий состав",
+    });
+});
+
+/** Признак плана записи снимка допустим только у записи о плане. */
+const releaseSnapshotEntryStored = releaseSnapshotEntryV1.superRefine((data, context) => {
+  if (data.plan !== undefined && data.item.kind !== "work-plan")
+    context.addIssue({
+      code: "custom",
+      path: ["plan"],
+      message: "Признак плана у записи снимка не о плане",
+    });
+});
+
+/** Данные записи совместимости прежнего адреса этапа: только план-владелец содержания. */
+const planStageCompatibilitySchema = z.strictObject({ planId: planningIdSchema });
 
 /** Состав сохраняет собственные ID и ревизию, но не получает искусственный публичный ключ. */
 export function workspaceStorageRegistry() {
@@ -46,6 +81,95 @@ export function workspaceStorageRegistry() {
   return new EntityStorageRegistry([
     ...definitions,
     {
+      // Прежний адрес этапа плана v1: ключ STG-N, ревизия, авторство и надгробия сохраняются,
+      // содержание принадлежит только work-plan.stages[]. Публичной записи нет.
+      kind: "plan-stage",
+      collection: "plan-stages",
+      dataVersion: 2,
+      schema: planStageCompatibilitySchema,
+      diskSchema: planStageCompatibilitySchema,
+      encode: (data) => jsonValue(data) as Record<string, JsonValue>,
+      decode: (data) => data,
+      references: (data) => [{ field: "planId", kind: "work-plan", id: data.planId }],
+      relocation: (record) => ({
+        ref: { kind: "work-plan", id: planStageCompatibilitySchema.parse(record.data).planId },
+        stageId: record.id,
+      }),
+      card: (record) => ({
+        title: record.key ?? record.id,
+        status: "relocated",
+        summary: "",
+        active: false,
+        selectors: [],
+      }),
+    },
+    // Снимки выпуска плана v1: исторические технические записи только для хранения.
+    // Текст снимка может быть единственной копией состояния на момент выпуска; публичного
+    // адреса, DTO и операций нет, каталоги и прогресс их не перечисляют. Данные — дисковая
+    // форма замороженной схемы 43d683b без декодирования. Ссылки: снимок → релиз (запись
+    // или надгробие) и свои записи; запись → свой снимок; принадлежность взаимна.
+    ...(
+      [
+        [
+          "release-snapshot",
+          "release-snapshots",
+          releaseSnapshotStored,
+          "Снимок выпуска",
+          (data: Record<string, JsonValue>): EntityReference[] => [
+            { field: "releaseId", kind: "release", id: data.releaseId },
+            ...(Array.isArray(data.entryIds) ? data.entryIds : []).map((id) => ({
+              field: "entryIds",
+              kind: "release-snapshot-entry",
+              id,
+              inverse: "snapshotId",
+            })),
+            // Записи плана снимка и признак `plan` записи соответствуют взаимно.
+            ...(Array.isArray(data.planEntryIds) ? data.planEntryIds : []).map((id) => ({
+              field: "planEntryIds",
+              kind: "release-snapshot-entry",
+              id,
+              inverse: "plan",
+            })),
+          ],
+        ],
+        [
+          "release-snapshot-entry",
+          "release-snapshot-entries",
+          releaseSnapshotEntryStored,
+          "Запись снимка выпуска",
+          (data: Record<string, JsonValue>): EntityReference[] => [
+            {
+              field: "snapshotId",
+              kind: "release-snapshot",
+              id: data.snapshotId,
+              inverse: "entryIds",
+            },
+            ...(data.plan === undefined
+              ? []
+              : [
+                  {
+                    field: "plan",
+                    kind: "release-snapshot",
+                    id: data.snapshotId,
+                    inverse: "planEntryIds",
+                  },
+                ]),
+          ],
+        ],
+      ] as const
+    ).map(([kind, collection, schema, title, references]) => ({
+      kind,
+      collection,
+      dataVersion: 1,
+      addressable: false,
+      schema: schema as unknown as z.ZodType<Record<string, unknown>>,
+      diskSchema: schema,
+      encode: (data: Record<string, unknown>) => jsonValue(data) as Record<string, JsonValue>,
+      decode: (data: Record<string, JsonValue>) => data,
+      references,
+      card: () => ({ title, status: "", selectors: [] }),
+    })),
+    {
       kind: "scope",
       collection: "scopes",
       dataVersion: 1,
@@ -56,6 +180,14 @@ export function workspaceStorageRegistry() {
       }),
       encode: (data) => jsonValue(data) as Record<string, JsonValue>,
       decode: (data) => data,
+      references: (data) => [
+        { field: "applicationId", kind: "application", id: data.applicationId },
+        ...(Array.isArray(data.implementations) ? data.implementations : []).map((id) => ({
+          field: "implementations",
+          kind: "implementation",
+          id,
+        })),
+      ],
       card: () => ({ title: "Состав приложения", status: "", selectors: [] }),
     },
   ]);

@@ -1,4 +1,5 @@
 import { SWRConfig } from "swr";
+import { isStorageFailure } from "infra/tasks-api";
 import type { DataProviderProps } from "./types/data-provider-props.type";
 
 /**
@@ -6,6 +7,7 @@ import type { DataProviderProps } from "./types/data-provider-props.type";
  *
  * Используется для:
  *  - дедупликации запросов и ограниченного восстановления после сетевой ошибки
+ *  - отказа от автоматического повтора, когда хранилище проекта требует обслуживания
  */
 export const DataProvider = (props: DataProviderProps) => {
   return (
@@ -14,6 +16,7 @@ export const DataProvider = (props: DataProviderProps) => {
         dedupingInterval: 500,
         errorRetryCount: 2,
         errorRetryInterval: 3000,
+        shouldRetryOnError: (error: Error) => !isStorageFailure(error),
         revalidateOnFocus: true,
       }}
     >

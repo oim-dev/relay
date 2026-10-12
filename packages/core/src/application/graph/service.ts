@@ -37,6 +37,7 @@ import { refreshEntityCards } from "../entities/storage-projection.js";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { storageCardSchema } from "@relay/contracts/storage";
 
 const versions = new Map<string, string>();
 const contextReaders = new Map<string, FullContextReader>();
@@ -54,6 +55,45 @@ export class GraphService {
     this.repository = new GraphRepository(workspace);
   }
 
+  /**
+   * Прежние адреса этапов плана не входят в каталог сущностей и не разрешаются как цель
+   * новой связи, но остаются концами сохранённых связей (например, прикреплений документов).
+   * Узел такого конца берётся из карточки записи совместимости, чтобы связь была видна.
+   */
+  private async addRelocatedEndpoints(
+    nodes: z.infer<typeof graphNodeSchema>[],
+    active: readonly Pick<GraphSummary, "from" | "to">[],
+  ): Promise<void> {
+    const session = this.workspace.storageSession;
+    if (!session) return;
+    const known = new Set(nodes.map((node) => entityAddress(node.ref)));
+    const relocated = new Set(
+      session.store.registry
+        .definitions()
+        .filter((definition) => definition.relocation)
+        .map((definition) => definition.kind),
+    );
+    for (const edge of active)
+      for (const ref of [edge.from, edge.to]) {
+        const address = entityAddress(ref);
+        if (known.has(address) || !relocated.has(ref.kind)) continue;
+        const raw = await session.indexGet("cards", address);
+        if (raw === undefined) continue;
+        const card = storageCardSchema.parse(raw);
+        nodes.push(
+          graphNodeSchema.parse({
+            ref: card.ref,
+            key: card.key,
+            title: card.title,
+            revision: card.revision,
+            status: card.status,
+          }),
+        );
+        known.add(address);
+      }
+    nodes.sort((a, b) => entityAddress(a.ref).localeCompare(entityAddress(b.ref)));
+  }
+
   private async snapshot(assertOwned: () => void) {
     const source = await this.catalog();
     const catalog = {
@@ -66,6 +106,7 @@ export class GraphService {
       ...node,
       aliases: source.aliases?.[entityAddress(node.ref)] ?? [],
     }));
+    await this.addRelocatedEndpoints(catalog.nodes, store.index.active);
     const catalogHash = graphDigest({
       ...catalog,
       ...(source.aliases ? { aliases: source.aliases } : {}),
@@ -119,8 +160,15 @@ export class GraphService {
         "Граф изменился. Начните чтение с первой страницы.",
         4,
       );
+      // Полный адрес прежнего этапа открывает его связи для чтения; ключ и ID без вида —
+      // нет: обычное разрешение адресов не выдаёт записи совместимости.
+      const relocated = catalog.nodes.find((node) => entityAddress(node.ref) === query.root);
       const root =
-        query.root === undefined ? undefined : resolveAddress(references, query.root).ref;
+        query.root === undefined
+          ? undefined
+          : relocated && !references.some((node) => entityAddress(node.ref) === query.root)
+            ? relocated.ref
+            : resolveAddress(references, query.root).ref;
       const byAddress = new Map(catalog.nodes.map((node) => [entityAddress(node.ref), node]));
       if (root)
         invariant(

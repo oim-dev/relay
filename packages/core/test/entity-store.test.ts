@@ -480,14 +480,14 @@ test("потеря/порча сегмента обнаруживается, rei
   const hash = state.roots.addresses!;
   const segment = join(root, ".indexes/segments", hash.slice(0, 2), `${hash}.json`);
   await rm(segment);
-  forgetStorageSegments(root);
+  forgetStorageSegments(store.root);
   await assert.rejects(store.resolve("NOTE-A"), { code: "STORAGE_INDEX_CORRUPT" });
   await store.reindex();
   assert.equal((await store.resolve("NOTE-A")).ref.id, "a");
   assert.equal(await store.run(input, async () => null), null);
   assert.equal("receipts" in (await store.get(ref("a"))), false);
   await writeFile(segment, '{"schemaVersion":1,"type":"leaf","entries":[]}');
-  forgetStorageSegments(root);
+  forgetStorageSegments(store.root);
   await assert.rejects(store.resolve("NOTE-A"), { code: "STORAGE_INDEX_CORRUPT" });
 });
 

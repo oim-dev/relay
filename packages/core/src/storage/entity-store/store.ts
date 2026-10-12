@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, realpath, unlink } from "node:fs/promises";
+import { mkdir, readdir, realpath, rmdir, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import {
-  storageManifestSchema,
   storedKeySpaceSchema,
   storageCardSchema,
   storedCommentSchema,
@@ -15,20 +14,30 @@ import type {
   StoredKeySpace,
 } from "@relay/contracts/storage";
 import { entityAddress, entityRefSchema } from "@relay/contracts/entities/graph";
+import { STORAGE_MAINTENANCE_ERROR_EXIT_CODES } from "@relay/contracts/storage-maintenance";
 import type { EntityRef } from "@relay/contracts/entities/graph";
 import { actorSchema, requestIdSchema, entityReferenceSchema } from "@relay/contracts/primitives";
-import { AppError, invariant } from "../../shared/errors.js";
+import { AppError, invariant, isErrno } from "../../shared/errors.js";
 import { exists, readJson, jsonFiles, directories, syncDirectory } from "../files.js";
-import { withStorageLock } from "../lock.js";
+import { runtimeDirectory, withStorageLock } from "../lock.js";
 import { StorageTransaction } from "./transaction.js";
 import type { TransactionProbe } from "./transaction.js";
 import { HashIndex, forgetStorageSegments } from "./hash-index.js";
 import { EntityStorageRegistry } from "./registry.js";
-import type { EntityRecord } from "./registry.js";
+import type { EntityCodec, EntityRecord } from "./registry.js";
+import {
+  MANIFEST_PATH,
+  CURRENT_PHYSICAL_FORMAT,
+  currentManifest,
+  parseStorageManifest,
+  readStorageManifest,
+  requireCurrentProfile,
+} from "../data-model/manifest.js";
+import type { StorageManifest } from "../data-model/manifest.js";
+import { CURRENT_DATA_MODEL } from "../data-model/profiles.js";
+import { storageError } from "../data-model/errors.js";
 import { STATE_PATH, EMPTY_STATE, stateSchema, RECORD_BYTES, digest, jsonValue } from "./format.js";
 import type { StoreState, FileChange } from "./format.js";
-import { storageMigrationOptionsSchema } from "../migration/options.js";
-import type { StorageMigrationOptions } from "../migration/options.js";
 
 const candidateSchema = z.strictObject({
   ref: entityRefSchema,
@@ -49,10 +58,153 @@ const commandSchema = z.strictObject({
 export type StorageCommand = z.infer<typeof commandSchema>;
 const sameRef = (a: EntityRef, b: EntityRef) => a.kind === b.kind && a.id === b.id;
 const refOf = (record: StoredRecord) => ({ kind: record.kind, id: record.id });
+const kindSchema = entityRefSchema.shape.kind;
+
+/** Последний увиденный процессом manifest каждой базы: смена профиля сбрасывает кеши. */
+const seenManifests = new Map<string, string>();
+
+/** Прежний адрес перенесён другому владельцу; details называют новый адрес. */
+export function entityRelocated(
+  from: EntityRef,
+  key: string | null,
+  target: ReturnType<NonNullable<EntityCodec["relocation"]>>,
+): AppError {
+  const to = entityAddress(target.ref);
+  return new AppError(
+    "ENTITY_RELOCATED",
+    `Адрес ${key ?? entityAddress(from)} перенесён: используйте ${to}`,
+    STORAGE_MAINTENANCE_ERROR_EXIT_CODES.ENTITY_RELOCATED,
+    {
+      code: "ENTITY_RELOCATED",
+      from: entityAddress(from),
+      to,
+      stageId: target.stageId,
+      key,
+      next: `Используйте адрес ${to}`,
+    },
+  );
+}
+
+/**
+ * STORAGE_DATA_MIGRATION_REQUIRED реестра дополняется details по общей схеме:
+ * вид, фактическая и ожидаемая версия, относительный путь. Текст записи не раскрывается.
+ */
+function withRecordDetails<T>(
+  registry: EntityStorageRegistry,
+  raw: unknown,
+  path: string,
+  operation: () => T,
+): T {
+  try {
+    return operation();
+  } catch (error) {
+    if (
+      !(error instanceof AppError) ||
+      error.code !== "STORAGE_DATA_MIGRATION_REQUIRED" ||
+      error.details !== undefined
+    )
+      throw error;
+    const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const kind = kindSchema.safeParse(value.kind);
+    const codec = kind.success
+      ? registry.definitions().find((entry) => entry.kind === kind.data)
+      : undefined;
+    throw storageError("STORAGE_DATA_MIGRATION_REQUIRED", error.message, {
+      path,
+      ...(kind.success ? { owner: kind.data } : {}),
+      ...(Number.isInteger(value.dataVersion) ? { current: value.dataVersion as number } : {}),
+      ...(codec ? { expected: codec.dataVersion } : {}),
+    });
+  }
+}
+
+/**
+ * Текущий writer пишет manifest только формата 4 текущего профиля: записи, прошедшие
+ * текущие кодеки, по определению принадлежат ему. Явный иной профиль — ошибка вызывающего.
+ */
+function normalizeManifest(value: JsonValue): JsonValue {
+  const manifest = parseStorageManifest(value);
+  invariant(
+    manifest.schemaVersion === CURRENT_PHYSICAL_FORMAT &&
+      (manifest.dataModelVersion === undefined || manifest.dataModelVersion === CURRENT_DATA_MODEL),
+    "INVALID_DATA",
+    "Текущий writer публикует маркер только актуального формата и профиля",
+    5,
+  );
+  return jsonValue(currentManifest(manifest.productId));
+}
+
+/**
+ * Единый порядок замков базы для записи и обслуживания: сначала legacy-замок каталога данных
+ * (как у Workspace прежнего формата), затем замок единого хранилища `<realpath root>/runtime`.
+ * Совпадающие lockfile берутся один раз; symlink-пути дают тот же замок.
+ * keepRuntime=false: созданные здесь каталоги runtime удаляются после освобождения, если пусты.
+ */
+export async function withStorageLocks<T>(
+  target: { root: string; legacyRoot?: string },
+  operation: (owned: () => void) => Promise<T>,
+  options: { keepRuntime?: boolean } = {},
+): Promise<T> {
+  const root = await realpath(target.root);
+  const locks: { target: string; runtime: string }[] = [];
+  if (target.legacyRoot !== undefined) {
+    const legacy = await realpath(target.legacyRoot);
+    locks.push({
+      target: legacy,
+      runtime: legacy === root ? join(root, "runtime") : runtimeDirectory(legacy),
+    });
+  }
+  const unified = join(root, "runtime");
+  if (!locks.some((lock) => lock.runtime === unified))
+    locks.push({ target: root, runtime: unified });
+  const created: string[] = [];
+  try {
+    for (const lock of locks) {
+      try {
+        const first = await mkdir(lock.runtime, { recursive: true });
+        for (let current = lock.runtime; first; current = dirname(current)) {
+          created.push(current);
+          if (current === first) break;
+        }
+      } catch (error) {
+        throw storageError("STORAGE_UNSAFE_PATH", "Нельзя создать каталог служебного замка базы", {
+          reason: error instanceof Error && "code" in error ? String(error.code) : "io",
+        });
+      }
+    }
+    const acquire = async (index: number, owned: () => void): Promise<T> => {
+      if (index === locks.length) return operation(owned);
+      try {
+        return await withStorageLock(
+          locks[index]!.target,
+          (next) =>
+            acquire(index + 1, () => {
+              owned();
+              next();
+            }),
+          locks[index]!.runtime,
+        );
+      } catch (error) {
+        if (isErrno(error, "ELOCKED"))
+          throw storageError("STORAGE_BUSY", "Хранилище занято другим процессом Relay");
+        throw error;
+      }
+    };
+    return await acquire(0, () => {});
+  } finally {
+    if (!options.keepRuntime)
+      for (const directory of [...new Set(created)].sort((a, b) => b.length - a.length))
+        await rmdir(directory).catch(() => {});
+  }
+}
 
 /** Низкоуровневый владелец одной базы. Предметные сценарии вызывают run после своих проверок. */
 export class EntityStore {
+  /** Физический формат последнего прочитанного manifest. */
   formatVersion: 1 | 2 | 3 | 4 = 4;
+  /** Manifest, перечитываемый при каждом захвате замка; undefined — база создаётся. */
+  manifest: StorageManifest | undefined;
+  private initializing = false;
   readonly metrics = {
     entityReads: 0,
     operationReads: 0,
@@ -64,7 +216,75 @@ export class EntityStore {
     readonly root: string,
     readonly registry: EntityStorageRegistry,
     readonly probe?: TransactionProbe,
+    /** Подготовка вне опубликованного состояния: без замка, recovery и публикации. */
+    readonly detached = false,
   ) {}
+
+  /**
+   * Хранилище для подготовки миграции: читает файлы корня, но не создаёт каталоги, не
+   * выполняет recovery, не берёт замок и не публикует. Сессии допускают записи совместимости.
+   */
+  static async detached(path: string, registry: EntityStorageRegistry): Promise<EntityStore> {
+    return new EntityStore(await realpath(path), registry, undefined, true);
+  }
+
+  /** Рабочая сессия подготовки миграции над заданным (по умолчанию пустым) снимком индексов. */
+  session(state: StoreState = EMPTY_STATE): StorageSession {
+    invariant(
+      this.detached,
+      "STORAGE_DETACHED_ONLY",
+      "Сессия миграции доступна только вне публикации",
+      5,
+    );
+    return new StorageSession(this, structuredClone(state), true, { migration: true });
+  }
+
+  /** Совместим ли открытый manifest с текущим writer (или база только создаётся). */
+  get compatible(): boolean {
+    try {
+      this.requireCompatible();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Быстрая проверка профиля без сканирования записей: устаревший формат или профиль —
+   * STORAGE_MIGRATION_REQUIRED, более новый — STORAGE_VERSION_UNSUPPORTED (при чтении manifest).
+   */
+  requireCompatible(): void {
+    invariant(
+      !this.detached,
+      "STORAGE_DETACHED_ONLY",
+      "Подготовленное хранилище миграции не обслуживает предметные операции",
+      5,
+    );
+    if (this.manifest === undefined) {
+      invariant(this.initializing, "STORAGE_FORMAT_MISSING", "Маркер хранилища не прочитан", 5);
+      return;
+    }
+    requireCurrentProfile(this.manifest);
+  }
+
+  /** Перечитывает manifest под замком; смена содержимого сбрасывает процессные кеши базы. */
+  private async loadManifest(): Promise<void> {
+    const manifest = await readStorageManifest(this.root);
+    if (!manifest)
+      throw storageError(
+        "STORAGE_FORMAT_MISSING",
+        "Маркер storage.json отсутствует; восстановите его до открытия базы",
+        { path: MANIFEST_PATH },
+      );
+    const seen = digest(jsonValue(manifest));
+    if (seenManifests.get(this.root) !== seen) {
+      if (seenManifests.has(this.root)) forgetStorageSegments(this.root);
+      seenManifests.set(this.root, seen);
+    }
+    this.manifest = manifest;
+    this.initializing = false;
+    this.formatVersion = manifest.schemaVersion;
+  }
 
   static async create(path: string, registry: EntityStorageRegistry): Promise<EntityStore> {
     const absolute = resolve(path);
@@ -102,10 +322,11 @@ export class EntityStore {
         await transaction.publish(
           [
             { path: STATE_PATH, after: { ...EMPTY_STATE, version: randomUUID() } },
-            { path: "storage.json", after: { format: "relay-entities", schemaVersion: 4 } },
+            { path: MANIFEST_PATH, after: jsonValue(currentManifest()) },
           ],
           owned,
         );
+        await store.loadManifest();
       },
       transaction.runtime,
     );
@@ -132,9 +353,9 @@ export class EntityStore {
       root,
       async (owned) => {
         await transaction.recover(owned);
-        store.formatVersion = storageManifestSchema.parse(
-          await readJson(join(root, "storage.json")),
-        ).schemaVersion;
+        // Устаревший профиль проверяется при предметной работе: физический storage migrate
+        // открывает старую базу тем же путём. Новее поддерживаемого — отказ сразу.
+        await store.loadManifest();
       },
       transaction.runtime,
     );
@@ -142,13 +363,18 @@ export class EntityStore {
   }
 
   private async locked<T>(fn: (owned: () => void) => Promise<T>): Promise<T> {
+    invariant(
+      !this.detached,
+      "STORAGE_DETACHED_ONLY",
+      "Подготовленное хранилище миграции не берёт замок базы",
+      5,
+    );
     return withStorageLock(
       this.root,
       async (owned) => {
+        // Каждый захват замка: вид WAL, затем manifest — долгоживущий процесс видит смену профиля.
         await new StorageTransaction(this.root).recover(owned);
-        this.formatVersion = storageManifestSchema.parse(
-          await readJson(join(this.root, "storage.json")),
-        ).schemaVersion;
+        await this.loadManifest();
         const result = await fn(owned);
         owned();
         return result;
@@ -173,7 +399,7 @@ export class EntityStore {
   /** Короткое чтение под общей блокировкой исключает наблюдение частичной публикации. */
   async read<T>(fn: (snapshot: StorageSession) => Promise<T>): Promise<T> {
     return this.locked(async () => {
-      this.requireCurrentFormat();
+      this.requireCompatible();
       const snapshot = new StorageSession(this, await this.state(), false);
       try {
         return await fn(snapshot);
@@ -197,7 +423,7 @@ export class EntityStore {
   ): Promise<T> {
     commandSchema.parse(input);
     return this.locked(async (owned) => {
-      this.requireCurrentFormat();
+      this.requireCompatible();
       const session = new StorageSession(this, await this.state(), true);
       const result = jsonValue(await fn(session)) as T;
       if (session.changed) await this.commitSession(session, owned);
@@ -217,10 +443,8 @@ export class EntityStore {
     const transaction = new StorageTransaction(store.root);
     await transaction.prepareDirectories();
     await transaction.recover(owned);
-    if (!initialize)
-      store.formatVersion = storageManifestSchema.parse(
-        await readJson(join(store.root, "storage.json")),
-      ).schemaVersion;
+    if (initialize && !(await exists(join(store.root, MANIFEST_PATH)))) store.initializing = true;
+    else await store.loadManifest();
     return store;
   }
 
@@ -231,7 +455,8 @@ export class EntityStore {
     initialize = false,
   ): Promise<T> {
     owned();
-    this.requireCurrentFormat();
+    if (!this.initializing) await this.loadManifest();
+    this.requireCompatible();
     const state =
       initialize && !(await exists(join(this.root, STATE_PATH)))
         ? structuredClone(EMPTY_STATE)
@@ -244,19 +469,10 @@ export class EntityStore {
   }
 
   private async commitSession(session: StorageSession, owned: () => void) {
-    this.requireCurrentFormat();
+    this.requireCompatible();
     const prepared = await session.prepare(randomUUID());
     await new StorageTransaction(this.root, this.probe).publish(prepared, owned);
     session.index.published();
-  }
-
-  private requireCurrentFormat() {
-    invariant(
-      this.formatVersion === 4,
-      "STORAGE_MIGRATION_REQUIRED",
-      "Для работы с базой выполните storage migrate: требуется формат 4",
-      4,
-    );
   }
 
   /** Явное обслуживание сканирует постоянные файлы. Обычные резолвы сюда не попадают. */
@@ -268,7 +484,7 @@ export class EntityStore {
   }> {
     const rebuild = async (owned: () => void) => {
       owned();
-      this.requireCurrentFormat();
+      this.requireCompatible();
       forgetStorageSegments(this.root);
       let expectedPaths: string[] = [];
       try {
@@ -311,7 +527,9 @@ export class EntityStore {
           const path = `entities/${definition.collection}/${filename}`;
           this.metrics.entityReads++;
           const raw = jsonValue(await readJson(join(this.root, path), Number.POSITIVE_INFINITY));
-          const record = this.registry.validate(raw);
+          const record = withRecordDetails(this.registry, raw, path, () =>
+            this.registry.validate(raw),
+          );
           snapshot.indexSet("file-hashes", path, digest(raw));
           invariant(
             this.registry.path(refOf(record)) === path,
@@ -354,24 +572,6 @@ export class EntityStore {
     };
     return externalOwned ? rebuild(externalOwned) : this.locked(rebuild);
   }
-
-  /** Единственный прямой переход физического формата, без промежуточного журнала. */
-  async migrateFormat(owned: () => void, input: StorageMigrationOptions = {}) {
-    owned();
-    const options = storageMigrationOptionsSchema.parse(input);
-    const manifest = storageManifestSchema.parse(await readJson(join(this.root, "storage.json")));
-    if (manifest.schemaVersion !== 4) {
-      const { migrateUnifiedStorage } = await import("../migration/unified.js");
-      return migrateUnifiedStorage(this, owned, options);
-    }
-    return {
-      migrated: false,
-      format: "relay-entities",
-      schemaVersion: 4,
-      entities: 0,
-      operations: 0,
-    };
-  }
 }
 
 /** Рабочий пакет. Непубликуемые предметные записи доступны следующим явным шагам сценария. */
@@ -384,12 +584,52 @@ export class StorageSession {
   private executed = false;
   private executing = false;
   private readonly updates = new Map<string, Map<string, JsonValue | undefined>>();
+  /** Сессия исполнителя миграции: допускает записи совместимости (relocation-виды). */
+  readonly migration: boolean;
   constructor(
     readonly store: EntityStore,
     readonly state: StoreState,
     private readonly writable: boolean,
+    options: { migration?: boolean } = {},
   ) {
     this.index = new HashIndex(store.root);
+    this.migration = options.migration === true;
+  }
+
+  private relocation(kind: string): EntityCodec["relocation"] {
+    return this.store.registry.definitions().find((entry) => entry.kind === kind)?.relocation;
+  }
+
+  /** Запись совместимости меняет только исполнитель миграции. */
+  private requireRelocationWritable(record: StoredRecord) {
+    const relocation = this.relocation(record.kind);
+    if (!relocation || this.migration) return;
+    if ("deleted" in record)
+      throw new AppError("ENTITY_DELETED", "Сущность удалена; адрес зарезервирован", 3, {
+        ref: refOf(record),
+      });
+    throw entityRelocated(refOf(record), record.key, relocation(record));
+  }
+
+  /** Живая запись совместимости, разрешённая не своим видом, отвечает новым адресом. */
+  private async relocated(ref: EntityRef): Promise<never> {
+    const path = this.store.registry.path(ref);
+    const raw = await this.readFile(path);
+    invariant(raw, "STORAGE_INDEX_CORRUPT", "Запись разрешённого адреса потеряна", 5, { path });
+    const record = withRecordDetails(this.store.registry, raw, path, () =>
+      this.store.registry.validate(raw),
+    );
+    invariant(sameRef(record, ref), "INVALID_DATA", "Файл содержит другую сущность", 5);
+    invariant(
+      !("deleted" in record),
+      "ENTITY_DELETED",
+      "Сущность удалена; адрес зарезервирован",
+      3,
+      {
+        ref,
+      },
+    );
+    throw entityRelocated(ref, record.key, this.relocation(ref.kind)!(record));
   }
 
   /** Комментарий меняет только собственную ленту, не содержание и ревизию задачи. */
@@ -465,7 +705,13 @@ export class StorageSession {
 
   /** Явный перенос дисковой записи сохраняет исходную ревизию и не выдаётся за пользовательскую правку. */
   async importRecord(input: EntityRecord): Promise<void> {
-    const record = this.store.registry.encode(input);
+    const record = withRecordDetails(
+      this.store.registry,
+      input,
+      this.store.registry.path(input),
+      () => this.store.registry.encode(input),
+    );
+    this.requireRelocationWritable(record);
     const path = this.store.registry.path(record);
     const previous = await this.readFile(path);
     invariant(
@@ -545,7 +791,11 @@ export class StorageSession {
       5,
       { path },
     );
-    if (value !== null && path.startsWith("entities/")) this.store.registry.validate(value);
+    if (value !== null && path.startsWith("entities/"))
+      withRecordDetails(this.store.registry, value, path, () =>
+        this.store.registry.validate(value),
+      );
+    if (value !== null && path === MANIFEST_PATH) value = normalizeManifest(value);
     const before = await this.readFile(path);
     if (digest(before) !== digest(value)) this.files.set(path, structuredClone(value));
     if (/^(entities|relations|keyspaces|operations|history)\//.test(path))
@@ -555,7 +805,9 @@ export class StorageSession {
     const path = this.store.registry.path(ref);
     const raw = await this.readFile(path);
     invariant(raw, "ENTITY_NOT_FOUND", "Сущность не найдена в выбранном проекте", 3);
-    const record = this.store.registry.decode(raw);
+    const record = withRecordDetails(this.store.registry, raw, path, () =>
+      this.store.registry.decode(raw),
+    );
     invariant(sameRef(record, ref), "INVALID_DATA", "Файл содержит другую сущность", 5);
     return record;
   }
@@ -567,16 +819,22 @@ export class StorageSession {
     const kind = pieces.length === 2 ? pieces[0] : undefined;
     const value = pieces.at(-1)!;
     const kinds = typeof expected === "string" ? [expected] : expected;
+    // Запись совместимости разрешается только явно ожидающим её действием.
+    const moved = (candidate: string) =>
+      this.relocation(candidate) !== undefined && !kinds?.includes(candidate);
     invariant(
-      !kind || !kinds || kinds.includes(kind),
+      !kind || !kinds || kinds.includes(kind) || moved(kind),
       "ENTITY_KIND_MISMATCH",
       "Вид ссылки не соответствует действию",
       4,
     );
     if (kind) {
-      const raw = await this.readFile(this.store.registry.path({ kind, id: value }));
+      const path = this.store.registry.path({ kind, id: value });
+      const raw = await this.readFile(path);
       if (raw) {
-        const record = this.store.registry.validate(raw);
+        const record = withRecordDetails(this.store.registry, raw, path, () =>
+          this.store.registry.validate(raw),
+        );
         invariant(
           record.kind === kind && record.id === value,
           "INVALID_DATA",
@@ -590,6 +848,7 @@ export class StorageSession {
           3,
           { ref: refOf(record) },
         );
+        if (moved(record.kind)) await this.relocated(refOf(record));
         const card = await this.indexGet("cards", entityAddress(refOf(record)));
         invariant(card, "STORAGE_INDEX_CORRUPT", "Карточка разрешённого адреса потеряна", 5);
         return storageCardSchema.parse(card);
@@ -605,6 +864,8 @@ export class StorageSession {
         .parse((await this.indexGet("selectors", JSON.stringify([kinds[0], value]))) ?? []);
       candidates.push(...selected.map((ref) => ({ ref, matches: [], deleted: false })));
     }
+    const relocated = all.filter((entry) => !entry.deleted && moved(entry.ref.kind));
+    if (!candidates.length && relocated.length === 1) await this.relocated(relocated[0]!.ref);
     invariant(
       candidates.length > 0,
       all.length ? "ENTITY_KIND_MISMATCH" : "ENTITY_NOT_FOUND",
@@ -622,6 +883,7 @@ export class StorageSession {
     invariant(!candidate.deleted, "ENTITY_DELETED", "Сущность удалена; адрес зарезервирован", 3, {
       ref: candidate.ref,
     });
+    if (moved(candidate.ref.kind)) await this.relocated(candidate.ref);
     const card = await this.indexGet("cards", entityAddress(candidate.ref));
     invariant(card, "STORAGE_INDEX_CORRUPT", "Карточка разрешённого адреса потеряна", 5);
     return storageCardSchema.parse(card);
@@ -629,11 +891,19 @@ export class StorageSession {
 
   /** Проверка новых ключей не блокирует изменение по ID при уже существующей merge-коллизии. */
   async put(record: EntityRecord, ifRevision: number | null): Promise<void> {
-    const stored = this.store.registry.encode(record);
+    const stored = withRecordDetails(
+      this.store.registry,
+      record,
+      this.store.registry.path(record),
+      () => this.store.registry.encode(record),
+    );
+    this.requireRelocationWritable(stored);
     const ref = refOf(stored);
     const path = this.store.registry.path(ref);
     const raw = await this.readFile(path);
-    const previous = raw ? this.store.registry.validate(raw) : undefined;
+    const previous = raw
+      ? withRecordDetails(this.store.registry, raw, path, () => this.store.registry.validate(raw))
+      : undefined;
     if (previous) {
       // Предметные адаптеры не вправе стирать опубликованные комментарии.
       if (previous.comments !== undefined) stored.comments = previous.comments;
@@ -699,6 +969,7 @@ export class StorageSession {
 
   async remove(ref: EntityRef, ifRevision: number, actor: string): Promise<void> {
     const record = await this.get(ref);
+    this.requireRelocationWritable(this.store.registry.encode(record));
     invariant(record.revision === ifRevision, "REVISION_CONFLICT", "Сущность изменилась", 4);
     invariant(
       (await this.postings("adjacency", entityAddress(ref))).length === 0,
