@@ -9,6 +9,7 @@ import { EntityDeletionService } from "@relay/core/application/entities/deletion
 import { ProductRepository } from "@relay/core/storage/product";
 import { GraphService } from "@relay/core/application/graph/service";
 import { fixture } from "./helpers/workspace.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("библиотека: черновик, атомарные связи с задачей, Markdown, CAS и повтор", async (t) => {
   const { workspace } = await fixture(t);
@@ -209,9 +210,21 @@ test("библиотека: повторяемая миграция прежне
   await writeFile(path, JSON.stringify(disk));
   const before = await engine.get({ ref: saved.key });
   assert.equal(before.document?.status, "active");
-  assert.equal((await new StorageService(workspace).migrate()).migrated, true);
-  assert.equal((await new StorageService(workspace).migrate()).migrated, false);
-  assert.deepEqual(await engine.get({ ref: saved.key }), before);
+  assert.equal(
+    (await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    true,
+  );
+  assert.equal(
+    (await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    false,
+  );
+  // Переход document v1 → v2 явно записывает формат и теги; текст, ID и ревизия прежние.
+  assert.deepEqual(await engine.get({ ref: saved.key }), {
+    ...before,
+    data: { ...before.data, documentFormat: "markdown", tags: [] },
+  });
   assert.equal(
     JSON.parse(
       await readFile(
@@ -220,5 +233,14 @@ test("библиотека: повторяемая миграция прежне
       ),
     ).schemaVersion,
     3,
+  );
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        join(repository.root, "../entities/documents", `${saved.ref.id}.json`),
+        "utf8",
+      ),
+    ).dataVersion,
+    2,
   );
 });

@@ -145,7 +145,7 @@ export type MaterialRelationChange = Pick<
   /** Сущность связи: kind и постоянный ID. */
   target: DocumentRelation["target"];
 };
-/** Вид сущности, к которой прикрепляется материал (11 видов). */
+/** Вид цели связи материала: 11 видов сущностей и прежний адрес этапа плана (только чтение). */
 export type MaterialTargetKind = DocumentRelation["target"]["kind"];
 /** Страница материалов, прикреплённых к одной сущности. */
 export type EntityMaterialsPage = EntityDocumentsPage;

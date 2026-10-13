@@ -190,7 +190,22 @@ export class EntityEngine {
           2,
         );
     }
-    return this.read((catalog) => {
+    return this.read(async (catalog) => {
+      // Полный адрес прежнего этапа плана (запись совместимости) не входит в публичный
+      // каталог и не роняет адресное чтение: такой ref пропускается, остальные читаются.
+      // Узнать план-владельца можно чтением графа/контекста от этого адреса.
+      const relocated = new Set<string>();
+      const session = this.workspace.storageSession;
+      if (session)
+        for (const ref of refs ?? []) {
+          const [refKind, refId, extra] = ref.split(":");
+          if (extra !== undefined || refId === undefined) continue;
+          const definition = session.store.registry
+            .definitions()
+            .find((entry) => entry.kind === refKind);
+          if (definition?.relocation && (await session.indexGet("cards", ref)) !== undefined)
+            relocated.add(ref);
+        }
       const expected: Record<string, EntityKind | readonly EntityKind[] | undefined> = {
         board: "board",
         application: "application",
@@ -207,7 +222,11 @@ export class EntityEngine {
       const selected =
         refs === undefined
           ? undefined
-          : new Set(refs.map((ref) => entityAddress(resolveEntity(catalog, ref, kind).ref)));
+          : new Set(
+              refs
+                .filter((ref) => !relocated.has(ref))
+                .map((ref) => entityAddress(resolveEntity(catalog, ref, kind).ref)),
+            );
       const needle = q?.trim().toLocaleLowerCase() || undefined;
       const axes = documentAxes(query, undefined);
       const items = catalog.entries

@@ -4274,7 +4274,7 @@ export interface EntityDetail {
         relations?: {
           /** Связанная сущность проекта: вид и постоянный ID */
           target: {
-            /** Вид связанной сущности проекта */
+            /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
             kind: EntityDetailKindEnum4;
             /**
              * Постоянный ID связанной сущности
@@ -4704,7 +4704,7 @@ export interface CreateEntity {
         relations?: {
           /** Связанная сущность проекта: вид и постоянный ID */
           target: {
-            /** Вид связанной сущности проекта */
+            /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
             kind: CreateEntityKindEnum;
             /**
              * Постоянный ID связанной сущности
@@ -4879,7 +4879,7 @@ export interface UpdateEntity {
         relations?: {
           /** Связанная сущность проекта: вид и постоянный ID */
           target: {
-            /** Вид связанной сущности проекта */
+            /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
             kind: UpdateEntityKindEnum;
             /**
              * Постоянный ID связанной сущности
@@ -7182,7 +7182,7 @@ export interface ProductState {
           relations?: {
             /** Связанная сущность проекта: вид и постоянный ID */
             target: {
-              /** Вид связанной сущности проекта */
+              /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
               kind: ProductStateKindEnum;
               /**
                * Постоянный ID связанной сущности
@@ -7515,7 +7515,7 @@ export type ProductEntity =
             relations?: {
               /** Связанная сущность проекта: вид и постоянный ID */
               target: {
-                /** Вид связанной сущности проекта */
+                /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
                 kind: ProductEntityKindEnum;
                 /**
                  * Постоянный ID связанной сущности
@@ -7840,7 +7840,7 @@ export interface ProductMutation {
         relations?: {
           /** Связанная сущность проекта: вид и постоянный ID */
           target: {
-            /** Вид связанной сущности проекта */
+            /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
             kind: ProductMutationKindEnum;
             /**
              * Постоянный ID связанной сущности
@@ -8206,7 +8206,7 @@ export interface ProductContext {
             relations?: {
               /** Связанная сущность проекта: вид и постоянный ID */
               target: {
-                /** Вид связанной сущности проекта */
+                /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
                 kind: ProductContextKindEnum;
                 /**
                  * Постоянный ID связанной сущности
@@ -11446,7 +11446,7 @@ export interface ProductList {
           relations?: {
             /** Связанная сущность проекта: вид и постоянный ID */
             target: {
-              /** Вид связанной сущности проекта */
+              /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
               kind: ProductListKindEnum;
               /**
                * Постоянный ID связанной сущности
@@ -13000,7 +13000,7 @@ export type EntityDetailDocumentStatusEnum = "draft" | "active" | "archived";
 /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
 export type EntityDetailDocumentFormatEnum = "markdown" | "link";
 
-/** Вид связанной сущности проекта */
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
 export type EntityDetailKindEnum4 =
   | "project"
   | "product"
@@ -13012,6 +13012,7 @@ export type EntityDetailKindEnum4 =
   | "task"
   | "document"
   | "work-plan"
+  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -13143,7 +13144,7 @@ export type CreateEntityDocumentStatusEnum = "draft" | "active" | "archived";
 /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
 export type CreateEntityDocumentFormatEnum = "markdown" | "link";
 
-/** Вид связанной сущности проекта */
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
 export type CreateEntityKindEnum =
   | "project"
   | "product"
@@ -13155,6 +13156,7 @@ export type CreateEntityKindEnum =
   | "task"
   | "document"
   | "work-plan"
+  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -13181,7 +13183,7 @@ export type UpdateEntityDocumentStatusEnum = "draft" | "active" | "archived";
 /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
 export type UpdateEntityDocumentFormatEnum = "markdown" | "link";
 
-/** Вид связанной сущности проекта */
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
 export type UpdateEntityKindEnum =
   | "project"
   | "product"
@@ -13193,6 +13195,7 @@ export type UpdateEntityKindEnum =
   | "task"
   | "document"
   | "work-plan"
+  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -13535,7 +13538,7 @@ export type ProductStateDocumentStatusEnum = "draft" | "active" | "archived";
 /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
 export type ProductStateDocumentFormatEnum = "markdown" | "link";
 
-/** Вид связанной сущности проекта */
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
 export type ProductStateKindEnum =
   | "project"
   | "product"
@@ -13547,6 +13550,7 @@ export type ProductStateKindEnum =
   | "task"
   | "document"
   | "work-plan"
+  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -13603,7 +13607,7 @@ export type ProductEntityDocumentStatusEnum = "draft" | "active" | "archived";
 /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
 export type ProductEntityDocumentFormatEnum = "markdown" | "link";
 
-/** Вид связанной сущности проекта */
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
 export type ProductEntityKindEnum =
   | "project"
   | "product"
@@ -13615,6 +13619,7 @@ export type ProductEntityKindEnum =
   | "task"
   | "document"
   | "work-plan"
+  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -13647,7 +13652,7 @@ export type ProductMutationDocumentStatusEnum = "draft" | "active" | "archived";
 /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
 export type ProductMutationDocumentFormatEnum = "markdown" | "link";
 
-/** Вид связанной сущности проекта */
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
 export type ProductMutationKindEnum =
   | "project"
   | "product"
@@ -13659,6 +13664,7 @@ export type ProductMutationKindEnum =
   | "task"
   | "document"
   | "work-plan"
+  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -13694,7 +13700,7 @@ export type ProductContextDocumentStatusEnum = "draft" | "active" | "archived";
 /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
 export type ProductContextDocumentFormatEnum = "markdown" | "link";
 
-/** Вид связанной сущности проекта */
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
 export type ProductContextKindEnum =
   | "project"
   | "product"
@@ -13706,6 +13712,7 @@ export type ProductContextKindEnum =
   | "task"
   | "document"
   | "work-plan"
+  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */
@@ -14100,7 +14107,7 @@ export type ProductListDocumentStatusEnum = "draft" | "active" | "archived";
 /** Формат материала: markdown — содержание в непустом Markdown; link — внешняя ссылка url с необязательным Markdown-пояснением. Отсутствие поля в прежних записях означает markdown */
 export type ProductListDocumentFormatEnum = "markdown" | "link";
 
-/** Вид связанной сущности проекта */
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
 export type ProductListKindEnum =
   | "project"
   | "product"
@@ -14112,6 +14119,7 @@ export type ProductListKindEnum =
   | "task"
   | "document"
   | "work-plan"
+  | "plan-stage"
   | "release";
 
 /** references — контекст для сущности; documents — документ описывает сущность */

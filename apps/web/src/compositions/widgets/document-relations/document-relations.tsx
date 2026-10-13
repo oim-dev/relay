@@ -5,7 +5,7 @@ import { notifications } from "@mantine/notifications";
 import { Link2, Plus } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useProjectBasePath, useProjectId } from "domains/project";
-import { useEntities } from "domains/entities";
+import { isRelocatedEntityKind, useEntities } from "domains/entities";
 import {
   DocumentAccessError,
   DocumentConflictError,
@@ -77,12 +77,15 @@ export const DocumentRelations = ({ material }: DocumentRelationsProps) => {
     const entity = known.find(
       (item) => item.ref.kind === relation.target.kind && item.ref.id === relation.target.id,
     );
+    // Прежний адрес после миграции: карточки нет, это не потерянная сущность.
+    const isRelocated = entity === undefined && isRelocatedEntityKind(relation.target.kind);
     return {
       address: `${relation.target.kind}:${relation.target.id}:${relation.type}:${isLegacy ? "links" : "relations"}`,
       relation,
       isLegacy,
-      title: entity?.title ?? "Сущность недоступна",
-      entityKey: entity?.key ?? relation.target.id,
+      isRelocated,
+      title: entity?.title ?? (isRelocated ? relation.target.id : "Сущность недоступна"),
+      entityKey: isRelocated ? "только чтение" : (entity?.key ?? relation.target.id),
       href: isDefined(entity) ? getEntityHref(entity) : null,
     };
   });

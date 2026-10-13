@@ -13,10 +13,11 @@ import { StorageTransaction } from "@relay/core/storage/entity-store/transaction
 import { readOwned, replaceOwnedRelations } from "@relay/core/storage/entity-store/relations";
 import { openWorkspace } from "@relay/core/storage/workspace";
 import type { FullContext, EntityRef } from "@relay/contracts/entities/graph";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("фича → пустой паспорт → проект: связи записаны до чтения контекста и сохраняются при заполнении", async (t) => {
   const { workspace } = await fixture(t);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   const engine = new EntityEngine(workspace);
   const graph = new GraphService(workspace);
   // Ранее инициализированная единая база ещё не имела корневой связи продукта.
@@ -124,7 +125,7 @@ for (const withFeature of [false, true])
   test(`reconcile восстанавливает корень незаполненного продукта${withFeature ? " и старую фичу" : " без фич"}`, async (t) => {
     const { workspace } = await fixture(t);
     const storage = new StorageService(workspace);
-    await storage.migrate();
+    await storage.migrate({ backupDir: await migrationBackupDir() });
     const engine = new EntityEngine(workspace);
     const feature = withFeature
       ? await engine.create(
@@ -202,7 +203,7 @@ test("явная миграция старой фичи без заполнен�
   const before = await engine.get({ ref: feature.key });
   await writeLegacyMigrationFixture(workspace);
   assert.equal((await new GraphService(workspace).context({ root: feature.key })).edges.length, 0);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   assert.deepEqual(await engine.get({ ref: feature.key }), before);
   const context = await new GraphService(workspace).context({ root: feature.key });
   const product = await engine.get({ ref: "PRODUCT" });
@@ -282,7 +283,7 @@ test("документ связывает все девять видов; кон
 
 async function setup(t: TestContext) {
   const { root, workspace } = await fixture(t);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   const engine = new EntityEngine(workspace);
   const feature = await engine.create(
     {

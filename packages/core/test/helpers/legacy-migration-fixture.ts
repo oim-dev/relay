@@ -15,6 +15,24 @@ import { forgetStorageSegments } from "../../src/storage/entity-store/hash-index
 import { json, settings } from "../../src/storage/unified-adapter.js";
 import { z } from "zod";
 
+/**
+ * Поля документа v2 (`documentFormat`, `url`, `tags`) в legacy-раскладке не существовали:
+ * замороженный reader `physical.legacy-to-4` их строго отвергает. Фикстура описывает только
+ * прежний Markdown-документ без тегов; ссылку или теги legacy-формат выразить не может.
+ */
+function legacyProduct<T>(stored: T): T {
+  const value = stored as { fields?: Record<string, unknown> };
+  if (value.fields?.kind !== "document") return stored;
+  const { documentFormat, url, tags, ...fields } = value.fields;
+  assert(
+    (documentFormat === undefined || documentFormat === "markdown") &&
+      url === undefined &&
+      (tags === undefined || (Array.isArray(tags) && tags.length === 0)),
+    "Legacy-формат не содержит материалов-ссылок и тегов документа",
+  );
+  return { ...value, fields } as T;
+}
+
 /** Явные старые JSON-данные для теста миграции. Это не production writer и не обратная миграция продукта. */
 export async function writeLegacyMigrationFixture(workspace: Workspace) {
   const root = dirname(workspace.configPath);
@@ -49,7 +67,7 @@ export async function writeLegacyMigrationFixture(workspace: Workspace) {
                 })),
               },
             }
-          : encodeProduct(record);
+          : legacyProduct(encodeProduct(record));
       output.set(`product/${products.path(record)}`, stored);
     }
     for (const record of source.implementations.values())

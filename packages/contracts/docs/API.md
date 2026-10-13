@@ -11,17 +11,18 @@
 Условие `tasks-source` выбирает `src`, обычный runtime — `dist`, типы — `dist/*.d.ts`.
 Не импортируйте из чужого `src` и не считайте корневой модуль экспортом всех схем.
 
-| Импорт                        | Назначение                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `@relay/contracts`            | `src/index.ts`: общие DTO, контекст проекта/сервера, `ApiResponse`, `PageMeta`, `ServerEvent`, константы API |
-| `@relay/contracts/primitives` | Текст, автор, timestamp, ключ, внешний адрес, correlation `requestId`                                        |
-| `@relay/contracts/entities`   | Реестр основных видов, данные, карточки, фильтры, схемы общих действий и удаления                            |
-| `@relay/contracts/entities/*` | Предметные схемы продукта, досок, задач, документов, графа и настроек                                        |
-| `@relay/contracts/planning`   | Планы, вложенные этапы, запросы и результаты планирования                                                    |
-| `@relay/contracts/releases`   | Релизы и их операции                                                                                         |
-| `@relay/contracts/progress`   | Предметные показатели и выборки прогресса                                                                    |
-| `@relay/contracts/product`    | Совместимые типы продуктовых представлений                                                                   |
-| `@relay/contracts/storage`    | Переносимые оболочки хранения, ключевые пространства и карточки; не дисковый движок                          |
+| Импорт                                 | Назначение                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@relay/contracts`                     | `src/index.ts`: общие DTO, контекст проекта/сервера, `ApiResponse`, `PageMeta`, `ServerEvent`, константы API        |
+| `@relay/contracts/primitives`          | Текст, автор, timestamp, ключ, внешний адрес, correlation `requestId`                                               |
+| `@relay/contracts/entities`            | Реестр основных видов, данные, карточки, фильтры, схемы общих действий и удаления                                   |
+| `@relay/contracts/entities/*`          | Предметные схемы продукта, досок, задач, документов, графа и настроек                                               |
+| `@relay/contracts/planning`            | Планы, вложенные этапы, запросы и результаты планирования                                                           |
+| `@relay/contracts/releases`            | Релизы и их операции                                                                                                |
+| `@relay/contracts/progress`            | Предметные показатели и выборки прогресса                                                                           |
+| `@relay/contracts/product`             | Совместимые типы продуктовых представлений                                                                          |
+| `@relay/contracts/storage`             | Переносимые оболочки хранения, ключевые пространства и карточки; не дисковый движок                                 |
+| `@relay/contracts/storage-maintenance` | Результаты `storage status`, `storage migrate --dry-run` и `storage migrate`, коды ошибок совместимости с exit code |
 
 Список видов и поддерживаемых действий берите из `entityDefinitions` и связанных
 схем, а не из фиксированного числа в README. Разрешённый схемой вид не означает,
@@ -115,6 +116,11 @@ project-runtime, Web). Новое обязательное поле резуль
 имеют cursor/snapshot; продуктовые списки имеют собственные ограничения. Размещение
 полей в HTTP, SSE и ошибки описывает только [REST-справочник](../../server-runtime/docs/API.md).
 
+`documentRelationSchema.target.kind` допускает `plan-stage` только для чтения: это сохранённая
+до миграции связь документа с прежним адресом этапа плана. Схема общая для ввода и результата,
+поэтому тип ввода тоже содержит это значение, но новое прикрепление к этапу отклоняет Core,
+а не схема. Клиент показывает такую цель как адрес `plan-stage:<id>` без перехода к сущности.
+
 Целевая модель не становится доступным полем до реализации. В частности, текущий
 релиз использует `planIds`, без `applicationId`; принятое расширение описано отдельно
 в [предметных правилах](../../../docs/domain/RELEASES.md).
@@ -129,6 +135,10 @@ project-runtime, Web). Новое обязательное поле резуль
 нормализацию и дедупликацию тегов и переход к `markdown` без адреса выполняет Core.
 В `entityCreateDataSchemas.document` поле `body` имеет default `""` (для ссылки),
 в update default нет: отсутствие `body` сохраняет текущее содержание.
+В схемах `documentFormat` и `tags` необязательны (ввод прежних клиентов), но в хранилище
+документ `dataVersion` 2 (профиль 3) содержит их всегда: прежние записи получают `markdown`
+и `[]` явной миграцией Core ([формат](../../core/docs/FORMAT.md#перенос-документа-v1)),
+поэтому `data` прочитанного документа включает оба поля.
 
 `entitiesQuerySchema` дополнен фильтрами `documentFormat`, `tags` (все выбранные, AND)
 и `unattached`. Карточка `entitySummarySchema.document` всегда содержит `format` и `tags`,
@@ -150,6 +160,40 @@ project-runtime, Web). Новое обязательное поле резуль
 частичный по контракту; `failed` не включает `unchanged`. Методы Core — `EntityEngine`
 `documentFacets`, `documentBulk`, `relateDocument`, `entityDocuments`; транспорт и
 доступность в интерфейсах фиксируются отдельно, не по наличию схемы.
+
+## Обслуживание хранилища
+
+`storage.ts` описывает manifest единого хранилища: `schemaVersion` — физический формат,
+`dataModelVersion` — профиль совместимости модели данных (целевые версии всех постоянных
+владельцев). Поле отсутствует только у исторических баз профиля 1; manifest остаётся строгим,
+поэтому прежний строгий parser отвергает manifest нового профиля. Перечень профилей,
+переходы и правило «отсутствие поля — только исторический reader» принадлежат Core
+([формат](../../core/docs/FORMAT.md)).
+
+`storage-maintenance.ts` содержит переносимые схемы результатов обслуживания; их использует
+локальный CLI и runner, REST и MCP их не исполняют:
+
+- `storageStatusSchema` — статус `current | migration-required | recovery-required |
+unsupported | invalid`, идентичность проекта, фактические и целевые версии по владельцам
+  (live и надгробия по версиям), незавершённый WAL, первые 50 блокеров и их общее число;
+- `storageMigrationPlanSchema` — статус плюс упорядоченные шаги, изменения файлов по категориям,
+  отношений и адресов, удаляемые по правилу структуры, бюджеты, место и `planFingerprint`;
+- `storageMigrationResultSchema` — сохраняет `migrated`, `format`, `entities`, `operations: 0`
+  и добавляет `schemaVersion`, `resumed`, профили, шаги, отпечаток, проверки и backup.
+  `entities` — действующие записи сущностей после переноса без надгробий и технических
+  владельцев (`scope`, адреса совместимости `plan-stage`). `counts.checked` — записи и наборы,
+  прошедшие полную проверку текущими схемами; `counts.changed` — файлы с иным байтовым
+  содержанием после публикации; `counts.removedByRule` — удалённые распознанные исторические
+  структуры; те же счётчики по видам и категориям — в `counts.owners`;
+- `storageErrorDetailsSchema` — форма `details` ошибок хранилища: код, причина, шаг, владелец,
+  версии, безопасный относительный путь или ID и `next`, без пользовательского текста и
+  конфигурации. `ApiFailure.error.details` остаётся `unknown`; клиенты различают ошибки по `code`.
+
+`STORAGE_MAINTENANCE_ERROR_EXIT_CODES` — единая таблица кода и exit code CLI для ошибок
+совместимости (`STORAGE_MIGRATION_REQUIRED`, `STORAGE_VERSION_UNSUPPORTED`,
+`STORAGE_TRANSITION_MISSING`, `STORAGE_REGISTRY_INVALID`, `STORAGE_PLAN_STALE`,
+`STORAGE_BACKUP_REQUIRED`, `ENTITY_RELOCATED` и др.). HTTP-статусы назначает Server runtime.
+Вид ошибки реестра переходов передаётся в `details.reason` (`storageRegistryIssueSchema`).
 
 ## Изменение контракта и проверка
 

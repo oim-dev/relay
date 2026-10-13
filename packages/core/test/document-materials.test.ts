@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { EntityEngine } from "@relay/core/application/entities/service";
 import { GraphService } from "@relay/core/application/graph/service";
 import { ProductRepository } from "@relay/core/storage/product";
@@ -11,6 +11,8 @@ import { ProductQueries } from "@relay/core/application/product/queries";
 import { validateWorkspace } from "@relay/core/application/validate";
 import { matchesTarget } from "@relay/core/application/entities/document-library";
 import { fixture } from "./helpers/workspace.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
+import { CURRENT_DATA_MODEL } from "../src/storage/data-model/profiles.js";
 
 type Engine = EntityEngine;
 let sequence = 0;
@@ -197,7 +199,7 @@ test("материалы: формат link, валидация адреса и 
   assert.equal(data.relations?.length, 1);
 });
 
-test("материалы: прежняя запись без формата и тегов читается и изменяется без потерь", async (t) => {
+test("материалы: документ v1 без формата и тегов переносится явной миграцией и изменяется без потерь", async (t) => {
   const { workspace, engine, feature, task } = await library(t);
   const saved = await engine.create(
     {
@@ -222,14 +224,33 @@ test("материалы: прежняя запись без формата и �
     `${saved.ref.id}.json`,
   );
   const disk = JSON.parse(await readFile(path, "utf8"));
+  assert.equal(disk.dataVersion, 2);
   assert.equal(disk.data.documentFormat, "markdown");
+  // Прежняя форма: документ v1 профиля 2 не знал формата и тегов.
   delete disk.data.documentFormat;
   delete disk.data.tags;
+  disk.dataVersion = 1;
   await writeFile(path, JSON.stringify(disk));
-  // Внешняя правка файла — штатный путь storage reindex, а не скрытое чтение мимо индекса.
-  await new StorageService(workspace).reindex();
+  const manifestPath = join(dirname(path), "../../storage.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, dataModelVersion: 2 }));
+  // Чтение не подставляет формат: прежний профиль требует явной миграции.
+  await assert.rejects(engine.get({ ref: saved.key }), { code: "STORAGE_MIGRATION_REQUIRED" });
+  const result = await new StorageService(workspace).migrate({
+    backupDir: await migrationBackupDir(),
+  });
+  assert.equal(result.migrated, true);
+  assert.deepEqual(
+    result.steps.map((step) => step.id),
+    ["document-v1-to-v2", `profile.2-to-${CURRENT_DATA_MODEL}`],
+  );
+  const migrated = JSON.parse(await readFile(path, "utf8"));
+  assert.equal(migrated.dataVersion, 2);
+  assert.equal(migrated.revision, disk.revision, "переход не создаёт пользовательскую ревизию");
   const { detail, data } = await documentData(engine, saved.key);
-  assert.equal(data.documentFormat, undefined);
+  assert.equal(data.documentFormat, "markdown");
+  assert.deepEqual(data.tags, []);
+  assert.equal(data.url, undefined);
   assert.equal(detail.document?.format, "markdown");
   assert.deepEqual(detail.document?.tags, []);
   assert.equal(
@@ -942,4 +963,130 @@ test("материалы: ошибки ссылок документа имею�
     ),
     { code: "ALREADY_EXISTS", exitCode: 4 },
   );
+});
+
+/**
+ * База промежуточной сборки библиотеки (04cff36, не выпускалась): документы `dataVersion` 1
+ * в формате 4 профиля 1 уже содержат `documentFormat`/`url`/`tags` у сохранённых ею
+ * материалов и пустой `body` у ссылки; не сохранённые ею документы — выпущенная форма v1.
+ * Дисковая форма совпадает с кодеком той сборки: те же Markdown-пути и поля схемы.
+ */
+async function libraryBuildBase(t: TestContext, profile: 1 | 2) {
+  const { workspace, engine, feature, task } = await library(t);
+  const base = { kind: "document" as const, summary: "", documentKind: "description" as const };
+  const link = await engine.create(
+    {
+      requestId: rid("link"),
+      data: {
+        ...base,
+        name: "Макет",
+        documentFormat: "link",
+        url: "https://example.com/design?id=1#frame",
+        tags: ["Дизайн", "UI"],
+        targets: [feature.key],
+        relations: [{ target: task.ref, type: "references", description: "Перед деплоем" }],
+      },
+    },
+    "agent",
+  );
+  const tagged = await engine.create(
+    {
+      requestId: rid("tagged"),
+      data: { ...base, name: "Правила", body: "## Текст\r\n", tags: ["Процессы"] },
+    },
+    "agent",
+  );
+  const plain = await engine.create(
+    { requestId: rid("plain"), data: { ...base, name: "Прежний", body: "Текст" } },
+    "agent",
+  );
+  const root = join(new ProductRepository(workspace).root, "..");
+  const file = (id: string) => join(root, "entities/documents", `${id}.json`);
+  const disks = new Map<string, Record<string, unknown>>();
+  for (const saved of [link, tagged, plain]) {
+    const disk = JSON.parse(await readFile(file(saved.ref.id), "utf8"));
+    disk.dataVersion = 1;
+    // Документ, который сборка не сохраняла, остался в выпущенной форме v1.
+    if (saved === plain) {
+      delete disk.data.documentFormat;
+      delete disk.data.tags;
+    }
+    await writeFile(file(saved.ref.id), JSON.stringify(disk));
+    disks.set(saved.ref.id, disk);
+  }
+  const manifestPath = join(root, "storage.json");
+  const { dataModelVersion: _current, ...manifest } = JSON.parse(
+    await readFile(manifestPath, "utf8"),
+  );
+  await writeFile(
+    manifestPath,
+    JSON.stringify(profile === 1 ? manifest : { ...manifest, dataModelVersion: 2 }),
+  );
+  return { workspace, engine, link, tagged, plain, file, disks };
+}
+
+for (const profile of [1, 2] as const)
+  test(`материалы: база промежуточной сборки (профиль ${profile}) переносится с сохранением ссылки и тегов`, async (t) => {
+    const { workspace, engine, link, tagged, plain, file, disks } = await libraryBuildBase(
+      t,
+      profile,
+    );
+    await assert.rejects(engine.get({ ref: link.key }), { code: "STORAGE_MIGRATION_REQUIRED" });
+    const result = await new StorageService(workspace).migrate({
+      backupDir: await migrationBackupDir(),
+    });
+    assert.equal(result.migrated, true);
+    assert.ok(result.steps.some((step) => step.id === "document-v1-to-v2"));
+    for (const [id, disk] of disks) {
+      const migrated = JSON.parse(await readFile(file(id), "utf8"));
+      assert.equal(migrated.dataVersion, 2, id);
+      assert.equal(migrated.revision, disk.revision, id);
+      const data = disk.data as Record<string, unknown>;
+      // Присутствующие поля сохраняются как есть, отсутствующие получают значения перехода.
+      assert.deepEqual(
+        migrated.data,
+        data.documentFormat === undefined
+          ? { ...data, documentFormat: "markdown", tags: [] }
+          : data,
+        id,
+      );
+    }
+    const linkData = (await documentData(engine, link.key)).data;
+    assert.equal(linkData.documentFormat, "link");
+    assert.equal(linkData.url, "https://example.com/design?id=1#frame");
+    assert.equal(linkData.body, "");
+    assert.deepEqual(linkData.tags, ["Дизайн", "UI"]);
+    assert.equal(linkData.relations?.length, 1);
+    assert.equal(linkData.links.length, 1);
+    assert.deepEqual((await documentData(engine, tagged.key)).data.tags, ["Процессы"]);
+    const plainData = (await documentData(engine, plain.key)).data;
+    assert.equal(plainData.documentFormat, "markdown");
+    assert.deepEqual(plainData.tags, []);
+    assert.equal(
+      (await engine.list({ kind: "document", tags: ["дизайн"] })).items[0]?.ref.id,
+      link.ref.id,
+    );
+  });
+
+test("материалы: промежуточный вариант v1 допускает только поля библиотеки в строгих схемах", async (t) => {
+  for (const [name, change] of [
+    ["неизвестный ключ", (data: Record<string, unknown>) => void (data.extra = 1)],
+    ["ссылка без адреса", (data: Record<string, unknown>) => void delete data.url],
+    ["адрес не http", (data: Record<string, unknown>) => void (data.url = "ftp://example.com")],
+    ["тег с краевым пробелом", (data: Record<string, unknown>) => void (data.tags = [" UI"])],
+    ["формат без тегов", (data: Record<string, unknown>) => void delete data.tags],
+  ] as const) {
+    const { workspace, link, file } = await libraryBuildBase(t, 1);
+    const path = file(link.ref.id);
+    const disk = JSON.parse(await readFile(path, "utf8"));
+    change(disk.data);
+    await writeFile(path, JSON.stringify(disk));
+    const before = await readFile(path, "utf8");
+    await assert.rejects(
+      new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() }),
+      { code: "STORAGE_DATA_CORRUPT" },
+      name,
+    );
+    assert.equal(await readFile(path, "utf8"), before, name);
+  }
 });

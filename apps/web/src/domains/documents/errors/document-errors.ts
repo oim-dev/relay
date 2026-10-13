@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ApiError } from "infra/tasks-api";
+import { ApiError, getStorageFailureMessage } from "infra/tasks-api";
 
 const FAILURE_SCHEMA = z.object({
   error: z.object({ message: z.string(), code: z.string().optional() }),
@@ -50,6 +50,9 @@ export const throwDocumentFailure = (failure: unknown): never => {
     const parsed = FAILURE_SCHEMA.safeParse(failure.error);
     const code = parsed.success ? (parsed.data.error.code ?? "") : "";
     const message = parsed.success ? parsed.data.error.message : "";
+    /* Хранилище требует обслуживания владельцем: объясняем причину и локальную команду. */
+    const storageMessage = getStorageFailureMessage(failure);
+    if (storageMessage !== null) throw new DocumentAccessError(storageMessage, { cause: failure });
     if (CONFLICT_CODES.has(code)) throw new DocumentConflictError(message, { cause: failure });
     if (code === "ENTITY_NOT_FOUND") throw new DocumentNotFoundError(message, { cause: failure });
     if (code === "ALREADY_EXISTS" || code === "RELATION_NOT_FOUND")

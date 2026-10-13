@@ -251,6 +251,7 @@ CI-выпуск переиспользует подтверждённый рез
 | `pnpm --filter @relay/rest-sdk run generate`                    | [REST SDK](../packages/rest-sdk/README.md); сначала выполняется `openapi:export`                                        |
 | `pnpm run openapi:export`                                       | [Экспорт OpenAPI](export-openapi.mts): временная база, inject без слушающего порта, результат `.artifacts/openapi.json` |
 | `pnpm run bench:graph` / `bench:storage`                        | Отдельные измерения [Core](../packages/core/README.md), не обязательный шаг обычной проверки                            |
+| `packages/core/scripts/migrate-storage.mts` (без pnpm-скрипта)  | [Runner миграции хранилища](../packages/core/scripts/README.md): тот же сервис Core, что `storage status/migrate` CLI   |
 
 ## Если команда не работает
 

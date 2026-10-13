@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getProjectApi, ApiError } from "infra/tasks-api";
+import { getProjectApi, ApiError, getStorageFailureMessage } from "infra/tasks-api";
 import { PRODUCT_STATE_SCHEMA } from "../config/product.schema";
 import { ProductNotFoundError } from "../errors/product-errors";
 import type { ProductCommand, ProductState } from "../types/product.type";
@@ -31,7 +31,8 @@ export const productError = (error: unknown): string => {
     return "Запись не найдена: её удалили или адрес неверен.";
   if (error instanceof ApiError) {
     const parsed = z.object({ error: z.object({ message: z.string() }) }).safeParse(error.error);
-    if (parsed.success && error.status < 500) return parsed.data.error.message;
+    if (parsed.success && error.status < 500)
+      return getStorageFailureMessage(error) ?? parsed.data.error.message;
   }
   return "Исход сохранения неизвестен. Ввод сохранён. Перечитайте состояние перед новой отправкой: повтор может создать дубликат.";
 };

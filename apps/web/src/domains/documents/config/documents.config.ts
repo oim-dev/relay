@@ -64,7 +64,10 @@ export const MATERIAL_FORMAT_OPTIONS: { value: MaterialFormat; label: string }[]
 /** Название вида из реестра Contracts. */
 const kindTitle = (kind: MaterialTargetKind): string =>
   entityDefinitions.find((definition) => definition.kind === kind)?.title ?? kind;
-/** Названия 11 видов сущностей, к которым прикрепляются материалы. */
+/**
+ * Названия видов целей связи: 11 видов сущностей, к которым прикрепляются материалы,
+ * и прежний адрес этапа плана, сохранённый после миграции только для чтения.
+ */
 export const MATERIAL_TARGET_KINDS: Record<MaterialTargetKind, string> = {
   project: kindTitle("project"),
   product: kindTitle("product"),
@@ -76,6 +79,8 @@ export const MATERIAL_TARGET_KINDS: Record<MaterialTargetKind, string> = {
   task: kindTitle("task"),
   document: kindTitle("document"),
   "work-plan": kindTitle("work-plan"),
+  /* Карточки нет, новое прикрепление Core отклоняет; сохранённую связь можно снять. */
+  "plan-stage": "Этап плана (прежний)",
   release: kindTitle("release"),
 };
 /** Ограничения тегов из контракта: не более 20 тегов по 50 символов. */

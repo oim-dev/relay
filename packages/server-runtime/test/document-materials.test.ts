@@ -3,11 +3,13 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHttpBackend } from "@relay/project-runtime/backend/http";
 import { EntityEngine } from "@relay/core/application/entities/service";
 import { GraphService } from "@relay/core/application/graph/service";
+import { StorageService } from "@relay/core/application/storage/service";
 import {
   documentBulkResultSchema,
   documentFacetsSchema,
@@ -78,14 +80,32 @@ async function library(t: TestContext) {
     },
     "agent",
   );
-  // Прежняя запись: без documentFormat и tags, как до появления библиотеки материалов.
+  // Прежняя запись: документ v1 профиля 2 без documentFormat и tags. Файлы меняются под
+  // замком хранилища, а маркер профиля 2 пишется первым: файловый наблюдатель Server
+  // проверяет внешние правки под тем же замком и на базе прежнего профиля не может пометить
+  // индекс устаревшим, поэтому ответ не зависит от того, когда он увидит правку документа.
   const path = join(root, ".relay/entities/documents", `${old.ref.id}.json`);
-  const disk = JSON.parse(await readFile(path, "utf8"));
-  delete disk.data.documentFormat;
-  delete disk.data.tags;
-  await writeFile(path, JSON.stringify(disk));
-  // Внешняя правка файла требует явного обслуживания индекса, как у пользователя.
-  await new GraphService(workspace).reindex();
+  await workspace.withEntityStorage(async () => {
+    const manifestPath = join(root, ".relay/storage.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, dataModelVersion: 2 }));
+    const disk = JSON.parse(await readFile(path, "utf8"));
+    delete disk.data.documentFormat;
+    delete disk.data.tags;
+    disk.dataVersion = 1;
+    await writeFile(path, JSON.stringify(disk));
+  });
+  // Server прежний профиль не мигрирует: нужна явная локальная миграция, как у пользователя.
+  const blocked = await app.inject(`/api/v1/entities/get?ref=${encodeURIComponent(old.key)}`);
+  assert.equal(blocked.statusCode, 409);
+  assert.equal(blocked.json().error.code, "STORAGE_MIGRATION_REQUIRED");
+  const backupDir = await realpath(await mkdtemp(join(tmpdir(), "relay-materials-backup-")));
+  t.after(() => rm(backupDir, { recursive: true, force: true }));
+  const migrated = await new StorageService(workspace).migrate({
+    backupDir,
+  });
+  assert.equal(migrated.migrated, true);
+  assert(migrated.steps.some((step) => step.id === "document-v1-to-v2"));
   const prefix = `/api/v1/projects/${workspace.config.projectId}/entities`;
   return { app, workspace, engine, feature, task, rules, link, old, prefix };
 }

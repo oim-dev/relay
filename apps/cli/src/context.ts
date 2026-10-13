@@ -32,6 +32,11 @@ export interface Runtime {
   helpCommand?: string;
   /** Код выхода успешно напечатанного результата с частичным отказом; по умолчанию 0. */
   exitCode?: number;
+  /**
+   * Фактический вызов обслуживания `npx @oim-dev/relay-cli --local --config <путь>`:
+   * подставляется вместо плейсхолдера `<config>` в подсказках Core только в text-выводе.
+   */
+  maintenanceCommand?: string;
 }
 export interface CommandContext {
   /** Версия, проверяемая Backend при продолжении offset-страницы. */
@@ -64,6 +69,7 @@ export function outputOptions(
   return {
     format,
     text: terminalOptions(runtime.stdout, runtime.env),
+    ...(runtime.maintenanceCommand ? { maintenanceCommand: runtime.maintenanceCommand } : {}),
   };
 }
 
@@ -71,10 +77,11 @@ export function action(
   command: Command,
   runtime: Runtime,
   handler: (context: CommandContext) => Promise<Result>,
+  options: { localOnly?: boolean } = {},
 ): void {
   command.action(async () => {
     const globals = command.optsWithGlobals<GlobalOptions>();
-    const backend = await connectBackend(runtime, globals, command.name() === "migrate");
+    const backend = await connectBackend(runtime, globals, options.localOnly ?? false);
     const workspace = backend.workspace;
     const output = outputOptions(runtime, globals, workspace.config.output);
     runtime.output = output;

@@ -1,4 +1,4 @@
-import { getProjectApi, ApiError } from "infra/tasks-api";
+import { getProjectApi, ApiError, getStorageFailureMessage } from "infra/tasks-api";
 import { BOARD_SCHEMA, BOARDS_PAGE_SCHEMA } from "../config/boards.schema";
 import type { Board, BoardsPage } from "../types/boards.type";
 
@@ -23,6 +23,8 @@ export const getBoard = async (projectId: string, slug: string): Promise<Board> 
         throw new Error("Доска не найдена. Выберите существующую доску в навигации.", {
           cause: error,
         });
+      const storageMessage = getStorageFailureMessage(error);
+      if (storageMessage !== null) throw new Error(storageMessage, { cause: error });
       if (error instanceof ApiError || error instanceof TypeError)
         throw new Error("Не удалось прочитать доску. Проверьте соединение и повторите загрузку.", {
           cause: error,

@@ -14,6 +14,7 @@ import { legacyFixture, seedLegacyTask } from "./helpers/workspace.js";
 import { graphFixture } from "./helpers/graph-workspace.js";
 import { failWal } from "./helpers/wal.js";
 import { legacyGraphEvents } from "./helpers/legacy-graph.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 const nodes: GraphNode[] = ["A", "B", "C"].map((id) => ({
   ref: { kind: "any", id },
@@ -148,7 +149,7 @@ test("legacy graph v1: чтение без записи, storage migrate сох�
   await assert.rejects(graph.mutate(command, "agent"), { code: "STORAGE_MIGRATION_REQUIRED" });
   await assert.rejects(graph.migrate(), { code: "STORAGE_MIGRATION_REQUIRED" });
   assert.equal(await readFile(graph.repository.legacyPath, "utf8"), original);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   assert.equal(await exists(graph.repository.legacyPath), false);
   const after = await graph.read();
   assert.deepEqual(
@@ -235,7 +236,7 @@ test("v3 graph: потеря/порча индекса, внешняя прав�
   };
   const created = await graph.mutate(command, "agent");
   await rm(join(workspace.root, ".indexes"), { recursive: true });
-  forgetStorageSegments(workspace.root);
+  forgetStorageSegments(store.root);
   await assert.rejects(graph.read(), { code: "STORAGE_INDEX_CORRUPT" });
   await store.reindex();
   assert.equal((await graph.read()).version, created.version);
@@ -245,7 +246,7 @@ test("v3 graph: потеря/порча индекса, внешняя прав�
     join(workspace.root, ".indexes/segments", hash.slice(0, 2), `${hash}.json`),
     "{}",
   );
-  forgetStorageSegments(workspace.root);
+  forgetStorageSegments(store.root);
   await assert.rejects(graph.read(), { code: "STORAGE_INDEX_CORRUPT" });
   await store.reindex();
   const path = join(workspace.root, "relations/anys/A.json");

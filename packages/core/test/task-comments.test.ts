@@ -14,6 +14,7 @@ import { EntityDeletionService } from "@relay/core/application/entities/deletion
 import { StorageService } from "@relay/core/application/storage/service";
 import { initialize, openWorkspace } from "@relay/core/storage/workspace";
 import { fixture } from "./helpers/workspace.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 const message = {
   title: "Результат проверки",
@@ -118,7 +119,7 @@ test("комментарии: временная legacy-база, существ
   const task = await seedLegacyTask(workspace);
   const saved = await seedLegacyComment(workspace, task, message);
   const before = await tasks.getComment(task.id, saved.commentId);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   const reopened = await openWorkspace(root);
   const migrated = new BoardTasksService(reopened);
   assert.deepEqual(await migrated.getComment(task.id, saved.commentId), before);

@@ -8,6 +8,8 @@ export type RelationEntry = {
   relation: DocumentRelation;
   /** Связь пришла из совместимой области links, а не из адресных relations. */
   isLegacy: boolean;
+  /** Прежний адрес после миграции: карточки нет, связь только читается и снимается. */
+  isRelocated: boolean;
   /** Название сущности или пояснение о её недоступности. */
   title: string;
   /** Публичный ключ сущности. */

@@ -48,6 +48,7 @@ test("каталог CLI воспроизводим и содержит кажд
     "document bulk remove-tags",
     "document bulk status",
     "document bulk pin",
+    "storage status",
   ])
     assert(commands.includes(command), `Потеряна команда ${command}`);
   assert(!commands.some((command) => /^(boards|projects|entities)\b/.test(command)));

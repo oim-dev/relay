@@ -14,7 +14,7 @@ import type { ComboboxItem } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { relationAddress } from "domains/relations";
 import { useEntities, useEntitySummary, entityKindLabel } from "domains/entities";
-import { isEmptyArray } from "shared/value-predicates";
+import { isDefined, isEmptyArray } from "shared/value-predicates";
 import type { EntityPickerProps } from "./types/entity-picker-props.type";
 
 /** Ширина списка вариантов: длинные названия и переход по страницам без обрезки. */
@@ -60,13 +60,22 @@ export const EntityPicker = (props: EntityPickerProps) => {
     (response.data?.total ?? 0) > page.offset + 40;
   const errorMessage = response.error?.message ?? selection.error?.message;
   const hasError = errorMessage !== undefined;
-  const emptyMessage = response.isLoading ? "Загружаем сущности…" : "Сущностей не найдено";
+  // Отказ чтения без данных не выдаётся за пустой результат.
+  const hasData = response.data !== undefined;
+  const emptyMessage = response.isLoading
+    ? "Загружаем сущности…"
+    : hasData
+      ? "Сущностей не найдено"
+      : "Список сущностей не загружен";
   const inputValue = combobox.dropdownOpened ? search : (selectedLabel ?? "");
   const hasSelection = selected !== null && selected !== "";
   const hasPrevious = page.offset > 0;
   const hasPages = hasMore || hasPrevious;
   const hasNoOptions = isEmptyArray(optionsData);
-  const pageLabel = `${page.offset + 1}–${Math.min(page.offset + 40, response.data?.total ?? 0)} из ${response.data?.total ?? 0}`;
+  const total = response.data?.total;
+  const pageLabel = isDefined(total)
+    ? `${page.offset + 1}–${Math.min(page.offset + 40, total)} из ${total}`
+    : "—";
   /** Сбрасывает продолжение при изменении серверного поиска. */
   const handleSearch = (text: string): void => {
     setSearch(text);

@@ -10,6 +10,7 @@ import { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import { ProductService } from "@relay/core/application/product/service";
 import { BoardsService } from "@relay/core/application/boards/service";
 import { fixture } from "./helpers/workspace.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("подзадачи блокируют завершение родителя, отмена не готовность, повторное открытие пересчитывает блокеры", async (t) => {
   const { workspace } = await fixture(t);
@@ -218,7 +219,7 @@ test("старый смешанный цикл читается и исправ�
   assert.equal((await service.get(parent.id)).blocked, true);
   assert.equal((await service.get(child.id)).blocked, true);
   assert.equal(await readFile(path, "utf8"), before);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   await service.link(
     child.id,
     { target: parent.id, relation: "depends-on", remove: true, ifRevision: 1, requestId: "repair" },
@@ -370,7 +371,7 @@ test("legacy v1 читается без записи; storage migrate сохра
   assert.deepEqual(task.productLinks, []);
   assert.equal(await readFile(path, "utf8"), before);
   await assert.rejects(service.create(command, "agent"), { code: "STORAGE_MIGRATION_REQUIRED" });
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   assert.equal((await service.get(created.id)).revision, created.revision);
   await service.update(
     created.id,

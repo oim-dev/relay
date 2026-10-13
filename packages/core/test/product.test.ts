@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { ProductRepository } from "@relay/core/storage/product";
 import { encodeProduct } from "@relay/core/storage/product-codec";
 import { lintProduct } from "@relay/core/application/product/content";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("проверка содержания выдаёт страницы предупреждений без изменения требований", async (t) => {
   const app = await fixture(t);
@@ -38,6 +39,22 @@ test("проверка содержания выдаёт страницы пре
   assert.notEqual(first.warnings[0]!.code, second.warnings[0]!.code);
   assert.equal(lintProduct(state, { id: feature.id }).records, 1);
   assert.deepEqual(await service.state(), state);
+});
+
+type ProductState = { version: string; records: { fields: { kind: string } }[] };
+/** Снимок без производной версии: она зависит от содержания и меняется вместе с ним. */
+const withoutVersion = ({ version: _version, ...state }: ProductState) => state;
+/**
+ * Ожидание после явной миграции: document v1 → v2 записывает прежним документам
+ * Markdown-формат и пустые теги; остальное содержание, ID и ревизии не меняются.
+ */
+const migratedState = (state: ProductState) => ({
+  ...withoutVersion(state),
+  records: state.records.map((record) =>
+    record.fields.kind === "document"
+      ? { ...record, fields: { documentFormat: "markdown", tags: [], ...record.fields } }
+      : record,
+  ),
 });
 
 test("хранение продукта: Markdown по строкам, миграция без потери текста, ревизий и повторов", async (t) => {
@@ -141,21 +158,33 @@ test("хранение продукта: Markdown по строкам, мигр�
   await rename(target, legacy);
   await writeFile(legacy, JSON.stringify(original));
   const before = await service.state();
-  assert.equal((await new StorageService(app.workspace).migrate()).migrated, true);
-  assert.deepEqual(await service.state(), before);
+  assert.equal(
+    (await new StorageService(app.workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    true,
+  );
+  assert.deepEqual(withoutVersion(await service.state()), migratedState(before));
   assert.deepEqual(
     (await repository.all()).find((record) => record.id === saved.id),
     original,
   );
   assert.equal((await service.entity(saved.id)).revision, saved.revision);
-  assert.equal((await new StorageService(app.workspace).migrate()).migrated, false);
+  assert.equal(
+    (await new StorageService(app.workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    false,
+  );
   // Сбой между заменой формата и переносом: новый кодек ещё в плоском каталоге.
   await writeLegacyMigrationFixture(app.workspace);
   await rename(target, legacy);
   await writeFile(legacy, JSON.stringify(encodeProduct(original)));
   assert.deepEqual(await service.state(), before);
-  assert.equal((await new StorageService(app.workspace).migrate()).migrated, true);
-  assert.deepEqual(await service.state(), before);
+  assert.equal(
+    (await new StorageService(app.workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    true,
+  );
+  assert.deepEqual(withoutVersion(await service.state()), migratedState(before));
   // Дубликат не игнорируется и не перезаписывается миграцией.
   await writeLegacyMigrationFixture(app.workspace);
   await mkdir(repository.root, { recursive: true });
@@ -193,7 +222,7 @@ test("миграция продукта сохраняет порядок и ver
     before.records.map((record) => record.id),
     ["Zed00001", "alpha001"],
   );
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   assert.deepEqual(await service.state(), before);
 });
 

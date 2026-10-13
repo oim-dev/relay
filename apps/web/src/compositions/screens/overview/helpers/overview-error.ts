@@ -11,6 +11,8 @@ export const getOverviewErrorMessage = (error: GetProductOverviewError): string 
       return "Проект недоступен на сервере. Проверьте подключение проекта или выберите другой.";
     case PRODUCT_OVERVIEW_ERROR_CODE.STORAGE_FAILURE:
       return `Сервер не смог прочитать хранилище проекта: ${details.payload.message}`;
+    case PRODUCT_OVERVIEW_ERROR_CODE.STORAGE_MAINTENANCE:
+      return details.payload.message;
     case PRODUCT_OVERVIEW_ERROR_CODE.INVALID_RESPONSE:
       return "Сервер вернул обзор в неожиданном формате. Версии сервера и интерфейса могут не совпадать.";
     case PRODUCT_OVERVIEW_ERROR_CODE.TEMPORARILY_UNAVAILABLE:

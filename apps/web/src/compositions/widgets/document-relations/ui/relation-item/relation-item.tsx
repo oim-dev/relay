@@ -17,7 +17,7 @@ import styles from "./styles/relation-item.module.css";
  */
 export const RelationItem = (props: RelationItemProps) => {
   const { entry, returnTo, onEdit, onDetach, className, ...rootAttrs } = props;
-  const { relation, isLegacy, title, entityKey, href } = entry;
+  const { relation, isLegacy, isRelocated, title, entityKey, href } = entry;
   const typeLabel = DOCUMENT_RELATION_TYPES[relation.type];
   const hasDescription = relation.description.trim() !== "";
   return (
@@ -48,16 +48,19 @@ export const RelationItem = (props: RelationItemProps) => {
         )}
       </div>
       <div className={styles.actions}>
-        <Button
-          size="compact-sm"
-          variant="subtle"
-          color="gray"
-          leftSection={<Pencil size={13} aria-hidden="true" />}
-          aria-label={`Изменить связь с «${title}»`}
-          onClick={onEdit}
-        >
-          Изменить
-        </Button>
+        {/* Смысл связи с прежним адресом Core не меняет: доступно только снятие. */}
+        {!isRelocated && (
+          <Button
+            size="compact-sm"
+            variant="subtle"
+            color="gray"
+            leftSection={<Pencil size={13} aria-hidden="true" />}
+            aria-label={`Изменить связь с «${title}»`}
+            onClick={onEdit}
+          >
+            Изменить
+          </Button>
+        )}
         <Button
           size="compact-sm"
           variant="subtle"

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ApiError, getProjectApi } from "infra/tasks-api";
+import { ApiError, getProjectApi, getStorageFailureMessage } from "infra/tasks-api";
 
 /** Подтверждённые сервером имя, адрес и версия настроек. */
 export const PROJECT_SETTINGS_SCHEMA = z.object({
@@ -63,6 +63,8 @@ export const saveProjectSettings = async (
           "Настройки изменились в другом окне. Ваш ввод сохранён.",
           code,
         );
+      const storageMessage = getStorageFailureMessage(error);
+      if (storageMessage !== null) throw new ProjectSettingsError(storageMessage, code);
       if (code === "VALIDATION_ERROR")
         throw new ProjectSettingsError("Проверьте имя и формат slug.", code);
       throw new ProjectSettingsError(
