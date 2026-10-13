@@ -718,20 +718,50 @@ K по `<ref> <key>`.
 `--document-kind <kind>` (specification/description/rules/instruction/proposal/decision/research),
 `--document-status <state>` (draft/active/archived), `--section-id <id>`,
 `--clear-section`, `--pinned <value>` (строго true/false), `--targets <refs...>`,
-`--clear-targets`, `--clear-relations`. Section-id конфликтует с clear-section,
+`--clear-targets`, `--relations <json>`, `--relations-file <path>`, `--clear-relations`.
+Section-id конфликтует с clear-section,
 targets — с clear-targets. Targets заменяет прежние продуктовые области, clear-relations
 очищает только современные адресные отношения. Две формы не очищают друг друга.
+
+Relations — полный JSON-массив современных отношений, не добавление к прежнему набору:
+
+```json
+[
+  {
+    "target": { "kind": "feature", "id": "постоянный-ID-фичи" },
+    "type": "documents",
+    "description": "## Основание\n\nЗачем читать документ для этой цели."
+  }
+]
+```
+
+Замените ID фактическим постоянным ID из `inspect resolve FEATURE-1`; читаемый ключ
+не является ID этого поля. Type — `documents` или `references`, description —
+необязательное Markdown-пояснение. `--relations-file ./relations.json` читает UTF-8,
+`--relations-file -` — stdin; inline-альтернатива — `--relations '<JSON-массив>'`.
+Эти источники и `--clear-relations` несовместимы. `[]` явно очищает современные отношения.
+Все источники summary/body/relations проверяются вместе: во всей команде допустим
+один stdin. Ввод полностью читается до записи. Содержание и отношения сохраняются
+одной атомарной операцией Core; неверный набор или конфликт ревизии не сохраняет
+часть изменения. CLI не выполняет серию link. Предметные ограничения — в
+[контракте документов](https://github.com/oim-dev/relay/blob/main/docs/domain/DOCUMENTS.md).
 
 ### document list
 
 `npx @oim-dev/relay-cli document list` — L; дополнительно `--status <state>`,
 `--target <ref>`, `--section <id>` (none — без раздела), `--document-kind <kind>`,
-`--pinned <value>`, `--archived <value>` (true/false). Ответ — краткие документы.
+`--pinned <value>`, `--archived <value>` (true/false). Ответ — краткие документы:
+сохранённая аннотация (длинная помечена как фрагмент), при поиске — предоставленный
+фрагмент содержания, при `--sort updated` — время изменения. Подсказка читает первый
+документ страницы; для другого замените ключ. JSON сохраняет полные поля списка.
 
 ### document get
 
-`npx @oim-dev/relay-cli document get DOC-1` — полное body, метаданные и ревизия,
-без собственных флагов. Не заменяйте это чтение превью списка.
+`npx @oim-dev/relay-cli document get DOC-1` — полные summary/body, метаданные, время
+изменения и ревизия, без собственных флагов. В text — точное число прикреплений
+(современных и прежних) и уникальных целей вместо всей коллекции пояснений;
+предложенная `document links` раскрывает её страницами. JSON полного EntityDetail,
+включая relations/links/references, не сокращается. Не заменяйте get превью списка.
 
 ### document create
 
@@ -745,6 +775,8 @@ npx @oim-dev/relay-cli document create \
 
 C и D; name и непустое body обязательны. Summary по умолчанию пустое,
 document-kind — description. Ответ — квитанция; проверьте document get.
+Для атомарного создания с современными прикреплениями добавьте к этому вызову
+`--relations-file ./relations.json` (формат — D выше).
 
 ### document update
 
@@ -759,6 +791,20 @@ npx @oim-dev/relay-cli document update DOC-1 \
 R и D, минимум одно поле. Дополнительно `--clear-summary`, несовместимый
 с T(summary). Непереданные поля сохраняются; смена proposal на decision сама
 по себе не доказывает внешнюю приёмку.
+
+Текст и полный современный набор можно заменить вместе:
+
+```bash
+npx @oim-dev/relay-cli document update DOC-1 \
+  --actor agent \
+  --body-file ./decision.md \
+  --relations-file ./relations.json \
+  --if-revision 1
+```
+
+Передайте прочитанную ревизию. Если relations не указан, набор не меняется;
+непереданные legacy targets также сохраняются. Для одной цели без полной замены
+остаются `document link/unlink`.
 
 ### document rename
 
@@ -775,6 +821,10 @@ K по `<ref> <key>`, не изменение названия документ�
 `npx @oim-dev/relay-cli document links DOC-1` — P прикреплений. Современные
 relations и прежние links помечены раздельно; пояснения показываются полностью.
 Продолжение защищено ID и ревизией документа; ответ включает его revision.
+Это собственные прикрепления, не все входящие рёбра графа. Есть переход к первой
+цели каждого вида на странице (без дублирования двух типов к одной цели) и к
+`inspect graph list --root` для остальных направлений. Для другой цели того же вида
+замените ключ/ID в примере; product/project читаются без позиционного адреса.
 
 ### document link
 
@@ -812,6 +862,8 @@ R документа; обязателен `--target <ref>`, допустимы 
 `npx @oim-dev/relay-cli document section list` — P разделов в их порядке и revision
 проекта. Если массив ещё не задан, используются стандартные разделы. Версия
 продолжения привязана к PROJECT; для записи нужна показанная ревизия проекта.
+Подсказка открывает документы первого раздела страницы; можно заменить его ID,
+а `none` выбирает документы без раздела.
 
 ### document section create
 

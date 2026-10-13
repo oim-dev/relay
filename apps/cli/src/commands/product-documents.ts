@@ -16,7 +16,7 @@ import {
   commandInvocation,
 } from "../command-kit.js";
 import { revisionOption, subject } from "./product.js";
-import { entitySavedText } from "../presentation/entities.js";
+import { entitySavedText, entityReadArgs } from "../presentation/entities.js";
 import { renderMarkdown } from "../presentation/markdown.js";
 import { cardText, listText } from "../presentation/common.js";
 
@@ -65,7 +65,8 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
     name: "links <ref>",
     arguments: { ref: "Ключ или ID документа" },
     description: "Прочитать отношения и прежние продуктовые области",
-    details: "relations и links показаны отдельно; пояснение относится к адресному отношению.",
+    details:
+      "Собственные прикрепления документа: relations и links показаны отдельно, пояснения полностью. Это не все входящие рёбра: связи других записей читайте через inspect graph list --root. Подсказка чтения даётся для первой цели каждого вида на странице; для другой замените ключ или ID.",
     examples: [["npx @oim-dev/relay-cli document links DOC-1", "Прочитать прикрепления"]],
     configure: paging,
     async run(context, input) {
@@ -102,6 +103,31 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
         nextOffset: next < links.length ? next : null,
         version,
       };
+      // Один пример чтения на вид цели, без повтора для двух типов отношения к одной записи.
+      const targets = new Map(
+        data.items.flatMap((link) => {
+          // Этап не имеет самостоятельного get по одному ID; не выдумываем адрес команды.
+          if (link.target.kind === "plan-stage") return [];
+          const target = record.references.find(
+            (item) => item.ref.kind === link.target.kind && item.ref.id === link.target.id,
+          ) ?? { ref: { kind: link.target.kind, id: link.target.id }, key: link.target.id };
+          return [[`${link.target.kind}:${link.target.id}`, target] as const];
+        }),
+      );
+      const seenKinds = new Set<string>();
+      const readCommands = [...targets.values()]
+        .filter((target) => {
+          if (seenKinds.has(target.ref.kind)) return false;
+          seenKinds.add(target.ref.kind);
+          return true;
+        })
+        .map((target) => ({
+          label:
+            target.ref.kind === "product" || target.ref.kind === "project"
+              ? `Прочитать ${target.key}`
+              : `Прочитать ${target.key}; для другой цели этого вида замените ключ/ID`,
+          command: commandInvocation(context, entityReadArgs(target)),
+        }));
       return {
         data,
         page: pageResult(context, command, {}, query, data),
@@ -110,6 +136,19 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
             {
               title: `Прикрепления ${record.key} — ${record.title}`,
               fields: [["Ревизия", record.revision]],
+              commands: [
+                ...readCommands,
+                {
+                  label: "Все направления связей, включая прикрепления других записей",
+                  command: commandInvocation(context, [
+                    "inspect",
+                    "graph",
+                    "list",
+                    "--root",
+                    record.key,
+                  ]),
+                },
+              ],
               sections: data.items.length
                 ? data.items.map((link) => {
                     const target = record.references.find(
@@ -314,6 +353,19 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
                 ["Ревизия проекта", project.revision],
               ],
               items: data.items.map((section) => ({ key: section.id, title: section.name })),
+              commands: [
+                {
+                  label: data.items[0]
+                    ? `Документы раздела ${data.items[0].id}; для другого замените ID (none — без раздела)`
+                    : "Документы без раздела",
+                  command: commandInvocation(context, [
+                    "document",
+                    "list",
+                    "--section",
+                    data.items[0]?.id ?? "none",
+                  ]),
+                },
+              ],
               emptyMessage:
                 data.total === 0
                   ? "Разделов нет. Документы без раздела читаются отдельно."

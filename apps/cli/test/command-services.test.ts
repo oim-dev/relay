@@ -93,19 +93,30 @@ for (const [label, directory] of [
 test("local: init, карточка, квитанция и обслуживание не добавляют флаги выбора проекта", async (t) => {
   const root = await tempDirectory(t);
   for (const [args, expected] of [
-    [["init"], "product create --help"],
-    [["document", "create", "--name", "Документ", "--body", "Полный текст"], "document get DOC-1"],
-    [["document", "get", "DOC-1"], "inspect graph context DOC-1"],
-    [["storage", "status"], "doctor check"],
+    [["init"], ["product create --help"]],
+    [
+      ["document", "create", "--name", "Документ", "--body", "Полный текст"],
+      ["document get DOC-1"],
+    ],
+    [
+      ["document", "get", "DOC-1"],
+      ["document links DOC-1", "inspect graph context DOC-1"],
+    ],
+    [["storage", "status"], ["doctor check"]],
   ] as const) {
     const result = await invokeRaw(root, [...args]);
     assert.equal(result.code, 0, result.stdout);
     assert.equal(result.stderr, "");
     const hints = result.stdout.split("\n").filter((line) => line.startsWith("npx "));
-    assert.deepEqual(hints, [`npx @oim-dev/relay-cli ${expected}`]);
+    assert.deepEqual(
+      hints,
+      expected.map((command) => `npx @oim-dev/relay-cli ${command}`),
+    );
     // Выполняем выданную команду в том же проекте; npx заменён только тестовым входом CLI.
-    const next = await invokeRaw(root, expected.split(" "));
-    assert.equal(next.code, 0, next.stdout);
+    for (const command of expected) {
+      const next = await invokeRaw(root, command.split(" "));
+      assert.equal(next.code, 0, next.stdout);
+    }
   }
 });
 

@@ -11,6 +11,7 @@ import {
   pageResultFor,
   nativeQuery,
   nativePageResult,
+  readTextFields,
 } from "../src/command-kit.js";
 import type { PaginationContext } from "../src/command-kit.js";
 import type { CommandContext } from "../src/context.js";
@@ -90,6 +91,50 @@ test("foundation: Markdown сохраняет literal строки, пустот
     ),
     "Карточка\n\nОписание\nANSI: \\u001b[31m; literal: \\u001b; путь C:\\tmp",
   );
+});
+
+test("foundation: команды вне содержания отделены во всех карточках, Markdown не меняется", () => {
+  const markdown =
+    "\nКонтекст:\n  npx @oim-dev/relay-cli document get DOC-999\n\n```text\n\tпример\n```\n\n";
+  for (const width of [24, 40, 100, 160]) {
+    const output = cardText(
+      {
+        title: "Карточка",
+        sections: [
+          { title: "Содержание", body: renderMarkdown(markdown, { width, color: false }) },
+        ],
+        commands: [{ label: "Прочитать", command: "npx @oim-dev/relay-cli feature get FEATURE-1" }],
+      },
+      { width, color: false },
+    );
+    assert.ok(output.includes(`Содержание\n${markdown}\n\n───\n`));
+    assert.match(output.replace(/\s+/g, " "), /Команды CLI — вне содержания/);
+    assert.ok(output.endsWith("npx @oim-dev/relay-cli feature get FEATURE-1"));
+  }
+});
+
+test("foundation: единая проверка текстовых и JSON-источников не читает файл/stdin при конфликте", async () => {
+  let reads = 0;
+  const context = {
+    runtime: {
+      input: {
+        text: async () => {
+          reads++;
+          return "";
+        },
+      },
+    },
+  } as unknown as CommandContext;
+  for (const options of [
+    { bodyFile: "-", relationsFile: "-" },
+    { summaryFile: "-", relationsFile: "-" },
+    { bodyFile: "-", relations: "[]", relationsFile: "missing.json" },
+  ]) {
+    await assert.rejects(readTextFields(context, options, ["summary", "body", "relations"]), {
+      code: "CONFLICTING_OPTIONS",
+    });
+    assert.equal(reads, 0);
+  }
 });
 
 test("foundation: список различает пустую выборку и карточки, сохраняет фильтр 0 и полезные детали", () => {

@@ -3,7 +3,7 @@ import type { Command } from "commander";
 import { entityCreateSchema, entityUpdateSchema } from "@relay/contracts/entities";
 import type { EntitiesQuery, EntityDetail } from "@relay/contracts/entities";
 import { parse } from "@relay/core/domain/validation";
-import { invariant } from "@relay/core/shared/errors";
+import { AppError, invariant } from "@relay/core/shared/errors";
 import { lintProduct } from "@relay/core/application/product/content";
 import { commandGroup, registerCommand } from "../command.js";
 import { author } from "../context.js";
@@ -171,6 +171,11 @@ function fieldOptions(command: Command, kind: Kind, creating: boolean) {
     );
   }
   if (kind === "document") {
+    textOption(
+      command,
+      "relations",
+      'Полная замена адресных отношений: JSON-массив [{"target":{"kind":"feature","id":"ID"},"type":"documents","description":"Markdown"}]',
+    );
     command
       .option(
         "--document-kind <kind>",
@@ -189,7 +194,7 @@ function fieldOptions(command: Command, kind: Kind, creating: boolean) {
       })
       .option(
         "--targets <refs...>",
-        "Заменить прежние продуктовые области; адресные связи — document link",
+        "Заменить прежние продуктовые области; адресные связи — --relations или document link",
       )
       .option("--clear-targets", "Очистить прежние продуктовые области")
       .option("--clear-relations", "Очистить адресные отношения; прежние области сохраняются");
@@ -205,7 +210,19 @@ async function readFields(
   kind: Kind,
   creating: boolean,
 ) {
-  const text = await readTextFields(context, options, texts(kind));
+  invariant(
+    !(
+      options.clearRelations &&
+      (options.relations !== undefined || options.relationsFile !== undefined)
+    ),
+    "CONFLICTING_OPTIONS",
+    "Выберите --relations, --relations-file или --clear-relations",
+  );
+  // Все источники, включая JSON, проверяются вместе до чтения единственного stdin и записи.
+  const { relations, ...text } = await readTextFields(context, options, [
+    ...texts(kind),
+    ...(kind === "document" ? ["relations"] : []),
+  ]);
   invariant(
     !(options.clearSummary && text.summary !== undefined),
     "INVALID_ARGUMENT",
@@ -222,6 +239,16 @@ async function readFields(
     "Выберите --targets или --clear-targets",
   );
   const fields: Record<string, unknown> = { kind, ...text };
+  if (relations !== undefined) {
+    try {
+      fields.relations = JSON.parse(relations);
+    } catch {
+      throw new AppError(
+        "INVALID_JSON",
+        "--relations / --relations-file должен содержать корректный JSON-массив отношений",
+      );
+    }
+  }
   for (const name of [
     "name",
     "title",
@@ -272,7 +299,10 @@ export function registerProduct(program: Command, runtime: Runtime): void {
       name: kind,
       description: titles[kind],
       details:
-        "Обычный ввод без JSON. Изменение передаёт только указанные поля и требует прочитанной ревизии.",
+        (kind === "document"
+          ? "Содержание принимается текстом; полный набор адресных отношений — JSON-массивом --relations/--relations-file. "
+          : "Обычный ввод без JSON. ") +
+        "Изменение передаёт только указанные поля и требует прочитанной ревизии.",
       examples: [
         [`npx @oim-dev/relay-cli ${kind} ${singleton ? "get" : "list"}`, "Прочитать данные"],
       ],
@@ -321,7 +351,15 @@ export function registerProduct(program: Command, runtime: Runtime): void {
             return {
               data,
               page: pageResult(context, command, filters, query, data),
-              text: (options) => entitiesText(data, { ...filters, kind }, options),
+              text: (options) =>
+                entitiesText(
+                  data,
+                  { ...filters, kind },
+                  options,
+                  kind === "document" && data.items[0]
+                    ? [commandInvocation(context, ["document", "get", data.items[0].key])]
+                    : [],
+                ),
             };
           },
         },
@@ -344,6 +382,9 @@ export function registerProduct(program: Command, runtime: Runtime): void {
           singleton ? "product:passport" : input.argument(),
         );
         const commands = {
+          ...(kind === "document"
+            ? { links: commandInvocation(context, ["document", "links", data.key]) }
+            : {}),
           context: commandInvocation(context, ["inspect", "graph", "context", data.key]),
           ...(kind === "feature"
             ? { scenarios: commandInvocation(context, ["scenario", "list", "--feature", data.key]) }
@@ -364,6 +405,9 @@ export function registerProduct(program: Command, runtime: Runtime): void {
           `Полное описание оформляйте разделами и списками в Markdown, достаточно подробно для исполнения и проверки без чата. ${contentHints[kind]}. Правила берите из требований; неизвестное уточняйте, не выдумывайте. Markdown принимается текстом, из файла или stdin. Источники одного поля несовместимы. После потери ответа сначала прочитайте запись; автоматического повтора нет.` +
           (kind === "implementation" && action === "create"
             ? " Для снятого участия той же пары приложение/цель Core возвращает прежний ID, но заменяет название, описание и совместимую отметку переданными значениями; без --status применяется none. Для возврата участия с сохранением содержания используйте application participation list/replace с прочитанными ревизией состава и версией продукта."
+            : "") +
+          (kind === "document"
+            ? ' --relations <json> или --relations-file <path|-> атомарно сохраняет полный массив отношений вместе с текстом; [] очищает его. Элемент: {"target":{"kind":"feature","id":"постоянный ID"},"type":"documents","description":"Markdown"}; type — documents/references, description необязателен. ID узнайте через inspect resolve. Это замена, не добавление; непереданные relations и прежние targets сохраняются при update. --clear-relations несовместим с источником relations. Для всех полей вместе допустим один stdin.'
             : ""),
         examples: [
           [
@@ -372,6 +416,14 @@ export function registerProduct(program: Command, runtime: Runtime): void {
               ? "Учебный пример: замените требования и адреса данными своего проекта"
               : "Изменить название; замените ревизию прочитанным значением",
           ],
+          ...(kind === "document"
+            ? [
+                [
+                  `npx @oim-dev/relay-cli document ${action}${action === "update" ? " DOC-1 --if-revision 1" : " --name 'Решение'"} --actor agent --body-file ./decision.md --relations-file ./relations.json`,
+                  "Атомарно сохранить содержание и полный набор отношений; подготовьте JSON с постоянными ID целей",
+                ] as const,
+              ]
+            : []),
         ],
         configure: (command) => fieldOptions(command, kind, action === "create"),
         async run(context, input) {

@@ -142,6 +142,9 @@ function recoveryText(error: AppError): string {
     )
   )
     return "";
+  if (error.code === "CONFLICTING_OPTIONS" || error.code === "STDIN_ALREADY_USED") {
+    return "Выберите один источник каждого поля и не более одного потребителя stdin (-) во всей команде. Уберите несовместимые параметры; синтаксис и примеры доступны через --help у этой команды.";
+  }
   if (/CONFLICT|REVISION|VERSION|STALE/.test(error.code)) {
     return "Перечитайте запись или начните список с первой страницы. Сравните изменения перед новой попыткой; не подставляйте свежую ревизию автоматически.";
   }

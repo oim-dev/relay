@@ -56,6 +56,14 @@ function commandsText(commands: readonly OutputCommand[], options: TextOptions):
     .join("\n\n");
 }
 
+/** Граница оформления, не машинный разделитель: пользовательский текст остаётся буквальным. */
+export function actionsText(commands: readonly OutputCommand[], options: TextOptions): string {
+  const body = commandsText(commands, options);
+  return body
+    ? `───\n${wrap("Команды CLI — вне содержания", outputWidth(options))}\n\n${body}`
+    : "";
+}
+
 /** Поля выбирает предметный владелец; body секций уже подготовлен его рендерером. */
 export function cardText(
   input: {
@@ -72,7 +80,9 @@ export function cardText(
     ...(input.sections ?? [])
       .filter(({ body }) => body.trim())
       .map(({ title, body }) => `${wrap(safeText(title), outputWidth(options))}\n${body}`),
-    commandsText(input.commands ?? [], options),
+    input.sections?.some(({ body }) => body.trim())
+      ? actionsText(input.commands ?? [], options)
+      : commandsText(input.commands ?? [], options),
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -84,6 +94,7 @@ export function listText(
     filters?: readonly OutputField[];
     items: readonly { key: string; title: string; details?: readonly string[] }[];
     emptyMessage?: string;
+    commands?: readonly OutputCommand[];
   },
   options: TextOptions,
 ): string {
@@ -108,6 +119,7 @@ export function listText(
           )
           .join("\n\n")
       : emptyText(input.emptyMessage, { ...options, width }),
+    actionsText(input.commands ?? [], options),
   ]
     .filter(Boolean)
     .join("\n\n");

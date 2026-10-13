@@ -159,8 +159,12 @@ MCP `entity_document_create/update`, `product_document_save`, `entity_project_up
 REST `/entities`, `/entities/update`, `/product/records`.
 Разделы меняются через общую операцию изменения проекта, а не через settings PUT.
 В CLI состояние, раздел и закрепление меняются через `document update`, адресные
-отношения — через `document link/unlink`. Прежние области задаются `--targets` либо
-`--legacy`. `document section` сохраняет массив разделов read-modify-write под
+отношения точечно — через `document link/unlink`. Полный современный набор можно
+атомарно сохранить вместе с содержанием через `document create/update`
+с `--relations` или `--relations-file`; непереданные современные и прежние поля
+при обновлении сохраняются. Формат ввода описан в [справочнике CLI](../apps/cli/docs/CLI.md#документы-и-разделы).
+Прежние области задаются `--targets` либо `--legacy`.
+`document section` сохраняет массив разделов read-modify-write под
 исходной ревизией PROJECT, не повторяя запись при конфликте.
 
 Основания: [Core сущности](../packages/core/src/application/entities/service.ts),
