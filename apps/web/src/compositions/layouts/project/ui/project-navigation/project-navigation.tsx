@@ -1,6 +1,6 @@
 import clsx from "clsx";
-import { Fragment, useId, useState } from "react";
-import { Button, Divider, NavLink, Text } from "@mantine/core";
+import { useId, useState } from "react";
+import { Button, NavLink, Text } from "@mantine/core";
 import { NavLink as RouterNavLink, useLocation } from "react-router-dom";
 import { Box, ChartNoAxesCombined, LayoutDashboard } from "lucide-react";
 import { useBoards } from "domains/boards";
@@ -13,9 +13,6 @@ import {
 } from "./config/navigation";
 import type { ProjectNavigationProps } from "./types/project-navigation-props.type";
 import styles from "./styles/project-navigation.module.css";
-
-/** Публичные точки оформления ссылок Mantine. */
-const LINK_CLASSES = { label: styles.label, section: styles.icon };
 
 /**
  * Представляет разделы проекта и вложенную навигацию продукта.
@@ -74,8 +71,6 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
         end
         label="Обзор"
         leftSection={<ChartNoAxesCombined size={17} aria-hidden="true" />}
-        className={styles.link}
-        classNames={LINK_CLASSES}
         onClick={onNavigate}
       />
       <div className={styles.product}>
@@ -84,8 +79,7 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
           type="button"
           label="Продукт"
           leftSection={<Box size={17} aria-hidden="true" />}
-          className={clsx(styles.link, isProductRoute && styles._currentGroup)}
-          classNames={{ ...LINK_CLASSES, children: styles.children }}
+          mod={{ "current-group": isProductRoute }}
           opened={isProductOpened}
           onChange={setProductOpened}
           childrenOffset={0}
@@ -106,8 +100,7 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
                 to={entry.href}
                 label={entry.label}
                 leftSection={<entry.Icon size={15} aria-hidden="true" />}
-                className={clsx(styles.link, styles._child)}
-                classNames={LINK_CLASSES}
+                mod={{ nested: true }}
                 onClick={onNavigate}
               />
             ))}
@@ -119,8 +112,7 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
         type="button"
         label="Доски и задачи"
         leftSection={<LayoutDashboard size={17} aria-hidden="true" />}
-        className={clsx(styles.link, isBoardsRoute && styles._currentGroup)}
-        classNames={{ ...LINK_CLASSES, children: styles.children }}
+        mod={{ "current-group": isBoardsRoute }}
         opened={isBoardsOpened}
         onChange={setBoardsOpened}
         childrenOffset={0}
@@ -139,21 +131,16 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
             </Text>
           )}
           {boardNavigationItems.map((board) => (
-            <Fragment key={board.id}>
-              {board.hasSeparator && (
-                <Divider my="xs" mx="xs" color="var(--tasks-border)" aria-hidden="true" />
-              )}
-              <NavLink
-                component={RouterNavLink}
-                to={board.href}
-                label={board.label}
-                title={board.name}
-                active={board.isActive}
-                className={clsx(styles.link, styles._child)}
-                classNames={LINK_CLASSES}
-                onClick={onNavigate}
-              />
-            </Fragment>
+            <NavLink
+              key={board.id}
+              component={RouterNavLink}
+              to={board.href}
+              label={board.label}
+              title={board.name}
+              active={board.isActive}
+              mod={{ nested: true, "group-start": board.hasSeparator }}
+              onClick={onNavigate}
+            />
           ))}
           {hasBoardsError && (
             <div role="alert">
@@ -187,20 +174,15 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
         </div>
       </NavLink>
       {projectItems.map((entry) => (
-        <Fragment key={entry.path}>
-          {entry.hasSeparator && (
-            <Divider my="xs" mx="xs" color="var(--tasks-border)" aria-hidden="true" />
-          )}
-          <NavLink
-            component={RouterNavLink}
-            to={entry.href}
-            label={entry.label}
-            leftSection={<entry.Icon size={17} aria-hidden="true" />}
-            className={styles.link}
-            classNames={LINK_CLASSES}
-            onClick={onNavigate}
-          />
-        </Fragment>
+        <NavLink
+          key={entry.path}
+          component={RouterNavLink}
+          to={entry.href}
+          label={entry.label}
+          leftSection={<entry.Icon size={17} aria-hidden="true" />}
+          mod={{ "group-start": entry.hasSeparator }}
+          onClick={onNavigate}
+        />
       ))}
     </nav>
   );

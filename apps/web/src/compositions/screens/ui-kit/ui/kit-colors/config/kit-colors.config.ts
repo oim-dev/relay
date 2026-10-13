@@ -21,8 +21,8 @@ export const KIT_COLOR_GROUPS: KitColorGroup[] = [
   {
     title: "Поверхности и текст",
     pairs: [
-      { background: "backdrop", text: "ink", usage: "Внешний фон экрана" },
-      { background: "stage", text: "ink", usage: "Сцена страницы" },
+      { background: "backdrop", text: "ink", usage: "Общая подложка (основа)" },
+      { background: "backdrop", text: "muted", usage: "Пояснение на подложке" },
       { background: "card", text: "muted", usage: "Панель и пояснение" },
       { background: "tile", text: "ink", usage: "Строка записи" },
       { background: "surface", text: "soft", usage: "Поле и слабая подпись" },
@@ -36,7 +36,12 @@ export const KIT_COLOR_GROUPS: KitColorGroup[] = [
       { background: "action-primary", text: "action-primary-text", usage: "Главное действие" },
       { background: "action-disabled", text: "action-disabled-text", usage: "Недоступно" },
       { background: "accent", text: "accent-contrast", usage: "Акцентная заливка" },
-      { background: "accent-subtle", text: "accent-ink", usage: "Текущее место навигации" },
+      {
+        background: "nav-current-surface",
+        text: "nav-current-ink",
+        usage: "Текущий пункт навигации",
+      },
+      { background: "accent-subtle", text: "accent-ink", usage: "Акцентная подложка" },
       { background: "selection", text: "ink", usage: "Выделение текста" },
       { background: "search-mark", text: "ink", usage: "Совпадение поиска" },
     ],

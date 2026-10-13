@@ -15,7 +15,13 @@ import styles from "./styles/page-breadcrumbs.module.css";
  *  - доступных переходов внутри модального окна задачи
  */
 export const PageBreadcrumbs = (props: PageBreadcrumbsProps) => {
-  const { items, embedded = false, className, ...rootAttrs } = props;
+  const {
+    items,
+    embedded = false,
+    className,
+    "aria-label": label = "Хлебные крошки",
+    ...rootAttrs
+  } = props;
   const [containerRef, containerRect] = useResizeObserver<HTMLElement>();
   const width = containerRect.width;
   const visibleLimit = width >= 960 ? 7 : width >= 600 ? 4 : 3;
@@ -32,7 +38,7 @@ export const PageBreadcrumbs = (props: PageBreadcrumbsProps) => {
     <nav
       {...rootAttrs}
       ref={containerRef}
-      aria-label="Хлебные крошки"
+      aria-label={label}
       className={clsx(styles.root, embedded && styles._embedded, className)}
     >
       <Breadcrumbs

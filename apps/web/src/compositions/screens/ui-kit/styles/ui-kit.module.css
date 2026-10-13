@@ -1,9 +1,11 @@
-/* Отключённый декор: образцы и панели должны остаться читаемыми на сплошной основе. */
+/*
+ * Галерея открывается вне каркаса проекта и стоит на той же общей подложке документа.
+ * Поле у края окна — как у рабочей области каркаса; PageStage горизонтальных полей не задаёт.
+ */
 .root {
-  &[data-decor="off"] {
-    --tasks-feature-image: none;
-    --tasks-feature-fade-image: none;
-    --tasks-hatch-image: none;
-    --tasks-card-fade-image: none;
-  }
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding-inline: var(--tasks-workspace-gutter);
+  padding-top: var(--tasks-space-4);
 }

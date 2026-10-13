@@ -1,6 +1,6 @@
 .layout {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--tasks-panel-gap);
   min-width: 0;
 
   @media (--xl) {
@@ -20,8 +20,8 @@
 /* Разделы остаются под рукой при длинной выдаче; шапка проекта закреплена сверху. */
 .sidebar {
   position: sticky;
-  top: 5rem;
-  max-height: calc(100dvh - 6rem);
+  top: calc(var(--tasks-app-header-height) + var(--tasks-panel-gap));
+  max-height: calc(100dvh - var(--tasks-app-header-height) - var(--tasks-panel-gap) * 2);
   padding: 0.75rem 0.5rem;
   overflow-y: auto;
   border-radius: var(--tasks-radius-panel);
@@ -57,7 +57,7 @@
 .main {
   display: grid;
   align-content: start;
-  gap: 1rem;
+  gap: var(--tasks-panel-gap);
   min-width: 0;
 }
 

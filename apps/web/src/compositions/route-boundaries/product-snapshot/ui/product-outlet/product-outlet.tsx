@@ -105,7 +105,7 @@ export const ProductOutlet = () => {
     <>
       {hasNotice && (
         <div className={styles.notice}>
-          <Alert color="warning" title="Проверьте актуальность реализации" className={styles.alert}>
+          <Alert color="warning" title="Проверьте актуальность реализации">
             {notice}
           </Alert>
         </div>

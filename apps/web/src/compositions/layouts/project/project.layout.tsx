@@ -103,8 +103,7 @@ export const ProjectLayout = () => {
               onChange={(id) => {
                 if (id !== null) navigate(`/projects/${encodeURIComponent(id)}/`);
               }}
-              className={styles.selector}
-              classNames={{ input: styles.selectorInput }}
+              variant="navigation"
               comboboxProps={{ width: 320, position: "bottom-start" }}
             />
           )}
@@ -162,11 +161,7 @@ export const ProjectLayout = () => {
         size="min(20rem, calc(100vw - 2rem))"
         title="Разделы проекта"
         closeButtonProps={{ "aria-label": "Закрыть навигацию" }}
-        classNames={{
-          content: styles.drawer,
-          header: styles.drawerHeader,
-          title: styles.drawerTitle,
-        }}
+        variant="navigation"
       >
         <ProjectNavigation basePath={base} onNavigate={() => setNavigationOpen(false)} />
       </Drawer>

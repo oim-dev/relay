@@ -73,6 +73,14 @@
     scroll-margin-top: 5rem;
   }
 
+  /*
+   * Мера чтения: текстовые блоки около 70ch на любом широком окне, панель остаётся
+   * на ширину колонки. Таблицы и код не ограничиваются и прокручиваются сами.
+   */
+  & :where(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6) {
+    max-width: var(--tasks-reading-measure);
+  }
+
   @media (--md) {
     padding: 1.75rem 2rem;
   }

@@ -6,7 +6,7 @@
  */
 .grid {
   display: grid;
-  gap: 1rem;
+  gap: var(--tasks-panel-gap);
 
   @media (--md) {
     grid-template-areas:
@@ -26,7 +26,6 @@
       "size knowledge"
       "boards documents";
     grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
-    gap: 1.25rem;
   }
 }
 
@@ -133,11 +132,7 @@
   font-weight: 650;
 }
 
-/* Материалы, прикреплённые к самому проекту, — после справочного контекста. */
+/* Материалы, прикреплённые к самому проекту, — следующая панель после справочного контекста. */
 .materials {
-  margin-top: 1rem;
-
-  @media (--lg) {
-    margin-top: 1.25rem;
-  }
+  margin-top: var(--tasks-panel-gap);
 }

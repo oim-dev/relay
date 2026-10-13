@@ -27,7 +27,7 @@
   transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
 
   &:hover {
-    background-color: var(--tasks-subtle);
+    background-color: var(--tasks-nav-hover);
     color: var(--tasks-ink);
   }
 

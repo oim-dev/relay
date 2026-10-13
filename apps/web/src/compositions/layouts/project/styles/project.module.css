@@ -1,5 +1,6 @@
 /*
- * Каркас проекта: липкая шапка, боковая навигация от 1024px и Drawer ниже.
+ * Каркас проекта на общей подложке документа: шапка, боковая навигация от 1024px
+ * и Drawer ниже не имеют собственных поверхностей, рамок и теней.
  * Шапка остаётся в слое приложения Mantine: выпадающие списки, окна и Drawer выше неё.
  * Каркас — flex-колонка на высоту окна: рабочее поле (PageStage layout="workspace")
  * заполняет остаток высоты под шапкой и крошками без расчёта их размеров.
@@ -9,9 +10,13 @@
   flex-direction: column;
   min-height: 100dvh;
   color: var(--tasks-ink);
-  background-color: var(--tasks-canvas);
 }
 
+/*
+ * Закреплённая шапка рисует продолжение общей подложки — те же роли основы и декора,
+ * привязанные к окну, — поэтому шва нет, а прокручиваемое содержимое не просвечивает
+ * под текстом и кнопками. Это не отдельная заливка: цвет совпадает с подложкой в любой точке.
+ */
 .header {
   position: sticky;
   top: 0;
@@ -20,13 +25,16 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--tasks-space-3);
-  min-height: 4rem;
-  padding: var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-2);
-  border-bottom: 1px solid var(--tasks-border);
-  background-color: var(--tasks-chrome);
+  min-height: var(--tasks-app-header-height);
+  padding: var(--tasks-space-3) var(--tasks-workspace-gutter);
+  background-color: var(--tasks-backdrop);
+  background-image: var(--tasks-backdrop-image);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 
-  @media (--sm) {
-    padding-inline: var(--tasks-space-4);
+  /* Значок бренда стоит на одной вертикали со значками пунктов сайдбара. */
+  @media (--lg) {
+    padding-left: calc(var(--tasks-space-2) + var(--tasks-space-3));
   }
 }
 
@@ -74,46 +82,39 @@
   max-width: 16rem;
 }
 
-/*
- * Выбор проекта занимает доступное место шапки: короткое название видно целиком,
- * длинное сокращается многоточием (полное — в подсказке и в списке).
- */
-.selector {
-  flex: 0 1 36rem;
-  min-width: 8rem;
-}
-
-.selectorInput {
-  overflow: hidden;
-  font-weight: 600;
-  text-overflow: ellipsis;
-}
-
+/* Поле рабочей области у края окна; рядом с сайдбаром — промежуток сайдбара. */
 .workspace {
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
+  padding-inline: var(--tasks-workspace-gutter);
 
   @media (--lg) {
     flex-direction: row;
+    gap: calc(var(--tasks-sidebar-gap) - var(--tasks-focus-ring-outset));
+    padding-left: 0;
   }
 }
 
+/*
+ * Сайдбар прокручивается сам (overflow), поэтому справа оставляет поле под вылет кольца
+ * фокуса пунктов. Поле вычитается из промежутка до контента: от края пункта до контента
+ * по-прежнему --tasks-sidebar-gap, ширина пунктов и положение контента не меняются.
+ */
 .sidebar {
   display: none;
-  background-color: var(--tasks-chrome);
 
   @media (--lg) {
     position: sticky;
-    top: 4rem;
+    top: var(--tasks-app-header-height);
     display: flex;
     flex-direction: column;
-    flex: 0 0 13.75rem;
+    flex: 0 0 calc(13.75rem + var(--tasks-focus-ring-outset));
     align-self: flex-start;
-    height: calc(100dvh - 4rem);
-    padding: var(--tasks-space-6) var(--tasks-space-3);
+    height: calc(100dvh - var(--tasks-app-header-height));
+    padding: var(--tasks-space-3) var(--tasks-focus-ring-outset) var(--tasks-space-4)
+      var(--tasks-space-2);
     overflow-y: auto;
-    border-right: 1px solid var(--tasks-border);
   }
 }
 
@@ -136,35 +137,25 @@
   }
 }
 
-.drawer {
-  background-color: var(--tasks-chrome);
-}
-
-.drawerHeader {
-  min-height: 4rem;
-  margin-bottom: var(--tasks-space-2);
-  border-bottom: 1px solid var(--tasks-border);
-  background-color: var(--tasks-chrome);
-}
-
-.drawerTitle {
-  font-size: var(--mantine-font-size-md);
-  font-weight: 650;
-}
-
 .sidebarFooter {
   display: flex;
   align-items: center;
   gap: var(--tasks-space-3);
   margin-top: auto;
-  padding: var(--tasks-space-6) var(--tasks-space-3) 0;
-  border-top: 1px solid var(--tasks-border);
+  padding: var(--tasks-space-8) var(--tasks-space-3) 0;
   color: var(--tasks-soft);
 }
 
+/*
+ * Колонка крошек и экрана не шире --tasks-page-max-width и центрируется в области справа
+ * от сайдбара: крошки и PageStage остаются на одной вертикали на любом широком окне.
+ */
 .content {
   display: flex;
   flex: 1;
   flex-direction: column;
+  width: 100%;
   min-width: 0;
+  max-width: var(--tasks-page-max-width);
+  margin-inline: auto;
 }

@@ -1,6 +1,7 @@
 /*
  * Родитель — ссылка с сокращением слишком длинного названия (полное — в подсказке
  * и в меню); текущая страница переносится полностью: это её единственная подпись в пути.
+ * В покое уровни без плашек: текущая страница отличается цветом и весом текста.
  */
 .root {
   display: block;
@@ -17,7 +18,7 @@
   transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
 
   &:hover {
-    background-color: var(--tasks-subtle);
+    background-color: var(--tasks-nav-hover);
     color: var(--tasks-ink);
   }
 
@@ -28,7 +29,6 @@
 
   &._current {
     max-width: min(28rem, 100%);
-    background-color: var(--tasks-subtle);
     color: var(--tasks-ink);
     font-weight: 600;
     white-space: normal;

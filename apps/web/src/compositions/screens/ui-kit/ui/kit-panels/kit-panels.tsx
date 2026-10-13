@@ -51,13 +51,13 @@ export const KitPanels = () => {
   return (
     <SectionPanel
       title="Страница и панели"
-      description="Шапка этой страницы — PageHeader в раскладке toolbar на сцене PageStage."
+      description="Шапка этой страницы — PageHeader в раскладке toolbar внутри PageStage, прямо на общей подложке."
     >
       <KitExample
-        title="Сцена и шапка страницы"
-        purpose="Один h1, контекст, пояснение и действия; сцена отделяет содержимое от фона."
+        title="Геометрия и шапка страницы"
+        purpose="Один h1, контекст, пояснение и действия на общей подложке; PageStage задаёт ширину, вертикальный ритм и зазор панелей, но не рисует сцену."
         importLine='import { PageStage } from "ui/page-stage"; import { PageHeader } from "ui/page-header";'
-        rule="actionsLayout='stack' — сведения и действие записи, 'toolbar' — поиск и создание в каталоге. PageStage layout='workspace' — доска и граф на оставшуюся высоту окна от 768px. Длинное слово в h1 переносится по слогам."
+        rule="actionsLayout='stack' — сведения и действие записи, 'toolbar' — поиск и создание в каталоге. PageStage layout='workspace' — доска и граф на оставшуюся высоту окна от 768px. Горизонтальные поля задаёт каркас (--tasks-workspace-gutter). Длинное слово в h1 переносится по слогам."
       >
         <p className={styles.note}>Пример — шапка галереи над разделами.</p>
       </KitExample>
@@ -203,7 +203,16 @@ export const KitPanels = () => {
         importLine='import { FilterChips } from "ui/filter-chips";'
         rule="До ~6 вариантов одного фильтра каталога на тонированной панели; варианты переносятся, на touch — 44px. Для переключения режима вида — SegmentedControl, для множественного выбора — Checkbox."
       >
-        <SectionPanel className={styles.sample} titleAs="h3" title="Планы" density="compact">
+        <SectionPanel
+          className={styles.sample}
+          titleAs="h3"
+          title={
+            <>
+              Планы<VisuallyHidden>: пример фильтра</VisuallyHidden>
+            </>
+          }
+          density="compact"
+        >
           <FilterChips
             label="Состояние плана"
             options={FILTER_OPTIONS}

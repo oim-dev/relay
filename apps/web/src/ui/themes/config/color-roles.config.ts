@@ -74,9 +74,11 @@ const buildColorRoles = (colors: Palettes): Record<string, SchemePair> => {
   const info: SchemePair = [blue[9], blue[4]];
   const actionPrimary: SchemePair = [gray[8], gray[2]];
 
-  // Главная карточка: спокойный переход от тона акцента к холодному бирюзовому, 155deg.
-  const featureStart: SchemePair = [mixSrgb(accent[0], 11, WHITE), mixSrgb(accent[1], 16, dark[7])];
-  const featureEnd: SchemePair = [mixSrgb(cyan[1], 45, gray[2]), mixSrgb(cyan[4], 16, dark[7])];
+  // Главная карточка: переход от тона акцента к холодному голубому, 155deg. В светлой
+  // схеме заметнее общей подложки, чтобы акцентная панель читалась на почти белом фоне
+  // без рамки и тени; в тёмной остаётся тихой (слабый текст на ней ≥4.5:1).
+  const featureStart: SchemePair = [mixSrgb(accent[0], 17, WHITE), mixSrgb(accent[1], 16, dark[7])];
+  const featureEnd: SchemePair = [mixSrgb(cyan[2], 42, WHITE), mixSrgb(cyan[4], 16, dark[7])];
   const featureSurface: SchemePair = [
     mixSrgb(featureStart[0], 50, featureEnd[0]),
     mixSrgb(featureStart[1], 50, featureEnd[1]),
@@ -89,6 +91,25 @@ const buildColorRoles = (colors: Palettes): Record<string, SchemePair> => {
   // Затухание — прозрачный вариант того же конечного цвета, без перехода через серый.
   const fadeImage = (color: string) =>
     `linear-gradient(to bottom, ${withAlpha(color, 0)}, ${color})`;
+
+  // Общая подложка приложения: почти белая (тёмная нейтральная) основа и отдельный
+  // декоративный слой из широких холодных переходов. Слой привязан к окну, а не к длине
+  // страницы; основа читаема и без изображения.
+  const backdrop: SchemePair = [mixSrgb(accent[0], 2, WHITE), mixSrgb(dark[9], 80, BLACK)];
+  const backdropAccent: SchemePair = [
+    mixSrgb(accent[0], 8, WHITE),
+    mixSrgb(accent[1], 6, backdrop[1]),
+  ];
+  const backdropCool: SchemePair = [mixSrgb(cyan[2], 22, WHITE), mixSrgb(cyan[4], 4, backdrop[1])];
+  const backdropImage = (scheme: 0 | 1) => {
+    const glow = (color: string, shape: string) =>
+      `radial-gradient(${shape}, ${color} 0%, ${withAlpha(color, 0)} 100%)`;
+    return [
+      glow(backdropAccent[scheme], "ellipse 70% 60% at 0% 0%"),
+      glow(backdropCool[scheme], "ellipse 60% 55% at 100% 0%"),
+      glow(backdropAccent[scheme], "ellipse 65% 50% at 85% 100%"),
+    ].join(", ");
+  };
 
   const accentContrast: SchemePair = [WHITE, dark[9]];
   const statusSurface = (light: string, darkTint: string): SchemePair => [
@@ -142,7 +163,8 @@ const buildColorRoles = (colors: Palettes): Record<string, SchemePair> => {
     "selected-border": [gray[6], dark[3]],
 
     // Уровни экрана-дашборда от дальнего к ближнему.
-    backdrop: [gray[2], mixSrgb(dark[9], 60, BLACK)],
+    backdrop,
+    "backdrop-image": [backdropImage(0), backdropImage(1)],
     stage: [mixSrgb(gray[0], 45, WHITE), dark[9]],
     card,
     tile,
@@ -154,7 +176,8 @@ const buildColorRoles = (colors: Palettes): Record<string, SchemePair> => {
     "feature-surface": featureSurface,
     "feature-image": [featureImage(0), featureImage(1)],
     "feature-fade-image": [fadeImage(featureSurface[0]), fadeImage(featureSurface[1])],
-    "hatch-surface": [WHITE, dark[7]],
+    // Основа штриховки — тон панели: без изображения карточка не сливается с подложкой.
+    "hatch-surface": card,
     "hatch-image": [hatchImage(0), hatchImage(1)],
     "card-fade-image": [fadeImage(card[0]), fadeImage(card[1])],
 
@@ -193,7 +216,7 @@ const buildColorRoles = (colors: Palettes): Record<string, SchemePair> => {
 
     // Граница поля и неотмеченного checkbox: значимая граница контрола, не менее 3:1
     // к обоим соседям — заливке поля и панели (card), а также к сцене и фону.
-    // Светлая: 4.0 к заливке поля, 3.34 к card, 3.11 к backdrop; тёмная: 5.21 и 5.86.
+    // Светлая: 4.0 к заливке поля, 3.34 к card, не ниже 3.6 к подложке; тёмная: 5.21 и 5.86.
     "field-border": [mixSrgb(gray[5], 60, gray[6]), dark[3]],
 
     // Состояния: текст и индикатор, фон, рамка; текст на заливке состояния.
@@ -210,6 +233,12 @@ const buildColorRoles = (colors: Palettes): Record<string, SchemePair> => {
     "info-surface": tones.info.surface,
     "info-border": [blue[3], blue[8]],
     "status-contrast": [WHITE, dark[9]],
+
+    // Навигация на общей подложке: наведение — полупрозрачное затемнение (осветление)
+    // любого участка градиента, текущий пункт — локальная заливка тона акцента.
+    // В тёмной схеме осветление сильнее: на тёмной основе малый шаг яркости незаметен.
+    "nav-hover": [withAlpha(gray[9], 0.06), withAlpha(WHITE, 0.1)],
+    "nav-current-surface": [mixSrgb(accent[0], 14, WHITE), mixSrgb(accent[1], 22, dark[9])],
 
     // Взаимодействие: фокус, выделение текста, совпадение поиска.
     "search-mark": [mixSrgb(accent[0], 20, WHITE), mixSrgb(accent[1], 45, dark[7])],
@@ -246,7 +275,6 @@ const ROLE_ALIASES: Record<string, string> = {
   highlight: "accent",
   "highlight-hover": "accent-hover",
   "highlight-ink": "accent-contrast",
-  "nav-current-surface": "accent-subtle",
   "nav-current-ink": "accent-ink",
   "warning-ink": "warning",
   "column-in-progress": "accent",

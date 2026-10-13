@@ -8,8 +8,38 @@
  * Mantine обрезает содержимое ActionIcon (overflow: hidden) ради анимации загрузки,
  * поэтому на touch вне загрузки обрезка снимается: иначе псевдо-область не принимает касание.
  * Визуал не меняется — иконка меньше кнопки, фокус-кольцо рисует outline.
+ *
+ * Состояния, которые нельзя передать одним цветом: открытое всплывающее окно — меню,
+ * Popover, Drawer (aria-haspopup и aria-expanded) — заливка наведения и контур
+ * selected-border, текущее место (aria-current) — контур цвета текущего пункта. Оба контура
+ * не ниже 3:1 к подложке и к панели card. Переключатель встроенной области (без
+ * aria-haspopup) так не отмечается: его состояние видно по самой раскрытой области.
+ * data-tasks-preview="hover" фиксирует наведение в инертном образце.
  */
-.touchTarget {
+.iconAction {
+  &[data-tasks-preview="hover"] {
+    background-color: var(--ai-hover);
+    color: var(--ai-hover-color, var(--ai-color));
+  }
+
+  &[aria-haspopup]:not([aria-haspopup="false"])[aria-expanded="true"] {
+    background-color: var(--ai-hover);
+    box-shadow: inset 0 0 0 1px var(--tasks-selected-border);
+    color: var(--ai-hover-color, var(--ai-color));
+  }
+
+  &[aria-current="page"] {
+    box-shadow: inset 0 0 0 1px var(--tasks-nav-current-ink);
+  }
+
+  @media (--forced-colors) {
+    &[aria-haspopup]:not([aria-haspopup="false"])[aria-expanded="true"],
+    &[aria-current="page"] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+
   @media (pointer: coarse) {
     &:not([data-loading]) {
       overflow: visible;

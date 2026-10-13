@@ -96,7 +96,7 @@ export const RelayScreen = () => {
   if (workspaceData === undefined) {
     const isConnecting = workspace.isLoading;
     return (
-      <main>
+      <main className={styles.content}>
         <PageBreadcrumbs
           items={[
             { id: "relay", label: "Relay", href: "/" },
@@ -174,7 +174,7 @@ export const RelayScreen = () => {
         </ProjectScope>
       )}
       {!canOpenProject && (
-        <main>
+        <main className={styles.content}>
           <PageBreadcrumbs
             items={[
               { id: "relay", label: "Relay", href: "/" },

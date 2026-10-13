@@ -24,13 +24,19 @@
   --tasks-radius-row: var(--mantine-radius-xl);
   --tasks-radius-metric: 1.25rem;
   --tasks-radius-panel: 1.5rem;
-  --tasks-radius-stage: 1.5rem;
   --tasks-radius-pill: 999px;
 
   /* Контролы: обычный 36px, компактный 32px, минимальная область нажатия на touch 44px. */
   --tasks-control-height: 2.25rem;
   --tasks-control-height-compact: 2rem;
   --tasks-touch-target: 2.75rem;
+  /*
+   * Контур фокуса снаружи контрола: толщина и отступ. Их сумма — вылет кольца за край;
+   * контейнер с overflow оставляет под него поле, чтобы кольцо не обрезалось.
+   */
+  --tasks-focus-ring-width: 2px;
+  --tasks-focus-ring-offset: 3px;
+  --tasks-focus-ring-outset: calc(var(--tasks-focus-ring-width) + var(--tasks-focus-ring-offset));
   /*
    * Запас под липкой нижней панелью действий формы (высота панели и зазор): форма задаёт
    * его как scroll-padding-bottom документа, чтобы фокус по Tab не оказывался под панелью.
@@ -58,14 +64,24 @@
   --tasks-duration-chart: 300ms;
   --tasks-easing-standard: cubic-bezier(0.2, 0, 0, 1);
 
-  --tasks-page-gutter: 1rem;
+  /*
+   * Ритм каркаса на общей подложке: зазор соседних панелей одной сетки, поле рабочей
+   * области у края окна, промежуток между постоянным сайдбаром и контентом, высота шапки
+   * и наибольшая ширина колонки экрана (на более широком окне колонка центрируется).
+   * Между самостоятельными смысловыми разделами допустим больший отступ шкалы.
+   */
+  --tasks-panel-gap: var(--tasks-space-2);
+  --tasks-workspace-gutter: var(--tasks-space-3);
+  --tasks-sidebar-gap: var(--tasks-space-3);
+  --tasks-app-header-height: 4rem;
+  --tasks-page-max-width: 90rem;
 
   @media (--md) {
+    --tasks-panel-gap: var(--tasks-space-3);
+    --tasks-workspace-gutter: var(--tasks-space-4);
     --tasks-sticky-actions-clearance: 6rem;
-    --tasks-radius-stage: 2rem;
     --tasks-font-size-page-title: 2rem;
     --tasks-font-size-panel-title: 1.25rem;
-    --tasks-page-gutter: 2rem;
   }
 
   @media (--lg) {
@@ -80,6 +96,7 @@
  */
 @media (--forced-colors), print {
   html:root[data-mantine-color-scheme] {
+    --tasks-backdrop-image: none;
     --tasks-feature-image: none;
     --tasks-feature-fade-image: none;
     --tasks-hatch-image: none;
@@ -88,4 +105,16 @@
     --tasks-card-hover: none;
     --tasks-raised-shadow: none;
   }
+}
+
+/*
+ * Отключённый декор всего документа (атрибут data-tasks-decor="off" на html): общая
+ * подложка и панели остаются на сплошных основах, все состояния читаемы.
+ */
+html:root[data-tasks-decor="off"] {
+  --tasks-backdrop-image: none;
+  --tasks-feature-image: none;
+  --tasks-feature-fade-image: none;
+  --tasks-hatch-image: none;
+  --tasks-card-fade-image: none;
 }

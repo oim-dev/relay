@@ -1,7 +1,7 @@
 /*
- * Навигация проекта. Текущий раздел — роль текущего места навигации (тон акцента),
- * отличная от выбора строки и подсветки поиска; раскрытая группа с текущим разделом
- * выделена начертанием. Высота пункта не меньше области нажатия 44px.
+ * Раскладка навигации проекта. Пункты (NavLink) оформляет тема — ui/themes,
+ * styles/navigation.module.css: покой без плашки, текущий раздел — заливка тона акцента,
+ * цвет и вес текста; вложенность, текущая группа и начало группы — модификаторы mod.
  */
 .root {
   display: grid;
@@ -9,65 +9,8 @@
   min-width: 0;
 }
 
-.link {
-  min-height: var(--tasks-touch-target);
-  padding: 0.625rem var(--tasks-space-3);
-  border-radius: var(--tasks-radius-control);
-  color: var(--tasks-muted);
-  text-decoration: none;
-  transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
-
-  &:hover {
-    background-color: var(--tasks-subtle);
-    color: var(--tasks-ink);
-  }
-
-  &[aria-current="page"],
-  &[data-active="true"] {
-    background-color: var(--tasks-nav-current-surface);
-    color: var(--tasks-nav-current-ink);
-    font-weight: 600;
-
-    @media (--forced-colors) {
-      outline: 2px solid Highlight;
-      outline-offset: -2px;
-    }
-  }
-
-  &._currentGroup {
-    color: var(--tasks-ink);
-    font-weight: 600;
-  }
-
-  &._child {
-    min-height: 2.5rem;
-    padding: var(--tasks-space-2) 0.625rem;
-
-    @media (pointer: coarse) {
-      min-height: var(--tasks-touch-target);
-    }
-  }
-}
-
-.label {
-  font-size: var(--mantine-font-size-sm);
-  line-height: 1.5;
-  font-weight: inherit;
-  overflow-wrap: anywhere;
-}
-
-.icon {
-  flex-shrink: 0;
-}
-
 .product {
   min-width: 0;
-}
-
-.children {
-  margin: var(--tasks-space-1) 0 var(--tasks-space-2) var(--tasks-space-5);
-  padding: 0 0 0 0.625rem;
-  border-left: 1px solid var(--tasks-border);
 }
 
 .productLinks {

@@ -31,7 +31,8 @@ Web — браузерная React SPA, представляющая данны�
   workspace, product, product-overview, boards, board-tasks, entities, documents, relations, planning, releases.
 - `infra` — технические механизмы HTTP, SWR-конфигурации, SSE, browser storage.
 - `ui` — общие визуальные возможности без знания проектов, маршрутов и статусов:
-  тема [themes](../src/ui/themes), сцена [page-stage](../src/ui/page-stage) (`layout`
+  тема [themes](../src/ui/themes) с общей подложкой приложения, геометрия экрана
+  [page-stage](../src/ui/page-stage) без собственной заливки (`layout`
   default или workspace), шапка [page-header](../src/ui/page-header), панель
   [section-panel](../src/ui/section-panel) (в том числе `titleRef` для фокуса), строка
   [record-row](../src/ui/record-row), бейдж [status-badge](../src/ui/status-badge), фильтр

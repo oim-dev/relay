@@ -130,6 +130,9 @@ export const MarkdownField = (props: MarkdownFieldProps) => {
               padding: "var(--mantine-spacing-xs)",
               minHeight: `calc(${minRows * 1.6}em + 2 * var(--mantine-spacing-xs))`,
               caretColor: "var(--tasks-ink)",
+              // Строки исходного текста переносятся не шире максимальной меры чтения:
+              // поле остаётся на ширину формы, а длинный абзац не растягивается на окно.
+              maxWidth: "var(--tasks-reading-measure-max)",
             },
             ".cm-line": { padding: "0", lineHeight: "1.6" },
             ".cm-content .cm-placeholder": { color: "var(--tasks-soft)" },

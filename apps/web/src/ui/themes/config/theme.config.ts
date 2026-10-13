@@ -17,6 +17,7 @@ import {
   Menu,
   Modal,
   NativeSelect,
+  NavLink,
   Notification,
   NumberInput,
   Popover,
@@ -31,6 +32,7 @@ import {
 } from "@mantine/core";
 import type { MantineColorsTuple } from "@mantine/core";
 import controlClasses from "../styles/controls.module.css";
+import navigationClasses from "../styles/navigation.module.css";
 import progressClasses from "../styles/progress.module.css";
 import { TONE_PALETTES } from "./color-roles.config";
 
@@ -176,9 +178,35 @@ export const theme = createTheme({
   },
   components: {
     Button: Button.extend({ defaultProps: { size: "sm", fw: 550 } }),
+    // Нейтральная иконка-действие ведёт себя как контрол навигации: покой muted, наведение —
+    // nav-hover и ink, текущее место (variant="light") — заливка и цвет текущего пункта.
+    // Раскрытие и текущее место дополнительно отмечены контуром (controls.module.css).
     ActionIcon: ActionIcon.extend({
       defaultProps: { size: 32, variant: "subtle", color: "gray" },
-      classNames: { root: controlClasses.touchTarget },
+      classNames: { root: controlClasses.iconAction },
+      vars: (_theme, props) => {
+        const isNeutral = props.color === undefined || props.color === "gray";
+        if (isNeutral && props.variant === "subtle") {
+          return {
+            root: {
+              "--ai-color": "var(--tasks-muted)",
+              "--ai-hover": "var(--tasks-nav-hover)",
+              "--ai-hover-color": "var(--tasks-ink)",
+            },
+          };
+        }
+        if (isNeutral && props.variant === "light") {
+          return {
+            root: {
+              "--ai-bg": "var(--tasks-nav-current-surface)",
+              "--ai-color": "var(--tasks-nav-current-ink)",
+              "--ai-hover": "var(--tasks-nav-current-surface)",
+              "--ai-hover-color": "var(--tasks-nav-current-ink)",
+            },
+          };
+        }
+        return { root: {} };
+      },
     }),
     Input: Input.extend({
       defaultProps: { size: "sm" },
@@ -190,9 +218,26 @@ export const theme = createTheme({
     InputBase: InputBase.extend({ defaultProps: { size: "sm" } }),
     TextInput: TextInput.extend({ defaultProps: { size: "sm" } }),
     Textarea: Textarea.extend({ defaultProps: { size: "sm" } }),
+    // variant="navigation" — компактный выбор в навигации каркаса (выбор проекта).
     Select: Select.extend({
       defaultProps: { size: "sm" },
-      classNames: { option: controlClasses.option },
+      classNames: (_theme, props) =>
+        props.variant === "navigation"
+          ? {
+              root: navigationClasses.select,
+              input: navigationClasses.selectInput,
+              option: controlClasses.option,
+            }
+          : { option: controlClasses.option },
+    }),
+    // Пункт навигации на общей подложке: единые правила каркаса и примеров галереи.
+    NavLink: NavLink.extend({
+      classNames: {
+        root: navigationClasses.link,
+        label: navigationClasses.linkLabel,
+        section: navigationClasses.linkSection,
+        children: navigationClasses.linkChildren,
+      },
     }),
     NativeSelect: NativeSelect.extend({ defaultProps: { size: "sm" } }),
     NumberInput: NumberInput.extend({ defaultProps: { size: "sm" } }),
@@ -245,11 +290,20 @@ export const theme = createTheme({
     // его через closeButtonProps (например, «Закрыть навигацию»).
     ModalCloseButton: Modal.CloseButton.extend({ defaultProps: { "aria-label": "Закрыть" } }),
     DrawerCloseButton: Drawer.CloseButton.extend({ defaultProps: { "aria-label": "Закрыть" } }),
+    // variant="navigation" — выдвижная навигация каркаса на узком экране.
     Drawer: Drawer.extend({
       defaultProps: {
         overlayProps: { backgroundOpacity: 0.3 },
         transitionProps: { duration: 200 },
       },
+      classNames: (_theme, props) =>
+        props.variant === "navigation"
+          ? {
+              content: navigationClasses.drawerContent,
+              header: navigationClasses.drawerHeader,
+              title: navigationClasses.drawerTitle,
+            }
+          : {},
     }),
     Notification: Notification.extend({ defaultProps: { radius: "lg", withBorder: true } }),
     Skeleton: Skeleton.extend({ defaultProps: { radius: "md" } }),

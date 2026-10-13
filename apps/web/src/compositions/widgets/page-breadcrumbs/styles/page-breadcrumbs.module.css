@@ -1,22 +1,19 @@
 /*
- * Путь страницы под шапкой каркаса. Уровни переносятся на следующую строку, а не
- * сжимаются до нескольких букв: на узком экране путь занимает две строки.
+ * Путь страницы на общей подложке, без собственной полосы и разделителя. Текст первого
+ * уровня стоит на вертикали начала контента: внутреннее поле ссылки вынесено влево.
+ * Уровни переносятся на следующую строку, а не сжимаются до нескольких букв.
  */
 .root {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 3rem;
-  padding: var(--tasks-space-1) var(--tasks-page-gutter);
-  border-bottom: 1px solid var(--tasks-border);
-  background-color: var(--tasks-chrome);
+  min-height: 2.75rem;
+  margin-left: calc(var(--tasks-space-2) * -1);
+  padding-block: var(--tasks-space-1);
 
   &._embedded {
     min-height: 0;
     margin-bottom: var(--tasks-space-4);
-    padding-inline: 0;
-    border-bottom: 0;
-    background-color: transparent;
   }
 }
 

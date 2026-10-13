@@ -1,17 +1,8 @@
 /*
- * Предупреждение о снимке стоит над сценой экрана на внешнем фоне с теми же полями,
- * что у PageStage, и не сдвигает ширину содержимого.
+ * Предупреждение о снимке стоит над экраном на общей подложке, в колонке контента каркаса,
+ * и не сдвигает ширину содержимого.
  */
 .notice {
-  padding: 0.5rem 0.5rem 0;
-  background: var(--tasks-backdrop);
-
-  @media (--md) {
-    padding: 1rem var(--tasks-page-gutter) 0;
-  }
-}
-
-.alert {
   max-width: 90rem;
-  margin-inline: auto;
+  padding-top: var(--tasks-space-1);
 }

@@ -1,15 +1,18 @@
+/* Экран стоит на общей подложке документа, без собственной заливки. */
 .root {
   display: block;
   min-height: 100dvh;
-  background-color: var(--tasks-canvas);
 }
 
-/* Шапка выбора проекта повторяет шапку каркаса проекта. */
+/* Шапка выбора проекта повторяет шапку каркаса проекта: без заливки и разделителя. */
 .selector {
-  min-height: 4rem;
-  padding: var(--tasks-space-3) var(--tasks-page-gutter);
-  border-bottom: 1px solid var(--tasks-border);
-  background-color: var(--tasks-chrome);
+  min-height: var(--tasks-app-header-height);
+  padding: var(--tasks-space-3) var(--tasks-workspace-gutter);
+}
+
+/* Путь и состояние выбора — с тем же полем рабочей области, что в каркасе проекта. */
+.content {
+  padding-inline: var(--tasks-workspace-gutter);
 }
 
 .brandIcon {

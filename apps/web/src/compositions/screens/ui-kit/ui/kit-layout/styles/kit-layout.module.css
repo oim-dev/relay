@@ -1,0 +1,61 @@
+.backdrops {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--tasks-panel-gap);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Основа и изображение раздельно: без изображения остаётся сплошная основа. */
+.backdrop {
+  display: grid;
+  align-content: start;
+  gap: var(--tasks-space-1);
+  min-height: 9rem;
+  padding: var(--tasks-space-4);
+  border-radius: var(--tasks-radius-row);
+  background-color: var(--tasks-backdrop);
+  color: var(--tasks-ink);
+
+  &[data-decor="image"] {
+    background-image: var(--tasks-backdrop-image);
+    background-repeat: no-repeat;
+  }
+
+  /* Значение допустимо для custom property, но недействительно как изображение. */
+  &[data-decor="invalid"] {
+    --tasks-backdrop-image: unsupported-image(1);
+
+    background-image: var(--tasks-backdrop-image);
+  }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
+}
+
+.backdropLabel {
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 650;
+}
+
+.backdropNote {
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+}
+
+/* Панель отделяется от подложки тоном, без рамки и тени. */
+.backdropPanel {
+  margin-top: var(--tasks-space-2);
+  padding: var(--tasks-space-3);
+  border-radius: var(--tasks-radius-metric);
+  background-color: var(--tasks-card);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
+}
