@@ -5,8 +5,7 @@ import { selectProject, serverAddress } from "@relay/project-runtime/config";
 import { cliConfiguration } from "../configuration.js";
 import type { GlobalOptions, Runtime } from "../context.js";
 import type { Backend } from "./types.js";
-import { resolve } from "node:path";
-import { shellCommand } from "../command-kit.js";
+import { localInvocation, shellCommand } from "../command-kit.js";
 import { requireLocalMaintenance } from "@relay/project-runtime/maintenance";
 
 /** Выбор выполняется до openWorkspace: HTTP-команды не создают даже .tasks-runtime. */
@@ -60,14 +59,8 @@ export async function connectBackend(
     "LOCAL_CONFIG_REQUIRED",
     "Для локальной операции нужен path или config проекта",
   );
-  // Путь известен до открытия базы: подсказки Core об обслуживании получают его в text.
-  runtime.maintenanceCommand = shellCommand([
-    "npx",
-    "@oim-dev/relay-cli",
-    "--local",
-    "--config",
-    resolve(runtime.cwd, target.configPath),
-  ]);
+  // Выбор известен до открытия базы; обычному проекту не нужны дополнительные флаги.
+  runtime.maintenanceCommand = shellCommand(localInvocation(runtime, globals, target.configPath));
   const { createLocalBackend } = await import("@relay/project-runtime/backend/local");
   return createLocalBackend(runtime.cwd, target.configPath);
 }

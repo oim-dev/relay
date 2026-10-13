@@ -18,7 +18,13 @@ import { entityUpdateSchema } from "@relay/contracts/entities";
 import { parse } from "@relay/core/domain/validation";
 import { author } from "../context.js";
 import { integer } from "../options.js";
-import { textOption, readTextFields, commandInvocation } from "../command-kit.js";
+import {
+  textOption,
+  readTextFields,
+  commandInvocation,
+  localInvocation,
+  shellCommand,
+} from "../command-kit.js";
 import { receiptText } from "../presentation/common.js";
 
 export function registerProject(program: Command, runtime: Runtime): void {
@@ -78,7 +84,23 @@ export function registerProject(program: Command, runtime: Runtime): void {
       runtime.stdout,
       {
         data: { configPath: workspace.configPath, storageDir: workspace.dataRoot },
-        text: (options) => initializedText(workspace.configPath, workspace.dataRoot, options),
+        text: (options) =>
+          initializedText(
+            workspace.configPath,
+            workspace.dataRoot,
+            options,
+            shellCommand([
+              ...localInvocation(
+                runtime,
+                globals,
+                workspace.configPath,
+                source?.kind === "registry",
+              ),
+              "product",
+              "create",
+              "--help",
+            ]),
+          ),
       },
       runtime.output,
     );

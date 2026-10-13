@@ -368,7 +368,7 @@ test("foundation: registerCommand передаёт аргументы, опци�
   assert.equal(output(), '{"ok":true,"data":{"title":"Расширение"}}\n');
 });
 
-test("foundation: CLI страницы обходятся без потерь; continuation копируется с config, snapshot не обновляется молча", async (t) => {
+test("foundation: CLI страницы обходятся без потерь; обычное продолжение короткое, snapshot не обновляется молча", async (t) => {
   const app = await fixture(t);
   const ids = [
     await app.create("Найти: первый"),
@@ -393,8 +393,8 @@ test("foundation: CLI страницы обходятся без потерь; c
   assert.equal(argv.status, 0, argv.stderr);
   const args = argv.stdout.split("\0").slice(0, -1);
   assert.equal(args.shift(), "@oim-dev/relay-cli");
-  assert.ok(args.includes(join(app.root, ".relay/config.json")));
-  assert.ok(args.includes("--local"));
+  assert.ok(!args.includes("--config"));
+  assert.ok(!args.includes("--local"));
   const second = successful(await app.run<{ items: { id: string }[] }>(args));
   assert.equal(second.meta?.page?.nextCursor, null);
   assert.equal(second.meta?.page?.nextCommand, null);

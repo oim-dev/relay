@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { AppError, invariant } from "@relay/core/shared/errors";
-import type { CommandContext } from "./context.js";
+import type { CommandContext, GlobalOptions, Runtime } from "./context.js";
 import { cursorOptions } from "./options.js";
 import type { CliPage } from "./queries/result.js";
 
@@ -227,11 +227,31 @@ export function shellCommand(argv: readonly string[]): string {
   return argv.map(quote).join(" ");
 }
 
+/** Обычный проект находится из cwd; явный выбор базы и режима сохраняем в подсказке. */
+export function localInvocation(
+  runtime: Pick<Runtime, "cwd" | "env">,
+  globals: Pick<GlobalOptions, "local" | "config">,
+  configPath: string,
+  selectedFromRegistry = false,
+): string[] {
+  const args = ["npx", "@oim-dev/relay-cli"];
+  if (globals.local || selectedFromRegistry) args.push("--local");
+  if (
+    globals.config !== undefined ||
+    runtime.env.RELAY_CONFIG !== undefined ||
+    selectedFromRegistry
+  )
+    args.push("--config", resolve(runtime.cwd, configPath));
+  return args;
+}
+
 function projectInvocation(context: CommandContext): string[] {
   const globals = context.globals;
-  const args = ["npx", "@oim-dev/relay-cli"];
+  const args =
+    context.backend.kind === "local"
+      ? localInvocation(context.runtime, globals, context.workspace.configPath)
+      : ["npx", "@oim-dev/relay-cli"];
   if (context.backend.kind === "local") {
-    args.push("--local", "--config", resolve(context.runtime.cwd, context.workspace.configPath));
     if (globals.project) args.push("--project", globals.project);
   } else {
     const url = context.connection ?? globals.serverUrl ?? context.runtime.env.RELAY_SERVER_URL;
@@ -247,7 +267,7 @@ function projectInvocation(context: CommandContext): string[] {
   return args;
 }
 
-/** Полная команда с фактическим подключением, без обязательного курсора и переносов по ширине. */
+/** Копируемая команда: короткая для текущего проекта, с явными параметрами его выбора. */
 export function commandInvocation(context: CommandContext, command: readonly string[]): string {
   return shellCommand([...projectInvocation(context), ...command]);
 }

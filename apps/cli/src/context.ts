@@ -31,7 +31,7 @@ export interface Runtime {
   output: OutputOptions;
   helpCommand?: string;
   /**
-   * Фактический вызов обслуживания `npx @oim-dev/relay-cli --local --config <путь>`:
+   * Вызов обслуживания с сохранением явного выбора базы и режима:
    * подставляется вместо плейсхолдера `<config>` в подсказках Core только в text-выводе.
    */
   maintenanceCommand?: string;

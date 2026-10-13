@@ -462,17 +462,17 @@ test(
     const readCommand = receipt
       .split("\n")
       .find((line) => line.startsWith("npx @oim-dev/relay-cli "));
-    assert.ok(readCommand, "Квитанция выпуска содержит эффективную команду чтения");
+    assert.ok(readCommand, "Квитанция выпуска содержит короткую команду чтения из того же проекта");
     const readArgs = readCommand
       .match(/'(?:[^']|'\\'')*'|[^\s]+/g)!
       .slice(2)
       .map((arg) => (arg.startsWith("'") ? arg.slice(1, -1).replaceAll("'\\''", "'") : arg));
     assert.deepEqual(readArgs.slice(-3), ["release", "get", r.key]);
-    const other = await fixture(t);
+    assert.ok(!readArgs.includes("--config"));
+    assert.ok(!readArgs.includes("--local"));
     assert.deepEqual(
-      successful(
-        await invoke<ReleaseSummary>(other.root, readArgs, { env: { RELAY_CONFIG: undefined } }),
-      ).data,
+      successful(await invoke<ReleaseSummary>(root, readArgs, { env: { RELAY_CONFIG: undefined } }))
+        .data,
       published,
     );
     assert.equal(published.status, "released");

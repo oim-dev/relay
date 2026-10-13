@@ -11,6 +11,7 @@ export function initializedText(
   configPath: string,
   storageDir: string,
   options: TextOptions,
+  nextCommand: string,
 ): string {
   return receiptText(
     {
@@ -22,16 +23,7 @@ export function initializedText(
       commands: [
         {
           label: "Следующий шаг: подготовить паспорт продукта",
-          command: shellCommand([
-            "npx",
-            "@oim-dev/relay-cli",
-            "--local",
-            "--config",
-            configPath,
-            "product",
-            "create",
-            "--help",
-          ]),
+          command: nextCommand,
         },
       ],
     },

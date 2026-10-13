@@ -450,7 +450,7 @@ const comparable = (data: Overview) => {
 };
 
 /** npx-шим исполняет подсказку как пользователь: строка shell целиком, без разбора в тесте. */
-async function hintRunner(t: TestContext) {
+async function hintRunner(t: TestContext, cwd = tmpdir()) {
   const directory = await tempDirectory(t);
   const shim = join(directory, "npx");
   const node = [process.execPath, ...cliNodeArgs, binary].map((part) => `'${part}'`).join(" ");
@@ -466,7 +466,7 @@ async function hintRunner(t: TestContext) {
         "/bin/sh",
         ["-c", command],
         {
-          cwd: tmpdir(),
+          cwd,
           encoding: "utf8",
           env: cliEnv({ PATH: `${directory}:${process.env.PATH}` }),
           timeout: 30_000,
@@ -707,7 +707,7 @@ test("product overview: пустой проект — нули, состояни
   ])
     assert.match(human.stdout, text);
   assert.doesNotMatch(human.stdout, /\u001b|"ok":/);
-  const run = await hintRunner(t);
+  const run = await hintRunner(t, app.root);
   assert.match(await run(result.data.commands.passportHelp!), /product create/);
   assert.equal(JSON.parse(await run(result.data.commands.passport!)).ok, true);
 });
@@ -800,7 +800,7 @@ test("product overview: срез проекта, подборки, страни�
       assert.match(out, /В работе · показано 5 из 7/);
       assert.match(
         out,
-        /Полный список \(ещё 2\):\nnpx @oim-dev\/relay-cli .* task list --column in-progress\n/,
+        /Полный список \(ещё 2\):\nnpx @oim-dev\/relay-cli task list --column in-progress\n/,
       );
       assert.match(
         out,
@@ -824,15 +824,17 @@ test("product overview: срез проекта, подборки, страни�
   });
 
   await t.test("все подсказки выполнимы на временной базе и совпадают с totals", async () => {
-    const run = await hintRunner(t);
+    const run = await hintRunner(t, app.root);
     const total = async (command: string) => {
       const body = JSON.parse(await run(command));
       assert.equal(body.ok, true, command);
       return body.meta?.page?.total as number | undefined;
     };
     const commands = full.data.commands;
-    for (const command of hintList(commands))
-      assert.match(command, /^npx @oim-dev\/relay-cli --local --config /);
+    for (const command of hintList(commands)) {
+      assert.match(command, /^npx @oim-dev\/relay-cli /);
+      assert.doesNotMatch(command, /--local|--config/);
+    }
     assert.equal(await total(commands.inProgress!), snapshot.attention.inProgress.total);
     assert.equal(await total(commands.review!), snapshot.attention.review.total);
     assert.equal(await total(commands.blocked!), snapshot.attention.blocked.total);
@@ -931,12 +933,16 @@ type MetricView = ProductOverviewMetricPage & {
 };
 type App = { root: string; run: Awaited<ReturnType<typeof fixture>>["run"] };
 
-/** Проект в каталоге с пробелом и кавычкой: подсказки обязаны экранировать --config. */
+/** Явный config в каталоге с пробелом и кавычкой сохраняется в копируемых подсказках. */
 async function quotedFixture(t: TestContext): Promise<App> {
   const root = join(await tempDirectory(t), "проект с 'кавычкой'");
   await mkdir(root);
   successful(await invoke(root, ["init"]));
-  return { root, run: (args, options) => invoke(root, args, options) };
+  return {
+    root,
+    run: (args, options) =>
+      invoke(root, ["--config", join(root, ".relay/config.json"), ...args], options),
+  };
 }
 
 /**
@@ -1234,7 +1240,7 @@ test("product overview: показатели оператора, детализ�
     for (const [metric, command] of Object.entries(commands.metrics as Record<string, string>)) {
       assert.match(
         command,
-        /^npx @oim-dev\/relay-cli --local --config '.*проект с '\\''кавычкой'\\''.*' --format json product overview --metric [a-z-]+$/,
+        /^npx @oim-dev\/relay-cli --config '.*проект с '\\''кавычкой'\\''.*' --format json product overview --metric [a-z-]+$/,
       );
       const body = JSON.parse(await run(command));
       assert.equal(body.ok, true, command);

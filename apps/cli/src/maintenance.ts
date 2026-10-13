@@ -1,5 +1,4 @@
 import type { Command } from "commander";
-import { resolve } from "node:path";
 import {
   locateMaintenanceTarget,
   requireLocalMaintenance,
@@ -7,7 +6,7 @@ import {
 import type { MaintenanceTarget, MaintenanceTransport } from "@relay/project-runtime/maintenance";
 import type { GlobalOptions, Runtime } from "./context.js";
 import { outputOptions } from "./context.js";
-import { shellCommand } from "./command-kit.js";
+import { localInvocation, shellCommand } from "./command-kit.js";
 import { printResult } from "./output.js";
 import type { OutputOptions } from "./output.js";
 import type { Result } from "./queries/result.js";
@@ -18,7 +17,7 @@ export interface MaintenanceContext {
   globals: GlobalOptions;
   output: OutputOptions;
   target: MaintenanceTarget;
-  /** Команда с фактическим выбором базы: `npx @oim-dev/relay-cli --local --config … <args>`. */
+  /** Команда без лишних флагов; явный выбор базы и проект реестра сохраняются. */
   invocation(args: readonly string[]): string;
 }
 
@@ -56,28 +55,15 @@ export function maintenanceAction<Options extends object>(
       ...(globals.project !== undefined ? { project: globals.project } : {}),
       ...transport,
     });
-    runtime.maintenanceCommand = shellCommand([
-      "npx",
-      "@oim-dev/relay-cli",
-      "--local",
-      "--config",
-      resolve(runtime.cwd, target.configPath),
-    ]);
+    const invocation = localInvocation(runtime, globals, target.configPath, !!target.registry);
+    runtime.maintenanceCommand = shellCommand(invocation);
     runtime.output = outputOptions(runtime, globals);
     const context: MaintenanceContext = {
       runtime,
       globals,
       output: runtime.output,
       target,
-      invocation: (args) =>
-        shellCommand([
-          "npx",
-          "@oim-dev/relay-cli",
-          "--local",
-          "--config",
-          resolve(runtime.cwd, target.configPath),
-          ...args,
-        ]),
+      invocation: (args) => shellCommand([...invocation, ...args]),
     };
     const result = await handler(context, command.opts() as Options);
     if (globals.project) result.meta = { ...result.meta, project: globals.project };

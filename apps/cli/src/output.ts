@@ -16,7 +16,7 @@ export interface OutputOptions {
   /** Совместимость старых адаптеров; CLI больше не ограничивает размер вывода. */
   maxBytes?: number;
   text?: TextOptions;
-  /** Вызов обслуживания с фактическим config для подсказок Core; JSON не меняется. */
+  /** Вызов обслуживания с явными параметрами выбора базы; подсказки Core в JSON не меняются. */
   maintenanceCommand?: string;
 }
 

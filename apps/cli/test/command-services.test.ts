@@ -81,21 +81,33 @@ for (const [label, directory] of [
       stdout: string;
       stderr: string;
     };
-    assert.deepEqual(replay.args, [
-      "--local",
-      "--config",
-      configPath,
-      "product",
-      "create",
-      "--help",
-    ]);
+    assert.deepEqual(replay.args, ["--config", configPath, "product", "create", "--help"]);
     assert.equal(replay.code, 0, replay.stdout + replay.stderr);
     assert.equal(replay.stderr, "");
     assert.match(replay.stdout, /product create/);
-    const read = successful(await invoke(root, [...replay.args.slice(0, 3), "config", "get"]));
+    const read = successful(await invoke(root, [...replay.args.slice(0, 2), "config", "get"]));
     assert.equal((read.meta as { configPath: string }).configPath, configPath);
     assert.ok(await readFile(configPath, "utf8"));
   });
+
+test("local: init, карточка, квитанция и обслуживание не добавляют флаги выбора проекта", async (t) => {
+  const root = await tempDirectory(t);
+  for (const [args, expected] of [
+    [["init"], "product create --help"],
+    [["document", "create", "--name", "Документ", "--body", "Полный текст"], "document get DOC-1"],
+    [["document", "get", "DOC-1"], "inspect graph context DOC-1"],
+    [["storage", "status"], "doctor check"],
+  ] as const) {
+    const result = await invokeRaw(root, [...args]);
+    assert.equal(result.code, 0, result.stdout);
+    assert.equal(result.stderr, "");
+    const hints = result.stdout.split("\n").filter((line) => line.startsWith("npx "));
+    assert.deepEqual(hints, [`npx @oim-dev/relay-cli ${expected}`]);
+    // Выполняем выданную команду в том же проекте; npx заменён только тестовым входом CLI.
+    const next = await invokeRaw(root, expected.split(" "));
+    assert.equal(next.code, 0, next.stdout);
+  }
+});
 
 test("init / config get / project get/update: сохранность, ревизия, только имя и human", async (t) => {
   const root = await tempDirectory(t);

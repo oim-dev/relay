@@ -317,15 +317,15 @@ test(
     const { root, run } = await fixture(t);
     const other = await fixture(t);
     const config = join(root, ".relay/config.json");
-    const executeHint = async (text: string) => {
+    const executeHint = async (text: string, cwd = other.root) => {
       const command = text.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli "));
       assert.ok(command, "Квитанция даёт копируемую команду чтения");
       const args = command
         .match(/'(?:[^']|'\\'')*'|[^\s]+/g)!
         .slice(2)
         .map((arg) => (arg.startsWith("'") ? arg.slice(1, -1).replaceAll("'\\''", "'") : arg));
-      assert.ok(args.includes("--config"));
-      successful(await invoke(other.root, args, { env: { RELAY_CONFIG: undefined } }));
+      assert.equal(args.includes("--config"), cwd !== root);
+      successful(await invoke(cwd, args, { env: { RELAY_CONFIG: undefined } }));
       return args;
     };
     const receipt = async (
@@ -480,7 +480,7 @@ test(
       assert.ok(!stageText.includes(task.ref.id));
       assert.ok(!stageText.includes(task.key));
     }
-    const hint = await executeHint(stageText);
+    const hint = await executeHint(stageText, root);
     assert.deepEqual(hint.slice(-6), ["plan", "stage", "task", "list", "PLN-1", stage.id]);
     await receipt(
       [
