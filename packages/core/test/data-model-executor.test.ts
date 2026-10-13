@@ -812,3 +812,64 @@ test("A28: превышение пакета WAL — блокер dry-run и app
     `${real.budgets.walBytes} ≥ ${walSize}`,
   );
 });
+
+test("перенесённая связь документа с прежним адресом этапа снимается detach, attach отказывает", async (t) => {
+  const { project, configPath } = await planV1Format4(t);
+  const oracle = await oracleOf("physical2-plan-v1-43d683b");
+  const plan = await planStorageMigration({ configPath });
+  await migrateStorage(
+    { configPath },
+    { backupDir: await tempDir(t), ifPlan: plan.planFingerprint },
+  );
+  const engine = new EntityEngine(await openWorkspace(project, configPath));
+  const d2 = oracle.entities.D2;
+  const stage = d2.relations.find((relation: unknown[]) => relation[0] === "plan-stage");
+  const stageRef = `plan-stage:${stage[1]}`;
+  const before = await engine.get({ ref: d2.key });
+  const relations = (
+    before.data as {
+      relations?: { target: { kind: string; id: string }; type: "documents" | "references" }[];
+    }
+  ).relations!;
+  const stageRelation = relations.find(
+    (relation) => `${relation.target.kind}:${relation.target.id}` === stageRef,
+  )!;
+  assert.ok(
+    relations.some((relation) => `${relation.target.kind}:${relation.target.id}` === stageRef),
+  );
+  const change = {
+    ref: d2.key,
+    ifRevision: before.revision,
+    target: stageRef,
+    type: stageRelation.type,
+  };
+  // Новое прикрепление и изменение по прежнему адресу этапа по-прежнему запрещены.
+  for (const action of ["attach", "update"] as const)
+    await assert.rejects(
+      engine.relateDocument({ ...change, action, requestId: `stage-${action}` }, "tester"),
+      code("ENTITY_RELOCATED"),
+    );
+  const saved = await engine.relateDocument(
+    { ...change, action: "detach", requestId: "stage-detach" },
+    "tester",
+  );
+  assert.equal(saved.revision, before.revision + 1);
+  const after = await engine.get({ ref: d2.key });
+  const left = (after.data as { relations?: { target: { kind: string; id: string } }[] })
+    .relations!;
+  assert.deepEqual(
+    left.map((relation) => `${relation.target.kind}:${relation.target.id}`),
+    relations
+      .map((relation) => `${relation.target.kind}:${relation.target.id}`)
+      .filter((address) => address !== stageRef),
+    "остальные связи сохранены",
+  );
+  // Повторное открепление: сохранённой связи больше нет, адрес разрешается и указывает на план.
+  await assert.rejects(
+    engine.relateDocument(
+      { ...change, ifRevision: after.revision, action: "detach", requestId: "stage-again" },
+      "tester",
+    ),
+    code("ENTITY_RELOCATED"),
+  );
+});

@@ -48,6 +48,7 @@ import type { EntityCatalog } from "./catalog.js";
 import { entityHandlers, entitySaved } from "./handlers.js";
 import {
   changeDocumentRelation,
+  storedDocumentTarget,
   documentAxes,
   documentFacets,
   entityDocuments,
@@ -566,6 +567,24 @@ export class EntityEngine {
     });
   }
   /** Одна связь документа под его ревизией; прочие relations и links сохраняются. */
+  /**
+   * Цель изменения связи. Каталог не содержит записей совместимости прежних адресов, поэтому
+   * отсутствующий в нём адрес дополнительно разрешается сессией хранилища: прежний адрес этапа
+   * отвечает ENTITY_RELOCATED с целью, как при адресном чтении, а не ENTITY_NOT_FOUND.
+   */
+  private async resolveTarget(
+    catalog: Parameters<typeof resolveEntity>[0],
+    reference: string,
+  ): Promise<EntityRef> {
+    try {
+      return resolveEntity(catalog, reference).ref;
+    } catch (error) {
+      const session = this.workspace.storageSession;
+      if (error instanceof AppError && error.code === "ENTITY_NOT_FOUND" && session)
+        await session.resolve(reference);
+      throw error;
+    }
+  }
   async relateDocument(input: DocumentRelationChange, actor: string) {
     const command = parse(documentRelationChangeSchema, input, "связь документа");
     invariant(
@@ -590,7 +609,13 @@ export class EntityEngine {
         4,
         { actual: entry.revision, expected: command.ifRevision },
       );
-      const target = resolveEntity(context.catalog, command.target).ref;
+      // Открепление снимает существующую связь по сохранённой цели без разрешения сущности:
+      // иначе связь с прежним адресом этапа или удалённой целью не убрать. Остальные действия
+      // разрешают цель; прежний адрес этапа даёт ENTITY_RELOCATED с планом-владельцем.
+      const target =
+        (command.action === "detach"
+          ? storedDocumentTarget(entry.data, command.target)
+          : undefined) ?? (await this.resolveTarget(context.catalog, command.target));
       const { relations, links } = changeDocumentRelation(entry.data, target, command);
       const saved = await new ProductQueries(this.workspace).mutate(
         productMutationSchema.parse({

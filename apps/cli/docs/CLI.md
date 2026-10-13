@@ -852,7 +852,10 @@ R документа; обязателен `--target <ref>`, допустимы 
 (по умолчанию documents) или `--legacy`, но не вместе. Без `--legacy` снимает одну
 связь через relateDocument, включая совместимую область links с типом documents;
 отсутствующая связь — `RELATION_NOT_FOUND` (exit 3). Не удаляет документ и цель.
-Ответ — квитанция.
+Связь с прежним адресом этапа `plan-stage:<id>`, оставшаяся после `storage migrate`,
+снимается по сохранённой цели: адрес отвечает `ENTITY_RELOCATED`, но unlink в local и HTTP
+передаёт его в Core как есть. Прикрепление и изменение такой связи (`document link`)
+отвечают `ENTITY_RELOCATED` (exit 3) с новым адресом в `details.to`. Ответ — квитанция.
 
 ### document facets
 

@@ -13,6 +13,7 @@ import {
   storageStatusSchema,
 } from "@relay/contracts/storage-maintenance";
 import { CURRENT_DATA_MODEL } from "@relay/core/storage/data-model/profiles";
+import { httpServer } from "./helpers/http.js";
 import { fixture, invoke, invokeRaw, successful, failed, tempDirectory } from "./helpers/cli.js";
 import { restoreFixtureTree } from "../../../packages/core/test/fixtures/data-migrations/restore-tree.mjs";
 
@@ -521,4 +522,86 @@ test("обычная local-команда на базе профиля 1: text �
   ]);
   assert.match(text.stdout, /Фактически: 1\n/);
   assert.deepEqual(await treeHashes(project), before, "чтение не меняет базу");
+});
+
+test("связь документа с прежним адресом этапа после migrate: unlink снимает, link — ENTITY_RELOCATED (local и HTTP)", async (t) => {
+  const stage = "plan-stage:Lg6IfNWn";
+  const links = async (run: (args: (string | number)[]) => ReturnType<typeof invoke>) =>
+    (
+      successful(await run(["document", "links", "DOC-2"])).data as {
+        items: { target: { kind: string; id: string }; type: string }[];
+      }
+    ).items.map(({ target, type }) => `${type} ${target.kind}:${target.id}`);
+  for (const mode of ["local", "http"] as const) {
+    const project = await frozenBase(t, "physical2-plan-v1-43d683b");
+    const backups = await tempDirectory(t);
+    successful(
+      await invoke(project, [
+        "--local",
+        "storage",
+        "migrate",
+        "--backup-dir",
+        join(backups, "copy"),
+      ]),
+    );
+    const prefix =
+      mode === "local" ? ["--local"] : ["--server-url", (await httpServer(t, project)).url];
+    const run = (args: (string | number)[]) =>
+      invoke(project, [...prefix, "--actor", "agent", ...args]);
+    const before = await links(run);
+    assert.ok(before.includes(`documents ${stage}`), before.join("; "));
+    const revision = (
+      successful(await run(["document", "get", "DOC-2"])).data as { revision: number }
+    ).revision;
+
+    // Прикрепить и изменить связь по прежнему адресу нельзя: отказ до Core-записи.
+    const refused = await run([
+      "document",
+      "link",
+      "DOC-2",
+      "--target",
+      stage,
+      "--if-revision",
+      revision,
+    ]);
+    failed(refused, "ENTITY_RELOCATED", 3);
+    assert.ok(!refused.body.ok);
+    assert.equal((refused.body.error.details as { from: string }).from, stage);
+    assert.deepEqual(await links(run), before, mode);
+
+    const removed = await invokeRaw(
+      project,
+      [
+        ...prefix,
+        "--actor",
+        "agent",
+        "document",
+        "unlink",
+        "DOC-2",
+        "--target",
+        stage,
+        "--if-revision",
+        revision,
+      ],
+      human,
+    );
+    assert.equal(removed.code, 0, removed.stdout);
+    assert.equal(removed.stderr, "");
+    assert.match(
+      removed.stdout,
+      new RegExp(`^Отношение снято \\(documents, ${stage}\\) для документа: DOC-2`),
+    );
+    assert.match(removed.stdout, new RegExp(`Ревизия:\\s+${revision + 1}`));
+    assert.deepEqual(
+      await links(run),
+      before.filter((link) => link !== `documents ${stage}`),
+      `${mode}: снята только связь с прежним адресом`,
+    );
+    // Сохранённой цели больше нет: повторное снятие — тот же отказ, не пустой успех.
+    failed(
+      await run(["document", "unlink", "DOC-2", "--target", stage, "--if-revision", revision + 1]),
+      "ENTITY_RELOCATED",
+      3,
+    );
+  }
 });

@@ -180,6 +180,23 @@ const linkTarget = (link: Link) => ({
   id: link.kind === "product" ? "passport" : link.id,
 });
 
+/**
+ * Сохранённая цель связи документа по полному адресу `kind:id` без разрешения сущности.
+ * Нужна только для открепления: цель может не разрешаться (прежний адрес этапа
+ * `plan-stage`, удалённая сущность), но связь у документа есть и должна сниматься.
+ */
+export function storedDocumentTarget(
+  data: DocumentData,
+  reference: string,
+): { kind: string; id: string } | undefined {
+  const relation = (data.relations ?? []).find(
+    (entry) => entityAddress(entry.target) === reference,
+  );
+  if (relation) return relation.target;
+  const link = data.links.find((entry) => entityAddress(linkTarget(entry)) === reference);
+  return link ? linkTarget(link) : undefined;
+}
+
 /** Связи документа с выбранной сущностью: адресные relations и совместимые links. */
 export function documentRelationsTo(data: DocumentData, target: { kind: string; id: string }) {
   const address = entityAddress(target);

@@ -5,7 +5,7 @@ import { entityUpdateSchema, defaultDocumentSections } from "@relay/contracts/en
 import type { EntityDetail } from "@relay/contracts/entities";
 import { documentBulkSchema } from "@relay/contracts/entities/document-catalog";
 import { parse } from "@relay/core/domain/validation";
-import { invariant } from "@relay/core/shared/errors";
+import { AppError, invariant } from "@relay/core/shared/errors";
 import { commandGroup, registerCommand } from "../command.js";
 import { author } from "../context.js";
 import type { CommandContext, Runtime } from "../context.js";
@@ -187,7 +187,7 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
       details:
         (action === "link"
           ? "Изменяет одну связь документа под его ревизией. Если связи цель+тип ещё нет, она прикрепляется (пояснение по умолчанию пустое; повтор даёт ALREADY_EXISTS). Если она есть — меняются только переданные поля: пояснение (--description/--description-file или --clear-description) и тип (--next-relation); пропущенное пояснение сохраняется. Совместимая область links с тем же адресом при явном изменении становится адресным отношением documents. Целью может быть сущность любого из 11 видов проекта."
-          : "Снимает одну связь цель+тип (по умолчанию documents), включая совместимую область links; документ и цель сохраняются. Отсутствующая связь даёт RELATION_NOT_FOUND.") +
+          : "Снимает одну связь цель+тип (по умолчанию documents), включая совместимую область links; документ и цель сохраняются. Отсутствующая связь даёт RELATION_NOT_FOUND. Связь с прежним адресом этапа (plan-stage:<id>) снимается по сохранённой цели, хотя сам адрес отвечает ENTITY_RELOCATED; link и изменение такой связи получают ENTITY_RELOCATED.") +
         " Остальные отношения и области сохраняются; Core проверяет ревизию и пишет рёбра графа в той же транзакции, при конфликте (REVISION_CONFLICT) запись не повторяется. --legacy изменяет прежние продуктовые области links/targets без пояснений через изменение документа.",
       examples: [
         [
@@ -250,7 +250,7 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
         const record = await subject(context, "document", input.argument());
         invariant(record.data.kind === "document", "INVALID_ARGUMENT", "Нужен документ");
         assertRevision(record, options.ifRevision);
-        const target = await context.backend.entities.resolve({ ref: options.target });
+        const target = await resolveRelationTarget(context, options.target, action);
         if (options.legacy) {
           const targets = record.data.links.map(
             (link) => `${link.kind}:${link.kind === "product" ? "passport" : link.id}`,
@@ -344,6 +344,30 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
         };
       },
     });
+}
+
+/**
+ * Цель связи документа. Прежний адрес (например, `plan-stage:<id>`) разрешается в
+ * ENTITY_RELOCATED; снять связь с ним можно только по сохранённой цели, поэтому unlink
+ * передаёт в Core исходный адрес из details. Link и update сохраняют отказ.
+ */
+async function resolveRelationTarget(
+  context: CommandContext,
+  ref: string,
+  action: "link" | "unlink",
+): Promise<{ ref: { kind: string; id: string }; key: string }> {
+  try {
+    return await context.backend.entities.resolve({ ref });
+  } catch (error) {
+    if (action !== "unlink" || !(error instanceof AppError) || error.code !== "ENTITY_RELOCATED")
+      throw error;
+    const details = error.details as { from?: unknown } | undefined;
+    const from = typeof details?.from === "string" ? details.from : undefined;
+    const match = from === undefined ? null : /^([a-z][a-z-]*):(.+)$/.exec(from);
+    if (!match) throw error;
+    // Прежний ключ (STG-1) теперь ведёт к новому владельцу; квитанция называет точный адрес.
+    return { ref: { kind: match[1]!, id: match[2]! }, key: from! };
+  }
 }
 
 export function registerDocumentSections(parent: Command, runtime: Runtime) {
