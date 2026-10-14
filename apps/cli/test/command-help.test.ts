@@ -6,10 +6,10 @@ import { formatHelpExample } from "../src/help-example.js";
 import { commandTree, renderHelp } from "./helpers/help.js";
 import { failed, invoke, invokeRaw, tempDirectory } from "./helpers/cli.js";
 
-test("help: все 136 листов и группы работают без config и не создают базу", async (t) => {
+test("help: все 146 листов и группы работают без config и не создают базу", async (t) => {
   const root = await tempDirectory(t);
   const tree = commandTree(root);
-  assert.equal(tree.filter(({ command }) => !command.commands.length).length, 136);
+  assert.equal(tree.filter(({ command }) => !command.commands.length).length, 146);
   const examples: string[] = [];
   for (const { command, path } of tree) {
     const result = await renderHelp(root, [...path, "--help"]);
@@ -168,7 +168,7 @@ test("help: ошибки адресуют нужный уровень; удал�
   }
 });
 
-test("help: product overview объясняет срез, подборки, --limit и версии", async (t) => {
+test("help: product overview объясняет compact/full/map, метрики, totals и версии", async (t) => {
   const root = await tempDirectory(t);
   const result = await renderHelp(root, ["product", "overview", "--help"]);
   assert.equal(result.code, 0, result.stdout);
@@ -176,22 +176,34 @@ test("help: product overview объясняет срез, подборки, --li
   for (const expected of [
     /шести колонкам/,
     /блокеры с причинами/,
-    /не более 5/,
-    /--limit и --cursor листают только карту/,
+    /По умолчанию text — компактная сводка без повторных карточек/,
+    /--view full возвращает прежнее полное представление с подборками/,
+    /JSON в обоих режимах сохраняет полный DTO обзора/,
+    /--view map явно выбирает самостоятельную серверную страницу карты без сводки/,
+    /--limit и --cursor листают карту; итоги обзора от них не зависят/,
+    /Подборки полного режима — до 5 элементов с точными totals/,
+    /Компактная сводка text не является страницей списка/,
     /snapshotVersion/,
-    /Поле version — версия продуктового состава/,
+    /поле data.version — версия продуктового состава, не snapshotVersion/,
+    /Глобальный --version по-прежнему показывает версию CLI/,
     /не решает, какую задачу начинать или завершать/,
     /product overview \\ --limit 20 \\ --format json/,
     // Детализация показателей оператора.
     /--metric <metric>/,
     /--blocker <task>/,
+    /--snapshot <snapshot>/,
+    /--view <mode>/,
+    /--snapshot <snapshotVersion> привязывает первое чтение метрики или карты к срезу обзора/,
+    /Без --snapshot первая страница читает актуальное состояние/,
+    /--view вместе с --metric не применяется/,
     /review-obligations-met, review-obligations-open, blocker-impact, blocker-affected, unplanned-work, board-work, open-plans-complete, ready-releases, plans-outside-releases/,
     /Для blocker-affected обязателен --blocker/,
     /не является внешней проверкой/,
     /работа вне открытых планов — сигнал, а не ошибка/,
     /total от размера страницы не зависит/,
     /достаточно передать только --cursor/,
-    /VERSION_CONFLICT/,
+    /VERSION_CONFLICT \(exit 4\)/,
+    /перечитайте overview без --cursor и --snapshot/,
     /product overview \\ --metric review-obligations-met/,
     /--metric blocker-affected \\ --blocker PRODUCT-1/,
   ])

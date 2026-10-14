@@ -459,6 +459,7 @@ test("обычная local-команда на базе профиля 1: text �
     "Остановите процессы Relay и проверьте план:",
     `npx @oim-dev/relay-cli --local --config ${config} storage migrate --dry-run`,
     "Затем выполните:",
+    "Шаблон команды: замените значения в <…> перед запуском.",
     `npx @oim-dev/relay-cli --local --config ${config} storage migrate --backup-dir <каталог вне базы> --if-plan <planFingerprint>`,
   ]);
   assert.match(text.stdout, /Фактически: 1\n/);

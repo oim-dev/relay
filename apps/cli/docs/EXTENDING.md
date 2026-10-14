@@ -121,18 +121,20 @@ HTTP-сценарии также должны завершать только с
 
 ## Маршрут команды в коде
 
-| Участок                                  | Ответственность                                                      |
-| ---------------------------------------- | -------------------------------------------------------------------- |
-| `src/main.ts`, `src/run.ts`              | Запуск, проектный префикс, ошибки Commander, exit code, EPIPE        |
-| `src/program.ts`                         | Дерево команд и глобальные параметры                                 |
-| `src/command.ts`                         | CommandDefinition, registerCommand, группы и общая справка           |
-| `src/context.ts`                         | Runtime, подключение Backend, автор, параметры вывода, печать Result |
-| `src/commands/`                          | Предметные адаптеры CLI                                              |
-| `src/backend/connect.ts`                 | Выбор подключения через project-runtime                              |
-| `src/input.ts`, `src/text-input.ts`      | Общие средства чтения ввода                                          |
-| `src/presentation/`                      | Представления конкретных семейств                                    |
-| `src/queries/result.ts`, `src/output.ts` | Конверт, сериализация и вывод ответа                                 |
-| `src/terminal.ts`                        | Ширина терминала                                                     |
+| Участок                                                | Ответственность                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `src/main.ts`, `src/run.ts`                            | Запуск, проектный префикс, ошибки Commander, exit code, EPIPE                   |
+| `src/program.ts`                                       | Дерево команд и глобальные параметры                                            |
+| `src/command.ts`                                       | CommandDefinition, registerCommand, группы и общая справка                      |
+| `src/context.ts`                                       | Runtime, подключение Backend, автор, параметры вывода, печать Result            |
+| `src/commands/`                                        | Предметные адаптеры CLI                                                         |
+| `src/commands/product-queries.ts`                      | Чтения продукта: state/context, обзор, карта, validation/lint                   |
+| `src/commands/planning.ts`, `src/commands/releases.ts` | Отдельные владельцы планов и релизов; общие аргументы — planning-release-shared |
+| `src/backend/connect.ts`                               | Выбор подключения через project-runtime                                         |
+| `src/input.ts`, `src/text-input.ts`                    | Общие средства чтения ввода                                                     |
+| `src/presentation/`                                    | Представления конкретных семейств                                               |
+| `src/queries/result.ts`, `src/output.ts`               | Конверт, сериализация и вывод ответа                                            |
+| `src/terminal.ts`                                      | Ширина терминала                                                                |
 
 Текущий `CommandContext` содержит `backend`, `workspace` (сведения о проекте),
 `connection` (CLI `ConnectionInfo`), `runtime`, `output`, `globals`.
@@ -177,8 +179,12 @@ HTTP-сценарии также должны завершать только с
 В JSON внутренний data.nextCursor не заменяет публичный meta.page.nextCursor.
 Для реестра без проектного Backend используйте чистые `offsetQueryFor`/`pageResultFor`
 с `PaginationContext { identity, defaultLimit, invocation }`: invocation — массив
-неэкранированных аргументов, не shell-строка. Отпечаток текущего каталога служит
-version для guard; это не серверный исторический снимок.
+неэкранированных аргументов, не shell-строка. Workspace list передаёт исходную version
+в `getProjectCatalogPage`, не получает полный каталог для локального среза. Серверный
+отпечаток защищает продолжение; в прежний data проецируется catalog страницы,
+а meta.page строится из total/nextOffset/version. Это не исторический снимок.
+Неизвестные фильтры курсора отклоняются. `meta.paginationSource` —
+`server-catalog-fingerprint`.
 
 1. Найдите предметный метод Backend и его контракт. Если операция отсутствует,
    согласуйте её у владельца Core/Backend, не имитируйте последовательностью
@@ -295,6 +301,17 @@ Update передаёт только предоставленные поля. Н
 чтение, но не подменяет его. UUID/ID и requestId в text нужны по смыслу адресации
 квитанции или диагностики, а не как обязательное дублирование всех машинных полей.
 JSON, включая технические адреса, requestId и details ошибки, не меняется ради text.
+
+Новая компактная проекция — явный отдельный контракт, не скрытая замена прежнего DTO.
+Сохраняйте отсутствие опции как прежний режим JSON; `--projection compact` (либо
+`product overview --view map`) вызывает соответствующий Backend, у списков cursor
+привязан к проекции. Workspace add/remove в text по умолчанию выбирают compact-маршрут,
+но JSON без явной проекции сохраняет прежний полный ответ; full — явный старый маршрут,
+не автоматический обход отказа capability. Не удаляйте поля из уже полученного полного HTTP-ответа, выдавая это
+за экономию транспорта. У первой компактной text-сводки overview нет footer невидимой
+карты; карта и метрики имеют собственный переход с исходным snapshotVersion.
+Группировка причин прогресса меняет только композицию text, не count/total исходных
+коллекций. Неизвестную причину нельзя сокращать как известный шаблон.
 
 Используйте существующий безопасный текст и `renderMarkdown`; экранную ширину
 измеряйте через `string-width`, не `.length`. Обычные метаданные и summary могут

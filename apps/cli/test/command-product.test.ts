@@ -154,8 +154,7 @@ test("product: восемь singleton-листьев и сохранение п�
       "--cursor",
       page.meta!.page!.nextCursor!,
     ]);
-    assert.equal(conflict.body.ok, false);
-    if (!conflict.body.ok) assert.equal(conflict.body.error.code, "VERSION_CONFLICT");
+    failed(conflict, "VERSION_CONFLICT", 4);
   });
   await t.test("validate: структурная проверка, не запись", async () => {
     const result = successful(
@@ -688,7 +687,7 @@ test("product overview: пустой проект — нули, состояни
     assert.deepEqual(preview, { total: 0, shown: 0, hasMore: false, items: [] });
   assert.equal(result.data.total, 0);
   assert.equal(result.meta?.page?.nextCursor, null);
-  const human = await invokeRaw(app.root, ["product", "overview"], {
+  const human = await invokeRaw(app.root, ["product", "overview", "--view", "full"], {
     env: { COLUMNS: "40", FORCE_COLOR: "1" },
   });
   assert.equal(human.code, 0, human.stdout);
@@ -769,9 +768,13 @@ test("product overview: срез проекта, подборки, страни�
 
   await t.test("human: порядок разделов, причины, «показано N из M», без ANSI", async () => {
     for (const width of [40, 120]) {
-      const human = await invokeRaw(app.root, ["product", "overview", "--limit", 2], {
-        env: { COLUMNS: String(width), FORCE_COLOR: "1" },
-      });
+      const human = await invokeRaw(
+        app.root,
+        ["product", "overview", "--view", "full", "--limit", 2],
+        {
+          env: { COLUMNS: String(width), FORCE_COLOR: "1" },
+        },
+      );
       assert.equal(human.code, 0, human.stdout);
       assert.equal(human.stderr, "");
       const out = human.stdout;
@@ -888,7 +891,7 @@ test("product overview: срез проекта, подборки, страни�
       "старая версия состава не меняется от задачи",
     );
     assert.notEqual(after.data.snapshotVersion, page.data.snapshotVersion);
-    failed(await app.run(["product", "overview", "--cursor", cursor]), "VERSION_CONFLICT");
+    failed(await app.run(["product", "overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
   });
 
   await t.test(
@@ -910,9 +913,13 @@ test("product overview: срез проекта, подборки, страни�
         if (!command.endsWith("--help"))
           assert.equal(JSON.parse(await run(command)).ok, true, command);
       }
-      const human = await invokeRaw(app.root, ["--server-url", server.url, "product", "overview"], {
-        env: { COLUMNS: "60" },
-      });
+      const human = await invokeRaw(
+        app.root,
+        ["--server-url", server.url, "product", "overview", "--view", "full"],
+        {
+          env: { COLUMNS: "60" },
+        },
+      );
       assert.equal(human.code, 0, human.stdout);
       assert.match(human.stdout, /В работе · показано 5 из 7/);
       assert.doesNotMatch(human.stdout, /\u001b/);
@@ -1135,7 +1142,7 @@ test("product overview: показатели оператора, детализ�
 
   await t.test("human: компактные блоки и подписи по смыслу, без ANSI", async () => {
     for (const width of [40, 120]) {
-      const human = await invokeRaw(app.root, ["product", "overview"], {
+      const human = await invokeRaw(app.root, ["product", "overview", "--view", "full"], {
         env: { COLUMNS: String(width), FORCE_COLOR: "1" },
       });
       assert.equal(human.code, 0, human.stdout);
@@ -1240,8 +1247,9 @@ test("product overview: показатели оператора, детализ�
     for (const [metric, command] of Object.entries(commands.metrics as Record<string, string>)) {
       assert.match(
         command,
-        /^npx @oim-dev\/relay-cli --config '.*проект с '\\''кавычкой'\\''.*' --format json product overview --metric [a-z-]+$/,
+        /^npx @oim-dev\/relay-cli --config '.*проект с '\\''кавычкой'\\''.*' --format json product overview --metric [a-z-]+ --snapshot [a-f0-9]{64}$/,
       );
+      assert.ok(command.endsWith(`--snapshot ${full.data.snapshotVersion}`), command);
       const body = JSON.parse(await run(command));
       assert.equal(body.ok, true, command);
       assert.equal(body.data.metric, metric);
@@ -1249,7 +1257,12 @@ test("product overview: показатели оператора, детализ�
     }
     for (const blocker of operator.blockerImpact.items) {
       const command = commands.blockerAffected[blocker.id] as string;
-      assert.ok(command.endsWith(`--metric blocker-affected --blocker ${blocker.id}`), command);
+      assert.ok(
+        command.endsWith(
+          `--metric blocker-affected --blocker ${blocker.id} --snapshot ${full.data.snapshotVersion}`,
+        ),
+        command,
+      );
       const body = JSON.parse(await run(command));
       assert.equal(body.data.blocker.id, blocker.id);
       assert.equal(body.data.total, blocker.affected.total);

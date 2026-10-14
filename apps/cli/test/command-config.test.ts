@@ -182,7 +182,19 @@ test("config: немутирующее local/legacy чтение, происхо
   assert.match(explicit.stdout.replace(/\s+/g, " "), /Проверьте явно выбранный путь/);
   assert.doesNotMatch(explicit.stdout, /npx .*init|найдите запись/);
   const entity = await invokeRaw(app.root, ["task", "get", "PRODUCT-999"]);
-  assert.match(entity.stdout.replace(/\s+/g, " "), /Проверьте ключ записи/);
+  assert.notEqual(entity.code, 0);
+  assert.equal(entity.stderr, "");
+  assert.match(entity.stdout, /Ошибка: NOT_FOUND/);
+  assert.match(entity.stdout.replace(/\s+/g, " "), /Проверьте адрес и выбранный проект/);
+  assert.doesNotMatch(entity.stdout, /\binit\b|CONFIG_NOT_FOUND/);
+  const recovery = entity.stdout
+    .split("\n")
+    .filter((line) => line.startsWith("npx @oim-dev/relay-cli "));
+  assert.deepEqual(recovery, ["npx @oim-dev/relay-cli task list"]);
+  const records = await runHint(app.root, recovery[0]!);
+  assert.equal(records.stderr, "");
+  assert.match(records.stdout, /Задачи/);
+  assert.match(records.stdout, /Показано: 0 из 0 подходящих записей/);
   assert.deepEqual(await readdir(empty), []);
 });
 

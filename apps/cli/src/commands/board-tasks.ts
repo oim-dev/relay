@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { Command } from "commander";
+import { Option, type Command } from "commander";
+import { taskDependenciesQuerySchema } from "@relay/contracts/progress";
 import {
   entityCreateSchema,
   entityUpdateSchema,
@@ -28,6 +29,8 @@ import {
 import { entitySavedText } from "../presentation/entities.js";
 import { registerTaskActivity } from "./task-activity.js";
 import { registerEntityProgress } from "./progress.js";
+import { registerEntityDeletion } from "./entity-deletion.js";
+import { registerTaskCommand } from "./task-command.js";
 import {
   boardTaskText,
   boardTaskSavedText,
@@ -210,7 +213,14 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     ],
   });
   registerTaskActivity(group, runtime);
-  registerCommand<BoardTasksQuery & PageOptions>(group, runtime, {
+  registerEntityDeletion(group, runtime, {
+    kind: "task",
+    example: "PRODUCT-1",
+    details:
+      "Удаляется задача с критериями и комментариями. Дети, другие задачи и документы сохраняются со снятием затронутых ссылок; у детей снимается родительство. Новый комментарий инвалидирует предпросмотр, хотя не меняет ревизию содержания. Участие задачи в любом плане, включая закрытый, блокирует удаление.",
+    catalogs: [{ label: "Проверить оставшиеся задачи и снятые ссылки", args: ["task", "list"] }],
+  });
+  registerTaskCommand<BoardTasksQuery & PageOptions>(group, runtime, {
     name: "list",
     description: "Найти задачи и блокеры",
     details:
@@ -235,11 +245,11 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       return {
         data,
         page: pageResult(context, command, filters, query, data),
-        text: (options) => boardTasksText(data, filters, options),
+        text: (options) => boardTasksText(data, filters, options, taskInvocation(context)),
       };
     },
   });
-  registerCommand(group, runtime, {
+  registerTaskCommand(group, runtime, {
     name: "get <task>",
     description: "Прочитать полную задачу",
     arguments: { task: "Текущий/прежний ключ или ID задачи" },
@@ -250,7 +260,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       return { data, text: (options) => boardTaskText(data, options, taskInvocation(context)) };
     },
   });
-  registerCommand<PageOptions>(group, runtime, {
+  registerTaskCommand<PageOptions>(group, runtime, {
     name: "children <task>",
     description: "Прочитать прямые подзадачи",
     arguments: { task: "Ключ или ID родителя" },
@@ -271,16 +281,17 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       return {
         data,
         page: pageResult(context, command, {}, query, data),
-        text: (options) => taskChildrenText(data, options, input.argument()),
+        text: (options) =>
+          taskChildrenText(data, options, input.argument(), taskInvocation(context)),
       };
     },
   });
-  registerCommand<PageOptions>(group, runtime, {
+  registerTaskCommand<PageOptions>(group, runtime, {
     name: "links <task>",
-    description: "Прочитать все предметные связи задачи",
+    description: "Прочитать связи между задачами",
     arguments: { task: "Ключ или ID задачи" },
     details:
-      "Включает родителя, детей, зависимости, блокируемые и обычные связанные задачи. Страница не означает полный состав.",
+      "Включает родителя, детей, зависимости, блокируемые и обычные связанные задачи. Материалы и другие виды отношений читаются через inspect graph list --root, участие в планах — plan task memberships. Страница не означает полный состав.",
     examples: [["npx @oim-dev/relay-cli task links PRODUCT-1", "Прочитать связи"]],
     configure: paging,
     async run(context, input) {
@@ -290,13 +301,14 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       return {
         data,
         page: pageResult(context, command, {}, query, data),
-        text: (options) => boardTaskLinksText(data, input.argument(), options),
+        text: (options) =>
+          boardTaskLinksText(data, input.argument(), options, taskInvocation(context)),
       };
     },
   });
   registerEntityProgress(group, runtime, "task");
   for (const action of ["create", "update"] as const) {
-    registerCommand<WriteOptions>(group, runtime, {
+    registerTaskCommand<WriteOptions>(group, runtime, {
       name: action === "create" ? "create" : "update <task>",
       description:
         action === "create"
@@ -438,7 +450,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       },
     });
   }
-  registerCommand<WriteOptions>(group, runtime, {
+  registerTaskCommand<WriteOptions>(group, runtime, {
     name: "rename <task> <key>",
     description: "Изменить ключ задачи, сохранив ID и прежний адрес",
     details:
@@ -485,7 +497,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       };
     },
   });
-  registerCommand<WriteOptions>(group, runtime, {
+  registerTaskCommand<WriteOptions>(group, runtime, {
     name: "move <task>",
     description: "Переместить задачу в колонку или на другую доску",
     arguments: { task: "Ключ или ID задачи" },
@@ -552,23 +564,55 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     details: "Необходимые результаты других задач; циклы проверяет Core.",
     examples: [["npx @oim-dev/relay-cli task dependency list PRODUCT-1", "Прочитать зависимости"]],
   });
-  registerCommand<PageOptions>(dependency, runtime, {
+  registerTaskCommand<PageOptions & { projection?: "full" | "compact" }>(dependency, runtime, {
     name: "list <task>",
     description: "Прочитать прямые обязательные зависимости",
     arguments: { task: "Ключ или ID задачи" },
     details:
-      "Используется отдельная страница dependencies предметного прогресса, а не фильтрация страницы всех связей. Выполнение вычисляется Core; ревизии соседей этот ответ не содержит. JSON сохраняет полный ответ прогресса.",
+      "По умолчанию full сохраняет прежний полный ответ прогресса, включая JSON; meta.page описывает только dependencies. --projection compact использует отдельную страницу зависимостей без criteria/children/reasons; по HTTP нужен Server с relay-work-read-models-v1, без скрытого fallback. Это не фильтрация страницы links. Выполнение вычисляется Core; ревизии соседей не предоставлены. Курсор и продолжение сохраняют проекцию независимо от формата; курсоры full и compact не взаимозаменяемы.",
     examples: [
       ["npx @oim-dev/relay-cli task dependency list PRODUCT-1 --limit 20", "Прочитать зависимости"],
+      [
+        "npx @oim-dev/relay-cli task dependency list PRODUCT-1 --projection compact --limit 20",
+        "Прочитать только зависимости без полного прогресса",
+      ],
     ],
-    configure: paging,
+    configure: (command) =>
+      paging(command).addOption(
+        new Option(
+          "--projection <mode>",
+          "full — совместимый полный DTO (по умолчанию); compact — только страница зависимостей",
+        ).choices(["full", "compact"]),
+      ),
     async run(context, input) {
       const command = ["task", "dependency", "list", input.argument()];
-      const query = offsetQuery(context, input.options, command, {});
+      const filters = { projection: input.options.projection };
+      const query = offsetQuery(context, input.options, command, filters);
+      filters.projection ??= "full";
+      if (filters.projection === "compact") {
+        const data = await context.backend.progress.taskDependencies(
+          parse(
+            taskDependenciesQuerySchema,
+            { ref: input.argument(), ...query },
+            "страница зависимостей",
+          ),
+        );
+        return {
+          data,
+          page: pageResult(context, command, filters, query, data),
+          text: (options) =>
+            taskDependenciesText(data, options, taskInvocation(context), input.argument()),
+        };
+      }
+      if (filters.projection !== "full")
+        throw new AppError(
+          "INVALID_CURSOR",
+          "Курсор содержит неизвестную проекцию. Начните список без --cursor",
+        );
       const data = await context.backend.progress.task({ ref: input.argument(), ...query });
       return {
         data,
-        page: pageResult(context, command, {}, query, {
+        page: pageResult(context, command, filters, query, {
           ...data.dependencies,
           version: data.version,
         }),
@@ -593,7 +637,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     const clear = relation === "parent" && remove;
     const targetName =
       relation === "parent" ? "parent" : relation === "depends-on" ? "dependency" : "target";
-    registerCommand<WriteOptions>(owner, runtime, {
+    registerTaskCommand<WriteOptions>(owner, runtime, {
       name: `${name} <task>${clear ? "" : ` <${targetName}>`}`,
       description: `${remove ? "Снять" : "Установить"} ${relation === "parent" ? "родителя" : relation === "related" ? "обычную связь" : "зависимость"} задачи`,
       arguments: {
@@ -673,7 +717,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     details: "Изменения требуют ревизии задачи. Для задачи в done сначала измените колонку.",
     examples: [["npx @oim-dev/relay-cli task criterion list PRODUCT-1", "Прочитать критерии"]],
   });
-  registerCommand<PageOptions>(criteria, runtime, {
+  registerTaskCommand<PageOptions>(criteria, runtime, {
     name: "list <task>",
     description: "Прочитать критерии без полного Markdown",
     arguments: { task: "Ключ или ID задачи" },
@@ -690,11 +734,11 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       return {
         data,
         page: pageResult(context, command, {}, query, data),
-        text: (options) => criteriaText(data, input.argument(), options),
+        text: (options) => criteriaText(data, input.argument(), options, taskInvocation(context)),
       };
     },
   });
-  registerCommand(criteria, runtime, {
+  registerTaskCommand(criteria, runtime, {
     name: "get <task> <criterion>",
     description: "Прочитать полный критерий и отметку выполнения",
     details: "Возвращает полное описание, автора и время выполнения, ревизию задачи.",
@@ -714,7 +758,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     },
   });
   for (const action of ["add", "update", "complete", "reopen", "remove"] as const) {
-    registerCommand<WriteOptions>(criteria, runtime, {
+    registerTaskCommand<WriteOptions>(criteria, runtime, {
       name: `${action} <task>${action === "add" ? "" : " <criterion>"}`,
       description: {
         add: "Добавить критерий",

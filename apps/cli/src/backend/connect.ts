@@ -53,6 +53,28 @@ export async function connectBackend(
       return undefined;
     throw error;
   });
+  if (localOnly && globals.local && source?.kind === "registry") {
+    const target = selectProject(source, globals.project);
+    invariant(
+      target.configPath,
+      "LOCAL_CONFIG_REQUIRED",
+      "Для обслуживания нужен прямой config выбранного проекта",
+    );
+    const invocation = localInvocation(runtime, globals, target.configPath, true);
+    if (globals.actor) invocation.push("--actor", globals.actor);
+    if (globals.format) invocation.push("--format", globals.format);
+    // helpCommand — путь зарегистрированного листа, не пользовательская shell-строка.
+    const command = runtime.helpCommand?.split(" ").slice(2) ?? ["storage", "--help"];
+    throw new AppError(
+      "LOCAL_CONFIG_REQUIRED",
+      "Для обслуживания укажите прямой --local --config выбранного проекта, не реестр workspace. Перед выполнением остановите писателей и сохраните резервную копию.",
+      2,
+      {
+        configPath: target.configPath,
+        next: shellCommand([...invocation, ...command]),
+      },
+    );
+  }
   invariant(
     !(source?.kind === "registry" && globals.local),
     "WORKSPACE_REQUIRES_SERVER",
@@ -62,9 +84,9 @@ export async function connectBackend(
     globals.serverUrl ??
     runtime.env.RELAY_SERVER_URL ??
     (source?.kind === "registry" ? serverAddress(source) : source?.value.server.url);
-  // Селектор local не ограничивает удалённый проект из-за источника HTTP URL.
+  // При HTTP клиентский реестр не разрешает key/ID/slug: источник каталога — Server.
   const target =
-    source && (source.kind === "registry" || globals.local || configuredUrl === undefined)
+    source && (globals.local || configuredUrl === undefined)
       ? selectProject(source, globals.project)
       : {};
   const clientConfig: ConnectionInfo["clientConfig"] = source
@@ -80,6 +102,11 @@ export async function connectBackend(
       }
     : undefined;
   if (!globals.local && configuredUrl !== undefined) {
+    invariant(
+      source?.kind !== "registry" || globals.project !== undefined,
+      "PROJECT_REQUIRED",
+      "В workspace укажите --project: ключ регистрации, ID или slug из каталога Server",
+    );
     // Адрес из config/реестра: тот же отказ, что и для флага, без запроса к Server.
     if (localOnly) requireLocalMaintenance({ serverUrl: configuredUrl });
     const url = new URL(parse(serverUrlSchema, configuredUrl, "адрес сервера")).origin;

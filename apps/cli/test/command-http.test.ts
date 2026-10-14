@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { fixture, invoke, invokeRaw, successful, failed, tempDirectory } from "./helpers/cli.js";
 import { httpServer, httpProxy } from "./helpers/http.js";
 
-test("workspace remove отсутствующего имени: нейтральная квитанция, каталог и файлы сохранены без pre-read", async (t) => {
+test("workspace remove отсутствующего имени: нейтральная квитанция, каталог и файлы сохранены без pre-read каталога", async (t) => {
   const app = await fixture(t);
   await app.create("Данные зарегистрированного проекта");
   const root = await tempDirectory(t);
@@ -51,8 +51,8 @@ test("workspace remove отсутствующего имени: нейтраль
   assert.equal(human.stderr, "");
   assert.deepEqual(
     requests,
-    ["DELETE /api/v1/projects/never-registered"],
-    "нейтральная квитанция не требует дополнительного чтения перед DELETE",
+    ["GET /api/v1/server/capabilities", "DELETE /api/v1/projects/never-registered/registration"],
+    "после проверки возможностей выполняется один DELETE без предварительного чтения каталога",
   );
   assert.deepEqual(successful(await invoke(root, ["workspace", "project", "list"])).data, catalog);
   assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")), registry);
@@ -66,7 +66,7 @@ test("workspace remove отсутствующего имени: нейтраль
   );
   assert.match(
     human.stdout,
-    /отсутствует|не зарегистрирован|запрос[^\n]*выполнен|снят[оа]|обработан/i,
+    /отсутств(?:ует|овала)|не зарегистрирован|запрос[^\n]*выполнен|снят[оа]|обработан/i,
     "квитанция сообщает постусловие либо обработку запроса, не выдуманное изменение",
   );
 });
@@ -231,7 +231,7 @@ test("workspace project init/list/add/remove: изоляция, cursor fingerpri
       ]),
     );
   const first = successful(await run(["workspace", "project", "list", "--limit", 1]));
-  assert.equal((first.meta as any).paginationSource, "client-catalog-fingerprint");
+  assert.equal((first.meta as any).paginationSource, "server-catalog-fingerprint");
   assert.equal(first.meta?.page?.consistency, "snapshot");
   assert.equal(first.meta?.page?.total, 2);
   const cursor = first.meta!.page!.nextCursor!;
@@ -277,7 +277,7 @@ test("workspace project init/list/add/remove: изоляция, cursor fingerpri
   failed(await run(["--local", "workspace", "project", "list"]), "WORKSPACE_REQUIRES_SERVER");
   failed(await run(["project", "get"]), "PROJECT_REQUIRED");
   successful(await run(["workspace", "project", "add", "c", "c"]));
-  failed(await run(["workspace", "project", "list", "--cursor", cursor]), "VERSION_CONFLICT");
+  failed(await run(["workspace", "project", "list", "--cursor", cursor]), "VERSION_CONFLICT", 4);
   const created = successful(
     await run(["a", "task", "create", "--board", "product", "--title", "Только A"]),
   );
@@ -515,6 +515,7 @@ test("HTTP product overview: cursor по snapshotVersion, отказ серве�
   failed(
     await app.run(["--server-url", server.url, "product", "overview", "--cursor", cursor]),
     "VERSION_CONFLICT",
+    4,
   );
   const denied = await httpProxy(t, async (_request, response) => {
     response.writeHead(503, { "content-type": "application/json" });

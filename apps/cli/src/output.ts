@@ -9,6 +9,7 @@ import { wrap } from "./presentation/layout.js";
 import { safeJson } from "./presentation/safe.js";
 import { cardText, commandText } from "./presentation/common.js";
 import { localizeStorageCommand, storageNextText } from "./presentation/storage.js";
+import { taskErrorRecovery } from "./presentation/board-tasks.js";
 import type { OutputField } from "./presentation/common.js";
 import {
   diagnosticRecovery,
@@ -112,6 +113,8 @@ function errorDetailsText(
       owner: "Владелец",
       id: "ID",
       slot: "Группа отношений",
+      step: "Шаг",
+      blockersTotal: "Всего блокеров",
     };
     const fields: OutputField[] = [];
     const steps: string[] = [];
@@ -143,6 +146,25 @@ function errorDetailsText(
             ? commandText(localizeStorageCommand(match[1]!, maintenanceCommand), options)
             : storageNextText(value, options.width, maintenanceCommand),
         );
+      } else if (name === "blockers" && Array.isArray(value)) {
+        issues.push(wrap(`Блокеры (показано ${value.length}):`, options.width));
+        for (const [index, blocker] of value.entries()) {
+          if (
+            !isRecord(blocker) ||
+            typeof blocker.code !== "string" ||
+            typeof blocker.message !== "string"
+          ) {
+            issues.push(errorDetailsText(blocker, options));
+            continue;
+          }
+          const { code: blockerCode, message, ...cause } = blocker;
+          issues.push(
+            [
+              wrap(`${index + 1}. ${safeText(blockerCode)} — ${safeText(message)}`, options.width),
+              errorDetailsText(cause, options, blockerCode, maintenanceCommand, hasRecovery),
+            ].join("\n"),
+          );
+        }
       } else if (name === "issues" && Array.isArray(value)) {
         issues.push(...value.map((issue) => schemaIssueText(issue, options)));
       } else if (
@@ -172,6 +194,7 @@ function errorDetailsText(
             "ref",
             "id",
             "owner",
+            "step",
             "requestId",
             "url",
           ].includes(name)
@@ -287,7 +310,7 @@ export function printError(stream: Writable, error: AppError, options: OutputOpt
   const colors = palette(text);
   const recovery =
     options.format === "text" && !(error instanceof PresentedError)
-      ? diagnosticRecovery(error, text, options.recovery)
+      ? (taskErrorRecovery(error, text) ?? diagnosticRecovery(error, text, options.recovery))
       : undefined;
   const encode = () =>
     options.format === "json"

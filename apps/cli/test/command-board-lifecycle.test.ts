@@ -84,7 +84,7 @@ const create = (
     "board-fixture",
   );
 
-test("board: help и только application deletion без проекта", async (t) => {
+test("board: help удаления без проекта и запрет самостоятельной мутации доски", async (t) => {
   const cwd = await tempDirectory(t);
   const board = human(await invokeRaw(cwd, ["board", "--help"])).replace(/\s+/g, " ");
   for (const fragment of [
@@ -95,16 +95,20 @@ test("board: help и только application deletion без проекта", a
     "product overview --metric board-work",
   ])
     assert.ok(board.includes(fragment), board);
-  for (const action of ["delete-preview", "delete"]) {
-    const help = human(await invokeRaw(cwd, ["application", action, "--help"]));
-    assert.match(help, /--if-version/);
-    assert.match(help, /Примеры:/);
-  }
-  for (const kind of ["board", "feature", "scenario", "implementation", "task"])
-    failed(
-      await invoke(cwd, [kind, "delete", "SOMETHING", "--if-version", "version"]),
-      "INVALID_ARGUMENT",
-    );
+  for (const kind of ["application", "feature", "scenario", "implementation", "task"])
+    for (const action of ["delete-preview", "delete"]) {
+      const help = human(await invokeRaw(cwd, [kind, action, "--help"]));
+      assert.match(help, /--if-version/);
+      assert.match(help, /Примеры:/);
+    }
+  for (const args of [
+    ["board", "delete", "SOMETHING", "--if-version", "version"],
+    ["board", "delete-preview", "SOMETHING"],
+    ["board", "create", "--name", "Самостоятельная доска"],
+    ["board", "unknown-action"],
+    ["feature", "unknown-action"],
+  ])
+    failed(await invoke(cwd, args), "INVALID_ARGUMENT");
 });
 
 test(

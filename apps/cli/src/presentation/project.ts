@@ -1,5 +1,9 @@
 import type { Config } from "@relay/core/domain/config";
-import type { RelayProject, ServerContextResponse } from "@relay/contracts";
+import type { ServerContextResponse } from "@relay/contracts";
+import type {
+  ProjectRegistrationReceipt,
+  ProjectUnregistrationReceipt,
+} from "@relay/contracts/server-context";
 import type { EntityDetail, EntitySaved } from "@relay/contracts/entities";
 import { defaultDocumentSections } from "@relay/contracts/entities";
 import type { ProjectSettings } from "@relay/contracts/entities/project-settings";
@@ -260,31 +264,61 @@ export function projectSavedText(
 }
 
 export function registryProjectsText(
-  items: readonly RelayProject[],
+  catalog: ServerContextResponse,
   options: TextOptions,
-  connection?: { configPath: string; endpoint: string },
+  connection: {
+    configPath?: string | undefined;
+    endpoint: string;
+    command: (tokens: string[]) => string;
+  },
 ): string {
+  const available = catalog.projects.find((project) => project.available);
   return listText(
     {
-      title: "Проекты workspace",
-      filters: connection
-        ? [
-            ["Реестр", connection.configPath],
-            ["Сервер", connection.endpoint],
-          ]
-        : [],
-      items: items.map((item) => ({
+      title: catalog.mode === "workspace" ? "Проекты workspace" : "Проект local-сервера",
+      filters: [
+        ["Режим Server", catalog.mode],
+        ["Сервер", connection.endpoint, "opaque"],
+        [
+          catalog.mode === "workspace" ? "Реестр на сервере" : "Конфиг на сервере",
+          catalog.configPath,
+          "opaque",
+        ],
+        ...(connection.configPath && connection.configPath !== catalog.configPath
+          ? [["Конфиг клиента", connection.configPath, "opaque"] as OutputField]
+          : []),
+        ["Проект по умолчанию", catalog.defaultProject ?? "не выбран (нужен --project)", "opaque"],
+      ],
+      items: catalog.projects.map((item) => ({
         key: item.key,
         title: item.name,
         details: [
           `Состояние: ${item.available ? "доступен" : "недоступен"}`,
-          `Конфигурация: ${item.configPath}`,
+          ...(!item.available ? [`Конфигурация на сервере: ${item.configPath}`] : []),
           ...(item.error ? [`Причина: ${item.error}`] : []),
           ...(item.slug ? [`Slug: ${item.slug}`] : []),
           `ID${item.available ? "" : " регистрации (база не подтверждена)"}: ${item.id}`,
         ],
       })),
       emptyMessage: "Регистраций на этой странице нет.",
+      commands: available
+        ? [
+            {
+              label:
+                "Прочитать выбранный проект и пути; для другого замените --project на ключ, ID или slug",
+              command: connection.command(["--project", available.key, "config", "get"]),
+            },
+          ]
+        : catalog.mode === "workspace"
+          ? [
+              {
+                label: catalog.projects.length
+                  ? "Доступных проектов на странице нет; проверьте причины на стороне Server. Условия регистрации"
+                  : "Подключить существующий проект: условия регистрации",
+                command: connection.command(["workspace", "project", "add", "--help"]),
+              },
+            ]
+          : [],
     },
     options,
   );
@@ -348,6 +382,34 @@ export function registrySavedText(
       commands: readCommand
         ? [{ label: "Проверить каталог регистраций", command: readCommand }]
         : [],
+    },
+    options,
+  );
+}
+
+export function registryCompactSavedText(
+  receipt: ProjectRegistrationReceipt | ProjectUnregistrationReceipt,
+  options: TextOptions,
+  readCommand: string,
+): string {
+  return receiptText(
+    {
+      title: `${receipt.action === "register" ? "✓ Регистрация проекта сохранена" : receipt.removed ? "✓ Регистрация проекта удалена" : "Регистрация уже отсутствовала"}: ${receipt.key}`,
+      fields: [
+        ["Регистрация", receipt.key, "opaque"],
+        ["Реестр на сервере", receipt.configPath, "opaque"],
+        ...(receipt.action === "register"
+          ? [
+              ["Путь относительно реестра", receipt.entry.path, "opaque"] as OutputField,
+              ["Конфиг относительно path/реестра", receipt.entry.config, "opaque"] as OutputField,
+              [
+                "Данные",
+                "Не создавались и не переносились. Доступность проекта проверьте в каталоге.",
+              ] as OutputField,
+            ]
+          : [["Данные", "Файлы проекта сохранены."] as OutputField]),
+      ],
+      commands: [{ label: "Проверить каталог регистраций", command: readCommand }],
     },
     options,
   );

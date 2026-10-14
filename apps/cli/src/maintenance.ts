@@ -55,15 +55,39 @@ export function maintenanceAction<Options extends object>(
       ...(globals.project !== undefined ? { project: globals.project } : {}),
       ...transport,
     });
-    const invocation = localInvocation(runtime, globals, target.configPath, !!target.registry);
+    const selectors = [
+      ...(globals.actor ? ["--actor", globals.actor] : []),
+      ...(globals.format ? ["--format", globals.format] : []),
+    ];
+    const invocation = [
+      ...localInvocation(runtime, globals, target.configPath, !!target.registry),
+      ...selectors,
+    ];
+    const maintenance = [
+      ...localInvocation(
+        runtime,
+        { ...globals, local: true },
+        target.configPath,
+        !!target.registry,
+      ),
+      ...selectors,
+    ];
+    const invoke = (args: readonly string[]) => shellCommand([...invocation, ...args]);
     runtime.maintenanceCommand = shellCommand(invocation);
+    // Locator уже подтвердил локальную базу. Для подсказок не нужно открывать Backend
+    // или восстанавливать хранилище; registry key заменён прямым config выбранного проекта.
+    runtime.recovery = {
+      command: invoke,
+      maintenance: (args) => shellCommand([...maintenance, ...args]),
+      actorAvailable: !!(globals.actor ?? runtime.env.RELAY_ACTOR),
+    };
     runtime.output = outputOptions(runtime, globals);
     const context: MaintenanceContext = {
       runtime,
       globals,
       output: runtime.output,
       target,
-      invocation: (args) => shellCommand([...invocation, ...args]),
+      invocation: invoke,
     };
     const result = await handler(context, command.opts() as Options);
     if (globals.project) result.meta = { ...result.meta, project: globals.project };

@@ -72,6 +72,7 @@ export function filterFields(query: object): OutputField[] {
     application: "Приложение",
     feature: "Фича",
     scenario: "Сценарий",
+    implementationTarget: "Вид цели реализации",
     target: "Цель",
     parent: "Родитель",
     board: "Доска",
@@ -110,7 +111,7 @@ const documentKinds = {
 type Page = { total: number; nextOffset: number | null; version: string };
 
 /** Только обзор списка: ограничение помечено, полные поля get не проходят через этот helper. */
-function documentAnnotation(value: string): string[] {
+function entityAnnotation(value: string): string[] {
   const text = safeText(value).replace(/\s+/gu, " ").trim();
   if (!text) return [];
   const segments = new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(text);
@@ -123,61 +124,127 @@ function documentAnnotation(value: string): string[] {
   return [`Аннотация: ${text}`];
 }
 
+/** Основание прислал Core; совпадения не восстанавливаются догадкой из q или title. */
+function entityMatchText(item: EntitySummary, q: string): string[] {
+  const match = item.match;
+  if (!match || match.field === "key" || match.field === "title") return [];
+  if (match.field === "summary") {
+    const annotation = entityAnnotation(item.summary)[0];
+    const visible = annotation?.slice(annotation.indexOf(": ") + 2).toLowerCase();
+    const needle = safeText(q).replace(/\s+/gu, " ").trim().toLowerCase();
+    if (needle && visible?.includes(needle)) return [];
+  }
+  const fields: Record<typeof match.field, string> = {
+    alias: "прежнем ключе",
+    address: "постоянном адресе",
+    id: "ID",
+    summary: "аннотации",
+    context: "контексте",
+    description: "описании",
+    body: "содержании",
+    goal: "цели плана",
+    version: "версии релиза",
+    "application.key": "ключе приложения",
+    "application.title": "названии приложения",
+    "target.key": "ключе цели",
+    "target.title": "названии цели",
+  };
+  // Сводка body нормализует Markdown и не заменяет полное чтение даже без усечения Core.
+  const fragment = match.field === "body" || match.truncated;
+  return [
+    `Совпадение в ${fields[match.field]}${fragment ? " (фрагмент)" : ""}: ${safeText(match.text).replace(/\s+/gu, " ").trim()}`,
+  ];
+}
+
 /** Компактный каталог одинаково раскрывает ключ, вид и контекст при любой ширине. */
 export function entitiesText(
   page: EntitiesPage,
   query: object,
   options: TextOptions,
   readCommands: string[] = [],
+  mode: "catalog" | "search" = "search",
 ): string {
-  const documentsOnly = "kind" in query && query.kind === "document";
-  return [
-    listText(
-      {
-        title: documentsOnly ? "Документы" : "Каталог сущностей",
-        filters: filterFields(query),
-        items: page.items.map((item) => ({
-          key: item.key,
-          title: item.title,
-          details: [
-            ...(documentsOnly ? [] : [labels.get(item.ref.kind) ?? item.ref.kind]),
-            ...(item.document
+  const kind = "kind" in query && typeof query.kind === "string" ? query.kind : undefined;
+  const titles: Record<string, string> = {
+    feature: "Фичи продукта",
+    scenario: "Сценарии фич",
+    application: "Приложения",
+    implementation: "Реализации требований",
+    document: "Документы",
+  };
+  const oneExample = mode === "catalog" || kind === "document";
+  const fixedParent = kind === "scenario" && "feature" in query && !!query.feature;
+  const title = (kind && titles[kind]) || "Каталог сущностей";
+  const items = page.items.map((item) => ({
+    key: item.key,
+    title: item.title,
+    details: [
+      ...(kind ? [] : [labels.get(item.ref.kind) ?? item.ref.kind]),
+      ...(item.document
+        ? [
+            `${stateLabel("document", item.document.status)} · ${documentKinds[item.document.kind]} · Раздел: ${item.document.sectionId ?? "Без раздела"} · прикреплений ${item.document.linkCount}${item.document.pinned ? " · закреплён" : ""}`,
+            ...("q" in query && query.q && item.document.excerpt && item.match?.field !== "body"
               ? [
-                  `${stateLabel("document", item.document.status)} · ${documentKinds[item.document.kind]} · Раздел: ${item.document.sectionId ?? "Без раздела"} · прикреплений ${item.document.linkCount}${item.document.pinned ? " · закреплён" : ""}`,
-                  ...documentAnnotation(item.summary ?? ""),
-                  ...("q" in query && query.q && item.document.excerpt
-                    ? [
-                        `Совпадение в содержании (фрагмент): ${item.document.excerpt.replace(/\s+/gu, " ").trim()}`,
-                      ]
-                    : []),
-                  ...("sort" in query && query.sort === "updated"
-                    ? [`Изменён: ${item.document.updatedAt}`]
-                    : []),
+                  `Совпадение в содержании (фрагмент): ${item.document.excerpt.replace(/\s+/gu, " ").trim()}`,
                 ]
-              : entityStateFields(item).map(([label, value]) => `${label}: ${value}`)),
-            ...(item.context ? [item.context] : []),
-          ],
-        })),
-        emptyMessage:
-          page.total === 0 ? "Сущностей по этим условиям нет." : "На этой странице сущностей нет.",
-        ...(documentsOnly && readCommands[0] && page.items[0]
-          ? {
-              commands: [
-                {
-                  label: `Прочитать ${page.items[0].key}; для другого документа замените ключ`,
-                  command: readCommands[0],
-                },
-              ],
-            }
-          : {}),
-      },
-      options,
-    ),
-    ...(documentsOnly ? [] : readCommands).map(
-      (command, index) =>
-        `Прочитать ${safeText(page.items[index]!.key)}:\n${commandText(command, options)}`,
-    ),
-  ].join("\n\n");
+              : []),
+          ]
+        : entityStateFields(item).map(([label, value]) => `${label}: ${value}`)),
+      ...entityAnnotation(item.summary ?? ""),
+      ...("q" in query && typeof query.q === "string" && query.q
+        ? entityMatchText(item, query.q)
+        : []),
+      ...(item.implementation
+        ? [
+            `Вид реализации: ${item.implementation.type}`,
+            ...("application" in query && query.application
+              ? []
+              : [
+                  `Приложение: ${item.implementation.application.key} · ${item.implementation.application.title}`,
+                ]),
+            `Цель: ${item.implementation.target.key} · ${item.implementation.target.title}`,
+          ]
+        : item.context && !fixedParent
+          ? [item.context]
+          : []),
+      ...("sort" in query && query.sort === "updated"
+        ? [`Изменён: ${item.updatedAt ?? item.document?.updatedAt ?? "дата не предоставлена"}`]
+        : []),
+    ],
+  }));
+  if (!oneExample && readCommands.length && items.length) {
+    return [
+      cardText({ title, fields: filterFields(query) }, options),
+      ...items.map((item, index) =>
+        [
+          listText({ title: "", items: [item] }, options),
+          ...(readCommands[index] ? [commandText(readCommands[index]!, options)] : []),
+        ].join("\n"),
+      ),
+    ].join("\n\n");
+  }
+  return listText(
+    {
+      title,
+      filters: filterFields(query),
+      items,
+      emptyMessage:
+        page.total === 0
+          ? `Сущностей по этим условиям нет.${"q" in query && query.q ? " Комментарии, критерии и вложенные этапы в поиск не входят." : ""}`
+          : "На этой странице сущностей нет.",
+      ...(oneExample && readCommands[0] && page.items[0]
+        ? {
+            commands: [
+              {
+                label: `Прочитать ${page.items[0].key}; для другой записи замените ключ`,
+                command: readCommands[0],
+              },
+            ],
+          }
+        : {}),
+    },
+    options,
+  );
 }
 
 export function entityTypesText(
@@ -216,6 +283,15 @@ export function entityText(
     context?: string;
     links?: string;
     deletion?: string;
+    feature?: string;
+    target?: string;
+    application?: string;
+    implementations?: string;
+    participation?: string;
+    progress?: string;
+    tasks?: string;
+    documents?: string;
+    productContext?: string;
   } = {},
 ): string {
   const addresses = new Map(
@@ -247,7 +323,9 @@ export function entityText(
   if (data.kind === "implementation")
     lines.push(
       `Приложение: ${address("application", data.applicationId)}\nФича: ${address("feature", data.featureId)}\nСценарий: ${data.scenarioId ? address("scenario", data.scenarioId) : "Общий вклад в фичу (FI)"}`,
-      "Ручная совместимая отметка в этом ответе не раскрывается; вычисляемая готовность не заменяет сохранённый status.",
+      entity.savedStatus === undefined
+        ? "Ручная совместимая отметка в этом ответе не раскрывается; вычисляемая готовность не заменяет сохранённый status."
+        : `Совместимая отметка: ${entity.savedStatus} (не управляет вычисляемой готовностью)`,
     );
   if (data.kind === "document") {
     lines.push(
@@ -289,7 +367,7 @@ export function entityText(
       fields: [
         ["Вид", labels.get(entity.ref.kind)],
         ["Ревизия", entity.revision],
-        ...(data.kind === "document" && entity.metadata
+        ...(entity.metadata
           ? ([
               ["Изменён", entity.metadata.updatedAt],
               ["Изменил", entity.metadata.updatedBy],
@@ -315,12 +393,23 @@ export function entityText(
             {
               scenarios: "Сценарии",
               overview: "Карта продукта",
-              context: data.kind === "document" ? "Связи графа: полная компонента" : "Контекст",
+              feature: "Общие требования фичи",
+              target: "Общее требование реализации",
+              application: "Назначение приложения",
+              implementations: "Реализации требований, включая снятые",
+              participation: "Состав приложения и условия его изменения",
+              progress: "Вычисляемая готовность и причины",
+              tasks: "Связанные задачи",
+              documents: "Прикреплённые документы",
+              productContext: "Предметная подборка требований и вкладов (не граф связей)",
+              context: "Связи графа: вся достижимая компонента (отдельное чтение)",
               links: "Прикрепления: адреса и полные пояснения страницами",
               deletion:
                 data.kind === "document"
                   ? "Жизненный цикл: предпросмотр удаления документа (без изменений)"
-                  : "Жизненный цикл: предпросмотр удаления приложения с доской (без изменений)",
+                  : data.kind === "application"
+                    ? "Жизненный цикл: предпросмотр удаления приложения с доской (без изменений)"
+                    : "Жизненный цикл: полный предпросмотр удаления (без изменений)",
             }[label] ?? label,
           command,
         })),

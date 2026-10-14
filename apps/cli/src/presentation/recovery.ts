@@ -4,7 +4,7 @@ import type { TextOptions } from "./theme.js";
 import { wrap } from "./layout.js";
 import { safeText } from "./safe.js";
 
-/** Только подтверждённый контекст подключения; серверные пути не считаются локальными. */
+/** Подтверждённое подключение или локальная цель обслуживания; серверный путь не локальный. */
 export interface RecoveryContext {
   command: (args: readonly string[]) => string;
   maintenance?: (args: readonly string[]) => string;
@@ -103,6 +103,16 @@ export function diagnosticRecovery(
             : [];
         })
       : [{ code: error.code, details }];
+  // Ошибка миграции содержит первые причины плана, а не только код первого блокера.
+  // Учитываем повреждение записи до предложения reindex, не теряя остальные адреса.
+  for (const cause of [...causes]) {
+    const blockers = record(cause.details)?.blockers;
+    if (!Array.isArray(blockers)) continue;
+    for (const item of blockers) {
+      const blocker = record(item);
+      if (typeof blocker?.code === "string") causes.push({ code: blocker.code, details: blocker });
+    }
+  }
   const codes = new Set(causes.map(({ code }) => code));
   const changed = codes.has("GRAPH_CHANGED");
   const index = codes.has("STORAGE_INDEX_STALE") || codes.has("STORAGE_INDEX_CORRUPT");
@@ -152,7 +162,10 @@ export function diagnosticRecovery(
       "Перед локальным обслуживанием остановите писателей и сохраните резервную копию базы.",
     );
     if (context?.maintenance) {
-      if (damaged && !causes.some(({ details }) => typeof record(details)?.path === "string")) {
+      if (
+        index ||
+        (damaged && !causes.some(({ details }) => typeof record(details)?.path === "string"))
+      ) {
         commands.push({
           label: "Диагностика файлов без исправления",
           command: context.maintenance(["storage", "status"]),

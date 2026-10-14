@@ -1,20 +1,30 @@
 import type { Command } from "commander";
+import { Option } from "commander";
 import type { ServerContextResponse } from "@relay/contracts";
-import { serverAddress } from "@relay/project-runtime/config";
 import { initializeRegistry } from "@relay/project-runtime/registry";
 import { createServerApi } from "@relay/project-runtime/backend/server";
 import { invariant } from "@relay/core/shared/errors";
 import type { GlobalOptions, Runtime } from "../context.js";
 import { outputOptions } from "../context.js";
-import { cliConfiguration } from "../configuration.js";
 import { commandGroup, createCommand } from "../command.js";
 import { printResult } from "../output.js";
-import { createHash } from "node:crypto";
-import { resolve } from "node:path";
-import { paging, offsetQueryFor, pageResultFor, shellCommand } from "../command-kit.js";
+import { paging, offsetQueryFor, pageResultFor } from "../command-kit.js";
 import type { PaginationContext } from "../command-kit.js";
-import { registryProjectsText, registrySavedText } from "../presentation/project.js";
-const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+import {
+  registryProjectsText,
+  registrySavedText,
+  registryCompactSavedText,
+} from "../presentation/project.js";
+import { workspaceConnection } from "./workspace-connection.js";
+
+function projection(command: Command) {
+  return command.addOption(
+    new Option(
+      "--projection <mode>",
+      "Квитанция: full — прежний каталог, compact — только изменённая регистрация. JSON по умолчанию full, text — compact",
+    ).choices(["full", "compact"]),
+  );
+}
 
 export function registerProjects(program: Command, runtime: Runtime) {
   const workspace = commandGroup(program, {
@@ -27,7 +37,7 @@ export function registerProjects(program: Command, runtime: Runtime) {
     name: "project",
     description: "Проекты Relay workspace",
     details:
-      "Пути разрешаются относительно relay.workspace.json. Регистрациями управляет запущенный Relay Server.",
+      "Пути относятся к файловой системе Server и разрешаются относительно его relay.workspace.json. --server-url или RELAY_SERVER_URL позволяют работать без локального реестра.",
     examples: [
       ["npx @oim-dev/relay-cli workspace project init", "Создать пустой workspace"],
       [
@@ -62,11 +72,11 @@ export function registerProjects(program: Command, runtime: Runtime) {
           : {}),
       details:
         operation === "list"
-          ? "--config выбирает workspace. Каталог целиком читается с сервера, затем CLI выдаёт страницу. Курсор привязан к отпечатку каталога: при изменении начните заново. Это локальная проверка неизменности ответа, не серверный snapshot."
+          ? "--server-url, RELAY_SERVER_URL или конфиг задают подключение без выбора проекта. Поддерживаются workspace и local Server с relay-project-catalog-v1. По сети передаётся только страница, Server проверяет отпечаток полного каталога. При изменении начните заново; исторического снимка нет. Старый Server требует обновления, скрытого полного чтения нет."
           : operation === "add"
-            ? "--config выбирает workspace. --project-config — конфиг относительно path. --replace явно разрешает заменить регистрацию. Данные проекта не создаются и не переносятся."
+            ? "Подключение: --server-url, RELAY_SERVER_URL или конфиг. Пути относятся к Server: path — относительно серверного реестра, --project-config — относительно path (без path — реестра). --replace явно разрешает замену. Данные не создаются и не переносятся. JSON сохраняет полный каталог; --projection compact явно выбирает краткую квитанцию. Text использует compact, требующий relay-project-catalog-v1; --projection full явно выбирает прежний маршрут."
             : operation === "remove"
-              ? "Удаляется только регистрация, данные проекта сохраняются. --config выбирает workspace."
+              ? "Удаляется только регистрация, данные проекта сохраняются. Подключение: --server-url, RELAY_SERVER_URL или конфиг. Требуется workspace Server. JSON по умолчанию возвращает полный каталог; --projection compact — только квитанцию. Text использует compact с relay-project-catalog-v1; --projection full явно выбирает прежний маршрут."
               : "Создаёт локальный пустой relay.workspace.json. --config задаёт путь реестра. Проектный префикс и --project недопустимы.",
       examples: [
         [
@@ -77,13 +87,15 @@ export function registerProjects(program: Command, runtime: Runtime) {
       ...(operation === "add"
         ? {
             configure: (target: Command) =>
-              target
+              projection(target)
                 .option("--project-config <path>", "Конфиг относительно каталога проекта")
                 .option("--replace", "Заменить существующее подключение"),
           }
         : operation === "list"
           ? { configure: paging }
-          : {}),
+          : operation === "remove"
+            ? { configure: projection }
+            : {}),
     });
     command.action(async () => {
       const globals = command.optsWithGlobals<GlobalOptions>();
@@ -108,93 +120,97 @@ export function registerProjects(program: Command, runtime: Runtime) {
         );
         return;
       }
-      const source = await cliConfiguration(runtime, globals, true);
-      invariant(source.kind === "registry", "REGISTRY_REQUIRED", "Требуется конфиг проектов");
-      invariant(
-        !globals.local,
-        "WORKSPACE_REQUIRES_SERVER",
-        "Проекты workspace управляются через Relay Server",
-      );
-      const url = globals.serverUrl ?? runtime.env.RELAY_SERVER_URL ?? serverAddress(source);
-      const api = createServerApi(url);
-      const endpoint = new URL(url).href;
-      const configPath = resolve(runtime.cwd, source.path);
+      const connection = await workspaceConnection(runtime, globals);
+      const { endpoint, configPath } = connection;
+      const api = createServerApi(endpoint);
       let data: ServerContextResponse;
       if (operation === "list") {
         const controls = command.opts<{ limit?: number; cursor?: string }>();
         const pagination: PaginationContext = {
-          identity: { kind: "registry", config: configPath, endpoint },
+          identity: { kind: "registry", config: configPath, endpoint: new URL(endpoint).href },
           defaultLimit: 20,
-          invocation: [
-            "npx",
-            "@oim-dev/relay-cli",
-            "--config",
-            configPath,
-            "--server-url",
-            endpoint,
-            ...(globals.format ? ["--format", globals.format] : []),
-          ],
+          invocation: connection.invocation,
         };
         const path = ["workspace", "project", "list"];
         const filters = {};
         const query = offsetQueryFor(pagination, controls, path, filters);
-        const catalog = (await api.projects.getProjects()).data;
-        const items = catalog.projects;
-        const selected = items.slice(query.offset, query.offset + query.limit);
+        invariant(
+          Object.keys(filters).length === 0,
+          "INVALID_CURSOR",
+          "Каталог проектов не поддерживает фильтры курсора. Начните список заново без --cursor",
+        );
+        const result = (await api.projects.getProjectCatalogPage(query)).data;
+        const { catalog } = result;
         const page = pageResultFor(pagination, path, filters, query, {
-          items: selected,
-          total: items.length,
-          nextOffset: query.offset + query.limit < items.length ? query.offset + query.limit : null,
-          version: hash(catalog),
+          items: catalog.projects,
+          total: result.total,
+          nextOffset: result.nextOffset,
+          version: result.version,
         });
         printResult(
           runtime.stdout,
           {
-            data: { ...catalog, projects: selected },
-            meta: { configPath: source.path, paginationSource: "client-catalog-fingerprint" },
+            data: catalog,
+            meta: {
+              ...(configPath ? { configPath } : {}),
+              paginationSource: "server-catalog-fingerprint",
+            },
             page,
-            text: (options) => registryProjectsText(selected, options, { configPath, endpoint }),
+            text: (options) => registryProjectsText(catalog, options, connection),
           },
           runtime.output,
         );
         return;
-      } else if (operation === "remove")
-        data = (
-          await api.projects.unregisterProject({ project: encodeURIComponent(command.args[0]!) })
-        ).data;
+      }
+      const options = command.opts<{
+        projectConfig?: string;
+        replace?: boolean;
+        projection?: "compact" | "full";
+      }>();
+      const project = { project: encodeURIComponent(command.args[0]!) };
+      const entry = {
+        ...(command.args[1] === undefined ? {} : { path: command.args[1] }),
+        ...(options.projectConfig === undefined ? {} : { config: options.projectConfig }),
+        ...(options.replace === undefined ? {} : { replace: options.replace }),
+      };
+      const compact =
+        options.projection === "compact" ||
+        (options.projection === undefined && runtime.output.format === "text");
+      if (compact) {
+        const receipt =
+          operation === "remove"
+            ? (await api.projects.unregisterProjectCompact(project)).data
+            : (await api.projects.registerProjectCompact(project, entry)).data;
+        printResult(
+          runtime.stdout,
+          {
+            data: receipt,
+            ...(configPath ? { meta: { configPath } } : {}),
+            text: (text) =>
+              registryCompactSavedText(
+                receipt,
+                text,
+                connection.command(["workspace", "project", "list"]),
+              ),
+          },
+          runtime.output,
+        );
+        return;
+      }
+      if (operation === "remove") data = (await api.projects.unregisterProject(project)).data;
       else {
-        const options = command.opts<{ projectConfig?: string; replace?: boolean }>();
-        data = (
-          await api.projects.registerProject(
-            { project: encodeURIComponent(command.args[0]!) },
-            {
-              ...(command.args[1] === undefined ? {} : { path: command.args[1] }),
-              ...(options.projectConfig === undefined ? {} : { config: options.projectConfig }),
-              ...(options.replace === undefined ? {} : { replace: options.replace }),
-            },
-          )
-        ).data;
+        data = (await api.projects.registerProject(project, entry)).data;
       }
       printResult(
         runtime.stdout,
         {
           data,
-          meta: { configPath: source.path },
+          ...(configPath ? { meta: { configPath } } : {}),
           text: (options) =>
             registrySavedText(
               { operation, data, name: command.args[0]! },
               options,
-              shellCommand([
-                "npx",
-                "@oim-dev/relay-cli",
-                "--config",
-                configPath,
-                "--server-url",
-                endpoint,
-                "workspace",
-                "project",
-                "list",
-              ]),
+              connection.command(["workspace", "project", "list"]),
             ),
         },
         runtime.output,

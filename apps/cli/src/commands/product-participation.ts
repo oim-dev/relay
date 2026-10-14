@@ -1,42 +1,84 @@
 import { randomUUID } from "node:crypto";
 import type { Command } from "commander";
-import { productMutationSchema } from "@relay/core/domain/product";
+import { productParticipationReplaceSchema } from "@relay/contracts/product-participation";
 import { parse } from "@relay/core/domain/validation";
-import { invariant } from "@relay/core/shared/errors";
+import { AppError, invariant } from "@relay/core/shared/errors";
 import { commandGroup, registerCommand } from "../command.js";
 import { author } from "../context.js";
 import type { Runtime } from "../context.js";
-import { paging, offsetQuery, pageResult, commandInvocation } from "../command-kit.js";
+import {
+  paging,
+  offsetQuery,
+  pageResult,
+  commandInvocation,
+  textOption,
+  readTextFields,
+} from "../command-kit.js";
 import { revisionOption, subject } from "./product.js";
-import { listText, receiptText } from "../presentation/common.js";
+import { listText } from "../presentation/common.js";
 import { stateLabel } from "../presentation/entities.js";
+import {
+  participationText,
+  participationSavedText,
+} from "../presentation/product-participation.js";
 
-/** Выбор существующих реализаций адаптируется к атомарной замене состава Core. */
+/** Совместимый полный ответ и явная компактная проекция; составом владеет Core. */
 export function registerParticipation(parent: Command, runtime: Runtime) {
   const group = commandGroup(parent, {
     name: "participation",
     description: "Активный состав приложения",
     details:
-      "Новые реализации создаются через implementation create. Снятые реализации сохраняют адреса и содержание; повторный выбор возвращает участие.",
+      "Снятые реализации сохраняют адреса и содержание; повторный выбор возвращает участие. Полный состав с новыми FI/SI можно сохранить атомарно через replace --composition-file.",
     examples: [
       [
-        "npx @oim-dev/relay-cli application participation list WEB",
+        "npx @oim-dev/relay-cli application participation list WEB --projection compact",
         "Прочитать состав и условия записи",
       ],
     ],
   });
-  registerCommand<{ cursor?: string; limit?: number }>(group, runtime, {
+  registerCommand<{ cursor?: string; limit?: number; projection?: string }>(group, runtime, {
     name: "list <ref>",
     arguments: { ref: "Ключ или ID приложения" },
     description: "Прочитать участие и ревизию состава",
     details:
-      "Включает снятые реализации. Для replace нужны ревизия состава и версия из этого ответа.",
-    examples: [["npx @oim-dev/relay-cli application participation list WEB", "Прочитать состав"]],
-    configure: paging,
+      "Включает снятые реализации. Для replace нужны ревизия состава и версия из этого ответа. --projection compact читает серверную страницу без полных описаний; version — для записи, snapshotVersion — guard страниц. По умолчанию сохранён прежний полный JSON contracts; полное содержание отдельного вклада — implementation get.",
+    examples: [
+      [
+        "npx @oim-dev/relay-cli application participation list WEB --projection compact",
+        "Прочитать компактную страницу и исходные условия записи",
+      ],
+    ],
+    configure: (command) =>
+      paging(command).option(
+        "--projection <mode>",
+        "Проекция: full (совместимый ответ по умолчанию) / compact",
+      ),
     async run(context, input) {
-      const application = await subject(context, "application", input.argument());
       const command = ["application", "participation", "list", input.argument()];
-      const query = offsetQuery(context, input.options, command, {});
+      const filters = {
+        ...(input.options.projection !== undefined ? { projection: input.options.projection } : {}),
+      };
+      const query = offsetQuery(context, input.options, command, filters);
+      invariant(
+        filters.projection === undefined || ["full", "compact"].includes(filters.projection),
+        "INVALID_ARGUMENT",
+        "Укажите --projection full или compact",
+      );
+      if (filters.projection === "compact") {
+        const data = await context.backend.product.participation({
+          application: input.argument(),
+          ...query,
+        });
+        return {
+          data,
+          page: pageResult(context, command, filters, query, {
+            ...data,
+            version: data.snapshotVersion,
+          }),
+          text: (options) => participationText(data, options, context),
+        };
+      }
+      const application = await subject(context, "application", input.argument());
       const state = await context.backend.product.state();
       invariant(
         !query.version || query.version === state.version,
@@ -59,14 +101,14 @@ export function registerParticipation(parent: Command, runtime: Runtime) {
       };
       return {
         data,
-        page: pageResult(context, command, {}, query, data),
+        page: pageResult(context, command, filters, query, data),
         text: (options) =>
           listText(
             {
               title: `Состав ${application.key} — ${application.title}`,
               filters: [
                 ["Ревизия состава", data.revision],
-                ["Версия для записи", data.version],
+                ["Версия для записи", data.version, "opaque"],
               ],
               items: data.items.map((item) => {
                 const target = state.records.find(
@@ -91,6 +133,40 @@ export function registerParticipation(parent: Command, runtime: Runtime) {
                 data.total === 0
                   ? "Реализаций нет. Новые вклады создаются через implementation create."
                   : "На этой странице реализаций нет.",
+              commands: [
+                ...(data.items[0]
+                  ? [
+                      {
+                        label: "Прочитать первый вклад; для другого замените ключ",
+                        command: commandInvocation(context, [
+                          "implementation",
+                          "get",
+                          data.items[0].key ?? `implementation:${data.items[0].id}`,
+                        ]),
+                      },
+                    ]
+                  : []),
+                {
+                  label: "Компактная страница состава с адресами целей и сохранёнными отметками",
+                  command: commandInvocation(context, [
+                    "application",
+                    "participation",
+                    "list",
+                    application.key,
+                    "--projection",
+                    "compact",
+                  ]),
+                },
+                {
+                  label: "Правила атомарной замены полного состава",
+                  command: commandInvocation(context, [
+                    "application",
+                    "participation",
+                    "replace",
+                    "--help",
+                  ]),
+                },
+              ],
             },
             options,
           ),
@@ -103,131 +179,92 @@ export function registerParticipation(parent: Command, runtime: Runtime) {
     requestId?: string;
     implementations?: string[];
     clear?: boolean;
+    composition?: string;
+    compositionFile?: string;
   }>(group, runtime, {
     name: "replace <ref>",
     arguments: { ref: "Ключ или ID приложения" },
     description: "Заменить выбранный активный состав",
     details:
-      "Явно перечислите ВСЕ сохраняемые активные реализации через --implementations либо --clear. Сохранённые тексты и ручные отметки читаются из исходного состава, не из вычисленной готовности. SI требует FI; Core проверяет состав атомарно. Ревизия и версия — из participation list, не подставляются автоматически.",
+      'Выберите один источник полного активного состава: --implementations, --clear либо --composition/--composition-file. JSON composition: [{"kind":"existing","ref":"WEB-FI-1"},{"kind":"target","target":"SCENARIO-1","title":"Вклад Web","description":"Markdown","status":"none"}]. existing сохраняет адрес, тексты и ручную отметку; target создаёт только новую пару приложение/цель. [] снимает всё участие. Новый FI и SI сохраняются одной операцией, SI требует FI. Непереданные в наборе реализации снимаются, не удаляются. Ревизия состава и version — из participation list; snapshotVersion не используйте для записи. Скрытого повтора нет. Новый composition-ввод возвращает отдельную расширенную квитанцию; прежние варианты сохраняют прежний JSON.',
     examples: [
       [
         "npx @oim-dev/relay-cli application participation replace WEB --implementations WEB-FI-1 WEB-SI-1 --if-revision 2 --if-version VERSION --actor agent",
         "Выбрать полный состав по прочитанной версии",
       ],
+      [
+        "npx @oim-dev/relay-cli application participation replace WEB --composition-file ./composition.json --if-revision 0 --if-version VERSION --actor agent",
+        "Атомарно выбрать новые FI/SI и существующие вклады; подготовьте JSON и замените исходные guards прочитанными",
+      ],
     ],
-    configure: (command) =>
-      revisionOption(command)
+    configure: (command) => {
+      textOption(
+        command,
+        "composition",
+        "Полный активный состав JSON: existing/ref либо target/target/title/description/status; один stdin",
+      );
+      return revisionOption(command)
         .requiredOption("--if-version <version>", "Прочитанная версия продукта")
         .option("--implementations <refs...>", "Полный активный набор существующих реализаций")
-        .option("--clear", "Снять всё участие, сохранив реализации"),
+        .option("--clear", "Снять всё участие, сохранив реализации");
+    },
     async run(context, input) {
       const options = input.options;
+      const hasComposition =
+        options.composition !== undefined || options.compositionFile !== undefined;
       invariant(
-        (options.implementations !== undefined) !== Boolean(options.clear),
+        Number(options.implementations !== undefined) +
+          Number(Boolean(options.clear)) +
+          Number(hasComposition) ===
+          1,
         "INVALID_ARGUMENT",
-        "Выберите --implementations или --clear",
-      );
-      const application = await subject(context, "application", input.argument());
-      const state = await context.backend.product.state();
-      invariant(
-        state.version === options.ifVersion,
-        "VERSION_CONFLICT",
-        "Продукт изменился. Перечитайте participation list и согласуйте состав.",
-        4,
-      );
-      const scope = state.records.find(
-        (record) =>
-          record.fields.kind === "scope" && record.fields.applicationId === application.ref.id,
+        "Выберите --implementations, --clear либо --composition/--composition-file",
       );
       invariant(
-        (scope?.revision ?? 0) === options.ifRevision,
-        "REVISION_CONFLICT",
-        "Ревизия состава изменилась. Перечитайте participation list.",
-        4,
+        !options.implementations ||
+          new Set(options.implementations).size === options.implementations.length,
+        "INVALID_ARGUMENT",
+        "Адрес реализации указан в --implementations повторно",
       );
-      // Только чтение по голому ID состава возвращает persisted contracts.
-      // state и адресные чтения реализации содержат вычисленную готовность.
-      const raw = scope ? await context.backend.product.entity(scope.id) : undefined;
-      invariant(
-        !raw || (raw.fields.kind === "scope" && raw.fields.applicationId === application.ref.id),
-        "INVALID_DATA",
-        "Backend вернул не исходный состав выбранного приложения",
-        5,
-      );
-      invariant(
-        !raw || raw.revision === options.ifRevision,
-        "REVISION_CONFLICT",
-        "Ревизия состава изменилась между чтениями. Перечитайте participation list.",
-        4,
-      );
-      const contracts = raw?.fields.kind === "scope" ? raw.fields.contracts : [];
-      const selected = [];
-      const ids = new Set<string>();
-      for (const ref of options.implementations ?? []) {
-        const implementation = await context.backend.entities.resolve({
-          ref,
-          kind: "implementation",
-        });
-        const contract = contracts.find((entry) => entry.id === implementation.ref.id);
-        invariant(contract, "INVALID_ARGUMENT", "Выбранная реализация не входит в это приложение");
-        invariant(
-          !ids.has(contract.id),
-          "INVALID_ARGUMENT",
-          "Реализация указана в составе повторно",
-        );
-        ids.add(contract.id);
-        selected.push({
-          featureId: contract.featureId,
-          scenarioId: contract.scenarioId,
-          title: contract.title,
-          description: contract.description,
-          status: contract.status,
-          ...(contract.key === undefined ? {} : { key: contract.key }),
-          ...(contract.revision === undefined ? {} : { revision: contract.revision }),
-        });
+      const { composition } = await readTextFields(context, options, ["composition"]);
+      let selections: unknown = (options.implementations ?? []).map((ref) => ({
+        kind: "existing",
+        ref,
+      }));
+      if (composition !== undefined) {
+        try {
+          selections = JSON.parse(composition);
+        } catch {
+          throw new AppError(
+            "INVALID_JSON",
+            "--composition / --composition-file должен содержать JSON-массив полного состава",
+          );
+        }
       }
-      // Исходная версия включает индивидуальные ревизии и защищает также окно
-      // между raw-чтением, разрешением адресов и единственной записью состава.
       const command = parse(
-        productMutationSchema,
+        productParticipationReplaceSchema,
         {
-          action: scope ? "update" : "create",
+          application: input.argument(),
+          selections,
           ifRevision: options.ifRevision,
           ifVersion: options.ifVersion,
           requestId: options.requestId ?? randomUUID(),
-          fields: { kind: "scope", applicationId: application.ref.id, contracts: selected },
         },
-        "состав приложения",
+        "полный состав приложения",
       );
-      const data = {
-        ...(await context.backend.product.mutate(command, author(context))),
-        requestId: command.requestId,
-      };
+      const saved = await context.backend.product.replaceParticipation(command, author(context));
+      // Прежние варианты ввода сохраняют прежнюю квитанцию; новый composition — явный opt-in.
+      const data = hasComposition
+        ? { ...saved, requestId: command.requestId }
+        : {
+            id: saved.scopeId,
+            ...("key" in saved && typeof saved.key === "string" ? { key: saved.key } : {}),
+            revision: saved.revision,
+            requestId: command.requestId,
+          };
       return {
         data,
-        text: (options) =>
-          receiptText(
-            {
-              title: `Активный состав заменён: ${application.key}`,
-              fields: [
-                ["Приложение", application.title],
-                ["Ревизия состава", data.revision],
-                ["Выбрано реализаций", selected.length],
-              ],
-              commands: [
-                {
-                  label: "Перечитать состав и версию",
-                  command: commandInvocation(context, [
-                    "application",
-                    "participation",
-                    "list",
-                    application.key,
-                  ]),
-                },
-              ],
-            },
-            options,
-          ),
+        text: (textOptions) => participationSavedText(saved, textOptions, context),
       };
     },
   });

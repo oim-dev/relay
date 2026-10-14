@@ -1,4 +1,5 @@
-import { listText, cardText, commandText } from "./common.js";
+import { listText, cardText, commandText, actionsText } from "./common.js";
+import type { OutputCommand, OutputField } from "./common.js";
 import { filterFields } from "./entities.js";
 import type {
   ProductContext,
@@ -11,13 +12,13 @@ import type {
   ProductOverviewSnapshot,
   ProductState,
 } from "@relay/core/domain/product";
-import type { ContentWarning } from "@relay/core/application/product/content";
-import type { ProductContentQuery } from "@relay/core/application/product/content";
+import type { ProductLintPage, ProductOverviewMapPage } from "@relay/contracts/product-query";
 import type { TextOptions } from "./theme.js";
+import type { AppError } from "@relay/core/shared/errors";
 import wrapAnsi from "wrap-ansi";
 import { wrap, section } from "./layout.js";
 import { renderMarkdown } from "./markdown.js";
-import { safeText, previewText } from "./text.js";
+import { safeText, previewText, diagnosticValueText } from "./text.js";
 import type {
   ProductEntity,
   ProductEntitySummary,
@@ -36,6 +37,33 @@ const kinds: Record<string, string> = {
   implementation: "Реализация",
 };
 const statuses = { none: "Не реализовано", partial: "Частично", done: "Готово" };
+
+/** Причина и исходные details не заменяются советом; следующий шаг — только новое чтение. */
+export function productSnapshotConflictText(
+  error: AppError,
+  restart: string,
+  options: TextOptions,
+): string {
+  return cardText(
+    {
+      title: error.message,
+      sections: [
+        ...(error.details === undefined
+          ? []
+          : [{ title: "Подробности", body: diagnosticValueText(error.details) }]),
+        {
+          title: "Следующий шаг",
+          body: wrap(
+            "Срез изменился. Версия проверяет неизменность текущих данных, а не открывает исторический снимок. Начните новое чтение без --cursor и --snapshot; не подставляйте свежую версию в прежний курсор. Команда ниже ничего не изменяет и не запускается автоматически.",
+            options.width,
+          ),
+        },
+      ],
+      commands: [{ label: "Прочитать актуальные данные", command: restart }],
+    },
+    options,
+  );
+}
 const nameOf = (record: RecordView) =>
   "name" in record.fields
     ? record.fields.name
@@ -44,21 +72,30 @@ const nameOf = (record: RecordView) =>
       : `Состав ${record.fields.applicationId}`;
 
 /** Представление предметной записи: метаданные не смешиваются с Markdown-содержанием. */
-export function productRecordText(record: RecordView, options: TextOptions): string {
+export function productRecordText(
+  record: RecordView,
+  options: TextOptions,
+  addresses: ReadonlyMap<string, string> = new Map(),
+): string {
   const fields = record.fields;
-  const head = section(
-    wrap(`${kinds[fields.kind]} · ${safeText(nameOf(record))}`, options.width),
-    wrap(
-      `${record.key ? `Ключ: ${record.key}\n` : ""}ID: ${record.id}\nРевизия: ${record.revision}\nАвтор: ${safeText(record.updatedBy)}`,
-      options.width,
-    ),
+  const address = (id: string) => addresses.get(id) ?? id;
+  const head = cardText(
+    {
+      title: `${kinds[fields.kind]} · ${fields.kind === "scope" ? `Состав приложения ${address(fields.applicationId)}` : nameOf(record)}`,
+      fields: [
+        ["Ключ", record.key, "opaque"],
+        [fields.kind === "scope" ? "Технический ID состава" : "ID", record.id, "opaque"],
+        ["Ревизия", record.revision],
+        ["Автор", record.updatedBy],
+      ],
+    },
     options,
   );
   const parts = [head];
   if ("summary" in fields && fields.summary)
     parts.push(wrap(safeText(fields.summary), options.width));
   if (fields.kind === "scenario")
-    parts.push(wrap(`Родительская фича: ${fields.featureId}`, options.width));
+    parts.push(wrap(`Родительская фича: ${address(fields.featureId)}`, options.width));
   if (fields.kind === "implementation")
     parts.push(
       wrap(
@@ -73,16 +110,29 @@ export function productRecordText(record: RecordView, options: TextOptions): str
       wrap(`Префикс задач: ${safeText(fields.prefix ?? fields.slug.toUpperCase())}`, options.width),
     );
   if (fields.kind === "scope") {
-    parts.push(wrap(`Приложение: ${fields.applicationId}`, options.width));
+    parts.push(wrap(`Приложение: ${address(fields.applicationId)}`, options.width));
     if (!fields.contracts.length) parts.push("Контрактов пока нет.");
     for (const contract of fields.contracts)
       parts.push(
         section(
-          safeText(contract.title),
+          safeText(`${contract.key ?? contract.id} — ${contract.title}`),
           [
-            wrap(
-              `ID: ${contract.id}\nФича: ${contract.featureId}\nСценарий: ${contract.scenarioId ?? "общий вклад"}\n${contract.active ? statuses[contract.status] : "Участие снято"}`,
-              options.width,
+            cardText(
+              {
+                title: contract.scenarioId ? "Реализация сценария (SI)" : "Реализация фичи (FI)",
+                fields: [
+                  ["ID", contract.id, "opaque"],
+                  ["Фича", address(contract.featureId), "opaque"],
+                  [
+                    "Сценарий",
+                    contract.scenarioId ? address(contract.scenarioId) : "общий вклад",
+                    "opaque",
+                  ],
+                  ["Участие", contract.active ? "действует" : "снято"],
+                  ["Ревизия реализации", contract.revision],
+                ],
+              },
+              options,
             ),
             renderMarkdown(contract.description, options),
           ].join("\n\n"),
@@ -137,7 +187,9 @@ function listing(
             ? [`Готовность (расчёт): ${statuses[states.get(item.id)!]}`]
             : []),
           ...(item.kind === "scope"
-            ? ["Техническая запись состава; приложение не раскрывается в этой сводке."]
+            ? [
+                "Технический агрегат. Адрес приложения и состав доступны в отдельной карте --view map.",
+              ]
             : []),
           ...(item.summary ? [previewText(item.summary, 120)] : []),
         ],
@@ -193,6 +245,9 @@ export type ProductOverviewCommands = {
   metrics: Record<Exclude<ProductOverviewMetric, "blocker-affected">, string>;
   /** Полный состав затронутых задач для каждого блокера из подборки, по его постоянному ID. */
   blockerAffected: Record<string, string>;
+  full?: string;
+  map?: string;
+  state?: string;
 };
 
 export type ProductOverviewView = ProductOverview & {
@@ -704,6 +759,8 @@ function operatorPlanningText(data: ProductOverviewView, options: TextOptions): 
 /** Исполняемые команды страницы детализации; сохраняют подключение исходного вызова. */
 export type ProductOverviewMetricCommands = {
   overview: string;
+  /** Один пример адресного чтения показанного элемента. */
+  read?: string;
   /** Для blocker-affected: полное чтение самого блокера. */
   blocker?: string;
   /** Для blocker-impact: полный состав затронутых задач каждого блокера страницы. */
@@ -720,7 +777,7 @@ export function productOverviewMetricText(
 ): string {
   const width = outputWidth(options);
   const label = metricLabels[data.metric];
-  const fields: [string, string | number][] = [
+  const fields: OutputField[] = [
     ["Метрика", data.metric],
     ["Всего", data.total],
     ["На странице", data.items.length],
@@ -731,7 +788,7 @@ export function productOverviewMetricText(
       ["Колонка блокера", data.blocker.column],
       ["Доска блокера", `${data.blocker.board.name} (${data.blocker.board.prefix})`],
     );
-  fields.push(["Срез", data.snapshotVersion], ["Получен", data.generatedAt]);
+  fields.push(["Срез", data.snapshotVersion, "opaque"], ["Получен", data.generatedAt]);
   const head = cardText({ title: label.title, fields }, options);
   const note = prose(label.note, width);
   let items: string[];
@@ -769,6 +826,14 @@ export function productOverviewMetricText(
     {
       title: "Дальнейшее чтение",
       commands: [
+        ...(data.commands.read
+          ? [
+              {
+                label: "Открыть первую запись (для остальных замените ключ)",
+                command: data.commands.read,
+              },
+            ]
+          : []),
         ...(data.commands.blocker
           ? [{ label: "Блокер целиком", command: data.commands.blocker }]
           : []),
@@ -784,6 +849,161 @@ export function productOverviewMetricText(
 
 const statusSplit = (counts: { none: number; partial: number; done: number }) =>
   `готово ${counts.done} · частично ${counts.partial} · не начато ${counts.none}`;
+
+/** Точка входа без повторных карточек. Полные DTO и подборки остаются в явном full. */
+export function productOverviewCompactText(
+  data: ProductOverviewView,
+  options: TextOptions,
+): string {
+  const s = data.snapshot;
+  const op = s.operator;
+  const width = outputWidth(options);
+  const passport = s.passport;
+  const columns = s.tasks.byColumn;
+  const lines = [
+    `Проект: ${s.project.name} (${s.project.slug})`,
+    `Срез получен: ${data.generatedAt}`,
+    passport.state === "missing"
+      ? "Паспорт ещё не создан."
+      : `Паспорт: ${passport.key ?? passport.id} · ревизия ${passport.revision}`,
+    ...(passport.state === "filled" ? [`Назначение: ${passport.summary}`] : []),
+    `Задач всего: ${s.tasks.total} · фактически выполнено ${s.tasks.completed} · в done с открытыми обязательствами ${s.tasks.doneWithOpenObligations}`,
+    `Колонки: inbox ${columns.inbox} · ready ${columns.ready} · in-progress ${columns["in-progress"]} · review ${columns.review} · done ${columns.done} · cancelled ${columns.cancelled}`,
+    `Готовы к началу ${s.tasks.readyToStart} · заблокировано ${s.tasks.blocked} · критерии ${s.tasks.criteria.completed}/${s.tasks.criteria.total}, не выполнено ${s.tasks.criteria.pending} в ${s.tasks.criteria.tasksWithPending} задачах`,
+    `Проверка: ${op.review.total} = обязательства выполнены ${op.review.obligationsMet.total} + остались обязательства ${op.review.obligationsOpen.total}`,
+    `Прямых блокеров ${op.blockerImpact.total} · незавершённых задач ${op.boardWork.remaining}, из них с блокерами ${op.boardWork.blockedRemaining}`,
+    `Вне открытых планов ${op.unplannedWork.total} (in-progress ${op.unplannedWork.byColumn["in-progress"]} · review ${op.unplannedWork.byColumn.review})`,
+    `Планы ${s.plans.total}: черновики ${s.plans.byStatus.draft} · активные ${s.plans.byStatus.active} · завершены ${s.plans.byStatus.completed} · отменены ${s.plans.byStatus.cancelled}`,
+    `Открытых с выполненным составом ${op.openPlansComplete.total} · завершённых с невыполненным составом ${s.plans.completedNotReady}`,
+    `Релизы ${s.releases.total}: запланированы ${s.releases.byStatus.planned} · выпущены ${s.releases.byStatus.released} · отменены ${s.releases.byStatus.cancelled}`,
+    `Готовы к выпуску ${op.releasePreparation.readyReleases.total} · готовых завершённых планов вне релизов ${op.releasePreparation.completedPlansOutsideReleases.total}`,
+    `Фичи ${s.knowledge.features.total} (${statusSplit(s.knowledge.features.byStatus)}); сценарии ${s.knowledge.scenarios.total} (${statusSplit(s.knowledge.scenarios.byStatus)})`,
+    `Приложения ${s.knowledge.applications.total} · FI действуют ${s.knowledge.featureImplementations.active}, сняты ${s.knowledge.featureImplementations.withdrawn} · SI действуют ${s.knowledge.scenarioImplementations.active}, сняты ${s.knowledge.scenarioImplementations.withdrawn}`,
+    `Доски ${s.boards.total} · документы ${s.documents.total} (черновики ${s.documents.byStatus.draft} · действующие ${s.documents.byStatus.active} · архивные ${s.documents.byStatus.archived}), закреплено ${s.documents.pinned}, разделов ${s.documents.sections.total}, без раздела ${s.documents.sections.unsectioned}`,
+    `Карта: ${data.total} продуктовых агрегатов; это не число всех сущностей проекта.`,
+  ];
+  const metrics: [ProductOverviewMetric, number][] = [
+    ["review-obligations-met", op.review.obligationsMet.total],
+    ["review-obligations-open", op.review.obligationsOpen.total],
+    ["blocker-impact", op.blockerImpact.total],
+    ["unplanned-work", op.unplannedWork.total],
+    ["open-plans-complete", op.openPlansComplete.total],
+    ["ready-releases", op.releasePreparation.readyReleases.total],
+    ["plans-outside-releases", op.releasePreparation.completedPlansOutsideReleases.total],
+  ];
+  const commands: OutputCommand[] = [
+    {
+      label: passport.state === "missing" ? "Заполнить паспорт: справка" : "Полный паспорт",
+      command: passport.state === "missing" ? data.commands.passportHelp : data.commands.passport,
+    },
+    ...metrics
+      .filter(([, count]) => count > 0)
+      .map(([metric, count]) => ({
+        label: `${metricLabels[metric].title} · ${count}`,
+        command:
+          data.commands.metrics[metric as Exclude<ProductOverviewMetric, "blocker-affected">],
+      })),
+    ...(data.commands.map
+      ? [{ label: "Адресная карта (страницами)", command: data.commands.map }]
+      : []),
+    ...(data.commands.full
+      ? [{ label: "Полный обзор: все показатели и подборки", command: data.commands.full }]
+      : []),
+    { label: "Продуктовая готовность и причины", command: data.commands.progress },
+  ];
+  return cardText(
+    {
+      title: passport.state === "missing" ? "Продукт без паспорта" : `Продукт · ${passport.name}`,
+      sections: [
+        ...(passport.state === "no-summary" && passport.excerpt.text
+          ? [
+              {
+                title: `Начало описания${passport.excerpt.truncated ? " (фрагмент)" : ""}`,
+                body: renderMarkdown(passport.excerpt.text, options),
+              },
+            ]
+          : []),
+        { title: "Сводка", body: lines.map((line) => prose(line, width)).join("\n") },
+        {
+          title: "Границы",
+          body: prose(
+            "Показатели пересекаются и не складываются. Выполненные обязательства не доказывают внешнюю проверку; состояние плана и релиза не равно готовности состава. Работа вне планов — сигнал, не ошибка; блокеры только прямые. Это сводка без списков; полные подборки и причины доступны командами ниже.",
+            width,
+          ),
+        },
+      ],
+      commands,
+    },
+    options,
+  );
+}
+
+/** Новая карта содержит адреса приложения/реализации от Core, не угадывает scope по имени. */
+export function productOverviewMapText(
+  data: ProductOverviewMapPage,
+  options: TextOptions,
+  commands: OutputCommand[] = [],
+): string {
+  return listText(
+    {
+      title: "Карта продукта",
+      filters: [
+        ["Всего продуктовых агрегатов", data.total],
+        ["На странице", data.items.length],
+        ["Срез", data.snapshotVersion, "opaque"],
+        ["Версия состава", data.version, "opaque"],
+      ],
+      items: data.items.map((item) => ({
+        key: item.subject.key,
+        title: item.name,
+        details: [
+          kinds[item.kind] ?? item.kind,
+          ...(item.status ? [`Готовность (расчёт): ${statuses[item.status]}`] : []),
+          ...(item.kind === "scope"
+            ? [`Состав приложения ${item.subject.key}; не самостоятельная публичная сущность.`]
+            : []),
+        ],
+      })),
+      emptyMessage: data.total ? "На этой странице записей нет." : "Записей продукта пока нет.",
+      commands,
+    },
+    options,
+  );
+}
+
+/** Совместимое продолжение прежней карты не повторяет сводку; JSON остаётся прежним. */
+export function productOverviewLegacyMapText(
+  data: ProductOverviewView,
+  options: TextOptions,
+  offset = 0,
+): string {
+  return [
+    prose(
+      `Карта продукта · записи ${data.items.length ? offset + 1 : 0}–${offset + data.items.length} из ${data.total}`,
+      outputWidth(options),
+    ),
+    listing(
+      data.items,
+      options,
+      data.readiness,
+      "",
+      data.total ? "На этой странице записей нет." : "Записей продукта пока нет.",
+    ),
+    ...(data.commands.map
+      ? [
+          cardText(
+            {
+              title: "Адресная карта без общего обзора",
+              commands: [
+                { label: "Открыть карту с адресами приложений", command: data.commands.map },
+              ],
+            },
+            options,
+          ),
+        ]
+      : []),
+  ].join("\n\n");
+}
 
 function passportText(
   data: ProductOverviewView,
@@ -1061,6 +1281,9 @@ export function productOverviewText(
       title: "Дальнейшее чтение",
       commands: [
         { label: "Паспорт целиком", command: commands.passport },
+        ...(commands.map
+          ? [{ label: "Адресная карта без повторения сводки", command: commands.map }]
+          : []),
         { label: "Готовность фич", command: commands.progress },
         { label: "Задачи в работе", command: commands.inProgress },
         { label: "Задачи на проверке", command: commands.review },
@@ -1125,14 +1348,40 @@ export function productEntitiesText(
     .join("\n\n");
 }
 
-export function productContextText(data: ProductContext, options: TextOptions): string {
+export function productContextText(
+  data: ProductContext,
+  options: TextOptions,
+  commands: OutputCommand[] = [],
+  filters: { id?: string; application?: string } = {},
+): string {
+  const addresses = new Map(data.records.map(({ record }) => [record.id, record.key ?? record.id]));
   const sections = [
-    section("Контекст продукта", `Включено записей: ${data.records.length}`, options),
+    cardText(
+      {
+        title: "Предметный контекст продукта",
+        fields: [
+          ["Выбранная запись", filters.id, "opaque"],
+          ["Приложение", filters.application, "opaque"],
+          ["Включено агрегатов", data.records.length],
+          ["Версия состава", data.version, "opaque"],
+        ],
+        sections: [
+          {
+            title: "Границы подборки",
+            body: prose(
+              "Выдана вся предметная подборка с причинами включения и полными текстами; составы приложений содержат только выбранные реализации. Это не весь продукт и не полный граф современных relations. Без фильтров выбираются паспорт и документы с прежней областью продукта.",
+              outputWidth(options),
+            ),
+          },
+        ],
+      },
+      options,
+    ),
   ];
   for (const { record, reasons } of data.records)
     sections.push(
       [
-        productRecordText(record, options),
+        productRecordText(record, options, addresses),
         section("Почему включено", wrap(safeText(reasons.join("; ")), options.width), options),
         ...data.readiness
           .filter((entry) => entry.id === record.id)
@@ -1145,19 +1394,56 @@ export function productContextText(data: ProductContext, options: TextOptions): 
       ].join("\n\n"),
     );
   if (!data.records.length)
-    sections.push(
-      "Связанного контекста пока нет. Посмотрите npx @oim-dev/relay-cli product overview или выберите --id.",
-    );
+    sections.push("Записей в предметной подборке нет. Выберите продуктовую запись через --id.");
+  if (commands.length) sections.push(actionsText(commands, options));
   return sections.join(`\n\n${"─".repeat(options.width)}\n\n`);
 }
 
-export function productStateText(data: ProductState, options: TextOptions): string {
-  return section(
-    "Снимок продукта",
-    data.records.map((record) => productRecordText(record, options)).join("\n\n") ||
+export function productStateText(
+  data: ProductState,
+  options: TextOptions,
+  commands: OutputCommand[] = [],
+): string {
+  const addresses = new Map(data.records.map((record) => [record.id, record.key ?? record.id]));
+  return [
+    cardText(
+      {
+        title: "Полное состояние продукта",
+        fields: [
+          ["ID продукта", data.productId, "opaque"],
+          ["Версия состава", data.version, "opaque"],
+          ["Продуктовых агрегатов", data.records.length],
+        ],
+        sections: [
+          {
+            title: "Полнота",
+            body: prose(
+              "Все продуктовые агрегаты, полные тексты, составы приложений и готовность получены одним согласованным чтением, без страниц. Это не все сущности проекта, не полный граф и не исторический снимок.",
+              outputWidth(options),
+            ),
+          },
+        ],
+      },
+      options,
+    ),
+    data.records.map((record) => productRecordText(record, options, addresses)).join("\n\n") ||
       "Продукт пока пуст.",
-    options,
-  );
+    listText(
+      {
+        title: "Вычисленная готовность",
+        items: data.readiness.map((entry) => ({
+          key: addresses.get(entry.id) ?? entry.id,
+          title: statuses[entry.status],
+          details: [
+            `Участников ${entry.participants} · готово ${entry.completed} · устарело ${entry.stale}`,
+          ],
+        })),
+        emptyMessage: "Фич и сценариев для расчёта нет.",
+        commands,
+      },
+      options,
+    ),
+  ].join("\n\n");
 }
 
 export function productSavedText(
@@ -1183,10 +1469,10 @@ export function productSavedText(
 }
 
 export function productLintText(
-  data: { records: number; warnings: ContentWarning[]; total: number; nextOffset: number | null },
+  data: ProductLintPage,
   options: TextOptions,
-  _query: ProductContentQuery = {},
-  keys: ReadonlyMap<string, string> = new Map(),
+  _query: { id?: string } = {},
+  commands: OutputCommand[] = [],
 ): string {
   return [
     listText(
@@ -1194,12 +1480,17 @@ export function productLintText(
         title: "Качество содержания",
         filters: [["Проверено записей", data.records], ...filterFields(_query)],
         items: data.warnings.map((entry) => ({
-          key: keys.get(entry.id) ?? entry.id,
-          title: entry.name,
-          details: [`${entry.field}: ${entry.message}`],
+          key: entry.key,
+          title: entry.title,
+          details: [
+            `${entry.ref.kind === "implementation" ? `Реализация ${entry.implementationTarget === "scenario" ? "сценария (SI)" : "фичи (FI)"}` : (kinds[entry.ref.kind] ?? entry.ref.kind)}`,
+            `${entry.code}: ${entry.message}`,
+            `Поле: ${entry.field}`,
+          ],
         })),
         emptyMessage:
           data.total === 0 ? "Структурных замечаний нет." : "На этой странице замечаний нет.",
+        commands,
       },
       options,
     ),
