@@ -36,14 +36,11 @@ for (const [label, directory] of [
     const lines = initialized.stdout
       .split("\n")
       .filter((line) => line.trimStart().startsWith("npx @oim-dev/relay-cli"));
-    assert.equal(lines.length, 1, initialized.stdout);
+    assert.equal(lines.length, 2, initialized.stdout);
+    assert.match(lines[1]!, /product create --help$/);
     const hint = lines[0]!;
     assert.doesNotMatch(hint, /[\r\n]/);
-    assert.match(
-      hint,
-      /product create --help\s*$/,
-      "подсказка целиком помещается в одну физическую строку",
-    );
+    assert.match(hint, /config get\s*$/, "подсказка целиком помещается в одну физическую строку");
     // Shell разбирает настоящую подсказку. Подменяем только npx: никакой загрузки npm,
     // аргументы без повторной сериализации передаются исходнику CLI с tsx.
     const launcher = `
@@ -81,10 +78,10 @@ for (const [label, directory] of [
       stdout: string;
       stderr: string;
     };
-    assert.deepEqual(replay.args, ["--config", configPath, "product", "create", "--help"]);
+    assert.deepEqual(replay.args, ["--config", configPath, "config", "get"]);
     assert.equal(replay.code, 0, replay.stdout + replay.stderr);
     assert.equal(replay.stderr, "");
-    assert.match(replay.stdout, /product create/);
+    assert.match(replay.stdout, /Конфигурация/);
     const read = successful(await invoke(root, [...replay.args.slice(0, 2), "config", "get"]));
     assert.equal((read.meta as { configPath: string }).configPath, configPath);
     assert.ok(await readFile(configPath, "utf8"));
@@ -93,7 +90,7 @@ for (const [label, directory] of [
 test("local: init, карточка, квитанция и обслуживание не добавляют флаги выбора проекта", async (t) => {
   const root = await tempDirectory(t);
   for (const [args, expected] of [
-    [["init"], ["product create --help"]],
+    [["init"], ["config get", "product create --help"]],
     [
       ["document", "create", "--name", "Документ", "--body", "Полный текст"],
       ["document get DOC-1"],

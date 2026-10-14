@@ -4,7 +4,6 @@ import { ProductRepository } from "../../storage/product.js";
 import { BoardRepository } from "../../storage/boards.js";
 import { BoardTaskRepository } from "../../storage/board-tasks.js";
 import { GraphRepository } from "../../storage/graph.js";
-import { exists } from "../../storage/files.js";
 import * as unified from "../../storage/unified-adapter.js";
 import {
   syncBoardRelations,
@@ -37,12 +36,6 @@ export class StorageService {
   async initialize() {
     const workspace = this.workspace;
     await workspace.withEntityStorage(async (store, owned) => {
-      invariant(
-        !(await exists(workspace.configPath)) && !(await exists(join(store.root, "storage.json"))),
-        "ALREADY_INITIALIZED",
-        "Конфигурация уже существует",
-        4,
-      );
       workspace.storageProductId = workspace.config.projectId!;
       await store.transaction(
         owned,

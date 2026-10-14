@@ -74,12 +74,8 @@ export async function locateConfiguration(cwd: string, explicit?: string, regist
   }
 }
 
-/** Поиск и чтение не создают хранилищ или служебных каталогов. */
-export async function readConfiguration(
-  cwd: string,
-  explicit?: string,
-  registryOnly = false,
-): Promise<Configuration> {
+/** Общий поиск и классификация файла; проектная база здесь не открывается. */
+async function readConfigurationFile(cwd: string, explicit?: string, registryOnly = false) {
   const path = await locateConfiguration(cwd, explicit, registryOnly);
   const value = await readJson(path);
   const localPath = basename(path) === "config.json" && basename(dirname(path)) === ".relay";
@@ -87,8 +83,34 @@ export async function readConfiguration(
     basename(path) === REGISTRY_NAME ||
     (!localPath && typeof value === "object" && value !== null && Object.hasOwn(value, "projects"))
   )
-    return { kind: "registry", path, value: parse(registrySchema, value, path) };
+    return { kind: "registry" as const, path, value: parse(registrySchema, value, path) };
   invariant(!registryOnly, "REGISTRY_REQUIRED", `Ожидается конфиг проектов: ${path}`);
+  return { kind: "project" as const, path, value };
+}
+
+/**
+ * Метаданные для init: та же схема и поиск, без проекции PROJECT, открытия Store,
+ * блокировки и recovery. Наличие конфигурации не подтверждает готовность самой базы.
+ */
+export async function readInitializationConfiguration(
+  cwd: string,
+  explicit?: string,
+): Promise<Configuration> {
+  const source = await readConfigurationFile(cwd, explicit);
+  return source.kind === "registry"
+    ? source
+    : { ...source, value: parse(configSchema, source.value, source.path) };
+}
+
+/** Обычное чтение включает проекцию PROJECT и recovery незавершённого WAL Core. */
+export async function readConfiguration(
+  cwd: string,
+  explicit?: string,
+  registryOnly = false,
+): Promise<Configuration> {
+  const source = await readConfigurationFile(cwd, explicit, registryOnly);
+  if (source.kind === "registry") return source;
+  const path = source.path;
   const project = await readWorkspaceConfig(cwd, path);
   return { kind: "project", path: project.configPath, value: project.config };
 }

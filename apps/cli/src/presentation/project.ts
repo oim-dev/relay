@@ -14,6 +14,7 @@ export function initializedText(
   storageDir: string,
   options: TextOptions,
   nextCommand: string,
+  readCommand: string,
 ): string {
   return receiptText(
     {
@@ -23,6 +24,10 @@ export function initializedText(
         ["Хранилище", storageDir],
       ],
       commands: [
+        {
+          label: "Проверить созданный проект и пути",
+          command: readCommand,
+        },
         {
           label: "Следующий шаг: подготовить паспорт продукта",
           command: nextCommand,
@@ -106,6 +111,51 @@ export function configText(
       commands: readCommand
         ? [{ label: "Прочитать проект и его ревизию", command: readCommand }]
         : [],
+    },
+    options,
+  );
+}
+
+/** Контекст отказа init приходит из Core; машинная причина остаётся в исходном details. */
+export function initializationBlockedText(
+  message: string,
+  configPath: string,
+  dataRoot: string | undefined,
+  readCommand: string,
+  options: TextOptions,
+  diagnostic = false,
+  paths: string[] = [],
+): string {
+  return cardText(
+    {
+      title: message,
+      fields: [
+        ["Конфигурация", configPath, "opaque"],
+        ["Хранилище", dataRoot, "opaque"],
+      ],
+      sections: diagnostic
+        ? [
+            {
+              title: "Обнаруженные пути относительно хранилища",
+              body: paths.map((path) => `- ${safeText(path)}`).join("\n"),
+            },
+            {
+              title: "Дальнейшие действия",
+              body: wrap(
+                "Не повторяйте init. Остановите писателей и сохраните копию оставшихся файлов. Проверьте состояние; при утрате конфига или storage.json диагностика тоже может отказать. Восстановите отсутствующие файлы из проверенной копии, не создавайте новую базу поверх остатков.",
+                options.width,
+              ),
+            },
+          ]
+        : [],
+      commands: [
+        {
+          label: diagnostic
+            ? "Проверить хранилище без восстановления и записи"
+            : "Прочитать существующий проект и пути; повторный init не нужен",
+          command: readCommand,
+        },
+      ],
     },
     options,
   );

@@ -1,15 +1,16 @@
 import type { Command } from "commander";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { selectProject } from "@relay/project-runtime/config";
-import { cliConfiguration } from "../configuration.js";
+import { cliInitializationConfiguration } from "../configuration.js";
 import { initialize } from "@relay/core/storage/workspace";
 import { outputOptions } from "../context.js";
 import type { GlobalOptions, Runtime } from "../context.js";
-import { printResult } from "../output.js";
+import { PresentedError, printResult } from "../output.js";
 import { createCommand, commandGroup, registerCommand } from "../command.js";
 import {
   configText,
   initializedText,
+  initializationBlockedText,
   projectText,
   projectSavedText,
   projectSettingsSavedText,
@@ -36,7 +37,7 @@ export function registerProject(program: Command, runtime: Runtime): void {
     name: "init",
     description: "Создать конфиг и хранилище проекта",
     details:
-      "Создаёт .relay/config.json и единое ID-хранилище рядом с конфигом: entities, relations и индексы. Существующие данные не заменяются.\n--storage сохраняется для совместимости конфигурации; новый формат не создаёт прежний каталог задач. --config задаёт путь конфигурации.\nПосле init подготовьте паспорт продукта: npx @oim-dev/relay-cli product create --help.",
+      "Создаёт .relay/config.json и единое ID-хранилище рядом с конфигом: entities, relations и индексы. Существующие данные не заменяются; init не восстанавливает неполную базу или незавершённую запись.\n--storage сохраняется для совместимости конфигурации; новый формат не создаёт прежний каталог задач. --config задаёт путь конфигурации. Новое имя файла: латинские буквы, цифры, «_», «-», «.»; кроме «.», «..», служебных имён Relay и relay.workspace.json. Расширение .json необязательно. Unicode, пробелы и кавычки в каталоге разрешены.\nURL из --server-url, RELAY_SERVER_URL или найденного конфига требует --local: init не обращается к серверу. Выбранный проект workspace задаёт локальный путь регистрации; без выбора создаётся отдельная база в текущем каталоге, без регистрации.\nПосле init проверьте config get и подготовьте паспорт продукта: npx @oim-dev/relay-cli product create --help.",
     examples: [
       ["npx @oim-dev/relay-cli init", "Начать в текущем проекте"],
       [
@@ -54,26 +55,27 @@ export function registerProject(program: Command, runtime: Runtime): void {
   init.action(async () => {
     const globals = init.optsWithGlobals<GlobalOptions>();
     let config = globals.config ?? runtime.env.RELAY_CONFIG;
-    const source = await cliConfiguration(runtime, globals).catch((error: unknown) => {
-      if (
-        error instanceof AppError &&
-        ["CONFIG_NOT_FOUND", "NOT_FOUND"].includes(error.code) &&
-        !globals.project
-      )
-        return undefined;
-      throw error;
-    });
+    const source = await cliInitializationConfiguration(runtime, globals).catch(
+      (error: unknown) => {
+        if (
+          error instanceof AppError &&
+          ["CONFIG_NOT_FOUND", "NOT_FOUND"].includes(error.code) &&
+          !globals.project
+        )
+          return undefined;
+        throw error;
+      },
+    );
     if (source && globals.project) {
       const selected = selectProject(source, globals.project);
       config = selected.configPath;
       invariant(config, "LOCAL_CONFIG_REQUIRED", "Для init нужен локальный путь проекта");
     }
+    // Init создаёт только локальную базу: явное HTTP-намерение одинаково для всех
+    // источников URL. Один лишь порт workspace не запрещает новый проект в cwd.
+    const serverUrl = globals.serverUrl ?? runtime.env.RELAY_SERVER_URL ?? source?.value.server.url;
     invariant(
-      globals.local ||
-        !(
-          globals.serverUrl ??
-          (source?.kind === "registry" ? undefined : runtime.env.RELAY_SERVER_URL)
-        ),
+      globals.local || !serverUrl,
       "LOCAL_ONLY",
       "Для инициализации локальной рабочей копии при настроенном HTTP укажите --local.",
     );
@@ -81,6 +83,50 @@ export function registerProject(program: Command, runtime: Runtime): void {
       runtime.cwd,
       init.opts<{ storage: string }>().storage,
       config,
+    ).catch((error: unknown) => {
+      if (!(error instanceof AppError) || error.code !== "ALREADY_INITIALIZED") throw error;
+      const details = error.details as
+        { configPath?: unknown; dataRoot?: unknown; reason?: unknown; paths?: unknown } | undefined;
+      // Только адрес Core: не извлекаем путь из message и не ищем другую базу.
+      if (
+        typeof details?.configPath !== "string" ||
+        typeof details.dataRoot !== "string" ||
+        !["config", "storage", "pending", "incomplete"].includes(String(details.reason))
+      )
+        throw error;
+      const configPath = details.configPath;
+      const dataRoot = details.dataRoot;
+      const diagnostic = details.reason !== "config";
+      const invocation = diagnostic
+        ? localInvocation(runtime, { local: true, config: dataRoot }, dataRoot)
+        : localInvocation(runtime, globals, configPath, source?.kind === "registry");
+      throw new PresentedError(
+        error.code,
+        error.message,
+        error.exitCode,
+        error.details,
+        (options) =>
+          initializationBlockedText(
+            error.message,
+            configPath,
+            dataRoot,
+            shellCommand([
+              ...invocation,
+              ...(diagnostic ? ["storage", "status"] : ["config", "get"]),
+            ]),
+            options,
+            diagnostic,
+            Array.isArray(details.paths)
+              ? details.paths.filter((path): path is string => typeof path === "string")
+              : [],
+          ),
+      );
+    });
+    const invocation = localInvocation(
+      runtime,
+      globals,
+      workspace.configPath,
+      source?.kind === "registry",
     );
     runtime.output = outputOptions(runtime, globals, workspace.config.output);
     printResult(
@@ -92,17 +138,8 @@ export function registerProject(program: Command, runtime: Runtime): void {
             workspace.configPath,
             workspace.dataRoot,
             options,
-            shellCommand([
-              ...localInvocation(
-                runtime,
-                globals,
-                workspace.configPath,
-                source?.kind === "registry",
-              ),
-              "product",
-              "create",
-              "--help",
-            ]),
+            shellCommand([...invocation, "product", "create", "--help"]),
+            shellCommand([...invocation, "config", "get"]),
           ),
       },
       runtime.output,

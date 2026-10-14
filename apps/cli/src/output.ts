@@ -97,6 +97,8 @@ function errorDetailsText(
     const labels: Record<string, string> = {
       field: "Поле",
       path: "Путь",
+      configPath: "Конфигурация",
+      basename: "Имя файла",
       expected: "Ожидалось",
       current: "Фактически",
       actual: "Получено",
@@ -162,7 +164,17 @@ function errorDetailsText(
               : typeof value === "string" && value !== "" && !["expected", "actual"].includes(name)
                 ? safeText(value)
                 : diagnosticValueText(value),
-          ...(["path", "field", "ref", "id", "owner", "requestId", "url"].includes(name)
+          ...([
+            "path",
+            "configPath",
+            "basename",
+            "field",
+            "ref",
+            "id",
+            "owner",
+            "requestId",
+            "url",
+          ].includes(name)
             ? (["opaque"] as const)
             : ([] as const)),
         ]);

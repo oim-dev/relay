@@ -1,5 +1,5 @@
 import type { GlobalOptions, Runtime } from "./context.js";
-import { readConfiguration } from "@relay/project-runtime/config";
+import { readConfiguration, readInitializationConfiguration } from "@relay/project-runtime/config";
 import { AppError } from "@relay/core/shared/errors";
 import { PresentedError } from "./output.js";
 import { wrap } from "./presentation/layout.js";
@@ -10,9 +10,22 @@ export async function cliConfiguration(
   globals: GlobalOptions,
   _registryOnly = false,
 ) {
+  return readCliConfiguration(runtime, globals, readConfiguration);
+}
+
+/** Init выбирает только режим/URL/регистрацию; обычное открытие могло бы исполнить WAL. */
+export async function cliInitializationConfiguration(runtime: Runtime, globals: GlobalOptions) {
+  return readCliConfiguration(runtime, globals, readInitializationConfiguration);
+}
+
+async function readCliConfiguration(
+  runtime: Runtime,
+  globals: GlobalOptions,
+  read: typeof readConfiguration,
+) {
   const explicit = globals.config ?? runtime.env.RELAY_CONFIG;
   try {
-    return await readConfiguration(runtime.cwd, explicit);
+    return await read(runtime.cwd, explicit);
   } catch (error) {
     // Сохраняем код и машинные details ошибки пути, меняем только human-восстановление.
     if (explicit !== undefined && error instanceof AppError && error.code === "NOT_FOUND") {

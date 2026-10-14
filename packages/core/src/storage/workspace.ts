@@ -33,6 +33,7 @@ import {
 } from "./entity-store/transaction.js";
 import { HashIndex } from "./entity-store/hash-index.js";
 import { stateSchema, STATE_PATH } from "./entity-store/format.js";
+import { assertInitializationTarget } from "./initialization.js";
 
 const lockContext = new AsyncLocalStorage<{
   root: string;
@@ -153,6 +154,7 @@ export class Workspace {
     operation: (store: EntityStore, owned: () => void) => Promise<T>,
     initialize = false,
   ): Promise<T> {
+    if (initialize) await assertInitializationTarget(this.configPath);
     const root = await realpath(dirname(this.configPath));
     const runtime = join(root, "runtime");
     await mkdir(runtime, { recursive: true });
@@ -163,6 +165,8 @@ export class Workspace {
         active?.assertOwned();
         owned();
       };
+      // Инициализация не допубликовывает чужой WAL и не принимает остатки базы за пустой снимок.
+      if (initialize) await assertInitializationTarget(this.configPath);
       const store = await EntityStore.underLock(
         root,
         workspaceStorageRegistry(),
@@ -384,14 +388,7 @@ export async function initialize(
   explicit?: string,
 ): Promise<Workspace> {
   const configPath = resolve(cwd, explicit ?? CONFIG_NAME);
-  invariant(!(await exists(configPath)), "ALREADY_INITIALIZED", "Конфигурация уже существует", 4);
-  invariant(
-    !(await exists(join(dirname(configPath), "storage.json"))) &&
-      !(await exists(join(dirname(configPath), "transactions/pending.json"))),
-    "ALREADY_INITIALIZED",
-    "В каталоге уже есть хранилище; восстановите его конфигурацию",
-    4,
-  );
+  await assertInitializationTarget(configPath);
   const config = parse(
     configSchema,
     {
