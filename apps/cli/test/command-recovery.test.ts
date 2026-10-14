@@ -125,11 +125,12 @@ test("потерянный ответ записи: ровно один POST, re
   const app = await fixture(t);
   const server = await httpServer(t, app.root);
   const writes: any[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
       headers: { "content-type": "application/json" },
       ...(body.length ? { body } : {}),

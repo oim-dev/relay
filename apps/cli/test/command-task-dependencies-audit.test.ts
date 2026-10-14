@@ -50,9 +50,10 @@ test(
     await create("Собственная подзадача", ["--parent", owner.key]);
     const server = await httpServer(t, root);
     const requests: string[] = [];
-    const proxy = await httpProxy(t, async (request, response) => {
+    const proxy = await httpProxy(t, async (request, response, signal) => {
       requests.push(request.url ?? "");
       const result = await fetch(`${server.url}${request.url}`, {
+        signal,
         method: request.method ?? "GET",
       });
       response.statusCode = result.status;

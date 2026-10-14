@@ -15,6 +15,7 @@ import {
   cliEnv,
   cliNodeArgs,
   failed,
+  fixtureCleanup,
   invoke,
   invokeRaw,
   successful,
@@ -23,7 +24,7 @@ import { httpProxy, httpServer } from "./helpers/http.js";
 
 async function setup(t: TestContext) {
   const root = await mkdtemp(join(tmpdir(), "relay-workspace-audit-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  fixtureCleanup(t, () => rm(root, { recursive: true, force: true }));
   const serverRoot = join(root, "сервер 'каталог'");
   const clientRoot = join(root, "клиент 'каталог'");
   const remoteRoot = join(root, "без конфига");
@@ -247,7 +248,7 @@ test("WSP-04/05: local Server доступен для discovery, не выдаё
 
 test("WSP-02: runtime schema отвергает неверные успешные конверты/DTO и не повторяет записи", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-workspace-wire-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  fixtureCleanup(t, () => rm(root, { recursive: true, force: true }));
   let response: unknown;
   let invalidJson = false;
   let count = 0;
@@ -408,11 +409,12 @@ test("WSP-07: исправление коллизии slug через CLI сох
 test("WSP-02: потеря ответа регистрации не повторяет PUT; отдельное чтение видит запись", async (t) => {
   const f = await setup(t);
   let writes = 0;
-  const proxy = await httpProxy(t, async (request, reply) => {
+  const proxy = await httpProxy(t, async (request, reply, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
     const response = await fetch(`${f.server.url}${request.url}`, {
+      signal,
       method: request.method!,
       ...(body.length ? { body, headers: { "Content-Type": "application/json" } } : {}),
     });

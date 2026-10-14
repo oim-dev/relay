@@ -76,7 +76,7 @@ for (const mode of ["local", "http"] as const)
     let flags: string[] = ["--local"];
     if (mode === "http") {
       const server = await httpServer(t, app.root);
-      const proxy = await httpProxy(t, async (request, response) => {
+      const proxy = await httpProxy(t, async (request, response, signal) => {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         const body = Buffer.concat(chunks).toString();
@@ -86,6 +86,7 @@ for (const mode of ["local", "http"] as const)
           ...(body ? { body: JSON.parse(body) } : {}),
         });
         const upstream = await fetch(`${server.url}${request.url}`, {
+          signal,
           method: request.method!,
           ...(body ? { body, headers: { "content-type": "application/json" } } : {}),
         });
@@ -424,7 +425,7 @@ test("document delete HTTP: потеря ответа без повтора", { 
   ).data;
   const server = await httpServer(t, app.root);
   const requests: Request[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks).toString();
@@ -434,6 +435,7 @@ test("document delete HTTP: потеря ответа без повтора", { 
       ...(body ? { body: JSON.parse(body) } : {}),
     });
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method!,
       ...(body ? { body, headers: { "content-type": "application/json" } } : {}),
     });

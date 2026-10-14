@@ -392,7 +392,7 @@ test("project: HTTP settings/rename без лишнего get и retry; CAS ме
   const calls: { method: string; path: string; body?: any }[] = [];
   let race = false;
   let lose = false;
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
@@ -402,6 +402,7 @@ test("project: HTTP settings/rename без лишнего get и retry; CAS ме
       ...(body.length ? { body: JSON.parse(body.toString()) } : {}),
     });
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
       headers: { "content-type": "application/json" },
       ...(body.length ? { body } : {}),

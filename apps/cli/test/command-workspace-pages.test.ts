@@ -14,6 +14,7 @@ import {
   cliEnv,
   cliNodeArgs,
   failed,
+  fixtureCleanup,
   invoke,
   invokeRaw,
   successful,
@@ -24,7 +25,7 @@ type Wire = { method: string; path: string; bytes: number; data: any };
 
 async function setup(t: TestContext, count = 23) {
   const root = await mkdtemp(join(tmpdir(), "relay-workspace-pages-cli-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  fixtureCleanup(t, () => rm(root, { recursive: true, force: true }));
   const serverRoot = join(root, "server");
   const cwd = join(root, "remote");
   await mkdir(cwd);
@@ -42,7 +43,7 @@ async function setup(t: TestContext, count = 23) {
     faultMethod?: string;
     override?: unknown;
   } = {};
-  const proxy = await httpProxy(t, async (request, reply) => {
+  const proxy = await httpProxy(t, async (request, reply, signal) => {
     const path = request.url!;
     const method = request.method!;
     if (path === "/api/v1/server/capabilities" && (control.old || control.noCapability)) {
@@ -58,6 +59,7 @@ async function setup(t: TestContext, count = 23) {
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
     const upstream = await fetch(`${server.url}${path}`, {
+      signal,
       method,
       ...(body.length ? { body, headers: { "Content-Type": "application/json" } } : {}),
     });

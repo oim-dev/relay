@@ -205,9 +205,9 @@ test("config: HTTP URL flag/env/config выбирает один удалённ�
   const expected = successful(await app.run<any>(["config", "get"]));
   const projectId = expected.data.projectId;
   const requests: string[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     requests.push(`${request.method} ${request.url}`);
-    const upstream = await fetch(`${server.url}${request.url}`);
+    const upstream = await fetch(`${server.url}${request.url}`, { signal });
     response.writeHead(upstream.status, { "content-type": "application/json" });
     response.end(await upstream.text());
   });
@@ -351,9 +351,9 @@ test("config: источник разрешается один раз, смен�
   const server = await httpServer(t, app.root);
   const projectId = successful(await app.run<any>(["config", "get"])).data.projectId;
   const requests: string[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     requests.push(`${request.method} ${request.url}`);
-    const upstream = await fetch(`${server.url}${request.url}`);
+    const upstream = await fetch(`${server.url}${request.url}`, { signal });
     const body = await upstream.text();
     await changeServer(client.root, { port: 0, url: "http://127.0.0.1:1" });
     response.writeHead(upstream.status, { "content-type": "application/json" });

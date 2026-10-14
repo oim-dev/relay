@@ -17,6 +17,7 @@ import {
   cliEnv,
   cliNodeArgs,
   fixture,
+  fixtureCleanup,
   successful,
   failed,
   invoke,
@@ -329,7 +330,7 @@ test("каталоги create/update: ввод до мутации и human-кв
 test("product: HTTP create/update и последующее local/HTTP чтение эквивалентны", async (t) => {
   const app = await fixture(t);
   const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
-  t.after(() => server.close());
+  fixtureCleanup(t, () => server.close());
   const remote = <T = unknown>(args: Array<string | number>) =>
     invoke<T>(app.root, ["--server-url", server.url, ...args]);
   successful(
@@ -898,7 +899,7 @@ test("product overview: срез проекта, подборки, страни�
     "HTTP: те же предметные данные, подсказки сохраняют сервер и выполнимы",
     async () => {
       const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
-      t.after(() => server.close());
+      fixtureCleanup(t, () => server.close());
       const local = successful(
         await app.run<Overview>(["--local", "product", "overview", "--limit", 4]),
       );
@@ -1415,7 +1416,7 @@ test("product overview: показатели оператора, детализ�
 
   await t.test("HTTP: те же данные всех метрик, команды сохраняют сервер", async () => {
     const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
-    t.after(() => server.close());
+    fixtureCleanup(t, () => server.close());
     const local = successful(
       await app.run<OverviewWithOperator>(["--local", "product", "overview"]),
     );

@@ -162,13 +162,14 @@ for (const transport of ["local", "HTTP"] as const) {
     let globals: string[] = ["--local"];
     if (transport === "HTTP") {
       const server = await httpServer(t, app.root);
-      const proxy = await httpProxy(t, async (request, response) => {
+      const proxy = await httpProxy(t, async (request, response, signal) => {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         const bytes = Buffer.concat(chunks);
         if (request.method === "POST")
           posts.push({ path: request.url!, body: JSON.parse(bytes.toString()) });
         const upstream = await fetch(`${server.url}${request.url}`, {
+          signal,
           method: request.method!,
           headers: { "content-type": "application/json" },
           ...(bytes.length ? { body: bytes } : {}),

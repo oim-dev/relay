@@ -23,7 +23,7 @@ for (const transport of ["local", "HTTP"] as const)
     let flags = ["--local"];
     if (transport === "HTTP") {
       const server = await httpServer(t, app.root);
-      const proxy = await httpProxy(t, async (request, response) => {
+      const proxy = await httpProxy(t, async (request, response, signal) => {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         const body = Buffer.concat(chunks).toString();
@@ -33,6 +33,7 @@ for (const transport of ["local", "HTTP"] as const)
           ...(body ? { body: JSON.parse(body) } : {}),
         });
         const upstream = await fetch(`${server.url}${request.url}`, {
+          signal,
           method: request.method!,
           ...(body ? { body, headers: { "content-type": "application/json" } } : {}),
         });
@@ -441,10 +442,10 @@ test("document metadata HTTP: текущая запись и совместим�
   const server = await httpServer(t, app.root);
   const requests: string[] = [];
   let legacyResponse = false;
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     requests.push(request.url!);
     assert.equal(request.method, "GET");
-    const upstream = await fetch(`${server.url}${request.url}`);
+    const upstream = await fetch(`${server.url}${request.url}`, { signal });
     const body = JSON.parse(await upstream.text());
     if (legacyResponse && request.url!.includes("/entities/get")) delete body.data.metadata;
     response.writeHead(upstream.status, { "content-type": "application/json" });
@@ -499,10 +500,10 @@ test("document library HTTP: прежняя цель plan-stage и отсутс�
   const server = await httpServer(t, app.root);
   const requests: string[] = [];
   let mode: "plan-stage" | "capability" = "plan-stage";
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     requests.push(request.url!);
     assert.equal(request.method, "GET", "Несовместимый сервер не должен получить запись");
-    const upstream = await fetch(`${server.url}${request.url}`);
+    const upstream = await fetch(`${server.url}${request.url}`, { signal });
     const body = JSON.parse(await upstream.text());
     if (mode === "capability" && Array.isArray(body?.data?.capabilities))
       body.data.capabilities = body.data.capabilities.filter(

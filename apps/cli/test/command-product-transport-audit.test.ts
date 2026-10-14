@@ -55,11 +55,12 @@ test("APP-03/07 IMP-04/08: HTTP mixed existing FI + новые SI; legacy replac
   );
   const server = await httpServer(t, f.root);
   const requests: { method: string; url: string; bytes: number }[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
       headers: { "content-type": "application/json" },
       ...(body.length ? { body } : {}),

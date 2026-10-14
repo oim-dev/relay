@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { test } from "node:test";
@@ -18,11 +17,13 @@ import {
   cliEnv,
   cliNodeArgs,
   failed,
+  fixtureCleanup,
   invoke,
   invokeRaw,
   successful,
   tempDirectory,
 } from "./helpers/cli.js";
+import { httpProxy } from "./helpers/http.js";
 
 const markdown =
   "\n\n## Требования 世界 🧭\n\n\tотступ\n\n```text\n  строка кода без изменений\n```\n\nКонец паспорта.\n\n";
@@ -622,7 +623,7 @@ test("PROD-03 state: local/HTTP DTO равен Core, включая Markdown, FI
   assert.equal(doc.fields.documentStatus, "archived");
   assert.equal(doc.fields.relations?.[0]?.description, "Полное пояснение\n\n  без усечения");
   const server = await startServer({ cwd: app.root, actor: "test-agent", port: 0 });
-  t.after(() => server.close());
+  fixtureCleanup(t, () => server.close());
   const remote = successful(
     await app.run<ProductState>(["--server-url", server.url, "product", "state"]),
   );
@@ -700,27 +701,17 @@ test("PROD-05: пустой обзор компактен, полный режи
 test("PROD HTTP: предметные операции не получают state ради validate/lint/map, guard и адреса", async (t) => {
   const app = await prepared(t);
   const server = await startServer({ cwd: app.root, actor: "test-agent", port: 0 });
-  t.after(() => server.close());
+  fixtureCleanup(t, () => server.close());
   const calls: { path: string; bytes: number; body: string }[] = [];
-  const proxy = createServer(async (req, res) => {
-    const upstream = await fetch(`${server.url}${req.url}`);
+  const proxy = await httpProxy(t, async (req, res, signal) => {
+    const upstream = await fetch(`${server.url}${req.url}`, { signal });
     const body = await upstream.text();
     calls.push({ path: req.url!, bytes: Buffer.byteLength(body), body });
     res.writeHead(upstream.status, { "content-type": "application/json" });
     res.end(body);
   });
-  await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
-  t.after(
-    () =>
-      new Promise<void>((resolve, reject) =>
-        proxy.close((error) => (error ? reject(error) : resolve())),
-      ),
-  );
-  const address = proxy.address();
-  assert.ok(address && typeof address === "object");
-  const url = `http://127.0.0.1:${address.port}`;
   const remote = <T = unknown>(args: (string | number)[]) =>
-    app.run<T>(["--server-url", url, ...args]);
+    app.run<T>(["--server-url", proxy.url, ...args]);
   for (const args of [
     ["product", "validate"],
     ["product", "lint", "--id", app.implementation.key],

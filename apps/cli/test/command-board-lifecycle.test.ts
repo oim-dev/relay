@@ -325,7 +325,7 @@ for (const mode of ["local", "http", "workspace"] as const)
           );
         }
         const server = await httpServer(t, serverRoot);
-        const proxy = await httpProxy(t, async (request, response) => {
+        const proxy = await httpProxy(t, async (request, response, signal) => {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
           const body = Buffer.concat(chunks).toString();
@@ -335,6 +335,7 @@ for (const mode of ["local", "http", "workspace"] as const)
             ...(body ? { body: JSON.parse(body) } : {}),
           });
           const upstream = await fetch(`${server.url}${request.url}`, {
+            signal,
             method: request.method!,
             ...(body ? { body, headers: { "content-type": "application/json" } } : {}),
           });

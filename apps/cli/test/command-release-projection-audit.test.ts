@@ -190,11 +190,12 @@ test(
       );
     const server = await httpServer(t, root);
     const requests: Array<{ method: string; path: string; body?: unknown; bytes: number }> = [];
-    const proxy = await httpProxy(t, async (request, response) => {
+    const proxy = await httpProxy(t, async (request, response, signal) => {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body = Buffer.concat(chunks);
       const upstream = await fetch(`${server.url}${request.url}`, {
+        signal,
         method: request.method ?? "GET",
         headers: { "content-type": "application/json" },
         ...(body.length ? { body } : {}),

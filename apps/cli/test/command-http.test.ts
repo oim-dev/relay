@@ -31,9 +31,10 @@ test("workspace remove отсутствующего имени: нейтраль
   };
   const files = await snapshot();
   const requests: string[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     requests.push(`${request.method} ${request.url}`);
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
     });
     const body = await upstream.text();
@@ -363,13 +364,14 @@ test("HTTP повтор одинакового комментария: два PO
   const before = successful(await app.run<any>(["task", "get", "PRODUCT-1"])).data;
   const server = await httpServer(t, app.root);
   const writes: Array<{ path: string; body: unknown }> = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
     if (request.method === "POST")
       writes.push({ path: request.url!, body: JSON.parse(body.toString()) });
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
       headers: { "content-type": "application/json" },
       ...(body.length ? { body } : {}),
@@ -594,9 +596,10 @@ test("HTTP product overview --metric: продолжение, VERSION_CONFLICT �
 
   // Прежний сервер без relay-overview-metrics-v1: детализация диагностируется до запроса.
   const requests: string[] = [];
-  const legacy = await httpProxy(t, async (request, response) => {
+  const legacy = await httpProxy(t, async (request, response, signal) => {
     requests.push(request.url!);
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
     });
     const body = await upstream.text();

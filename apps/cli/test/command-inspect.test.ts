@@ -201,11 +201,12 @@ for (const transport of ["local", "HTTP", "workspace"] as const) {
           );
         }
         const server = await httpServer(t, cwd);
-        const proxy = await httpProxy(t, async (request, response) => {
+        const proxy = await httpProxy(t, async (request, response, signal) => {
           requests.push(`${request.method} ${request.url}`);
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
           const upstream = await fetch(`${server.url}${request.url}`, {
+            signal,
             method: request.method ?? "GET",
             headers: { "content-type": "application/json" },
             ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),

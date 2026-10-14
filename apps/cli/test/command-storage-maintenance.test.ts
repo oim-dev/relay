@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createServer } from "node:http";
-import { once } from "node:events";
 import { lstat, mkdir, readFile, readdir, readlink, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +11,7 @@ import {
   storageStatusSchema,
 } from "@relay/contracts/storage-maintenance";
 import { fixture, invoke, invokeRaw, successful, failed, tempDirectory } from "./helpers/cli.js";
+import { httpProxy } from "./helpers/http.js";
 import { restoreFixtureTree } from "../../../packages/core/test/fixtures/data-migrations/restore-tree.mjs";
 
 const FIXTURES = fileURLToPath(
@@ -57,16 +56,11 @@ async function editJson(path: string, change: (value: Record<string, unknown>) =
 /** Server-заглушка: любой запрос считается нарушением «без сетевого запроса». */
 async function countingServer(t: TestContext) {
   let requests = 0;
-  const server = createServer((_request, response) => {
+  const server = await httpProxy(t, async (_request, response) => {
     requests++;
     response.writeHead(500).end();
   });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  t.after(() => new Promise((resolve) => server.close(resolve)));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
-  return { url: `http://127.0.0.1:${address.port}`, requests: () => requests };
+  return { url: server.url, requests: () => requests };
 }
 
 const human = { env: { FORCE_COLOR: "1", NO_COLOR: undefined, COLUMNS: "80" } };
