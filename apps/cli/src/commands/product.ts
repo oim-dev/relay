@@ -241,7 +241,19 @@ async function readFields(
   const fields: Record<string, unknown> = { kind, ...text };
   if (relations !== undefined) {
     try {
-      fields.relations = JSON.parse(relations);
+      const parsed: unknown = JSON.parse(relations);
+      // В CLI пояснение необязательно; Backend получает строку. Явные неверные значения
+      // и остальные поля не исправляем: их проверяет общая предметная схема.
+      fields.relations = Array.isArray(parsed)
+        ? parsed.map((relation: unknown) =>
+            typeof relation === "object" &&
+            relation !== null &&
+            !Array.isArray(relation) &&
+            !Object.hasOwn(relation, "description")
+              ? { ...relation, description: "" }
+              : relation,
+          )
+        : parsed;
     } catch {
       throw new AppError(
         "INVALID_JSON",

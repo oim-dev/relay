@@ -69,6 +69,93 @@ function commands(stdout: string): string[] {
 }
 
 for (const transport of ["local", "HTTP"] as const) {
+  test(`document ${transport}: необязательное пояснение relations через inline/file/stdin`, async (t) => {
+    const app = await fixture(t);
+    const globals =
+      transport === "HTTP" ? ["--server-url", (await httpServer(t, app.root)).url] : ["--local"];
+    const run = <T = unknown>(args: Array<string | number>, options?: RunOptions) =>
+      invoke<T>(app.root, [...globals, ...args], options);
+    const feature = successful(
+      await run<EntitySaved>([
+        "feature",
+        "create",
+        "--name",
+        "Цель без пояснения",
+        "--description",
+        "Общее требование",
+      ]),
+    ).data;
+    const relations = [
+      { target: feature.ref, type: "documents" },
+      { target: feature.ref, type: "references", description: "" },
+    ];
+    const expected = relations.map((relation) => ({ ...relation, description: "" }));
+    const path = join(app.root, "необязательные пояснения.json");
+    const json = JSON.stringify(relations);
+    await writeFile(path, json);
+    for (const [source, args, options] of [
+      ["inline", ["--relations", json], undefined],
+      ["file", ["--relations-file", path], undefined],
+      ["stdin", ["--relations-file", "-"], { input: json }],
+    ] as const) {
+      const saved = successful(
+        await run<EntitySaved>(
+          ["document", "create", "--name", source, "--body", "Исходное содержание", ...args],
+          options,
+        ),
+      ).data;
+      const read = async () =>
+        successful(await run<EntityDetail>(["document", "get", saved.key])).data;
+      const created = await read();
+      assert.equal(created.revision, 1);
+      assert.equal(created.data.kind, "document");
+      if (created.data.kind !== "document") return;
+      assert.deepEqual(created.data.relations, expected);
+      successful(
+        await run(
+          [
+            "document",
+            "update",
+            saved.key,
+            "--if-revision",
+            1,
+            "--body",
+            "Обновлённое содержание",
+            ...args,
+          ],
+          options,
+        ),
+      );
+      const updated = await read();
+      assert.equal(updated.revision, 2);
+      assert.equal(updated.data.kind, "document");
+      if (updated.data.kind !== "document") return;
+      assert.equal(updated.data.body, "Обновлённое содержание");
+      assert.deepEqual(updated.data.relations, expected);
+      assert.deepEqual(
+        successful(await app.run<EntityDetail>(["--local", "document", "get", saved.key])).data,
+        updated,
+      );
+      for (const description of [null, 17]) {
+        failed(
+          await run([
+            "document",
+            "update",
+            saved.key,
+            "--if-revision",
+            2,
+            "--body",
+            "Не сохранять",
+            "--relations",
+            JSON.stringify([{ ...relations[0], description }]),
+          ]),
+          "VALIDATION_ERROR",
+        );
+        assert.deepEqual(await read(), updated);
+      }
+    }
+  });
+
   test(`document ${transport}: атомарный JSON-набор, общий preflight, ошибки без частичной записи`, async (t) => {
     const app = await fixture(t);
     const posts: { path: string; body: Record<string, unknown> }[] = [];

@@ -737,7 +737,8 @@ Relations — полный JSON-массив современных отноше
 
 Замените ID фактическим постоянным ID из `inspect resolve FEATURE-1`; читаемый ключ
 не является ID этого поля. Type — `documents` или `references`, description —
-необязательное Markdown-пояснение. `--relations-file ./relations.json` читает UTF-8,
+необязательное Markdown-пояснение: при отсутствии CLI передаёт пустую строку.
+Явные `null` и нестроковые значения недопустимы. `--relations-file ./relations.json` читает UTF-8,
 `--relations-file -` — stdin; inline-альтернатива — `--relations '<JSON-массив>'`.
 Эти источники и `--clear-relations` несовместимы. `[]` явно очищает современные отношения.
 Все источники summary/body/relations проверяются вместе: во всей команде допустим
