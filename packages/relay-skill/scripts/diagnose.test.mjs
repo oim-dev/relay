@@ -24,6 +24,7 @@ test("скрипт из поставки работает отдельно бе�
 });
 
 async function fixture(t) {
+  await mkdir(join(repoRoot, ".artifacts"), { recursive: true });
   const directory = await mkdtemp(join(repoRoot, ".artifacts/diagnose-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   return directory;

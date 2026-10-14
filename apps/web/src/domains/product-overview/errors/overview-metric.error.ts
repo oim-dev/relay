@@ -25,8 +25,11 @@ export type OverviewMetricErrorDetails =
 class OverviewMetricDomainError extends Error {
   readonly name = "OverviewMetricDomainError";
 
-  constructor(readonly details: OverviewMetricErrorDetails) {
-    super(`product-overview-metric:${details.code}`);
+  constructor(
+    readonly details: OverviewMetricErrorDetails,
+    options?: ErrorOptions,
+  ) {
+    super(`product-overview-metric:${details.code}`, options);
   }
 }
 
@@ -53,11 +56,14 @@ export const createMetricProjectUnavailableError = (): GetOverviewMetricError =>
   new OverviewMetricDomainError({ code: OVERVIEW_METRIC_ERROR_CODE.PROJECT_UNAVAILABLE });
 
 /** Сервер не смог прочитать хранилище проекта. */
-export const createMetricStorageFailureError = (message: string): GetOverviewMetricError =>
-  new OverviewMetricDomainError({
-    code: OVERVIEW_METRIC_ERROR_CODE.STORAGE_FAILURE,
-    payload: { message },
-  });
+export const createMetricStorageFailureError = (
+  message: string,
+  cause?: unknown,
+): GetOverviewMetricError =>
+  new OverviewMetricDomainError(
+    { code: OVERVIEW_METRIC_ERROR_CODE.STORAGE_FAILURE, payload: { message } },
+    { cause },
+  );
 
 /** Ответ сервера не соответствует контракту; его нельзя показывать пустым списком. */
 export const createMetricInvalidResponseError = (): GetOverviewMetricError =>

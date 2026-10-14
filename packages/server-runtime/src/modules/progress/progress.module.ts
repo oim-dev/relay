@@ -4,6 +4,7 @@ import { success } from "@relay/contracts";
 import { progressQuerySchema, progressPageQuerySchema } from "@relay/contracts/progress";
 import type { ProgressQuery, ProgressPageQuery } from "@relay/contracts/progress";
 import { ProgressService } from "@relay/core/application/progress/service";
+import { taskDependenciesQuerySchema, type TaskDependenciesQuery } from "@relay/contracts/progress";
 import { ApiEndpoint } from "../../openapi/endpoint.js";
 import { ZodValidationPipe } from "../../common/validation.js";
 import { WorkspaceService } from "../workspace/workspace.module.js";
@@ -12,6 +13,19 @@ import { WorkspaceService } from "../workspace/workspace.module.js";
 @Controller("progress")
 class ProgressController {
   constructor(@Inject(WorkspaceService) private readonly workspace: WorkspaceService) {}
+
+  @Get("task/dependencies")
+  @ApiEndpoint({
+    id: "getTaskDependencies",
+    summary: "Страница прямых зависимостей задачи без полного прогресса продукта",
+    response: "TaskDependenciesPage",
+    query: "TaskDependenciesQuery",
+  })
+  async dependencies(
+    @Query(new ZodValidationPipe(taskDependenciesQuerySchema)) query: TaskDependenciesQuery,
+  ) {
+    return success(await new ProgressService(await this.workspace.open()).taskDependencies(query));
+  }
 
   @Get("work-plan")
   @ApiEndpoint({

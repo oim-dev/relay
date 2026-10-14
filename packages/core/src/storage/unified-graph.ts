@@ -11,7 +11,12 @@ import { graphDigest, graphShard } from "./graph-format.js";
 import type { GraphSummary } from "./graph-format.js";
 import { invariant } from "../shared/errors.js";
 import { digest } from "./entity-store/format.js";
-import { readOwnedEntry, publicRelation, writeOwnedRelations } from "./entity-store/relations.js";
+import {
+  readOwned,
+  readOwnedEntry,
+  publicRelation,
+  writeOwnedRelations,
+} from "./entity-store/relations.js";
 import { session, json } from "./unified-adapter.js";
 import { fullContextVersion } from "./entity-store/context.js";
 
@@ -31,8 +36,36 @@ const snapshots = new WeakMap<GraphSnapshot, Map<string, z.infer<typeof indexedE
 export async function openUnifiedGraph(workspace: Workspace): Promise<GraphSnapshot> {
   const tx = session(workspace);
   const records = new Map(
-    (await tx.indexEntries("edges")).map(([id, value]) => [id, indexedEdgeSchema.parse(value)]),
+    (await tx.indexEntries("edges")).map(([id, value]) => {
+      const entry = indexedEdgeSchema.parse(value);
+      invariant(
+        entry.id === id,
+        "STORAGE_INDEX_CORRUPT",
+        "ID отношения не соответствует индексу",
+        5,
+      );
+      return [id, entry];
+    }),
   );
+  // Даже одновременная потеря edges и adjacency не превращает сохранённые связи
+  // в пустой граф. Проверка файлов нужна только при пустом индексе рёбер; обычная
+  // страница открывает ниже лишь выбранные отношения. Пустые наборы допустимы.
+  if (!records.size)
+    for (const [path] of await tx.indexEntries("file-hashes")) {
+      const match = /^relations\/([^/]+)\/([^/]+)\.json$/.exec(path);
+      if (!match) continue;
+      const definition = tx.store.registry
+        .definitions()
+        .find((entry) => entry.collection === match[1]);
+      invariant(definition, "STORAGE_INDEX_CORRUPT", "Неизвестный владелец отношений", 5);
+      const owner = { kind: definition.kind, id: match[2]! };
+      invariant(
+        (await readOwned(tx, owner)).entries.length === 0,
+        "STORAGE_INDEX_CORRUPT",
+        "Индекс рёбер потерян при наличии сохранённых отношений",
+        5,
+      );
+    }
   const summaries: GraphSummary[] = [...records.values()].map((entry) => ({
     id: entry.id,
     type: entry.type,

@@ -24,7 +24,7 @@ import { GraphRepository } from "../../storage/graph.js";
 import { graphDigest } from "../../storage/graph-format.js";
 import type { GraphCurrent, GraphSummary } from "../../storage/graph-format.js";
 import type { Workspace } from "../../storage/workspace.js";
-import { projectGraphCatalog } from "./catalog.js";
+import { indexedProjectGraphCatalog, projectGraphCatalog } from "./catalog.js";
 import type { GraphCatalogProvider, GraphCatalog } from "./catalog.js";
 import { resolveAddress } from "../entities/resolver.js";
 import { AppError } from "../../shared/errors.js";
@@ -37,6 +37,7 @@ import { refreshEntityCards } from "../entities/storage-projection.js";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { storageCardSchema } from "@relay/contracts/storage";
 
 const versions = new Map<string, string>();
 const contextReaders = new Map<string, FullContextReader>();
@@ -46,16 +47,61 @@ const versionOf = (catalogHash: string, fingerprint: string) =>
 /** Универсальные отношения: адресный индекс отделяет обход от чтения Markdown и истории. */
 export class GraphService {
   readonly repository: GraphRepository;
+  readonly catalog: GraphCatalogProvider;
+  private readonly mutationCatalog: GraphCatalogProvider;
   constructor(
     readonly workspace: Workspace,
-    readonly catalog: GraphCatalogProvider = () => projectGraphCatalog(workspace),
+    catalog?: GraphCatalogProvider,
     readonly validateMutation?: (catalog: GraphCatalog, edges: readonly GraphEdge[]) => void,
   ) {
     this.repository = new GraphRepository(workspace);
+    this.catalog = catalog ?? (() => indexedProjectGraphCatalog(workspace));
+    // Пользовательский источник остаётся владельцем обеих операций. Только стандартный
+    // каталог разделяет индексное чтение и прежнюю полную проверку перед записью.
+    this.mutationCatalog = catalog ?? (() => projectGraphCatalog(workspace));
   }
 
-  private async snapshot(assertOwned: () => void) {
-    const source = await this.catalog();
+  /**
+   * Прежние адреса этапов плана не входят в каталог сущностей и не разрешаются как цель
+   * новой связи, но остаются концами сохранённых связей (например, прикреплений документов).
+   * Узел такого конца берётся из карточки записи совместимости, чтобы связь была видна.
+   */
+  private async addRelocatedEndpoints(
+    nodes: z.infer<typeof graphNodeSchema>[],
+    active: readonly Pick<GraphSummary, "from" | "to">[],
+  ): Promise<void> {
+    const session = this.workspace.storageSession;
+    if (!session) return;
+    const known = new Set(nodes.map((node) => entityAddress(node.ref)));
+    const relocated = new Set(
+      session.store.registry
+        .definitions()
+        .filter((definition) => definition.relocation)
+        .map((definition) => definition.kind),
+    );
+    for (const edge of active)
+      for (const ref of [edge.from, edge.to]) {
+        const address = entityAddress(ref);
+        if (known.has(address) || !relocated.has(ref.kind)) continue;
+        const raw = await session.indexGet("cards", address);
+        if (raw === undefined) continue;
+        const card = storageCardSchema.parse(raw);
+        nodes.push(
+          graphNodeSchema.parse({
+            ref: card.ref,
+            key: card.key,
+            title: card.title,
+            revision: card.revision,
+            status: card.status,
+          }),
+        );
+        known.add(address);
+      }
+    nodes.sort((a, b) => entityAddress(a.ref).localeCompare(entityAddress(b.ref)));
+  }
+
+  private async snapshot(assertOwned: () => void, purpose: "read" | "mutation" = "read") {
+    const source = await (purpose === "mutation" ? this.mutationCatalog() : this.catalog());
     const catalog = {
       nodes: source.nodes
         .map((node) => graphNodeSchema.parse(node))
@@ -66,6 +112,7 @@ export class GraphService {
       ...node,
       aliases: source.aliases?.[entityAddress(node.ref)] ?? [],
     }));
+    await this.addRelocatedEndpoints(catalog.nodes, store.index.active);
     const catalogHash = graphDigest({
       ...catalog,
       ...(source.aliases ? { aliases: source.aliases } : {}),
@@ -91,7 +138,7 @@ export class GraphService {
       "Повтор адреса сущности в каталоге",
       5,
     );
-    if (versions.get(this.repository.root) !== version) {
+    if (this.workspace.storageSession || versions.get(this.repository.root) !== version) {
       const ids = new Set<string>();
       for (const edge of store.index.active) {
         invariant(!ids.has(edge.id), "INVALID_DATA", "Повтор ID отношения", 5);
@@ -106,6 +153,35 @@ export class GraphService {
       versions.set(this.repository.root, version);
       if (versions.size > 8) versions.delete(versions.keys().next().value!);
     }
+    if (this.workspace.storageSession) {
+      // Не подменяем потерянную смежность пустым окружением. Сверяем компактные
+      // индексы, не открывая содержание соседей или всех сохранённых отношений.
+      const expected = new Map<string, Set<string>>();
+      for (const edge of store.index.active)
+        for (const ref of [edge.from, edge.to]) {
+          const address = entityAddress(ref);
+          const ids = expected.get(address) ?? new Set<string>();
+          ids.add(edge.id);
+          expected.set(address, ids);
+        }
+      const session = this.workspace.storageSession;
+      const addresses = new Set([
+        ...expected.keys(),
+        ...(await session.indexEntries("adjacency")).map(([address]) => address),
+      ]);
+      for (const address of addresses) {
+        const ids = await session.postings("adjacency", address);
+        const wanted = expected.get(address) ?? new Set<string>();
+        invariant(
+          ids.length === wanted.size &&
+            new Set(ids).size === ids.length &&
+            ids.every((id) => wanted.has(id)),
+          "STORAGE_INDEX_CORRUPT",
+          `Индекс смежности не соответствует отношениям ${address}`,
+          5,
+        );
+      }
+    }
     return { catalog, catalogHash, store, version, addresses, references };
   }
 
@@ -119,8 +195,15 @@ export class GraphService {
         "Граф изменился. Начните чтение с первой страницы.",
         4,
       );
+      // Полный адрес прежнего этапа открывает его связи для чтения; ключ и ID без вида —
+      // нет: обычное разрешение адресов не выдаёт записи совместимости.
+      const relocated = catalog.nodes.find((node) => entityAddress(node.ref) === query.root);
       const root =
-        query.root === undefined ? undefined : resolveAddress(references, query.root).ref;
+        query.root === undefined
+          ? undefined
+          : relocated && !references.some((node) => entityAddress(node.ref) === query.root)
+            ? relocated.ref
+            : resolveAddress(references, query.root).ref;
       const byAddress = new Map(catalog.nodes.map((node) => [entityAddress(node.ref), node]));
       if (root)
         invariant(
@@ -297,8 +380,10 @@ export class GraphService {
           return receipt.result;
         }
       }
-      const { catalog, catalogHash, store, version, addresses, references } =
-        await this.snapshot(assertOwned);
+      const { catalog, catalogHash, store, version, addresses, references } = await this.snapshot(
+        assertOwned,
+        "mutation",
+      );
       invariant(
         !store.legacy,
         "GRAPH_MIGRATION_REQUIRED",

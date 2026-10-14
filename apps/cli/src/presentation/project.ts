@@ -1,16 +1,25 @@
 import type { Config } from "@relay/core/domain/config";
-import type { RelayProject, ServerContextResponse } from "@relay/contracts";
+import type { ServerContextResponse } from "@relay/contracts";
+import type {
+  ProjectRegistrationReceipt,
+  ProjectUnregistrationReceipt,
+} from "@relay/contracts/server-context";
 import type { EntityDetail, EntitySaved } from "@relay/contracts/entities";
+import { defaultDocumentSections } from "@relay/contracts/entities";
+import type { ProjectSettings } from "@relay/contracts/entities/project-settings";
 import { defaultTextOptions, type TextOptions } from "./theme.js";
 import { safeText } from "./safe.js";
 import { section, table, wrap } from "./layout.js";
-import { cardText, listText, receiptText, type OutputField } from "./common.js";
+import { cardText, listText, receiptText, type OutputField, type OutputCommand } from "./common.js";
 import { shellCommand } from "../command-kit.js";
+import type { ConnectionInfo } from "../backend/connect.js";
 
 export function initializedText(
   configPath: string,
   storageDir: string,
   options: TextOptions,
+  nextCommand: string,
+  readCommand: string,
 ): string {
   return receiptText(
     {
@@ -21,17 +30,12 @@ export function initializedText(
       ],
       commands: [
         {
+          label: "Проверить созданный проект и пути",
+          command: readCommand,
+        },
+        {
           label: "Следующий шаг: подготовить паспорт продукта",
-          command: shellCommand([
-            "npx",
-            "@oim-dev/relay-cli",
-            "--local",
-            "--config",
-            configPath,
-            "product",
-            "create",
-            "--help",
-          ]),
+          command: nextCommand,
         },
       ],
     },
@@ -44,16 +48,19 @@ export function configText(
   configPath: string,
   root: string,
   options: TextOptions,
-  connection?: string,
+  connection?: ConnectionInfo,
   readCommand?: string,
 ): string {
+  const client = connection?.clientConfig;
+  const http = connection?.transport === "http";
+  const separateClient = client && client.path !== configPath;
   return cardText(
     {
       title: `Конфигурация — ${config.projectSettings?.entityKey ?? "PROJECT"} — ${config.projectSettings?.name ?? "проект"}`,
       fields: [
         ["Ревизия проекта", config.projectSettings?.revision],
         ["Slug", config.projectSettings?.slug],
-        ["ID проекта", config.projectId],
+        ["ID проекта", connection?.projectId ?? config.projectId],
         ["Версия конфигурации", config.version],
       ],
       sections: [
@@ -63,9 +70,43 @@ export function configText(
             {
               title: "",
               fields: [
-                ["Текущий доступ", connection],
-                ["Конфигурация", configPath],
-                ["Хранилище", root],
+                [
+                  "Текущий доступ",
+                  http ? `HTTP: ${connection.serverUrl}` : "Прямой Core (local)",
+                  "opaque",
+                ],
+                [
+                  "Источник URL",
+                  connection?.serverUrlSource
+                    ? {
+                        flag: "--server-url",
+                        env: "RELAY_SERVER_URL",
+                        config: `${connection.serverUrlConfigField} ${client?.mode === "workspace" ? "реестра" : "конфига"} клиента`,
+                      }[connection.serverUrlSource]
+                    : undefined,
+                ],
+                [
+                  "Выбор конфига клиента",
+                  client
+                    ? {
+                        flag: "--config",
+                        env: "RELAY_CONFIG",
+                        discovered: "поиск вверх от cwd",
+                      }[client.source]
+                    : "без локального конфига",
+                ],
+                ["Режим конфига клиента", client?.mode],
+                ...(separateClient
+                  ? [
+                      [
+                        client.mode === "workspace" ? "Реестр клиента" : "Конфиг клиента",
+                        client.path,
+                        "opaque",
+                      ] as OutputField,
+                    ]
+                  : []),
+                [http ? "Конфиг проекта на сервере" : "Конфигурация", configPath, "opaque"],
+                [http ? "Хранилище на сервере" : "Хранилище", root, "opaque"],
                 ["URL в конфиге", config.server.url],
                 ["Порт REST в конфиге", config.server.port],
                 ["Порт MCP в конфиге", config.mcp?.port],
@@ -117,10 +158,55 @@ export function configText(
   );
 }
 
+/** Контекст отказа init приходит из Core; машинная причина остаётся в исходном details. */
+export function initializationBlockedText(
+  message: string,
+  configPath: string,
+  dataRoot: string | undefined,
+  readCommand: string,
+  options: TextOptions,
+  diagnostic = false,
+  paths: string[] = [],
+): string {
+  return cardText(
+    {
+      title: message,
+      fields: [
+        ["Конфигурация", configPath, "opaque"],
+        ["Хранилище", dataRoot, "opaque"],
+      ],
+      sections: diagnostic
+        ? [
+            {
+              title: "Обнаруженные пути относительно хранилища",
+              body: paths.map((path) => `- ${safeText(path)}`).join("\n"),
+            },
+            {
+              title: "Дальнейшие действия",
+              body: wrap(
+                "Не повторяйте init. Остановите писателей и сохраните копию оставшихся файлов. Проверьте состояние; при утрате конфига или storage.json диагностика тоже может отказать. Восстановите отсутствующие файлы из проверенной копии, не создавайте новую базу поверх остатков.",
+                options.width,
+              ),
+            },
+          ]
+        : [],
+      commands: [
+        {
+          label: diagnostic
+            ? "Проверить хранилище без восстановления и записи"
+            : "Прочитать существующий проект и пути; повторный init не нужен",
+          command: readCommand,
+        },
+      ],
+    },
+    options,
+  );
+}
+
 export function projectText(
   entity: EntityDetail,
   options: TextOptions,
-  updateHelp?: string,
+  commands: OutputCommand[] = [],
 ): string {
   const project = entity.data;
   if (project.kind !== "project") return "Ответ не является проектом.";
@@ -129,31 +215,29 @@ export function projectText(
       title: `${entity.key} — ${project.name}`,
       fields: [
         ["Ревизия", entity.revision],
-        ["Slug", project.slug],
-        ["ID проекта", entity.ref.id],
+        ["Slug", project.slug, "opaque"],
+        ["ID проекта", entity.ref.id, "opaque"],
+        ["Разделов документов", (project.documentSections ?? defaultDocumentSections).length],
       ],
-      sections: [
-        {
-          title: "Разделы документов",
-          body:
-            project.documentSections === undefined
-              ? "Разделы явно не заданы; используются стандартные разделы библиотеки."
-              : listText(
-                  {
-                    title: "",
-                    items: project.documentSections.map((item) => ({
-                      key: item.id,
-                      title: item.name,
-                    })),
-                    emptyMessage: "Разделов нет.",
-                  },
-                  options,
-                ),
-        },
+      commands,
+    },
+    options,
+  );
+}
+
+export function projectSettingsSavedText(
+  settings: ProjectSettings,
+  readCommand: string,
+  options: TextOptions,
+): string {
+  return receiptText(
+    {
+      title: `✓ Настройки проекта сохранены: ${settings.name}`,
+      fields: [
+        ["Slug", settings.slug, "opaque"],
+        ["Ревизия", settings.revision],
       ],
-      commands: updateHelp
-        ? [{ label: "Изменить имя по прочитанной ревизии: справка", command: updateHelp }]
-        : [],
+      commands: [{ label: "Прочитать сохранённый проект", command: readCommand }],
     },
     options,
   );
@@ -180,31 +264,61 @@ export function projectSavedText(
 }
 
 export function registryProjectsText(
-  items: readonly RelayProject[],
+  catalog: ServerContextResponse,
   options: TextOptions,
-  connection?: { configPath: string; endpoint: string },
+  connection: {
+    configPath?: string | undefined;
+    endpoint: string;
+    command: (tokens: string[]) => string;
+  },
 ): string {
+  const available = catalog.projects.find((project) => project.available);
   return listText(
     {
-      title: "Проекты workspace",
-      filters: connection
-        ? [
-            ["Реестр", connection.configPath],
-            ["Сервер", connection.endpoint],
-          ]
-        : [],
-      items: items.map((item) => ({
+      title: catalog.mode === "workspace" ? "Проекты workspace" : "Проект local-сервера",
+      filters: [
+        ["Режим Server", catalog.mode],
+        ["Сервер", connection.endpoint, "opaque"],
+        [
+          catalog.mode === "workspace" ? "Реестр на сервере" : "Конфиг на сервере",
+          catalog.configPath,
+          "opaque",
+        ],
+        ...(connection.configPath && connection.configPath !== catalog.configPath
+          ? [["Конфиг клиента", connection.configPath, "opaque"] as OutputField]
+          : []),
+        ["Проект по умолчанию", catalog.defaultProject ?? "не выбран (нужен --project)", "opaque"],
+      ],
+      items: catalog.projects.map((item) => ({
         key: item.key,
         title: item.name,
         details: [
           `Состояние: ${item.available ? "доступен" : "недоступен"}`,
-          `Конфигурация: ${item.configPath}`,
+          ...(!item.available ? [`Конфигурация на сервере: ${item.configPath}`] : []),
           ...(item.error ? [`Причина: ${item.error}`] : []),
           ...(item.slug ? [`Slug: ${item.slug}`] : []),
           `ID${item.available ? "" : " регистрации (база не подтверждена)"}: ${item.id}`,
         ],
       })),
       emptyMessage: "Регистраций на этой странице нет.",
+      commands: available
+        ? [
+            {
+              label:
+                "Прочитать выбранный проект и пути; для другого замените --project на ключ, ID или slug",
+              command: connection.command(["--project", available.key, "config", "get"]),
+            },
+          ]
+        : catalog.mode === "workspace"
+          ? [
+              {
+                label: catalog.projects.length
+                  ? "Доступных проектов на странице нет; проверьте причины на стороне Server. Условия регистрации"
+                  : "Подключить существующий проект: условия регистрации",
+                command: connection.command(["workspace", "project", "add", "--help"]),
+              },
+            ]
+          : [],
     },
     options,
   );
@@ -268,6 +382,34 @@ export function registrySavedText(
       commands: readCommand
         ? [{ label: "Проверить каталог регистраций", command: readCommand }]
         : [],
+    },
+    options,
+  );
+}
+
+export function registryCompactSavedText(
+  receipt: ProjectRegistrationReceipt | ProjectUnregistrationReceipt,
+  options: TextOptions,
+  readCommand: string,
+): string {
+  return receiptText(
+    {
+      title: `${receipt.action === "register" ? "✓ Регистрация проекта сохранена" : receipt.removed ? "✓ Регистрация проекта удалена" : "Регистрация уже отсутствовала"}: ${receipt.key}`,
+      fields: [
+        ["Регистрация", receipt.key, "opaque"],
+        ["Реестр на сервере", receipt.configPath, "opaque"],
+        ...(receipt.action === "register"
+          ? [
+              ["Путь относительно реестра", receipt.entry.path, "opaque"] as OutputField,
+              ["Конфиг относительно path/реестра", receipt.entry.config, "opaque"] as OutputField,
+              [
+                "Данные",
+                "Не создавались и не переносились. Доступность проекта проверьте в каталоге.",
+              ] as OutputField,
+            ]
+          : [["Данные", "Файлы проекта сохранены."] as OutputField]),
+      ],
+      commands: [{ label: "Проверить каталог регистраций", command: readCommand }],
     },
     options,
   );

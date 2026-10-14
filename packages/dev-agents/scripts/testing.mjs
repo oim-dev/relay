@@ -15,6 +15,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sourceRoot } from "./lib.mjs";
 
+// Цвет внешнего терминала не меняет subprocess-тесты; явные overrides сохраняются.
+export function subprocessEnv(overrides = {}, inherited = process.env) {
+  const env = { ...inherited };
+  delete env.FORCE_COLOR;
+  delete env.NO_COLOR;
+  return { ...env, ...overrides };
+}
+
 /** Создаёт исходники только во временном каталоге; реальные роли проекта не читает. */
 export async function fixture(t) {
   let temporary = join(tmpdir(), "opencode");

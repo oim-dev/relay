@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { ProductRepository } from "@relay/core/storage/product";
 import { encodeProduct } from "@relay/core/storage/product-codec";
 import { lintProduct } from "@relay/core/application/product/content";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("проверка содержания выдаёт страницы предупреждений без изменения требований", async (t) => {
   const app = await fixture(t);
@@ -141,20 +142,32 @@ test("хранение продукта: Markdown по строкам, мигр�
   await rename(target, legacy);
   await writeFile(legacy, JSON.stringify(original));
   const before = await service.state();
-  assert.equal((await new StorageService(app.workspace).migrate()).migrated, true);
+  assert.equal(
+    (await new StorageService(app.workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    true,
+  );
   assert.deepEqual(await service.state(), before);
   assert.deepEqual(
     (await repository.all()).find((record) => record.id === saved.id),
     original,
   );
   assert.equal((await service.entity(saved.id)).revision, saved.revision);
-  assert.equal((await new StorageService(app.workspace).migrate()).migrated, false);
+  assert.equal(
+    (await new StorageService(app.workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    false,
+  );
   // Сбой между заменой формата и переносом: новый кодек ещё в плоском каталоге.
   await writeLegacyMigrationFixture(app.workspace);
   await rename(target, legacy);
   await writeFile(legacy, JSON.stringify(encodeProduct(original)));
   assert.deepEqual(await service.state(), before);
-  assert.equal((await new StorageService(app.workspace).migrate()).migrated, true);
+  assert.equal(
+    (await new StorageService(app.workspace).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    true,
+  );
   assert.deepEqual(await service.state(), before);
   // Дубликат не игнорируется и не перезаписывается миграцией.
   await writeLegacyMigrationFixture(app.workspace);
@@ -193,7 +206,7 @@ test("миграция продукта сохраняет порядок и ver
     before.records.map((record) => record.id),
     ["Zed00001", "alpha001"],
   );
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   assert.deepEqual(await service.state(), before);
 });
 

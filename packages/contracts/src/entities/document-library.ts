@@ -55,9 +55,12 @@ export const documentRelationSchema = z.strictObject({
           "task",
           "document",
           "work-plan",
+          "plan-stage",
           "release",
         ])
-        .describe("Вид связанной сущности проекта"),
+        .describe(
+          "Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены",
+        ),
       id: z
         .string()
         .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/)

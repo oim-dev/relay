@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Command } from "commander";
-import { graphMutationSchema } from "@relay/core/domain/entity-graph";
+import { entityAddress, graphMutationSchema } from "@relay/core/domain/entity-graph";
 import type { GraphQuery } from "@relay/core/domain/entity-graph";
 import { parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
@@ -9,6 +9,7 @@ import { author } from "../context.js";
 import type { Runtime } from "../context.js";
 import { integer } from "../options.js";
 import { graphText, fullContextText, graphSavedText } from "../presentation/graph.js";
+import { entityReadArgs } from "../presentation/entities.js";
 import {
   paging,
   offsetQuery,
@@ -74,7 +75,7 @@ export function registerGraph(program: Command, runtime: Runtime): void {
     name: "list",
     description: "Прочитать граф или выбранный подграф с продолжением",
     details:
-      "Узлы и рёбра имеют отдельные страницы одного снимка: --limit ограничивает каждый список. Курсор продолжает оба списка. Сводное количество — сумма узлов и рёбер, не число сущностей. Конец страниц не отменяет фильтры и границу глубины; для всей достижимой компоненты используйте context.",
+      "Узлы и рёбра имеют отдельные страницы одного снимка: --limit ограничивает каждый список. Курсор продолжает оба списка. Сводное количество — сумма узлов и рёбер, не число сущностей. Конец страниц не отменяет фильтры и границу глубины; для всей достижимой компоненты используйте context. Прямые get читают содержание узлов, переходы от границы продолжают ограниченный обход с теми же фильтрами. Направление ограничивает обход, а не удаляет обратные рёбра между выбранными узлами.",
     examples: [
       ["npx @oim-dev/relay-cli inspect graph list --root WEB-24 --limit 20", "Прочитать связи"],
     ],
@@ -127,6 +128,26 @@ export function registerGraph(program: Command, runtime: Runtime): void {
                     command: commandInvocation(context, ["inspect", "graph", "context", "--help"]),
                   },
                 ],
+            {
+              read: (node) => commandInvocation(context, entityReadArgs(node)),
+              boundary: (ref) =>
+                commandInvocation(context, [
+                  "inspect",
+                  "graph",
+                  "list",
+                  "--root",
+                  entityAddress(ref),
+                  "--depth",
+                  String(Math.max(1, Number(query.depth ?? 3))),
+                  "--direction",
+                  query.direction ?? "both",
+                  ...(query.type ? ["--type", query.type] : []),
+                  ...(query.profile ? ["--profile", query.profile] : []),
+                  ...(query.q !== undefined ? ["--q", query.q] : []),
+                  "--limit",
+                  String(pagination.limit),
+                ]),
+            },
           ),
       };
     },
@@ -148,23 +169,26 @@ export function registerGraph(program: Command, runtime: Runtime): void {
       const data = await context.backend.graph.context({ root: input.argument() });
       return {
         data,
-        text: (options) =>
-          fullContextText(data, options, [
-            {
-              label: "Прочитать пояснения отношений (ограниченный обзор)",
-              command: commandInvocation(context, [
-                "inspect",
-                "graph",
-                "list",
-                "--root",
-                input.argument(),
-              ]),
-            },
-            {
-              label: "Разрешить адрес корня и получить команду чтения содержания",
-              command: commandInvocation(context, ["inspect", "resolve", input.argument()]),
-            },
-          ]),
+        text: (options) => {
+          const sources = new Set(data.edges.map((edge) => entityAddress(edge.from)));
+          return fullContextText(data, options, [], {
+            read: (node) => commandInvocation(context, entityReadArgs(node)),
+            descriptions: (ref) =>
+              sources.has(entityAddress(ref))
+                ? commandInvocation(context, [
+                    "inspect",
+                    "graph",
+                    "list",
+                    "--root",
+                    entityAddress(ref),
+                    "--depth",
+                    "1",
+                    "--direction",
+                    "outgoing",
+                  ])
+                : undefined,
+          });
+        },
       };
     },
   });

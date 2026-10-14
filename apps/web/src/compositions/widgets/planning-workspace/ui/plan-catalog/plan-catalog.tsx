@@ -59,7 +59,10 @@ export const PlanCatalog = (props: PlanCatalogProps) => {
   const planItems = plansQuery.data?.items ?? [];
   const total = plansQuery.data?.total ?? 0;
   const hasError = isDefined(plansQuery.error);
-  const resultLabel = plansQuery.isLoading ? "Ищем…" : `Найдено: ${total}`;
+  // Отказ чтения без данных не выдаётся за пустой результат.
+  const resultLabel = plansQuery.isLoading
+    ? "Ищем…"
+    : `Найдено: ${isDefined(plansQuery.data) ? total : "—"}`;
   const hasFilters = query !== "" || state !== "all";
   const isEmpty = !plansQuery.isLoading && !hasError && isEmptyArray(planItems);
   const hasMore = isDefined(plansQuery.data?.nextOffset);

@@ -4,14 +4,15 @@ import type { Result, OutputFormat } from "./queries/result.js";
 import { actorSchema, parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { connectBackend } from "./backend/connect.js";
+import type { ConnectionInfo, ConnectOptions } from "./backend/connect.js";
 import type { Backend, WorkspaceInfo } from "./backend/types.js";
 import { InputReader } from "./input.js";
 import { printResult } from "./output.js";
 import type { OutputOptions } from "./output.js";
 import { terminalOptions } from "./terminal.js";
 import type { ColorMode } from "./terminal.js";
-import { cliConfiguration } from "./configuration.js";
-import { selectProject, serverAddress } from "@relay/project-runtime/config";
+import { commandInvocation } from "./command-kit.js";
+import type { RecoveryContext } from "./presentation/recovery.js";
 
 export interface GlobalOptions {
   config?: string;
@@ -30,12 +31,18 @@ export interface Runtime {
   env: NodeJS.ProcessEnv;
   output: OutputOptions;
   helpCommand?: string;
+  /**
+   * Вызов обслуживания с сохранением явного выбора базы и режима:
+   * подставляется вместо плейсхолдера `<config>` в подсказках Core только в text-выводе.
+   */
+  maintenanceCommand?: string;
+  recovery?: RecoveryContext;
 }
 export interface CommandContext {
   /** Версия, проверяемая Backend при продолжении offset-страницы. */
   offsetVersion?: string;
-  /** Фактически выбранный HTTP origin; не адрес сервера из удалённого конфига. */
-  connection?: string;
+  /** Подключение, разрешённое один раз до открытия Backend. */
+  connection?: ConnectionInfo;
   workspace: WorkspaceInfo;
   backend: Backend;
   runtime: Runtime;
@@ -62,6 +69,8 @@ export function outputOptions(
   return {
     format,
     text: terminalOptions(runtime.stdout, runtime.env),
+    ...(runtime.maintenanceCommand ? { maintenanceCommand: runtime.maintenanceCommand } : {}),
+    ...(runtime.recovery ? { recovery: runtime.recovery } : {}),
   };
 }
 
@@ -69,10 +78,11 @@ export function action(
   command: Command,
   runtime: Runtime,
   handler: (context: CommandContext) => Promise<Result>,
+  options: ConnectOptions = {},
 ): void {
   command.action(async () => {
     const globals = command.optsWithGlobals<GlobalOptions>();
-    const backend = await connectBackend(runtime, globals, command.name() === "migrate");
+    const { backend, connection } = await connectBackend(runtime, globals, options);
     const workspace = backend.workspace;
     const output = outputOptions(runtime, globals, workspace.config.output);
     runtime.output = output;
@@ -82,18 +92,9 @@ export function action(
       globals,
       output,
       runtime,
+      connection,
     };
-    if (backend.kind === "http") {
-      let url = globals.serverUrl ?? runtime.env.RELAY_SERVER_URL;
-      if (!url) {
-        const source = await cliConfiguration(runtime, globals);
-        url =
-          source.kind === "registry"
-            ? serverAddress(source)
-            : selectProject(source, globals.project).serverUrl;
-      }
-      if (url) context.connection = new URL(url).origin;
-    }
+    if (runtime.recovery) runtime.recovery.command = (args) => commandInvocation(context, args);
     let result: Result;
     try {
       result = await handler(context);

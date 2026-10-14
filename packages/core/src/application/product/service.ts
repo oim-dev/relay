@@ -24,10 +24,21 @@ import { readEntityCatalog, assertEntityKeyAvailable, resolveEntity } from "../e
 import { defaultDocumentSections } from "@relay/contracts/entities";
 import { saveDocumentWithLinks } from "../documents/link-workflow.js";
 import { syncProductRelations } from "../entities/owned-relations.js";
+import { productValidationSchema } from "@relay/contracts/product-query";
+import type { ProductValidation } from "@relay/contracts/product-query";
 
 /** Единая граница записи для Web, REST, CLI и MCP. */
 export class ProductService {
   constructor(readonly workspace: Workspace) {}
+
+  async validate(): Promise<ProductValidation> {
+    const state = await this.state();
+    return productValidationSchema.parse({
+      valid: true,
+      records: state.records.length,
+      version: state.version,
+    });
+  }
 
   async state(): Promise<ProductState> {
     return this.workspace.locked(async (assertOwned) => {
@@ -221,11 +232,19 @@ export class ProductService {
               (contract) =>
                 contract.featureId === entry.featureId && contract.scenarioId === entry.scenarioId,
             );
-            const preserveBasis = creatingImplementation
-              ? prior?.active === true
-              : command.fields.kind === "contract" &&
-                prior !== undefined &&
-                prior.id !== command.fields.contractId;
+            // Выбор прежнего вклада без изменения текста и ручной отметки не подтверждает
+            // заново изменившееся общее требование и не переписывает basis реализации.
+            const preserveBasis =
+              command.fields.kind === "scope" &&
+              prior &&
+              prior.description === entry.description &&
+              prior.status === entry.status
+                ? true
+                : creatingImplementation
+                  ? prior?.active === true
+                  : command.fields.kind === "contract" &&
+                    prior !== undefined &&
+                    prior.id !== command.fields.contractId;
             const contractId = prior?.id ?? shortId(occupied);
             occupied.add(contractId);
             return {
@@ -347,6 +366,21 @@ export class ProductService {
             "Раздел библиотеки не найден",
           );
         for (const relation of fields.relations ?? []) {
+          // Прежний адрес этапа плана — только чтение: сохранённая связь остаётся с тем же
+          // текстом, а новое прикрепление к этапу запрещено (этап — запись внутри плана).
+          if (relation.target.kind === "plan-stage") {
+            invariant(
+              prior?.relations?.some(
+                (link) =>
+                  link.target.kind === "plan-stage" &&
+                  link.target.id === relation.target.id &&
+                  link.type === relation.type,
+              ),
+              "INVALID_REFERENCE",
+              "Этап плана не является целью прикрепления; прикрепите документ к плану",
+            );
+            continue;
+          }
           const target = resolveEntity(catalog, `${relation.target.kind}:${relation.target.id}`);
           invariant(
             target.ref.id !== id || target.ref.kind !== "document",

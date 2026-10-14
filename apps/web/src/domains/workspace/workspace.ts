@@ -1,7 +1,7 @@
 import useSWR from "swr";
 import type { SWRResponse } from "swr";
 import { z } from "zod";
-import { tasksApi } from "infra/tasks-api";
+import { getProjectAvailabilityMessage, tasksApi } from "infra/tasks-api";
 
 const WORKSPACE_SCHEMA = z.object({
   mode: z.enum(["local", "workspace"]),
@@ -13,7 +13,8 @@ const WORKSPACE_SCHEMA = z.object({
       name: z.string(),
       slug: z.string().optional(),
       available: z.boolean(),
-      error: z.string().optional(),
+      /** Причина недоступности; несовместимое хранилище дополняется следующим шагом. */
+      error: z.string().transform(getProjectAvailabilityMessage).optional(),
     }),
   ),
 });

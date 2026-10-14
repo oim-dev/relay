@@ -1055,16 +1055,51 @@ test(
     const footer = human.stdout
       .split("\n")
       .filter((line) => line.startsWith("npx @oim-dev/relay-cli "));
-    assert.deepEqual(footer, [nextCommand.replace(" --format json", "")]);
-    const { stdout } = await promisify(execFile)("bash", [
-      "-c",
-      `set -- ${nextCommand.slice("npx @oim-dev/relay-cli ".length)}; printf '%s\\0' "$@"`,
+    const firstTask = quoted.data.items[0]!;
+    const quotedConfig = `'${config.replaceAll("'", "'\\''")}'`;
+    const expectedGet = `npx @oim-dev/relay-cli --local --config ${quotedConfig} task get ${firstTask.key}`;
+    const expectedNextCommand = nextCommand.replace(" --format json", "");
+    assert.deepEqual(footer, [expectedGet, expectedNextCommand]);
+    assert.doesNotMatch(human.stdout, /\u001b/);
+    for (const line of human.stdout.split("\n")) {
+      if (line.startsWith("npx @oim-dev/relay-cli ")) {
+        assert.ok(stringWidth(line) > 40, "Длинная команда не обрезана и не перенесена по ширине");
+      } else assert.ok(stringWidth(line.trimEnd()) <= 40, `Строка шире 40 колонок: ${line}`);
+    }
+    const shellArguments = async (command: string) => {
+      const { stdout, stderr } = await promisify(execFile)("bash", [
+        "--noprofile",
+        "--norc",
+        "-c",
+        `set -- ${command.slice("npx @oim-dev/relay-cli ".length)}; printf '%s\\0' "$@"`,
+      ]);
+      assert.equal(stderr, "");
+      const args = stdout.split("\0").filter(Boolean);
+      assert.equal(args[args.indexOf("--config") + 1], config);
+      return args;
+    };
+    const getArgs = await shellArguments(footer[0]!);
+    assert.deepEqual(getArgs, ["--local", "--config", config, "task", "get", firstTask.key]);
+    const opened = successful(await invoke<BoardTaskView>(app.root, getArgs));
+    assert.equal(opened.data.id, firstTask.id);
+    assert.equal(opened.data.key, firstTask.key);
+    assert.equal(opened.data.title, firstTask.title);
+    const nextArgs = await shellArguments(footer[1]!);
+    assert.deepEqual(nextArgs, [
+      "--local",
+      "--config",
+      config,
+      "task",
+      "list",
+      "--cursor",
+      quoted.meta!.page!.nextCursor,
     ]);
-    const args = stdout.split("\0").filter(Boolean);
-    assert.equal(args[args.indexOf("--config") + 1], config);
-    const replay = successful(await invoke<TaskPage>(app.root, args));
+    const replay = successful(await invoke<TaskPage>(app.root, nextArgs));
     assert.equal(replay.data.items.length, 1);
-    assert.notEqual(replay.data.items[0]!.id, quoted.data.items[0]!.id);
+    assert.notEqual(replay.data.items[0]!.id, firstTask.id);
+    assert.equal(replay.meta!.page!.count, 1);
+    assert.equal(replay.meta!.page!.total, 2);
+    assert.equal(replay.meta!.page!.nextCursor, null);
   },
 );
 

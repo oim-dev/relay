@@ -10,6 +10,15 @@ import { invariant } from "../../shared/errors.js";
 import { digest, keyHash, jsonValue } from "./format.js";
 const json = (value: unknown) => jsonValue(JSON.parse(JSON.stringify(value)));
 import type { StorageSession } from "./store.js";
+import { fileError } from "./diagnostics.js";
+
+function parseRelation<T>(schema: z.ZodType<T>, raw: unknown, path: string, ref: EntityRef): T {
+  try {
+    return schema.parse(raw);
+  } catch (error) {
+    throw fileError(error, path, ref);
+  }
+}
 
 const storedEdgeSchema = graphEdgeSchema.extend({
   historyCount: z.number().int().nonnegative().optional(),
@@ -68,13 +77,15 @@ export async function readOwned(session: StorageSession, owner: EntityRef, verif
       "STORAGE_INDEX_STALE",
       "Файл отношений изменён вне Core. Выполните storage reindex",
       4,
+      { path: `${base}.json`, ref: owner },
     );
-  const record = ownerSchema.parse(raw);
+  const record = parseRelation(ownerSchema, raw, `${base}.json`, owner);
   invariant(
     entityAddress(record.owner) === entityAddress(owner),
     "INVALID_DATA",
     "Неверный владелец набора связей",
     5,
+    { path: `${base}.json`, ref: owner },
   );
   const entries: Entry[] = [];
   const files: string[] = [];
@@ -89,8 +100,9 @@ export async function readOwned(session: StorageSession, owner: EntityRef, verif
           "STORAGE_INDEX_STALE",
           "Сегмент отношений изменён вне Core. Выполните storage reindex",
           4,
+          { path, ref: owner },
         );
-      const shard = shardSchema.parse(rawShard);
+      const shard = parseRelation(shardSchema, rawShard, path, owner);
       invariant(
         digest(json(shard)) === hash &&
           entityAddress(shard.owner) === entityAddress(owner) &&
@@ -98,6 +110,7 @@ export async function readOwned(session: StorageSession, owner: EntityRef, verif
         "INVALID_DATA",
         "Сегмент набора связей повреждён",
         5,
+        { path, ref: owner },
       );
       entries.push(...shard.entries);
       files.push(path);
@@ -107,6 +120,7 @@ export async function readOwned(session: StorageSession, owner: EntityRef, verif
     "INVALID_DATA",
     "Повтор ID в наборе связей",
     5,
+    { path: `${base}.json`, ref: owner },
   );
   return { entries, files };
 }
@@ -130,7 +144,7 @@ export async function readOwnedEntry(
     );
     return value;
   };
-  const record = ownerSchema.parse(await read(`${base}.json`));
+  const record = parseRelation(ownerSchema, await read(`${base}.json`), `${base}.json`, owner);
   invariant(
     entityAddress(record.owner) === entityAddress(owner),
     "INVALID_DATA",
@@ -157,7 +171,7 @@ export async function readOwnedEntry(
       "Повреждён сегмент отношений",
       5,
     );
-    const shard = shardSchema.parse(raw);
+    const shard = parseRelation(shardSchema, raw, `${base}/${prefix}.json`, owner);
     invariant(
       entityAddress(shard.owner) === entityAddress(owner) &&
         shard.entries.every((entry) => keyHash(entry.edge.id).startsWith(prefix)),
@@ -232,6 +246,15 @@ async function saveOwned(
     });
   }
   for (const path of previousFiles) if (!files.has(path)) await session.writeFile(path, null);
+}
+
+/**
+ * Непустые корни индексов, которые `indexEntry` создаёт для ребра: `edges` — всегда,
+ * `adjacency` — только для активного (неактивное снимается с соседства). Явная диагностика
+ * обслуживания выводит из этого обязательность корней; пустой корректный индекс не потерян.
+ */
+export function edgeIndexRoots(active: boolean): readonly string[] {
+  return active ? ["edges", "adjacency"] : ["edges"];
 }
 
 async function indexEntry(session: StorageSession, owner: EntityRef, entry: Entry) {

@@ -6,7 +6,8 @@
     "scripts/diagnose.mjs": "scripts/diagnose.mjs",
     "references/ORCHESTRATOR.md": "references/agent/ORCHESTRATOR.md",
     "references/WORKER.md": "references/agent/WORKER.md",
-    "references/EXAMPLES.md": "references/agent/EXAMPLES.md"
+    "references/EXAMPLES.md": "references/agent/EXAMPLES.md",
+    "references/MIGRATION.md": "references/agent/MIGRATION.md"
   },
   "documents": {
     "docs/README.md": "references/README.md",

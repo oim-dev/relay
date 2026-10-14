@@ -12,11 +12,14 @@ import type { ProgressQuery, ProgressPageQuery } from "@relay/contracts/progress
 import type { Workspace } from "../../storage/workspace.js";
 import { PlanningService } from "../planning/service.js";
 import { workPlanProgress } from "./planning.js";
-import { ReleasesService } from "../releases/service.js";
+import { releaseCompositionPage } from "../releases/model.js";
+import { planningRecord } from "../../storage/planning.js";
 import type { ProgressReason } from "@relay/contracts/progress";
 import { readPlanningState } from "../planning/model.js";
 import { AppError } from "../../shared/errors.js";
 import { readProgressSnapshot } from "./snapshot.js";
+import { taskDependencies } from "./dependencies.js";
+import type { TaskDependenciesQuery } from "@relay/contracts/progress";
 import {
   taskProgress,
   implementationProgress,
@@ -45,12 +48,15 @@ export class ProgressService {
   async workPlan(input: ProgressQuery) {
     return this.planningRead(() => workPlanProgress(this.workspace, input));
   }
+  async taskDependencies(input: TaskDependenciesQuery) {
+    return this.workspace.locked(() => taskDependencies(this.workspace, input));
+  }
   async release(input: ProgressQuery) {
     const query = progressQuerySchema.parse(input);
     return this.planningRead(async () => {
-      const service = new ReleasesService(this.workspace);
-      const release = await service.get(query.ref);
-      const composition = await service.composition(release.id, query);
+      const release = await planningRecord(this.workspace, query.ref, "release");
+      const current = await readPlanningState(this.workspace);
+      const composition = releaseCompositionPage(this.workspace, release, current, query);
       const entity = {
         kind: "release" as const,
         id: release.id,
@@ -58,7 +64,7 @@ export class ProgressService {
         title: release.title,
       };
       const reasons: ProgressReason[] = [];
-      if (release.readiness.ready !== release.readiness.total)
+      if (composition.readiness.ready !== composition.readiness.total)
         reasons.push({
           code: "PLAN_NOT_COMPLETED",
           source: entity,
@@ -66,7 +72,6 @@ export class ProgressService {
         });
       if (release.status === "cancelled")
         reasons.push({ code: "INACTIVE", source: entity, message: "Релиз отменён" });
-      const current = await readPlanningState(this.workspace);
       const plans = current.plans
         .filter((plan) => release.planIds.includes(plan.id))
         .map(current.summary);
@@ -90,7 +95,7 @@ export class ProgressService {
           release.status !== "cancelled" &&
           composition.readiness.ready === composition.readiness.total &&
           composition.readiness.total > 0,
-        readiness: release.readiness,
+        readiness: composition.readiness,
         plans: {
           total: composition.total,
           nextOffset: composition.nextOffset,

@@ -4,6 +4,7 @@ import { invariant } from "@relay/core/shared/errors";
 import { action } from "./context.js";
 import type { CommandContext, Runtime } from "./context.js";
 import { formatHelpExample } from "./help-example.js";
+import type { ConnectOptions } from "./backend/connect.js";
 
 export interface CommandHelp {
   name: string;
@@ -20,7 +21,7 @@ export interface CommandInput<Options> {
   optionalArgument(index?: number): string | undefined;
 }
 
-export interface CommandDefinition<Options> extends CommandHelp {
+export interface CommandDefinition<Options> extends CommandHelp, ConnectOptions {
   run: (context: CommandContext, input: CommandInput<Options>) => Promise<Result>;
 }
 
@@ -71,22 +72,31 @@ export function registerCommand<Options extends object = Record<string, never>>(
   definition: CommandDefinition<Options>,
 ): void {
   const command = createCommand(parent, definition);
-  action(command, runtime, (context) =>
-    definition.run(context, {
-      options: command.opts() as Options,
-      argument(index = 0) {
-        const value: unknown = command.processedArgs[index];
-        invariant(
-          typeof value === "string",
-          "INVALID_ARGUMENT",
-          `Отсутствует аргумент. Справка: ${commandPath(command)} --help`,
-        );
-        return value;
-      },
-      optionalArgument(index = 0) {
-        return command.processedArgs[index] as string | undefined;
-      },
-    }),
+  action(
+    command,
+    runtime,
+    (context) =>
+      definition.run(context, {
+        options: command.opts() as Options,
+        argument(index = 0) {
+          const value: unknown = command.processedArgs[index];
+          invariant(
+            typeof value === "string",
+            "INVALID_ARGUMENT",
+            `Отсутствует аргумент. Справка: ${commandPath(command)} --help`,
+          );
+          return value;
+        },
+        optionalArgument(index = 0) {
+          return command.processedArgs[index] as string | undefined;
+        },
+      }),
+    {
+      localOnly: definition.localOnly ?? false,
+      ...(definition.createLegacyDirectories === undefined
+        ? {}
+        : { createLegacyDirectories: definition.createLegacyDirectories }),
+    },
   );
 }
 

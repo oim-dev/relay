@@ -21,7 +21,9 @@ class ContextController {
     response: "ContextResponse",
   })
   async get(): Promise<ApiSuccess<ContextResponse>> {
-    return success(this.workspace.context(await this.workspace.open()));
+    return success(
+      this.workspace.context(await this.workspace.open({ createLegacyDirectories: false })),
+    );
   }
 
   @Get("settings")
@@ -31,7 +33,7 @@ class ContextController {
     response: "ProjectSettings",
   })
   async settings() {
-    const workspace = await this.workspace.open();
+    const workspace = await this.workspace.open({ createLegacyDirectories: false });
     return success(projectSettings(workspace.config, workspace.configPath));
   }
 

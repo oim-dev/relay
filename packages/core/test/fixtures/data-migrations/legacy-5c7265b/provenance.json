@@ -1,0 +1,59 @@
+{
+  "fixture": "legacy-5c7265b",
+  "commit": "5c7265b78725faf158d90a495f99715d7344005b",
+  "commitShort": "5c7265b",
+  "commitDate": "2026-09-22T15:29:50+03:00",
+  "commitSubject": "chore: черновая реализация документов",
+  "exactTag": null,
+  "firstContainingTag": "v0.6.1",
+  "layout": "legacy (до единого хранения), последний коммит перед 90d7b26",
+  "physicalFormat": null,
+  "generator": {
+    "profile": "legacy",
+    "script": "generators/generate-unified.mjs",
+    "cli": "node --conditions=tasks-source apps/cli/scripts/dev.mjs --local --format json (исходники того же SHA, pnpm install --frozen-lockfile)",
+    "deletion": "generators/fixture-delete.mts — EntityDeletionService того же SHA (в CLI версии нет команды удаления)",
+    "node": "v24.3.0",
+    "actorDefault": "fixture-author"
+  },
+  "entityKindsOfVersion": [
+    "project",
+    "product",
+    "feature",
+    "scenario",
+    "application",
+    "implementation",
+    "board",
+    "task",
+    "document"
+  ],
+  "tree": {
+    "bundle": {
+      "sha256": "9600a4955e953df91060bae3ff43c633e144046c4e73b266be401f7e3d97f754",
+      "bytes": 25040
+    },
+    "files": 148,
+    "directories": 94,
+    "emptyDirectories": [
+      ".relay/boards/.pending-applications",
+      ".relay/boards/infrastructure/tasks",
+      ".relay/product/.transactions",
+      ".relay/relations/transactions",
+      ".relay/task-activity/QtZuV5Mg/events",
+      ".relay/task-activity/QtZuV5Mg/summaries",
+      ".relay/tasks"
+    ],
+    "totalBytes": 131791,
+    "filesByTopLevel": {
+      ".relay/boards": 10,
+      ".relay/config.json": 1,
+      ".relay/entity-deletions": 4,
+      ".relay/product": 18,
+      ".relay/relations": 49,
+      ".relay/runtime": 1,
+      ".relay/task-activity": 65
+    },
+    "entityCollections": {},
+    "manifest": null
+  }
+}

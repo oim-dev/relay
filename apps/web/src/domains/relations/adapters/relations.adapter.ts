@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getProjectApi, ApiError } from "infra/tasks-api";
+import { getProjectApi, ApiError, getStorageFailureMessage } from "infra/tasks-api";
 import { RELATIONS_PAGE_SCHEMA, ENTITY_CONTEXT_SCHEMA } from "../types/relations.type";
 import type {
   EntityRef,
@@ -48,6 +48,8 @@ export const relationError = (error: unknown): Error => {
         "Восстановление остановлено из-за внешнего изменения файла. Сверьте файлы с журналом прерванной операции; повторное сохранение не исправит конфликт.",
       );
   }
+  const storageMessage = getStorageFailureMessage(error);
+  if (storageMessage !== null) return new Error(storageMessage, { cause: error });
   if (error instanceof ApiError && error.status === 409)
     return new Error(
       "Граф изменился. Обновите версию и повторите сохранение; введённые данные сохранены.",

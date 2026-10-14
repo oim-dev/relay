@@ -1,0 +1,428 @@
+{
+  "fixture": "physical2-v0.6.1-ec4a2cc",
+  "commit": "ec4a2cc940640739a9415f774a1a811378fb61d6",
+  "commitShort": "ec4a2cc",
+  "commitDate": "2026-09-26T09:00:43+03:00",
+  "commitSubject": "chore: подготовить первый ручной npm-релиз 0.6.1",
+  "exactTag": "v0.6.1",
+  "firstContainingTag": "v0.6.1",
+  "layout": "единое хранение, history/, вложенные stages (work-plan/release dataVersion 2)",
+  "physicalFormat": 2,
+  "generator": {
+    "profile": "nested",
+    "script": "generators/generate-unified.mjs",
+    "cli": "node --conditions=tasks-source apps/cli/scripts/dev.mjs --local --format json (исходники того же SHA, pnpm install --frozen-lockfile)",
+    "deletion": "generators/fixture-delete.mts — EntityDeletionService того же SHA (в CLI версии нет команды удаления)",
+    "node": "v24.3.0",
+    "actorDefault": "fixture-author"
+  },
+  "entityKindsOfVersion": [
+    "work-plan",
+    "release",
+    "project",
+    "product",
+    "feature",
+    "scenario",
+    "application",
+    "implementation",
+    "board",
+    "task",
+    "document"
+  ],
+  "tree": {
+    "bundle": {
+      "sha256": "0ed0278efd3480f974261bd3fbe93f37029faff534bb5f7895be901cc8a273b6",
+      "bytes": 118083
+    },
+    "files": 120,
+    "directories": 262,
+    "emptyDirectories": [
+      ".relay/.indexes/segments/01",
+      ".relay/.indexes/segments/02",
+      ".relay/.indexes/segments/04",
+      ".relay/.indexes/segments/06",
+      ".relay/.indexes/segments/07",
+      ".relay/.indexes/segments/08",
+      ".relay/.indexes/segments/09",
+      ".relay/.indexes/segments/0a",
+      ".relay/.indexes/segments/0b",
+      ".relay/.indexes/segments/0d",
+      ".relay/.indexes/segments/0e",
+      ".relay/.indexes/segments/10",
+      ".relay/.indexes/segments/11",
+      ".relay/.indexes/segments/12",
+      ".relay/.indexes/segments/13",
+      ".relay/.indexes/segments/14",
+      ".relay/.indexes/segments/15",
+      ".relay/.indexes/segments/16",
+      ".relay/.indexes/segments/17",
+      ".relay/.indexes/segments/1b",
+      ".relay/.indexes/segments/1f",
+      ".relay/.indexes/segments/21",
+      ".relay/.indexes/segments/22",
+      ".relay/.indexes/segments/23",
+      ".relay/.indexes/segments/24",
+      ".relay/.indexes/segments/25",
+      ".relay/.indexes/segments/26",
+      ".relay/.indexes/segments/27",
+      ".relay/.indexes/segments/28",
+      ".relay/.indexes/segments/29",
+      ".relay/.indexes/segments/2b",
+      ".relay/.indexes/segments/2c",
+      ".relay/.indexes/segments/2d",
+      ".relay/.indexes/segments/2f",
+      ".relay/.indexes/segments/31",
+      ".relay/.indexes/segments/32",
+      ".relay/.indexes/segments/33",
+      ".relay/.indexes/segments/34",
+      ".relay/.indexes/segments/36",
+      ".relay/.indexes/segments/37",
+      ".relay/.indexes/segments/38",
+      ".relay/.indexes/segments/39",
+      ".relay/.indexes/segments/3a",
+      ".relay/.indexes/segments/3b",
+      ".relay/.indexes/segments/3c",
+      ".relay/.indexes/segments/3d",
+      ".relay/.indexes/segments/3e",
+      ".relay/.indexes/segments/3f",
+      ".relay/.indexes/segments/40",
+      ".relay/.indexes/segments/41",
+      ".relay/.indexes/segments/42",
+      ".relay/.indexes/segments/43",
+      ".relay/.indexes/segments/44",
+      ".relay/.indexes/segments/45",
+      ".relay/.indexes/segments/46",
+      ".relay/.indexes/segments/49",
+      ".relay/.indexes/segments/4b",
+      ".relay/.indexes/segments/4e",
+      ".relay/.indexes/segments/4f",
+      ".relay/.indexes/segments/50",
+      ".relay/.indexes/segments/51",
+      ".relay/.indexes/segments/52",
+      ".relay/.indexes/segments/53",
+      ".relay/.indexes/segments/54",
+      ".relay/.indexes/segments/56",
+      ".relay/.indexes/segments/57",
+      ".relay/.indexes/segments/58",
+      ".relay/.indexes/segments/59",
+      ".relay/.indexes/segments/5a",
+      ".relay/.indexes/segments/5b",
+      ".relay/.indexes/segments/5d",
+      ".relay/.indexes/segments/5f",
+      ".relay/.indexes/segments/60",
+      ".relay/.indexes/segments/61",
+      ".relay/.indexes/segments/62",
+      ".relay/.indexes/segments/63",
+      ".relay/.indexes/segments/64",
+      ".relay/.indexes/segments/65",
+      ".relay/.indexes/segments/66",
+      ".relay/.indexes/segments/67",
+      ".relay/.indexes/segments/68",
+      ".relay/.indexes/segments/69",
+      ".relay/.indexes/segments/6a",
+      ".relay/.indexes/segments/6b",
+      ".relay/.indexes/segments/6c",
+      ".relay/.indexes/segments/6d",
+      ".relay/.indexes/segments/6e",
+      ".relay/.indexes/segments/6f",
+      ".relay/.indexes/segments/70",
+      ".relay/.indexes/segments/71",
+      ".relay/.indexes/segments/72",
+      ".relay/.indexes/segments/73",
+      ".relay/.indexes/segments/74",
+      ".relay/.indexes/segments/75",
+      ".relay/.indexes/segments/76",
+      ".relay/.indexes/segments/77",
+      ".relay/.indexes/segments/78",
+      ".relay/.indexes/segments/79",
+      ".relay/.indexes/segments/7a",
+      ".relay/.indexes/segments/7c",
+      ".relay/.indexes/segments/7d",
+      ".relay/.indexes/segments/7e",
+      ".relay/.indexes/segments/7f",
+      ".relay/.indexes/segments/80",
+      ".relay/.indexes/segments/81",
+      ".relay/.indexes/segments/82",
+      ".relay/.indexes/segments/83",
+      ".relay/.indexes/segments/84",
+      ".relay/.indexes/segments/85",
+      ".relay/.indexes/segments/86",
+      ".relay/.indexes/segments/87",
+      ".relay/.indexes/segments/88",
+      ".relay/.indexes/segments/8a",
+      ".relay/.indexes/segments/8b",
+      ".relay/.indexes/segments/8c",
+      ".relay/.indexes/segments/8f",
+      ".relay/.indexes/segments/90",
+      ".relay/.indexes/segments/92",
+      ".relay/.indexes/segments/93",
+      ".relay/.indexes/segments/94",
+      ".relay/.indexes/segments/95",
+      ".relay/.indexes/segments/96",
+      ".relay/.indexes/segments/97",
+      ".relay/.indexes/segments/98",
+      ".relay/.indexes/segments/99",
+      ".relay/.indexes/segments/9b",
+      ".relay/.indexes/segments/9d",
+      ".relay/.indexes/segments/9e",
+      ".relay/.indexes/segments/9f",
+      ".relay/.indexes/segments/a2",
+      ".relay/.indexes/segments/a3",
+      ".relay/.indexes/segments/a4",
+      ".relay/.indexes/segments/a5",
+      ".relay/.indexes/segments/a6",
+      ".relay/.indexes/segments/a7",
+      ".relay/.indexes/segments/a8",
+      ".relay/.indexes/segments/a9",
+      ".relay/.indexes/segments/aa",
+      ".relay/.indexes/segments/ab",
+      ".relay/.indexes/segments/ac",
+      ".relay/.indexes/segments/ad",
+      ".relay/.indexes/segments/af",
+      ".relay/.indexes/segments/b1",
+      ".relay/.indexes/segments/b2",
+      ".relay/.indexes/segments/b3",
+      ".relay/.indexes/segments/b4",
+      ".relay/.indexes/segments/b5",
+      ".relay/.indexes/segments/b6",
+      ".relay/.indexes/segments/b7",
+      ".relay/.indexes/segments/b8",
+      ".relay/.indexes/segments/b9",
+      ".relay/.indexes/segments/ba",
+      ".relay/.indexes/segments/bc",
+      ".relay/.indexes/segments/bd",
+      ".relay/.indexes/segments/be",
+      ".relay/.indexes/segments/bf",
+      ".relay/.indexes/segments/c0",
+      ".relay/.indexes/segments/c1",
+      ".relay/.indexes/segments/c2",
+      ".relay/.indexes/segments/c3",
+      ".relay/.indexes/segments/c4",
+      ".relay/.indexes/segments/c5",
+      ".relay/.indexes/segments/c6",
+      ".relay/.indexes/segments/c7",
+      ".relay/.indexes/segments/c8",
+      ".relay/.indexes/segments/ca",
+      ".relay/.indexes/segments/cb",
+      ".relay/.indexes/segments/cd",
+      ".relay/.indexes/segments/ce",
+      ".relay/.indexes/segments/cf",
+      ".relay/.indexes/segments/d0",
+      ".relay/.indexes/segments/d1",
+      ".relay/.indexes/segments/d3",
+      ".relay/.indexes/segments/d4",
+      ".relay/.indexes/segments/d5",
+      ".relay/.indexes/segments/d7",
+      ".relay/.indexes/segments/d8",
+      ".relay/.indexes/segments/d9",
+      ".relay/.indexes/segments/da",
+      ".relay/.indexes/segments/db",
+      ".relay/.indexes/segments/dc",
+      ".relay/.indexes/segments/dd",
+      ".relay/.indexes/segments/de",
+      ".relay/.indexes/segments/df",
+      ".relay/.indexes/segments/e1",
+      ".relay/.indexes/segments/e2",
+      ".relay/.indexes/segments/e3",
+      ".relay/.indexes/segments/e4",
+      ".relay/.indexes/segments/e5",
+      ".relay/.indexes/segments/e6",
+      ".relay/.indexes/segments/e8",
+      ".relay/.indexes/segments/e9",
+      ".relay/.indexes/segments/ea",
+      ".relay/.indexes/segments/eb",
+      ".relay/.indexes/segments/ed",
+      ".relay/.indexes/segments/ef",
+      ".relay/.indexes/segments/f0",
+      ".relay/.indexes/segments/f1",
+      ".relay/.indexes/segments/f3",
+      ".relay/.indexes/segments/f4",
+      ".relay/.indexes/segments/f5",
+      ".relay/.indexes/segments/f6",
+      ".relay/.indexes/segments/f7",
+      ".relay/.indexes/segments/f8",
+      ".relay/.indexes/segments/f9",
+      ".relay/.indexes/segments/fa",
+      ".relay/.indexes/segments/fb",
+      ".relay/.indexes/segments/fc",
+      ".relay/.indexes/segments/fd",
+      ".relay/.indexes/segments/fe",
+      ".relay/.indexes/segments/ff"
+    ],
+    "totalBytes": 1831302,
+    "filesByTopLevel": {
+      ".relay/.indexes": 22,
+      ".relay/config.json": 1,
+      ".relay/entities": 35,
+      ".relay/history": 2,
+      ".relay/keyspaces": 13,
+      ".relay/relations": 43,
+      ".relay/runtime": 2,
+      ".relay/storage.json": 1,
+      ".relay/transactions": 1
+    },
+    "entityCollections": {
+      "applications": {
+        "records": 2,
+        "tombstones": 0,
+        "kinds": {
+          "application": 2
+        },
+        "schemaVersions": {
+          "1": 2
+        },
+        "dataVersions": {
+          "1": 2
+        }
+      },
+      "boards": {
+        "records": 4,
+        "tombstones": 0,
+        "kinds": {
+          "board": 4
+        },
+        "schemaVersions": {
+          "1": 4
+        },
+        "dataVersions": {
+          "1": 4
+        }
+      },
+      "documents": {
+        "records": 4,
+        "tombstones": 1,
+        "kinds": {
+          "document": 4
+        },
+        "schemaVersions": {
+          "1": 4
+        },
+        "dataVersions": {
+          "1": 4
+        }
+      },
+      "features": {
+        "records": 3,
+        "tombstones": 1,
+        "kinds": {
+          "feature": 3
+        },
+        "schemaVersions": {
+          "1": 3
+        },
+        "dataVersions": {
+          "1": 3
+        }
+      },
+      "implementations": {
+        "records": 3,
+        "tombstones": 0,
+        "kinds": {
+          "implementation": 3
+        },
+        "schemaVersions": {
+          "1": 3
+        },
+        "dataVersions": {
+          "1": 3
+        }
+      },
+      "products": {
+        "records": 1,
+        "tombstones": 0,
+        "kinds": {
+          "product": 1
+        },
+        "schemaVersions": {
+          "1": 1
+        },
+        "dataVersions": {
+          "1": 1
+        }
+      },
+      "projects": {
+        "records": 1,
+        "tombstones": 0,
+        "kinds": {
+          "project": 1
+        },
+        "schemaVersions": {
+          "1": 1
+        },
+        "dataVersions": {
+          "1": 1
+        }
+      },
+      "releases": {
+        "records": 2,
+        "tombstones": 0,
+        "kinds": {
+          "release": 2
+        },
+        "schemaVersions": {
+          "1": 2
+        },
+        "dataVersions": {
+          "2": 2
+        }
+      },
+      "scenarios": {
+        "records": 3,
+        "tombstones": 0,
+        "kinds": {
+          "scenario": 3
+        },
+        "schemaVersions": {
+          "1": 3
+        },
+        "dataVersions": {
+          "1": 3
+        }
+      },
+      "scopes": {
+        "records": 2,
+        "tombstones": 0,
+        "kinds": {
+          "scope": 2
+        },
+        "schemaVersions": {
+          "1": 2
+        },
+        "dataVersions": {
+          "1": 2
+        }
+      },
+      "tasks": {
+        "records": 7,
+        "tombstones": 1,
+        "kinds": {
+          "task": 7
+        },
+        "schemaVersions": {
+          "1": 7
+        },
+        "dataVersions": {
+          "1": 7
+        }
+      },
+      "work-plans": {
+        "records": 3,
+        "tombstones": 0,
+        "kinds": {
+          "work-plan": 3
+        },
+        "schemaVersions": {
+          "1": 3
+        },
+        "dataVersions": {
+          "2": 3
+        }
+      }
+    },
+    "manifest": {
+      "format": "relay-entities",
+      "schemaVersion": 2,
+      "productId": "jM9FOkio"
+    }
+  }
+}

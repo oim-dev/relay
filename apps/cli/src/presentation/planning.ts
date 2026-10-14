@@ -8,6 +8,9 @@ import { renderMarkdown } from "./markdown.js";
 import { safeText } from "./text.js";
 import { wrap } from "./layout.js";
 import { cardText, listText, receiptText } from "./common.js";
+import type { OutputCommand, OutputField } from "./common.js";
+import type { AppError } from "@relay/core/shared/errors";
+import { unwrapServerDetails } from "./recovery.js";
 
 const contentSections = (values: string[][], options: TextOptions) =>
   values
@@ -97,7 +100,7 @@ export function planText(
 export function releaseText(
   release: ReleaseSummary,
   options: TextOptions,
-  commands: { plans: string; progress: string },
+  commands: { plans: string; progress: string; documents?: string },
 ): string {
   return cardText(
     {
@@ -132,6 +135,9 @@ export function releaseText(
       commands: [
         { label: "Планы", command: commands.plans },
         { label: "Прогресс", command: commands.progress },
+        ...(commands.documents
+          ? [{ label: "Прикреплённые документы", command: commands.documents }]
+          : []),
       ],
     },
     options,
@@ -147,6 +153,7 @@ export function planningListText(
   query: Record<string, unknown>,
   options: TextOptions,
   _globals: GlobalOptions,
+  commands: readonly OutputCommand[] = [],
 ): string {
   const labels: Record<string, string> = {
     q: "Поиск",
@@ -156,6 +163,7 @@ export function planningListText(
     stage: "Этап",
     availableOnly: "Только доступные",
     plans: "Выбранные планы",
+    projection: "Проекция",
   };
   return listText(
     {
@@ -181,6 +189,46 @@ export function planningListText(
         details: row.slice(2).map((value, index) => `${columns[index + 2]}: ${value}`),
       })),
       emptyMessage: "На этой странице записей нет.",
+      commands,
+    },
+    options,
+  );
+}
+
+/** Адресное продолжение отказанной записи; машинная ошибка сохраняется без изменений. */
+export function releaseErrorText(
+  error: AppError,
+  next: string,
+  commands: readonly OutputCommand[],
+  options: TextOptions,
+): string {
+  const fields: OutputField[] = [];
+  const details = unwrapServerDetails(error.details);
+  if (details && typeof details === "object" && !Array.isArray(details)) {
+    for (const [key, label] of [
+      ["expectedRevision", "Ожидаемая ревизия"],
+      ["actualRevision", "Текущая ревизия"],
+      ["ref", "Запись"],
+    ] as const) {
+      const value = (details as Record<string, unknown>)[key];
+      if (typeof value === "number" || typeof value === "string")
+        fields.push([label, value, "opaque"]);
+    }
+  }
+  if (error.details && typeof error.details === "object" && details !== error.details) {
+    const transport = error.details as Record<string, unknown>;
+    for (const [key, label] of [
+      ["requestId", "ID запроса"],
+      ["url", "URL сервера"],
+    ] as const)
+      if (typeof transport[key] === "string") fields.push([label, transport[key], "opaque"]);
+  }
+  return cardText(
+    {
+      title: error.message,
+      fields,
+      sections: [{ title: "Следующий шаг", body: wrap(safeText(next), options.width) }],
+      commands,
     },
     options,
   );

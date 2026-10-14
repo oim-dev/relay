@@ -11,6 +11,7 @@ import { GraphService } from "../src/application/graph/service.js";
 import { EntityDeletionService } from "../src/application/entities/deletion.js";
 import { PlanningService } from "../src/application/planning/service.js";
 import { ReleasesService } from "../src/application/releases/service.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 test("100 смен статуса задачи: размер и число файлов стабильны, все владельцы и tombstone без аудита", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-status-growth-"));
@@ -169,7 +170,13 @@ test("прямой init через symlink публикует конфигура
   assert.equal(initialized.configPath, reopened.configPath);
   assert.equal(initialized.runtime, reopened.runtime);
   const storage = dirname(initialized.configPath);
-  assert.equal(JSON.parse(await readFile(join(storage, "storage.json"), "utf8")).schemaVersion, 4);
+  // Новая база сразу несёт маркер текущего профиля: прежний строгий parser её отвергает.
+  assert.deepEqual(JSON.parse(await readFile(join(storage, "storage.json"), "utf8")), {
+    format: "relay-entities",
+    schemaVersion: 4,
+    productId: initialized.config.projectId,
+    dataModelVersion: 2,
+  });
   const task = await new BoardTasksService(reopened).create(
     { board: "product", requestId: "init-write" },
     "agent",
@@ -179,5 +186,9 @@ test("прямой init через symlink публикует конфигура
       .schemaVersion,
     3,
   );
-  assert.equal((await new StorageService(reopened).migrate()).migrated, false);
+  assert.equal(
+    (await new StorageService(reopened).migrate({ backupDir: await migrationBackupDir() }))
+      .migrated,
+    false,
+  );
 });

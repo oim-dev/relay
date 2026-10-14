@@ -9,7 +9,7 @@ import { createBundle, verifyBundle } from "./bundle.mjs";
 import { validateEvent } from "./event.mjs";
 import { publishedIntegrity, taggedVersion, compareVersions } from "./registry.mjs";
 import { publishPackages } from "./publish.mjs";
-import { runNpm } from "./npm.mjs";
+import { subprocessEnv } from "./test-env.mjs";
 
 const exec = promisify(execFile);
 async function fixture(t) {
@@ -199,7 +199,7 @@ test("npm-обёртка сохраняет аргументы с пробела
       "-e",
       `import {runNpm} from ${JSON.stringify(module)}; const result = await runNpm(["publish", "archive with spaces.tgz", "--provenance"], ${JSON.stringify(root)}); process.stdout.write(result.stdout);`,
     ],
-    { env: { ...process.env, npm_execpath: entry, ACTIONS_ID_TOKEN_REQUEST_TOKEN: "test-only" } },
+    { env: subprocessEnv({ npm_execpath: entry, ACTIONS_ID_TOKEN_REQUEST_TOKEN: "test-only" }) },
   );
   assert.deepEqual(JSON.parse(stdout), {
     args: ["exec", "npm", "publish", "archive with spaces.tgz", "--provenance"],
@@ -212,7 +212,16 @@ test("настоящий npm доступен через обёртку без �
   const root = await mkdtemp(join(tmpdir(), "relay publisher empty "));
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
-  const actual = await runNpm(["--version"], root);
-  const expected = await exec("npm", ["--version"], { cwd: root });
+  const module = new URL("./npm.mjs", import.meta.url).href;
+  const actual = await exec(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import {runNpm} from ${JSON.stringify(module)}; const result = await runNpm(["--version"], ${JSON.stringify(root)}); process.stdout.write(result.stdout);`,
+    ],
+    { env: subprocessEnv() },
+  );
+  const expected = await exec("npm", ["--version"], { cwd: root, env: subprocessEnv() });
   assert.equal(actual.stdout.trim(), expected.stdout.trim());
 });

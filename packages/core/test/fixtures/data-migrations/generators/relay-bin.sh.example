@@ -1,0 +1,5 @@
+#!/bin/sh
+# Обёртка исторического CLI: запуск из исходников временного worktree на нужном SHA.
+# WORKTREE — путь к `git worktree add --detach <dir> <sha>` после `pnpm install --frozen-lockfile`.
+# DB — каталог создаваемой базы (передаётся генератором через окружение).
+cd "$DB" && INIT_CWD="$DB" exec node --conditions=tasks-source "$WORKTREE/apps/cli/scripts/dev.mjs" "$@"

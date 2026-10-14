@@ -1,7 +1,32 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
+import { actorSchema } from "@relay/contracts/primitives";
+import {
+  productValidationSchema,
+  productLintQuerySchema,
+  productLintPageSchema,
+  productOverviewMapQuerySchema,
+  productOverviewMapPageSchema,
+} from "@relay/contracts/product-query";
+import {
+  productParticipationQuerySchema,
+  productParticipationPageSchema,
+  productParticipationReplaceSchema,
+  productParticipationSavedSchema,
+  productImplementationDetailSchema,
+} from "@relay/contracts/product-participation";
+import {
+  documentLinksQuerySchema,
+  documentLinksPageSchema,
+  documentSectionsQuerySchema,
+  documentSectionsPageSchema,
+  documentRelationChangeSchema,
+  documentSectionChangeSchema,
+} from "@relay/contracts/document-library";
 import {
   plansQuerySchema,
+  plansCompactQuerySchema,
+  plansCompactPageSchema,
   planningPageQuerySchema,
   plansPageSchema,
   planSummarySchema,
@@ -20,6 +45,13 @@ import {
 } from "@relay/contracts/planning";
 import {
   releasesQuerySchema,
+  releasesCompactQuerySchema,
+  releasesCompactPageSchema,
+  releaseCompositionCompactQuerySchema,
+  releaseCompositionCompactSchema,
+  releasePreviewCompactSchema,
+  saveReleaseByRefsSchema,
+  updateReleaseByRefsSchema,
   releasesPageSchema,
   releaseSummarySchema,
   saveReleaseSchema,
@@ -30,6 +62,8 @@ import {
 } from "@relay/contracts/releases";
 import {
   progressQuerySchema,
+  taskDependenciesQuerySchema,
+  taskDependenciesPageSchema,
   progressPageQuerySchema,
   taskProgressSchema,
   implementationProgressSchema,
@@ -59,6 +93,10 @@ import {
   entityRenameSchema,
   entityMoveTaskSchema,
   entityLinkTaskSchema,
+  entityDeletionQuerySchema,
+  entityDeletionPreviewSchema,
+  deleteEntitySchema,
+  entityDeletedSchema,
 } from "@relay/contracts/entities";
 import {
   graphPageSchema,
@@ -72,6 +110,7 @@ import {
   productEntitySchema,
   productEntitiesSchema,
   productEntitiesQuerySchema,
+  productEntityQuerySchema,
 } from "@relay/core/domain/product-implementation";
 import { boardsPageSchema, boardViewSchema, boardsQuerySchema } from "@relay/core/domain/board";
 import {
@@ -94,8 +133,13 @@ import { HttpClient, ApiError } from "@relay/rest-sdk/http-client";
 import { createApiClient } from "@relay/rest-sdk/create-api-client";
 import { operationsTree } from "@relay/rest-sdk/operations-tree";
 import { configSchema } from "@relay/core/domain/config";
+import {
+  projectSettingsSchema,
+  saveProjectSettingsSchema,
+} from "@relay/core/domain/project-settings";
 import { parse } from "@relay/core/domain/validation";
 import { AppError } from "@relay/core/shared/errors";
+import { isStorageCompatibility } from "../storage-errors.js";
 import type { Backend, WorkspaceInfo } from "./types.js";
 import {
   productStateSchema,
@@ -112,6 +156,16 @@ import type { ProductOverviewMetric } from "@relay/core/domain/product";
 
 /** Возможность сервера: snapshot.operator и детализация метрик оператора обзора. */
 export const OVERVIEW_METRICS_CAPABILITY = "relay-overview-metrics-v1";
+/** Страницы библиотеки и адресные записи без клиентского полного чтения документа/проекта. */
+export const DOCUMENT_LIBRARY_CAPABILITY = "relay-document-library-v1";
+/** Адресные продуктовые чтения и атомарная замена участия без full-state fallback. */
+export const PRODUCT_QUERIES_CAPABILITY = "relay-product-queries-v1";
+/** Явные компактные проекции планирования и специализированная страница зависимостей. */
+export const WORK_READ_MODELS_CAPABILITY = "relay-work-read-models-v1";
+/** Разрешение публичных адресов планов внутри единственной записи релиза. */
+export const RELEASE_REFS_CAPABILITY = "relay-release-refs-v1";
+/** Полнотекстовый поиск и типовые FI/SI-фильтры общего каталога. */
+export const ENTITY_SEARCH_CAPABILITY = "relay-entity-search-v2";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -187,7 +241,7 @@ function projectClient(url: string, project?: string) {
   );
 }
 
-/** Единственный REST-адаптер CLI и MCP; после подключения проект закреплён по UUID. */
+/** Единственный REST-адаптер CLI и MCP; после подключения проект закреплён по ID сервера. */
 export async function createHttpBackend(url: string, project?: string): Promise<Backend> {
   async function call<T>(
     operation: () => Promise<{ ok: true; data: T }>,
@@ -230,7 +284,12 @@ export async function createHttpBackend(url: string, project?: string): Promise<
                 : message,
               exitCode ??
                 (error.status === 404 ? 3 : error.status === 409 ? 4 : error.status < 500 ? 2 : 5),
-              requestId === undefined ? details : { serverDetails: details, requestId, url },
+              // Отказ совместимости определён (запись не выполнена): details в той же
+              // форме, что у чтения, чтобы клиент показал next сервера.
+              requestId === undefined ||
+                (error.status === 409 && isStorageCompatibility(code, exitCode))
+                ? details
+                : { serverDetails: details, requestId, url },
             );
           }
           throw new AppError(
@@ -263,8 +322,10 @@ export async function createHttpBackend(url: string, project?: string): Promise<
       5,
       { url },
     );
-  const api = projectClient(url, decode(z.string().min(1), context.projectId));
+  const projectId = decode(z.string().min(1), context.projectId);
+  const api = projectClient(url, projectId);
   const workspace: WorkspaceInfo = {
+    projectId,
     config: parse(configSchema, context.config, "конфигурация сервера"),
     configPath: context.configPath,
     root: context.storagePath,
@@ -273,9 +334,47 @@ export async function createHttpBackend(url: string, project?: string): Promise<
     operation: () => Promise<{ ok: true; data: unknown }>,
     requestId: string,
   ) => decode(planningSavedSchema, await call(operation, "write", requestId));
+  const requireDocumentLibrary = () => {
+    if (!context.capabilities?.includes(DOCUMENT_LIBRARY_CAPABILITY))
+      throw new AppError(
+        "SERVER_INCOMPATIBLE",
+        `Операции библиотеки требуют Relay Server с ${DOCUMENT_LIBRARY_CAPABILITY}. Обновите и перезапустите сервер той же версии, что и клиент.`,
+        5,
+        { url },
+      );
+  };
+  const requireCapability = (capability: string) => {
+    if (!context.capabilities?.includes(capability))
+      throw new AppError(
+        "SERVER_INCOMPATIBLE",
+        `Операция требует Relay Server с ${capability}. Обновите и перезапустите сервер той же версии, что и клиент.`,
+        5,
+        { url },
+      );
+  };
   return {
     kind: "http",
+    projectSettings: {
+      get: async () =>
+        decode(projectSettingsSchema, await call(() => api.context.getProjectSettings())),
+      save: async (input) => {
+        const command = parse(saveProjectSettingsSchema, input, "настройки проекта");
+        return decode(
+          projectSettingsSchema,
+          await call(() => api.context.saveProjectSettings(command), "write"),
+        );
+      },
+    },
     plans: {
+      listCompact: async (input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        return decode(
+          plansCompactPageSchema,
+          await call(() =>
+            api.plans.getPlansCompact(defined(plansCompactQuerySchema.parse(input))),
+          ),
+        );
+      },
       candidates: async (query = {}) =>
         decode(
           planningCandidatesPageSchema,
@@ -390,6 +489,57 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
     },
     releases: {
+      listCompact: async (input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        return decode(
+          releasesCompactPageSchema,
+          await call(() =>
+            api.releases.getReleasesCompact(defined(releasesCompactQuerySchema.parse(input))),
+          ),
+        );
+      },
+      compositionCompact: async (reference, input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        return decode(
+          releaseCompositionCompactSchema,
+          await call(() =>
+            api.releases.getReleasePlansCompact({
+              reference,
+              ...defined(releaseCompositionCompactQuerySchema.parse(input)),
+            }),
+          ),
+        );
+      },
+      previewCompact: async (input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        const { projection, ...body } = releasePreviewCompactSchema.parse(input);
+        return decode(
+          releaseCompositionCompactSchema,
+          await call(() => api.releases.previewReleaseCompact({ projection }, defined(body))),
+        );
+      },
+      createByRefs: async (input, defaultActor) => {
+        requireCapability(RELEASE_REFS_CAPABILITY);
+        const command = saveReleaseByRefsSchema.parse({
+          ...input,
+          actor: input.actor ?? defaultActor,
+        });
+        return writePlanning(
+          () => api.releases.createReleaseByRefs(defined(command)),
+          command.requestId,
+        );
+      },
+      updateByRefs: async (reference, input, defaultActor) => {
+        requireCapability(RELEASE_REFS_CAPABILITY);
+        const command = updateReleaseByRefsSchema.parse({
+          ...input,
+          actor: input.actor ?? defaultActor,
+        });
+        return writePlanning(
+          () => api.releases.updateReleaseByRefs({ reference }, defined(command)),
+          command.requestId,
+        );
+      },
       list: async (query = {}) =>
         decode(
           releasesPageSchema,
@@ -440,6 +590,15 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
     },
     progress: {
+      taskDependencies: async (input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        return decode(
+          taskDependenciesPageSchema,
+          await call(() =>
+            api.progress.getTaskDependencies(defined(taskDependenciesQuerySchema.parse(input))),
+          ),
+        );
+      },
       workPlan: async (input) =>
         decode(
           workPlanProgressSchema,
@@ -505,11 +664,20 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
       describe: async (input) =>
         decode(entityTypeDetailSchema, await call(() => api.entities.describeEntityType(input))),
-      list: async (input = {}) =>
-        decode(
+      list: async (input = {}) => {
+        const query = entitiesQuerySchema.parse(input);
+        if (
+          query.implementationTarget !== undefined ||
+          (query.q !== undefined && query.kind !== "document") ||
+          (query.sort === "updated" && query.kind !== "document") ||
+          (query.kind === undefined && (query.active !== undefined || query.section !== undefined))
+        )
+          requireCapability(ENTITY_SEARCH_CAPABILITY);
+        return decode(
           entitiesPageSchema,
-          await call(() => api.entities.listEntities(defined(entitiesQuerySchema.parse(input)))),
-        ),
+          await call(() => api.entities.listEntities(defined(query))),
+        );
+      },
       get: async (input) =>
         decode(
           entityDetailSchema,
@@ -600,6 +768,71 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             input.requestId,
           ),
         ),
+    },
+    documents: {
+      links: async (input) => {
+        requireDocumentLibrary();
+        const query = parse(documentLinksQuerySchema, input, "прикрепления документа");
+        return decode(
+          documentLinksPageSchema,
+          await call(() => api.documents.getDocumentLinks(defined(query))),
+        );
+      },
+      sections: async (input = {}) => {
+        requireDocumentLibrary();
+        const query = parse(documentSectionsQuerySchema, input, "разделы библиотеки");
+        return decode(
+          documentSectionsPageSchema,
+          await call(() => api.documents.getDocumentSections(defined(query))),
+        );
+      },
+      changeRelation: async (input, defaultActor) => {
+        requireDocumentLibrary();
+        const command = parse(documentRelationChangeSchema, input, "изменение прикрепления");
+        const actor = parse(actorSchema, command.actor ?? defaultActor, "автор изменения");
+        return decode(
+          entitySavedSchema,
+          await call(
+            () => api.documents.changeDocumentRelation(defined({ ...command, actor })),
+            "write",
+            command.requestId,
+          ),
+        );
+      },
+      changeSection: async (input, defaultActor) => {
+        requireDocumentLibrary();
+        const command = parse(documentSectionChangeSchema, input, "изменение раздела");
+        const actor = parse(actorSchema, command.actor ?? defaultActor, "автор изменения");
+        return decode(
+          entitySavedSchema,
+          await call(
+            () => api.documents.changeDocumentSection(defined({ ...command, actor })),
+            "write",
+            command.requestId,
+          ),
+        );
+      },
+    },
+    deletion: {
+      preview: async (input) => {
+        const query = parse(entityDeletionQuerySchema, input, "предпросмотр удаления");
+        return decode(
+          entityDeletionPreviewSchema,
+          await call(() => api.entities.previewEntityDeletion(query)),
+        );
+      },
+      delete: async (input, defaultActor) => {
+        const command = parse(deleteEntitySchema, input, "удаление сущности");
+        const actor = parse(actorSchema, command.actor ?? defaultActor, "автор удаления");
+        return decode(
+          entityDeletedSchema,
+          await call(
+            () => api.entities.deleteEntity(defined({ ...command, actor })),
+            "write",
+            command.requestId,
+          ),
+        );
+      },
     },
     graph: {
       context: async (input) => {
@@ -768,6 +1001,64 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
     },
     product: {
+      validate: async () => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(productValidationSchema, await call(() => api.product.validateProduct()));
+      },
+      lint: async (input = {}) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(
+          productLintPageSchema,
+          await call(() => api.product.lintProduct(defined(productLintQuerySchema.parse(input)))),
+        );
+      },
+      overviewMap: async (input = {}) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(
+          productOverviewMapPageSchema,
+          await call(() =>
+            api.product.getProductOverviewMap(defined(productOverviewMapQuerySchema.parse(input))),
+          ),
+        );
+      },
+      participation: async (input) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(
+          productParticipationPageSchema,
+          await call(() =>
+            api.product.getProductParticipation(
+              defined(productParticipationQuerySchema.parse(input)),
+            ),
+          ),
+        );
+      },
+      implementation: async (ref) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(
+          productImplementationDetailSchema,
+          await call(() =>
+            api.product.getProductImplementation(productEntityQuerySchema.parse({ ref })),
+          ),
+        );
+      },
+      replaceParticipation: async (input, defaultActor) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        const command = productParticipationReplaceSchema.parse({
+          ...input,
+          actor: input.actor ?? defaultActor,
+        });
+        return decode(
+          productParticipationSavedSchema,
+          await call(
+            () =>
+              api.product.replaceProductParticipation(
+                defined({ ...command, selections: command.selections.map(defined) }),
+              ),
+            "write",
+            command.requestId,
+          ),
+        );
+      },
       entity: async (ref) =>
         decode(productEntitySchema, await call(() => api.product.getProductEntity({ ref }))),
       entities: async (input = {}) =>

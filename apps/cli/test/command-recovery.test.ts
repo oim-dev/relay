@@ -125,11 +125,12 @@ test("потерянный ответ записи: ровно один POST, re
   const app = await fixture(t);
   const server = await httpServer(t, app.root);
   const writes: any[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
       headers: { "content-type": "application/json" },
       ...(body.length ? { body } : {}),
@@ -209,7 +210,14 @@ test("missing/corrupt config и повреждение хранения: не п
   await writeFile(markerPath, marker);
   await writeFile(taskPath, "{invalid-record");
   const corrupt = await app.run(["doctor", "check"]);
-  failed(corrupt, "STORAGE_INDEX_STALE", 4);
+  failed(corrupt, "VALIDATION_FAILED", 5);
+  assert.ok(!corrupt.body.ok);
+  assert.ok(
+    (corrupt.body.error.details as Array<{ code: string; details?: { path?: string } }>).some(
+      (issue) => issue.code === "INVALID_DATA" && issue.details?.path?.endsWith(`${task.id}.json`),
+    ),
+    corrupt.stdout,
+  );
   assert.equal(corrupt.stderr, "");
   assert.equal(await readFile(taskPath, "utf8"), "{invalid-record");
   const rebuild = await app.run(["--local", "storage", "reindex"]);
@@ -295,8 +303,19 @@ test("storage migrate: поддерживаемые legacy-задачи сохр
   assert.equal(await readFile(originalPath, "utf8"), original);
   const notes = join(root, ".relay/user-notes.txt");
   await writeFile(notes, "Собственные данные пользователя");
-  const migrated = successful(await invoke<any>(root, ["--local", "storage", "migrate"])).data;
+  const backups = await tempDirectory(t);
+  const migrated = successful(
+    await invoke<any>(root, [
+      "--local",
+      "storage",
+      "migrate",
+      "--backup-dir",
+      join(backups, "legacy"),
+    ]),
+  ).data;
   assert.equal(migrated.migrated, true);
+  // Core создаёт отдельный каталог копии внутри --backup-dir.
+  assert.ok(migrated.backup?.path.startsWith(`${join(backups, "legacy")}/`), migrated.backup?.path);
   const task = successful(await invoke<any>(root, ["task", "get", "OLD-2"])).data;
   assert.equal(task.id, "LegacyT2");
   assert.equal(task.revision, 7);
@@ -366,7 +385,8 @@ test("storage migrate: неподдерживаемая предметная в�
   assert.notEqual(result.code, 0, result.stdout);
   assert.equal(result.stderr, "");
   assert.ok(!result.body.ok);
-  assert.match(result.stdout, /верси|поддерж|план/i);
+  assert.ok(!result.body.ok && /^STORAGE_/.test(result.body.error.code), result.stdout);
+  assert.ok((result.body.error.details as { next?: string } | undefined)?.next, result.stdout);
   assert.equal(await readFile(path, "utf8"), original);
   assert.equal(await readFile(markerPath, "utf8"), oldMarker);
 });

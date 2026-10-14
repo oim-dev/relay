@@ -14,7 +14,7 @@ import {
   transitionPlanSchema,
   transferPlanTaskSchema,
 } from "@relay/contracts/planning";
-import { getProjectApi, ApiError, readApiPages } from "infra/tasks-api";
+import { getProjectApi, ApiError, readApiPages, getStorageFailureMessage } from "infra/tasks-api";
 import { planningView, stageView, planningTaskView } from "../helpers/planning-view";
 import type {
   PlanningPlan,
@@ -34,8 +34,9 @@ export class PlanningError extends Error {
   constructor(
     message: string,
     readonly code: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 
@@ -53,7 +54,11 @@ const request = async <Result>(
     if (error instanceof ApiError) {
       const failure = FAILURE_SCHEMA.safeParse(error.error);
       if (failure.success && error.status < 500)
-        throw new PlanningError(failure.data.error.message, failure.data.error.code);
+        throw new PlanningError(
+          getStorageFailureMessage(error) ?? failure.data.error.message,
+          failure.data.error.code,
+          { cause: error },
+        );
     }
     if (
       error instanceof TypeError ||

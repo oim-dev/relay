@@ -2,11 +2,17 @@ import type { WorkPlan } from "@relay/contracts/planning";
 import type { Workspace } from "../../storage/workspace.js";
 import { planningSession } from "../../storage/planning.js";
 import { replaceOwnedRelations } from "../../storage/entity-store/relations.js";
+import type { RelationSink } from "../entities/owned-relations.js";
 
 /** Явное согласование после предметной записи, в общей восстанавливаемой транзакции. */
-export async function syncPlanRelations(workspace: Workspace, plan: WorkPlan, actor: string) {
+export async function syncPlanRelations(
+  workspace: Workspace,
+  plan: WorkPlan,
+  actor: string,
+  sink: RelationSink = replaceOwnedRelations,
+) {
   const owner = { kind: "work-plan", id: plan.id };
-  await replaceOwnedRelations(
+  await sink(
     planningSession(workspace),
     owner,
     "planning-scope",
@@ -22,7 +28,7 @@ export async function syncPlanRelations(workspace: Workspace, plan: WorkPlan, ac
     actor,
   );
   // Этапы — записи плана. Только явные включения дают отдельные связи с планом.
-  await replaceOwnedRelations(
+  await sink(
     planningSession(workspace),
     owner,
     "planning-membership",

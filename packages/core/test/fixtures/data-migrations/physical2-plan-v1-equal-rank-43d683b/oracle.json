@@ -1,0 +1,69 @@
+{
+  "plan": {
+    "id": "8EQaNwt0",
+    "key": "PLN-1",
+    "status": "active",
+    "goal": "Юникод: ёЁ, 中文字符, emoji 🚀👩‍💻, й (и + U+0306), RTL שלום, NBSP здесь, табуляция\tвнутри\n\n"
+  },
+  "tasks": [
+    {
+      "id": "J9sTfHUF",
+      "key": "PRODUCT-1"
+    },
+    {
+      "id": "C5qkUd1T",
+      "key": "PRODUCT-2"
+    },
+    {
+      "id": "Zqg6aTWZ",
+      "key": "PRODUCT-3"
+    },
+    {
+      "id": "JVVCHmjg",
+      "key": "PRODUCT-4"
+    }
+  ],
+  "stages": [
+    {
+      "id": "FhpruDYL",
+      "title": "Этап X",
+      "taskIds": ["J9sTfHUF"]
+    },
+    {
+      "id": "fAVWvbdH",
+      "title": "Этап Y",
+      "taskIds": ["C5qkUd1T", "Zqg6aTWZ"]
+    },
+    {
+      "id": "Z261Bz7a",
+      "title": "Этап Z",
+      "taskIds": ["JVVCHmjg"]
+    }
+  ],
+  "manualEdit": [
+    {
+      "id": "FhpruDYL",
+      "rankBefore": 0,
+      "rankAfter": 5
+    },
+    {
+      "id": "fAVWvbdH",
+      "rankBefore": 1,
+      "rankAfter": 5
+    },
+    {
+      "id": "Z261Bz7a",
+      "rankBefore": 2,
+      "rankAfter": 5
+    }
+  ],
+  "oldReaderOrderBefore": ["FhpruDYL", "fAVWvbdH", "Z261Bz7a"],
+  "oldReaderOrderAfter": ["fAVWvbdH", "FhpruDYL", "Z261Bz7a"],
+  "tieBreakRule": "rank asc, затем id.localeCompare (packages/core/src/application/planning/model.ts@43d683b)",
+  "expectedOrderByRule": ["fAVWvbdH", "FhpruDYL", "Z261Bz7a"],
+  "reindex": {
+    "revision": 12,
+    "edges": 13,
+    "events": 13
+  }
+}

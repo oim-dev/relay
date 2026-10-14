@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PlanningSaved, PlanSummary, PlanStage } from "@relay/contracts/planning";
@@ -8,7 +8,7 @@ import type { Progress } from "@relay/contracts/progress";
 import { startServer } from "@relay/server-runtime";
 import { openWorkspace } from "@relay/core/storage/workspace";
 import { PlanningService } from "@relay/core/application/planning/service";
-import { fixture, invoke, invokeRaw, successful, failed } from "./helpers/cli.js";
+import { fixture, invoke, invokeRaw, successful, failed, tempDirectory } from "./helpers/cli.js";
 
 type Page<T> = { items: T[]; total: number; nextOffset: number | null; version: string };
 type Stage = PlanStage & { planId: string; planKey: string; planRevision: number };
@@ -317,15 +317,15 @@ test(
     const { root, run } = await fixture(t);
     const other = await fixture(t);
     const config = join(root, ".relay/config.json");
-    const executeHint = async (text: string) => {
+    const executeHint = async (text: string, cwd = other.root) => {
       const command = text.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli "));
       assert.ok(command, "Квитанция даёт копируемую команду чтения");
       const args = command
         .match(/'(?:[^']|'\\'')*'|[^\s]+/g)!
         .slice(2)
         .map((arg) => (arg.startsWith("'") ? arg.slice(1, -1).replaceAll("'\\''", "'") : arg));
-      assert.ok(args.includes("--config"));
-      successful(await invoke(other.root, args, { env: { RELAY_CONFIG: undefined } }));
+      assert.equal(args.includes("--config"), cwd !== root);
+      successful(await invoke(cwd, args, { env: { RELAY_CONFIG: undefined } }));
       return args;
     };
     const receipt = async (
@@ -480,7 +480,7 @@ test(
       assert.ok(!stageText.includes(task.ref.id));
       assert.ok(!stageText.includes(task.key));
     }
-    const hint = await executeHint(stageText);
+    const hint = await executeHint(stageText, root);
     assert.deepEqual(hint.slice(-6), ["plan", "stage", "task", "list", "PLN-1", stage.id]);
     await receipt(
       [
@@ -1432,14 +1432,18 @@ test(
   "plan candidates и list: фильтры до страниц, копируемый nextCommand с RELAY_CONFIG",
   { timeout: 120_000 },
   async (t) => {
-    const { root, run } = await fixture(t);
+    const base = await tempDirectory(t);
+    const root = join(base, "проект с пробелом и 'кавычкой'");
+    await mkdir(root);
+    successful(await invoke(root, ["init"]));
+    const run = <T = unknown>(args: Array<string | number>) => invoke<T>(root, args);
     const elsewhere = await mkdtemp(join(tmpdir(), "relay-plan-other-"));
     t.after(() => rm(elsewhere, { recursive: true, force: true }));
     const save = async (args: Array<string | number>) =>
       successful(await run<PlanningSaved>(args)).data;
     const p = await save(["plan", "create", "--title", "Совпадение один"]);
     await save(["plan", "create", "--title", "Не подходит"]);
-    await save(["plan", "create", "--title", "Совпадение два"]);
+    const another = await save(["plan", "create", "--title", "Совпадение два"]);
     const s = await save([
       "plan",
       "stage",
@@ -1532,11 +1536,12 @@ test(
       keys[1]!,
       keys[3]!,
     ]);
+    const config = join(root, ".relay/config.json");
     const page = successful(
       await invoke<Page<PlanSummary>>(
         elsewhere,
         ["--local", "plan", "list", "--q", "Совпадение", "--status", "draft", "--limit", 1],
-        { env: { RELAY_CONFIG: join(root, ".relay/config.json") } },
+        { env: { RELAY_CONFIG: config } },
       ),
     );
     assert.equal(page.meta?.page?.total, 2);
@@ -1545,27 +1550,68 @@ test(
       await invokeRaw(
         elsewhere,
         ["--local", "plan", "list", "--q", "Совпадение", "--status", "draft", "--limit", 1],
-        { env: { ...narrow.env, RELAY_CONFIG: join(root, ".relay/config.json") } },
+        { env: { ...narrow.env, RELAY_CONFIG: config } },
       ),
       [page.data.items[0]!.key, "Черновик"],
     );
     assert.ok(next);
-    const humanNext = humanPage
-      .split("\n")
-      .find((line) => line.startsWith("npx @oim-dev/relay-cli "));
-    assert.ok(humanNext, "Подсказка копируется одной строкой при ширине 40");
-    assert.ok(humanNext.includes("--cursor"));
-    assert.ok(humanNext.includes("--config"));
-    assert.ok(next.startsWith("npx @oim-dev/relay-cli "));
-    assert.ok(next.includes("--config"));
-    assert.ok(next.includes("--local"));
-    assert.doesNotMatch(next, /\n/);
     // Разбор POSIX-кавычек без shell и без запуска npx: исполняется тот же локальный CLI.
     const tokens = (command: string) =>
       command
         .match(/'(?:[^']|'\\'')*'|[^\s]+/g)!
         .slice(2)
         .map((x) => (x.startsWith("'") ? x.slice(1, -1).replaceAll("'\\''", "'") : x));
+    const hints = humanPage
+      .split("\n")
+      .filter((line) => line.startsWith("npx @oim-dev/relay-cli "));
+    const continuations = hints.filter((line) => tokens(line).includes("--cursor"));
+    assert.equal(continuations.length, 1, "Страница даёт ровно одно продолжение");
+    const humanNext = continuations[0]!;
+    const reads = hints.filter((line) => tokens(line).slice(-3, -1).join(" ") === "plan get");
+    assert.equal(reads.length, 1, "Страница даёт один адресный пример чтения");
+    assert.equal(hints.length, 2, "Адресное чтение и продолжение — разные действия");
+    const humanRead = reads[0]!;
+    assert.deepEqual(tokens(humanRead), [
+      "--local",
+      "--config",
+      config,
+      "plan",
+      "get",
+      page.data.items[0]!.key,
+    ]);
+    assert.ok(page.meta?.page?.nextCursor);
+    const continuationArgs = [
+      "--local",
+      "--config",
+      config,
+      "plan",
+      "list",
+      "--q",
+      "Совпадение",
+      "--status",
+      "draft",
+      "--cursor",
+      page.meta.page.nextCursor,
+    ];
+    assert.deepEqual(tokens(humanNext), continuationArgs);
+    // invoke явно выбирает JSON; это единственное отличие контекста от human-вызова.
+    assert.deepEqual(tokens(next), [
+      ...continuationArgs.slice(0, 3),
+      "--format",
+      "json",
+      ...continuationArgs.slice(3),
+    ]);
+    assert.equal(humanNext, next.replace(" --format json ", " "));
+    for (const hint of [humanRead, humanNext, next]) {
+      assert.doesNotMatch(hint, /\n/);
+      assert.match(hint, /'\\''/, "Апостроф пути экранирован внутри shell-аргумента");
+    }
+    const opened = successful(
+      await invoke<PlanSummary>(elsewhere, tokens(humanRead), {
+        env: { RELAY_CONFIG: undefined },
+      }),
+    );
+    assert.deepEqual(opened.data, page.data.items[0]);
     const continued = successful(
       await invoke<Page<PlanSummary>>(elsewhere, tokens(next), {
         env: { RELAY_CONFIG: undefined },
@@ -1579,6 +1625,14 @@ test(
     assert.deepEqual(continuedHuman.data, continued.data);
     assert.equal(continued.data.items.length, 1);
     assert.notEqual(continued.data.items[0]!.id, page.data.items[0]!.id);
+    assert.deepEqual(
+      new Set([...page.data.items, ...continued.data.items].map((item) => item.key)),
+      new Set([p.key, another.key]),
+    );
+    assert.ok(
+      [...page.data.items, ...continued.data.items].every((item) => item.status === "draft"),
+    );
+    assert.equal(continued.meta?.page?.total, 2);
     assert.equal(continued.meta?.page?.nextCursor, null);
   },
 );

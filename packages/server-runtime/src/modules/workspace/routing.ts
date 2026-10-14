@@ -8,7 +8,7 @@ export function projectRouting(request: IncomingMessage): string {
   const match = /^\/api\/v1\/projects\/([^/?]+)(\/[^?]*)(\?.*)?$/.exec(url);
   if (!match) return url;
   if (
-    !/^\/(?:entities|graph|context|board|boards|board-tasks|tasks|events|task-list|groups|overview|validation|project|product|progress|plans|releases)(?:\/|$)/.test(
+    !/^\/(?:documents|entities|graph|context|board|boards|board-tasks|tasks|events|task-list|groups|overview|validation|project|product|progress|plans|releases)(?:\/|$)/.test(
       match[2]!,
     )
   )

@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import { ProductQueries } from "@relay/core/application/product/queries";
 import { fixture } from "./helpers/workspace.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 
 /** Создаёт общие требования и два независимых состава приложений. */
 async function targetsFixture(t: TestContext) {
@@ -215,7 +216,7 @@ test("старые несовместимые цели читаются без �
   const original = await readFile(path, "utf8");
   assert.deepEqual((await tasks.get(task.id)).productLinks, stored.productLinks);
   assert.equal(await readFile(path, "utf8"), original);
-  await new StorageService(workspace).migrate();
+  await new StorageService(workspace).migrate({ backupDir: await migrationBackupDir() });
   await tasks.update(task.id, { title: "Исправляем", ifRevision: 1, requestId: "title" }, "agent");
   await tasks.move(task.id, { column: "ready", ifRevision: 2, requestId: "column" }, "agent");
   await tasks.update(task.id, { productLinks: [], ifRevision: 3, requestId: "repair" }, "agent");

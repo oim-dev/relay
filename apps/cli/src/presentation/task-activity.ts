@@ -14,7 +14,7 @@ export function taskActivityText(
   reference: string,
   query: TaskCommentsQuery,
   options: TextOptions,
-  _invoke?: TaskInvocation,
+  invoke?: TaskInvocation,
 ): string {
   return listText(
     {
@@ -30,6 +30,15 @@ export function taskActivityText(
         details: [`${e.actor} · ${e.at}`],
       })),
       emptyMessage: "В этой части ленты записей нет.",
+      commands:
+        page.items[0] && invoke
+          ? [
+              {
+                label: "Полный комментарий — get с номером выбранной записи. Пример этой страницы:",
+                command: invoke(["task", "comment", "get", reference, String(page.items[0].id)]),
+              },
+            ]
+          : [],
     },
     options,
   );

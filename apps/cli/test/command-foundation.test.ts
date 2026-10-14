@@ -11,6 +11,7 @@ import {
   pageResultFor,
   nativeQuery,
   nativePageResult,
+  readTextFields,
 } from "../src/command-kit.js";
 import type { PaginationContext } from "../src/command-kit.js";
 import type { CommandContext } from "../src/context.js";
@@ -90,6 +91,50 @@ test("foundation: Markdown сохраняет literal строки, пустот
     ),
     "Карточка\n\nОписание\nANSI: \\u001b[31m; literal: \\u001b; путь C:\\tmp",
   );
+});
+
+test("foundation: команды вне содержания отделены во всех карточках, Markdown не меняется", () => {
+  const markdown =
+    "\nКонтекст:\n  npx @oim-dev/relay-cli document get DOC-999\n\n```text\n\tпример\n```\n\n";
+  for (const width of [24, 40, 100, 160]) {
+    const output = cardText(
+      {
+        title: "Карточка",
+        sections: [
+          { title: "Содержание", body: renderMarkdown(markdown, { width, color: false }) },
+        ],
+        commands: [{ label: "Прочитать", command: "npx @oim-dev/relay-cli feature get FEATURE-1" }],
+      },
+      { width, color: false },
+    );
+    assert.ok(output.includes(`Содержание\n${markdown}\n\n───\n`));
+    assert.match(output.replace(/\s+/g, " "), /Команды CLI — вне содержания/);
+    assert.ok(output.endsWith("npx @oim-dev/relay-cli feature get FEATURE-1"));
+  }
+});
+
+test("foundation: единая проверка текстовых и JSON-источников не читает файл/stdin при конфликте", async () => {
+  let reads = 0;
+  const context = {
+    runtime: {
+      input: {
+        text: async () => {
+          reads++;
+          return "";
+        },
+      },
+    },
+  } as unknown as CommandContext;
+  for (const options of [
+    { bodyFile: "-", relationsFile: "-" },
+    { summaryFile: "-", relationsFile: "-" },
+    { bodyFile: "-", relations: "[]", relationsFile: "missing.json" },
+  ]) {
+    await assert.rejects(readTextFields(context, options, ["summary", "body", "relations"]), {
+      code: "CONFLICTING_OPTIONS",
+    });
+    assert.equal(reads, 0);
+  }
 });
 
 test("foundation: список различает пустую выборку и карточки, сохраняет фильтр 0 и полезные детали", () => {
@@ -368,7 +413,7 @@ test("foundation: registerCommand передаёт аргументы, опци�
   assert.equal(output(), '{"ok":true,"data":{"title":"Расширение"}}\n');
 });
 
-test("foundation: CLI страницы обходятся без потерь; continuation копируется с config, snapshot не обновляется молча", async (t) => {
+test("foundation: CLI страницы обходятся без потерь; обычное продолжение короткое, snapshot не обновляется молча", async (t) => {
   const app = await fixture(t);
   const ids = [
     await app.create("Найти: первый"),
@@ -393,8 +438,8 @@ test("foundation: CLI страницы обходятся без потерь; c
   assert.equal(argv.status, 0, argv.stderr);
   const args = argv.stdout.split("\0").slice(0, -1);
   assert.equal(args.shift(), "@oim-dev/relay-cli");
-  assert.ok(args.includes(join(app.root, ".relay/config.json")));
-  assert.ok(args.includes("--local"));
+  assert.ok(!args.includes("--config"));
+  assert.ok(!args.includes("--local"));
   const second = successful(await app.run<{ items: { id: string }[] }>(args));
   assert.equal(second.meta?.page?.nextCursor, null);
   assert.equal(second.meta?.page?.nextCommand, null);
@@ -411,6 +456,44 @@ test("foundation: CLI страницы обходятся без потерь; c
   assert.ok(!conflict.body.ok);
   assert.equal(conflict.body.error.code, "BOARD_CHANGED");
   assert.match(conflict.body.error.message, /без --cursor/);
+});
+
+test("foundation: cliEnv изолирует унаследованный цвет и сохраняет явные env, включая undefined", () => {
+  const keys = ["FORCE_COLOR", "NO_COLOR"] as const;
+  const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (const inherited of [
+      { FORCE_COLOR: "3" },
+      { NO_COLOR: "1" },
+      { FORCE_COLOR: "3", NO_COLOR: "1" },
+    ]) {
+      for (const key of keys) {
+        delete process.env[key];
+        if (inherited[key] !== undefined) process.env[key] = inherited[key];
+      }
+      for (const overrides of [
+        {},
+        { FORCE_COLOR: "3" },
+        { NO_COLOR: "1" },
+        { FORCE_COLOR: "0", NO_COLOR: "" },
+        { FORCE_COLOR: "3", NO_COLOR: undefined },
+        { FORCE_COLOR: undefined, NO_COLOR: "1" },
+        { FORCE_COLOR: undefined, NO_COLOR: undefined },
+      ]) {
+        const env = cliEnv(overrides);
+        for (const key of keys) {
+          assert.equal(env[key], overrides[key]);
+          assert.equal(Object.hasOwn(env, key), Object.hasOwn(overrides, key));
+          assert.equal(process.env[key], inherited[key]);
+        }
+      }
+    }
+  } finally {
+    for (const key of keys) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  }
 });
 
 test("foundation: config не переключает text; JSON сохраняет Unicode/Markdown без raw ANSI", async (t) => {
@@ -650,7 +733,7 @@ test("foundation: native token не подменяется; пустая live с
   // Минимальный контекст границы адаптера; это не имитация предметной операции Backend.
   const context = {
     backend: { kind: "http" },
-    connection: "http://127.0.0.1:4700",
+    connection: { transport: "http", serverUrl: "http://127.0.0.1:4700" },
     globals: { project: "alpha" },
     runtime: { cwd: "/fixture", env: {} },
     workspace: {

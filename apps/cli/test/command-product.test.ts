@@ -17,6 +17,7 @@ import {
   cliEnv,
   cliNodeArgs,
   fixture,
+  fixtureCleanup,
   successful,
   failed,
   invoke,
@@ -154,8 +155,7 @@ test("product: восемь singleton-листьев и сохранение п�
       "--cursor",
       page.meta!.page!.nextCursor!,
     ]);
-    assert.equal(conflict.body.ok, false);
-    if (!conflict.body.ok) assert.equal(conflict.body.error.code, "VERSION_CONFLICT");
+    failed(conflict, "VERSION_CONFLICT", 4);
   });
   await t.test("validate: структурная проверка, не запись", async () => {
     const result = successful(
@@ -330,7 +330,7 @@ test("каталоги create/update: ввод до мутации и human-кв
 test("product: HTTP create/update и последующее local/HTTP чтение эквивалентны", async (t) => {
   const app = await fixture(t);
   const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
-  t.after(() => server.close());
+  fixtureCleanup(t, () => server.close());
   const remote = <T = unknown>(args: Array<string | number>) =>
     invoke<T>(app.root, ["--server-url", server.url, ...args]);
   successful(
@@ -450,7 +450,7 @@ const comparable = (data: Overview) => {
 };
 
 /** npx-шим исполняет подсказку как пользователь: строка shell целиком, без разбора в тесте. */
-async function hintRunner(t: TestContext) {
+async function hintRunner(t: TestContext, cwd = tmpdir()) {
   const directory = await tempDirectory(t);
   const shim = join(directory, "npx");
   const node = [process.execPath, ...cliNodeArgs, binary].map((part) => `'${part}'`).join(" ");
@@ -466,7 +466,7 @@ async function hintRunner(t: TestContext) {
         "/bin/sh",
         ["-c", command],
         {
-          cwd: tmpdir(),
+          cwd,
           encoding: "utf8",
           env: cliEnv({ PATH: `${directory}:${process.env.PATH}` }),
           timeout: 30_000,
@@ -688,7 +688,7 @@ test("product overview: пустой проект — нули, состояни
     assert.deepEqual(preview, { total: 0, shown: 0, hasMore: false, items: [] });
   assert.equal(result.data.total, 0);
   assert.equal(result.meta?.page?.nextCursor, null);
-  const human = await invokeRaw(app.root, ["product", "overview"], {
+  const human = await invokeRaw(app.root, ["product", "overview", "--view", "full"], {
     env: { COLUMNS: "40", FORCE_COLOR: "1" },
   });
   assert.equal(human.code, 0, human.stdout);
@@ -707,7 +707,7 @@ test("product overview: пустой проект — нули, состояни
   ])
     assert.match(human.stdout, text);
   assert.doesNotMatch(human.stdout, /\u001b|"ok":/);
-  const run = await hintRunner(t);
+  const run = await hintRunner(t, app.root);
   assert.match(await run(result.data.commands.passportHelp!), /product create/);
   assert.equal(JSON.parse(await run(result.data.commands.passport!)).ok, true);
 });
@@ -769,9 +769,13 @@ test("product overview: срез проекта, подборки, страни�
 
   await t.test("human: порядок разделов, причины, «показано N из M», без ANSI", async () => {
     for (const width of [40, 120]) {
-      const human = await invokeRaw(app.root, ["product", "overview", "--limit", 2], {
-        env: { COLUMNS: String(width), FORCE_COLOR: "1" },
-      });
+      const human = await invokeRaw(
+        app.root,
+        ["product", "overview", "--view", "full", "--limit", 2],
+        {
+          env: { COLUMNS: String(width), FORCE_COLOR: "1" },
+        },
+      );
       assert.equal(human.code, 0, human.stdout);
       assert.equal(human.stderr, "");
       const out = human.stdout;
@@ -800,7 +804,7 @@ test("product overview: срез проекта, подборки, страни�
       assert.match(out, /В работе · показано 5 из 7/);
       assert.match(
         out,
-        /Полный список \(ещё 2\):\nnpx @oim-dev\/relay-cli .* task list --column in-progress\n/,
+        /Полный список \(ещё 2\):\nnpx @oim-dev\/relay-cli task list --column in-progress\n/,
       );
       assert.match(
         out,
@@ -824,15 +828,17 @@ test("product overview: срез проекта, подборки, страни�
   });
 
   await t.test("все подсказки выполнимы на временной базе и совпадают с totals", async () => {
-    const run = await hintRunner(t);
+    const run = await hintRunner(t, app.root);
     const total = async (command: string) => {
       const body = JSON.parse(await run(command));
       assert.equal(body.ok, true, command);
       return body.meta?.page?.total as number | undefined;
     };
     const commands = full.data.commands;
-    for (const command of hintList(commands))
-      assert.match(command, /^npx @oim-dev\/relay-cli --local --config /);
+    for (const command of hintList(commands)) {
+      assert.match(command, /^npx @oim-dev\/relay-cli /);
+      assert.doesNotMatch(command, /--local|--config/);
+    }
     assert.equal(await total(commands.inProgress!), snapshot.attention.inProgress.total);
     assert.equal(await total(commands.review!), snapshot.attention.review.total);
     assert.equal(await total(commands.blocked!), snapshot.attention.blocked.total);
@@ -886,14 +892,14 @@ test("product overview: срез проекта, подборки, страни�
       "старая версия состава не меняется от задачи",
     );
     assert.notEqual(after.data.snapshotVersion, page.data.snapshotVersion);
-    failed(await app.run(["product", "overview", "--cursor", cursor]), "VERSION_CONFLICT");
+    failed(await app.run(["product", "overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
   });
 
   await t.test(
     "HTTP: те же предметные данные, подсказки сохраняют сервер и выполнимы",
     async () => {
       const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
-      t.after(() => server.close());
+      fixtureCleanup(t, () => server.close());
       const local = successful(
         await app.run<Overview>(["--local", "product", "overview", "--limit", 4]),
       );
@@ -908,9 +914,13 @@ test("product overview: срез проекта, подборки, страни�
         if (!command.endsWith("--help"))
           assert.equal(JSON.parse(await run(command)).ok, true, command);
       }
-      const human = await invokeRaw(app.root, ["--server-url", server.url, "product", "overview"], {
-        env: { COLUMNS: "60" },
-      });
+      const human = await invokeRaw(
+        app.root,
+        ["--server-url", server.url, "product", "overview", "--view", "full"],
+        {
+          env: { COLUMNS: "60" },
+        },
+      );
       assert.equal(human.code, 0, human.stdout);
       assert.match(human.stdout, /В работе · показано 5 из 7/);
       assert.doesNotMatch(human.stdout, /\u001b/);
@@ -931,12 +941,16 @@ type MetricView = ProductOverviewMetricPage & {
 };
 type App = { root: string; run: Awaited<ReturnType<typeof fixture>>["run"] };
 
-/** Проект в каталоге с пробелом и кавычкой: подсказки обязаны экранировать --config. */
+/** Явный config в каталоге с пробелом и кавычкой сохраняется в копируемых подсказках. */
 async function quotedFixture(t: TestContext): Promise<App> {
   const root = join(await tempDirectory(t), "проект с 'кавычкой'");
   await mkdir(root);
   successful(await invoke(root, ["init"]));
-  return { root, run: (args, options) => invoke(root, args, options) };
+  return {
+    root,
+    run: (args, options) =>
+      invoke(root, ["--config", join(root, ".relay/config.json"), ...args], options),
+  };
 }
 
 /**
@@ -1129,7 +1143,7 @@ test("product overview: показатели оператора, детализ�
 
   await t.test("human: компактные блоки и подписи по смыслу, без ANSI", async () => {
     for (const width of [40, 120]) {
-      const human = await invokeRaw(app.root, ["product", "overview"], {
+      const human = await invokeRaw(app.root, ["product", "overview", "--view", "full"], {
         env: { COLUMNS: String(width), FORCE_COLOR: "1" },
       });
       assert.equal(human.code, 0, human.stdout);
@@ -1234,8 +1248,9 @@ test("product overview: показатели оператора, детализ�
     for (const [metric, command] of Object.entries(commands.metrics as Record<string, string>)) {
       assert.match(
         command,
-        /^npx @oim-dev\/relay-cli --local --config '.*проект с '\\''кавычкой'\\''.*' --format json product overview --metric [a-z-]+$/,
+        /^npx @oim-dev\/relay-cli --config '.*проект с '\\''кавычкой'\\''.*' --format json product overview --metric [a-z-]+ --snapshot [a-f0-9]{64}$/,
       );
+      assert.ok(command.endsWith(`--snapshot ${full.data.snapshotVersion}`), command);
       const body = JSON.parse(await run(command));
       assert.equal(body.ok, true, command);
       assert.equal(body.data.metric, metric);
@@ -1243,7 +1258,12 @@ test("product overview: показатели оператора, детализ�
     }
     for (const blocker of operator.blockerImpact.items) {
       const command = commands.blockerAffected[blocker.id] as string;
-      assert.ok(command.endsWith(`--metric blocker-affected --blocker ${blocker.id}`), command);
+      assert.ok(
+        command.endsWith(
+          `--metric blocker-affected --blocker ${blocker.id} --snapshot ${full.data.snapshotVersion}`,
+        ),
+        command,
+      );
       const body = JSON.parse(await run(command));
       assert.equal(body.data.blocker.id, blocker.id);
       assert.equal(body.data.total, blocker.affected.total);
@@ -1396,7 +1416,7 @@ test("product overview: показатели оператора, детализ�
 
   await t.test("HTTP: те же данные всех метрик, команды сохраняют сервер", async () => {
     const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
-    t.after(() => server.close());
+    fixtureCleanup(t, () => server.close());
     const local = successful(
       await app.run<OverviewWithOperator>(["--local", "product", "overview"]),
     );
