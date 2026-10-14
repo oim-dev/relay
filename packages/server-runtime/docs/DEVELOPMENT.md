@@ -34,7 +34,7 @@ Project runtime предоставляет конфигурацию и реес�
   разрешает один контекст на запрос; проект/автор не хранятся как общий активный выбор.
 - `modules/workspace/routing.ts`: scoped-префикс переиспользует те же контроллеры
   через rewrite URL, сохраняя поток SSE.
-- `modules/{entities,product,boards,board-tasks,planning,releases,progress,graph}`:
+- `modules/{entities,documents,product,boards,board-tasks,planning,releases,progress,graph}`:
   транспортные адаптеры соответствующих сервисов Core.
 - `modules/context`, `workspace/server.module.ts`, `health`, `project`:
   подключение/settings, реестр, доступность и validation.

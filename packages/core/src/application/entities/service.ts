@@ -44,12 +44,13 @@ import {
   readEntityCatalog,
   resolveEntity,
 } from "./catalog.js";
-import type { EntityCatalog } from "./catalog.js";
 import { entityHandlers, entitySaved } from "./handlers.js";
 import type { EntityOperationContext } from "./handlers.js";
 import { readProjectDetail } from "./project.js";
 import { entityKeySpacePrefix, readEntityCards, resolveEntityCard } from "./indexed-catalog.js";
 import { readBoardDetail } from "../boards/read.js";
+import { readDocumentDetail } from "../documents/read.js";
+import { readDocumentList } from "../documents/list.js";
 
 /** Общий движок адресации, чтения и исполнения зарегистрированных предметных операций. */
 export class EntityEngine {
@@ -70,11 +71,6 @@ export class EntityEngine {
       nextOffset: next < items.length ? next : null,
       version,
     };
-  }
-  private read<T>(operation: (catalog: EntityCatalog) => T | Promise<T>) {
-    return this.workspace.locked(async (owned) =>
-      operation(await readEntityCatalog(this.workspace, owned)),
-    );
   }
   private write<T>(
     input: { actor?: string | undefined; requestId: string },
@@ -160,7 +156,16 @@ export class EntityEngine {
           2,
         );
     }
-    return this.read(async (catalog) => {
+    return this.workspace.locked(async (owned) => {
+      if (kind === "document") {
+        const documents = await readDocumentList(this.workspace, query);
+        if (documents)
+          return {
+            ...this.page(documents.items, pagination, documents.version),
+            libraryCounts: documents.libraryCounts,
+          };
+      }
+      const catalog = await readEntityCatalog(this.workspace, owned);
       // Полный адрес прежнего этапа плана (запись совместимости) не входит в публичный
       // каталог и не роняет адресное чтение: такой ref пропускается, остальные читаются.
       // Узнать план-владельца можно чтением графа/контекста от этого адреса.
@@ -265,6 +270,8 @@ export class EntityEngine {
       if (project) return project;
       const board = await readBoardDetail(this.workspace, query);
       if (board) return board;
+      const document = await readDocumentDetail(this.workspace, query);
+      if (document) return document;
       const catalog = await readEntityCatalog(this.workspace, owned);
       const entry = resolveEntity(catalog, query.ref, query.kind);
       const refs: { kind: string; id: string }[] = [];
@@ -315,7 +322,14 @@ export class EntityEngine {
         .map(entitySummary);
       return parse(
         entityDetailSchema,
-        { ...entitySummary(entry), data: entry.data, references },
+        {
+          ...entitySummary(entry),
+          data: entry.data,
+          references,
+          ...(catalog.metadata?.has(entityAddress(entry.ref))
+            ? { metadata: catalog.metadata.get(entityAddress(entry.ref)) }
+            : {}),
+        },
         "данные сущности",
         true,
       );

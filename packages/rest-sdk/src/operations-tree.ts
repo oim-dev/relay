@@ -4,6 +4,10 @@
  * https://github.com/gromlab-ru/rest-api-codegen
  */
 
+import { changeDocumentRelationForProject } from "./operations/change-document-relation-for-project.js";
+import { changeDocumentRelation } from "./operations/change-document-relation.js";
+import { changeDocumentSectionForProject } from "./operations/change-document-section-for-project.js";
+import { changeDocumentSection } from "./operations/change-document-section.js";
 import { changePlanStageForProject } from "./operations/change-plan-stage-for-project.js";
 import { changePlanStage } from "./operations/change-plan-stage.js";
 import { changePlanTasksForProject } from "./operations/change-plan-tasks-for-project.js";
@@ -36,6 +40,10 @@ import { getBoardsForProject } from "./operations/get-boards-for-project.js";
 import { getBoards } from "./operations/get-boards.js";
 import { getContextForProject } from "./operations/get-context-for-project.js";
 import { getContext } from "./operations/get-context.js";
+import { getDocumentLinksForProject } from "./operations/get-document-links-for-project.js";
+import { getDocumentLinks } from "./operations/get-document-links.js";
+import { getDocumentSectionsForProject } from "./operations/get-document-sections-for-project.js";
+import { getDocumentSections } from "./operations/get-document-sections.js";
 import { getEntityForProject } from "./operations/get-entity-for-project.js";
 import { getEntityKeySpacesForProject } from "./operations/get-entity-key-spaces-for-project.js";
 import { getEntityKeySpaces } from "./operations/get-entity-key-spaces.js";
@@ -332,6 +340,16 @@ export const operationsTree = {
     renameEntityKeyForProject: renameEntityKeyForProject,
     moveEntityTaskForProject: moveEntityTaskForProject,
     linkEntityTaskForProject: linkEntityTaskForProject,
+  },
+  documents: {
+    getDocumentLinks: getDocumentLinks,
+    getDocumentSections: getDocumentSections,
+    changeDocumentSection: changeDocumentSection,
+    changeDocumentRelation: changeDocumentRelation,
+    getDocumentLinksForProject: getDocumentLinksForProject,
+    getDocumentSectionsForProject: getDocumentSectionsForProject,
+    changeDocumentSectionForProject: changeDocumentSectionForProject,
+    changeDocumentRelationForProject: changeDocumentRelationForProject,
   },
   events: {
     watchEvents: watchEvents,

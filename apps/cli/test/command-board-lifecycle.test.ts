@@ -100,7 +100,7 @@ test("board: help и только application deletion без проекта", a
     assert.match(help, /--if-version/);
     assert.match(help, /Примеры:/);
   }
-  for (const kind of ["board", "feature", "scenario", "implementation", "task", "document"])
+  for (const kind of ["board", "feature", "scenario", "implementation", "task"])
     failed(
       await invoke(cwd, [kind, "delete", "SOMETHING", "--if-version", "version"]),
       "INVALID_ARGUMENT",

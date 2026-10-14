@@ -524,8 +524,9 @@ test("document reading: 20 аннотаций, 40 отношений, literal Ma
         assert.match(out.stdout.replace(/\s+/g, " "), /Прикрепления: 40 · уникальных целей: 20/);
         assert.ok(out.stdout.indexOf("───\n") > out.stdout.indexOf(body));
         const hints = commands(out.stdout);
-        assert.equal(hints.length, 2);
+        assert.equal(hints.length, 3);
         assert.match(hints[0]!, /document links/);
+        assert.match(hints[2]!, /document delete-preview/);
         assert.ok(
           Buffer.byteLength(out.stdout) < 8000,
           `Карточка раскрыла соседние пояснения: ${Buffer.byteLength(out.stdout)}`,
@@ -539,6 +540,8 @@ test("document reading: 20 аннотаций, 40 отношений, literal Ma
       assert.equal(commands(list.stdout).length, 1);
       const get = await follow(cwd, commands(list.stdout)[0]!);
       assert.ok(get.includes(body));
+      const preview = await follow(cwd, commands(get)[2]!);
+      assert.match(preview, /Полный каскад удаления/);
       const links = await follow(cwd, commands(get)[0]!);
       assert.match(links, /КОНЕЦ ПОЯСНЕНИЯ 0 documents/);
       const targetHints = commands(links).filter((line) => / (feature|document) get /.test(line));

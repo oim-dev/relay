@@ -4,6 +4,10 @@
  * https://github.com/gromlab-ru/rest-api-codegen
  */
 
+export { changeDocumentRelationForProject } from "./change-document-relation-for-project.js";
+export { changeDocumentRelation } from "./change-document-relation.js";
+export { changeDocumentSectionForProject } from "./change-document-section-for-project.js";
+export { changeDocumentSection } from "./change-document-section.js";
 export { changePlanStageForProject } from "./change-plan-stage-for-project.js";
 export { changePlanStage } from "./change-plan-stage.js";
 export { changePlanTasksForProject } from "./change-plan-tasks-for-project.js";
@@ -36,6 +40,10 @@ export { getBoardsForProject } from "./get-boards-for-project.js";
 export { getBoards } from "./get-boards.js";
 export { getContextForProject } from "./get-context-for-project.js";
 export { getContext } from "./get-context.js";
+export { getDocumentLinksForProject } from "./get-document-links-for-project.js";
+export { getDocumentLinks } from "./get-document-links.js";
+export { getDocumentSectionsForProject } from "./get-document-sections-for-project.js";
+export { getDocumentSections } from "./get-document-sections.js";
 export { getEntityForProject } from "./get-entity-for-project.js";
 export { getEntityKeySpacesForProject } from "./get-entity-key-spaces-for-project.js";
 export { getEntityKeySpaces } from "./get-entity-key-spaces.js";

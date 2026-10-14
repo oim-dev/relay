@@ -140,7 +140,19 @@ export const entitySummarySchema = z.strictObject({
     .optional()
     .describe("Компактные свойства документа без полного Markdown"),
 });
+export const entityMetadataSchema = z.strictObject({
+  createdAt: timestampSchema.describe("Сохранённое время создания текущей записи"),
+  createdBy: actorSchema.describe("Сохранённый автор создания записи"),
+  updatedAt: timestampSchema.describe("Сохранённое время последнего изменения записи"),
+  updatedBy: actorSchema.describe("Сохранённый автор последнего изменения записи"),
+});
+export type EntityMetadata = z.infer<typeof entityMetadataSchema>;
 export const entityDetailSchema = entitySummarySchema.extend({
+  metadata: entityMetadataSchema
+    .optional()
+    .describe(
+      "Метаданные той же записи и ревизии; отсутствие не заменяется выдуманными значениями",
+    ),
   data: entityDataSchema.describe("Полные типизированные данные; Markdown передаётся строками"),
   references: z
     .array(entitySummarySchema)

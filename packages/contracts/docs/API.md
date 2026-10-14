@@ -17,6 +17,7 @@
 | `@relay/contracts/primitives`          | Текст, автор, timestamp, ключ, внешний адрес, correlation `requestId`                                               |
 | `@relay/contracts/entities`            | Реестр основных видов, данные, карточки, фильтры, схемы общих действий и удаления                                   |
 | `@relay/contracts/entities/*`          | Предметные схемы продукта, досок, задач, документов, графа и настроек                                               |
+| `@relay/contracts/document-library`    | Страницы прикреплений и разделов библиотеки, точечные изменения под ревизией владельца                              |
 | `@relay/contracts/planning`            | Планы, вложенные этапы, запросы и результаты планирования                                                           |
 | `@relay/contracts/releases`            | Релизы и их операции                                                                                                |
 | `@relay/contracts/progress`            | Предметные показатели и выборки прогресса                                                                           |
@@ -124,6 +125,55 @@ project-runtime, Web). Новое обязательное поле резуль
 Целевая модель не становится доступным полем до реализации. В частности, текущий
 релиз использует `planIds`, без `applicationId`; принятое расширение описано отдельно
 в [предметных правилах](../../../docs/domain/RELEASES.md).
+
+### Документная библиотека
+
+`document-library.ts` переиспользует предметные поля из `entities/document-library.ts`,
+не меняя их дисковую форму. Core-фасад — `DocumentLibraryService`:
+
+- `documentLinksQuerySchema` / `DocumentLinksQuery`: `ref` документа и обычные
+  `offset/limit/version`. `documentLinksPageSchema` / `DocumentLinksPage` возвращает
+  `ref`, `key`, `title`, `revision`, `items`, `references`, `total`, `nextOffset`, `version`.
+  Элемент `DocumentLinkItem` — `{source: "relations" | "links", target, type, description}`;
+  references содержат только `{ref,key,title}` доступных уникальных целей страницы.
+  Тела, аннотации целей и пояснения вне страницы не передаются. Прежний `plan-stage`
+  остаётся адресом элемента без выдуманной карточки цели.
+- `documentSectionsQuerySchema` / `DocumentSectionsQuery`: только пагинация выбранного
+  проекта. `documentSectionsPageSchema` / `DocumentSectionsPage` —
+  `{project, projectKey, revision, items, total, nextOffset, version}`; элементы —
+  существующие `{id,name}` в порядке PROJECT. Ключ заголовка не требует второго get.
+- Версии обеих страниц — `<ID владельца>:<ревизия>`, конфликт — `VERSION_CONFLICT`.
+  Названия целей не получают отдельного snapshot guard. Пагинация сохраняет defaults
+  `offset=0`, `limit=40`, максимум 100; отсутствие версии начинает новое чтение.
+- `documentRelationChangeSchema` / `DocumentRelationChange`: общие
+  `ref`, `target`, `ifRevision`, `requestId`, optional `actor`; строгие варианты:
+  `source: "relations", action: "link", relation?, description?`,
+  `source: "relations", action: "unlink", relation?` и
+  `source: "links", action: "link" | "unlink"`. Тип modern по умолчанию `documents`.
+  Отсутствующее пояснение сохраняет прежнее, для нового отношения означает `""`;
+  `description: ""` очищает. Legacy не принимает тип/пояснение, unlink — пояснение.
+- `documentSectionChangeSchema` / `DocumentSectionChange`: общие
+  `id`, `ifRevision`, `requestId`, optional `actor`; строгие варианты:
+  `action: "create" | "update", name`, `action: "move", before: string | null`
+  и `action: "remove"`. `before: null` означает конец списка. Мутации возвращают
+  прежний `EntitySaved` с `action: "update"`. Actor ввода приоритетнее автора вызова;
+  `requestId` не гарантирует дедупликацию и no-op сохраняет новую ревизию.
+
+`EntityDetail.metadata` — optional блок из четырёх обязательных полей
+`createdAt`, `createdBy`, `updatedAt`, `updatedBy`; даты — `timestampSchema`,
+авторы — `actorSchema`. Первоначально его заполняет чтение документов из настоящей
+записи той же ревизии. Это не история; отсутствие блока не заполняется из mtime,
+событий или текущего автора. Обязательные метаданные повреждённого файла не становятся
+необязательными из-за optional DTO. Блок не входит в `EntitySummary` и storageCard.
+Новый parser принимает прежний ответ без блока, но прежний строгий parser может
+отклонить ответ с новым полем: Server/SDK/Backend/CLI обновляются согласованно.
+
+Для `EntityEngine.list({kind: "document"})` текущий индексный путь использует новую
+непрозрачную версию `documents-v1:<SHA-256 отсортированных пар snapshotRoots>`.
+Прежние курсоры дают `ENTITIES_CHANGED`; это не эквивалент прежнему хешу полных entries.
+Guard консервативный, включая изменения других корней; dirty/legacy сохраняют старую
+каталоговую версию. Это проверка текущего состояния, не исторический снимок и не
+диагностика неиндексированных внешних правок файлов.
 
 ## Обслуживание хранилища
 

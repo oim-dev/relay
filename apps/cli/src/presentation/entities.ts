@@ -289,7 +289,14 @@ export function entityText(
       fields: [
         ["Вид", labels.get(entity.ref.kind)],
         ["Ревизия", entity.revision],
-        ...(entity.document ? [["Изменён", entity.document.updatedAt] as OutputField] : []),
+        ...(data.kind === "document" && entity.metadata
+          ? ([
+              ["Изменён", entity.metadata.updatedAt],
+              ["Изменил", entity.metadata.updatedBy],
+            ] as OutputField[])
+          : entity.document
+            ? [["Изменён", entity.document.updatedAt] as OutputField]
+            : []),
         ...(data.kind !== "document" ? entityStateFields(entity) : []),
       ],
       sections: [
@@ -310,7 +317,10 @@ export function entityText(
               overview: "Карта продукта",
               context: data.kind === "document" ? "Связи графа: полная компонента" : "Контекст",
               links: "Прикрепления: адреса и полные пояснения страницами",
-              deletion: "Жизненный цикл: предпросмотр удаления приложения с доской (без изменений)",
+              deletion:
+                data.kind === "document"
+                  ? "Жизненный цикл: предпросмотр удаления документа (без изменений)"
+                  : "Жизненный цикл: предпросмотр удаления приложения с доской (без изменений)",
             }[label] ?? label,
           command,
         })),

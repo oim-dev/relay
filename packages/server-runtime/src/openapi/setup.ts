@@ -53,6 +53,10 @@ export function setupOpenApi(app: INestApplication): void {
       jsonSchema(
         schema,
         [
+          "DocumentLinksQuery",
+          "DocumentSectionsQuery",
+          "DocumentRelationChange",
+          "DocumentSectionChange",
           "PlansQuery",
           "PlanningPageQuery",
           "PlanningCandidatesQuery",

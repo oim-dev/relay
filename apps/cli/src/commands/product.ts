@@ -405,8 +405,8 @@ export function registerProduct(program: Command, runtime: Runtime): void {
           ...(kind === "product"
             ? { overview: commandInvocation(context, ["product", "overview"]) }
             : {}),
-          ...(kind === "application"
-            ? { deletion: commandInvocation(context, ["application", "delete-preview", data.key]) }
+          ...(kind === "application" || kind === "document"
+            ? { deletion: commandInvocation(context, [kind, "delete-preview", data.key]) }
             : {}),
         };
         return { data, text: (options) => entityText(data, options, commands) };
@@ -519,6 +519,18 @@ export function registerProduct(program: Command, runtime: Runtime): void {
     if (kind === "document") {
       registerDocumentRelations(group, runtime);
       registerDocumentSections(group, runtime);
+      registerEntityDeletion(group, runtime, {
+        kind,
+        example: examples[kind],
+        details:
+          "Удаляется только документ; прикреплённые сущности и другие документы сохраняются со снятием затронутых ссылок. Архивирование и открепление не равны удалению.",
+        catalogs: [
+          {
+            label: "Проверить оставшиеся документы и их прикрепления (удаление не повторять)",
+            args: ["document", "list"],
+          },
+        ],
+      });
     }
     if (kind === "application") {
       registerParticipation(group, runtime);

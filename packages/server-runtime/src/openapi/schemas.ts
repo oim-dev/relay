@@ -1,5 +1,13 @@
 import { z } from "zod";
 import {
+  documentLinksQuerySchema,
+  documentLinksPageSchema,
+  documentSectionsQuerySchema,
+  documentSectionsPageSchema,
+  documentRelationChangeSchema,
+  documentSectionChangeSchema,
+} from "@relay/contracts/document-library";
+import {
   plansQuerySchema,
   planningPageQuerySchema,
   plansPageSchema,
@@ -144,6 +152,12 @@ const serverEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export const schemas = {
+  DocumentLinksQuery: documentLinksQuerySchema,
+  DocumentLinksPage: documentLinksPageSchema,
+  DocumentSectionsQuery: documentSectionsQuerySchema,
+  DocumentSectionsPage: documentSectionsPageSchema,
+  DocumentRelationChange: documentRelationChangeSchema,
+  DocumentSectionChange: documentSectionChangeSchema,
   PlansQuery: plansQuerySchema,
   PlanningCandidatesQuery: planningCandidatesQuerySchema,
   PlanningCandidatesPage: planningCandidatesPageSchema,

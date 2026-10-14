@@ -3,6 +3,7 @@ import type {
   EntityData,
   EntityDetail,
   EntityKind,
+  EntityMetadata,
   EntitySummary,
 } from "@relay/contracts/entities";
 import { ProductRepository } from "../../storage/product.js";
@@ -13,17 +14,23 @@ import { invariant } from "../../shared/errors.js";
 import { productState, validateProduct } from "../product/model.js";
 import { resolveAddress } from "./resolver.js";
 import { EntityDeletionRepository } from "../../storage/entity-deletion.js";
-import { defaultDocumentSections } from "@relay/contracts/entities";
+import { documentEntityEntry, documentMetadata } from "../documents/projection.js";
 import { planningRecords } from "../../storage/planning.js";
 import { projectEntityEntry, readEntityConfig } from "./project.js";
 import { boardEntityEntry } from "./board.js";
 
-export type EntityEntry = Omit<EntityDetail, "references"> & {
+export type EntityEntry = Omit<EntityDetail, "references" | "metadata"> & {
   aliases: string[];
   selectors: string[];
   filters: Record<string, string | string[] | null>;
 };
-export type EntityCatalog = { entries: EntityEntry[]; version: string; reservedKeys: string[] };
+export type EntityCatalog = {
+  entries: EntityEntry[];
+  version: string;
+  reservedKeys: string[];
+  /** Не входит в entries/version и производные карточки. */
+  metadata?: ReadonlyMap<string, EntityMetadata>;
+};
 export const entityAddress = (ref: { kind: string; id: string }) => `${ref.kind}:${ref.id}`;
 export const entityDigest = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -90,6 +97,7 @@ export async function readEntityCatalog(
   const tasks = await new BoardTaskRepository(workspace).all();
   const state = productState(repository.productId, source.records, tasks);
   const entries: EntityEntry[] = [];
+  const metadata = new Map<string, EntityMetadata>();
   const add = (
     kind: EntityKind,
     id: string,
@@ -134,6 +142,13 @@ export async function readEntityCatalog(
     );
   for (const record of state.records) {
     const fields = record.fields;
+    if (fields.kind === "document") {
+      entries.push(
+        documentEntityEntry({ ...record, fields }, config.projectSettings?.documentSections),
+      );
+      metadata.set(`document:${record.id}`, documentMetadata(record));
+      continue;
+    }
     if (fields.kind === "scope") {
       for (const contract of fields.contracts) {
         const stored = source.implementations.get(contract.id);
@@ -182,37 +197,8 @@ export async function readEntityCatalog(
       fields.kind === "passport" ? { ...fields, kind: "product" } : fields,
       {
         aliases: record.reservedKeys ?? [],
-        status:
-          fields.kind === "document"
-            ? (fields.documentStatus ?? "active")
-            : (readiness?.status ?? null),
-        ...(fields.kind !== "document"
-          ? {}
-          : {
-              document: {
-                kind: fields.documentKind,
-                status: fields.documentStatus ?? "active",
-                sectionId: (
-                  config.projectSettings?.documentSections ?? defaultDocumentSections
-                ).some((section) => section.id === fields.sectionId)
-                  ? (fields.sectionId ?? null)
-                  : null,
-                pinned: fields.pinned ?? false,
-                updatedAt: record.updatedAt,
-                linkCount: fields.links.length + (fields.relations?.length ?? 0),
-              },
-            }),
-        filters:
-          fields.kind === "scenario"
-            ? { feature: fields.featureId }
-            : fields.kind === "document"
-              ? {
-                  target: [
-                    ...fields.links.map((link) => (link.kind === "product" ? "passport" : link.id)),
-                    ...(fields.relations ?? []).map((link) => link.target.id),
-                  ],
-                }
-              : {},
+        status: readiness?.status ?? null,
+        filters: fields.kind === "scenario" ? { feature: fields.featureId } : {},
       },
     );
   }
@@ -297,5 +283,5 @@ export async function readEntityCatalog(
   }
   entries.sort((a, b) => entityAddress(a.ref).localeCompare(entityAddress(b.ref)));
   const reservedKeys = await new EntityDeletionRepository(workspace).reservedKeys();
-  return { entries, reservedKeys, version: entityDigest([entries, reservedKeys]) };
+  return { entries, reservedKeys, version: entityDigest([entries, reservedKeys]), metadata };
 }

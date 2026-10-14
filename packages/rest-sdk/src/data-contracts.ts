@@ -16,6 +16,371 @@ export type ProductOverviewMetric =
   | "ready-releases"
   | "plans-outside-releases";
 
+export interface DocumentLinksQuery {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+  /**
+   * Ключ, ID или постоянный адрес документа
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+}
+
+export interface DocumentLinksPage {
+  /** Постоянный адрес выбранного документа */
+  ref: {
+    /** Вид основной сущности */
+    kind: DocumentLinksPageKindEnum;
+    /**
+     * Постоянный ID; внутренние отношения сохраняют только этот адрес
+     * @minLength 1
+     * @maxLength 128
+     */
+    id: string;
+  };
+  /** Текущий читаемый ключ документа для заголовка */
+  key: string;
+  /** Название документа для заголовка */
+  title: string;
+  /**
+   * Ревизия записи владельца
+   * @min 0
+   * @max 9007199254740991
+   */
+  revision: number;
+  /** Отношения страницы: сначала relations, затем links */
+  items: {
+    /** Поле документа: адресные отношения или прежние области */
+    source: DocumentLinksPageSourceEnum;
+    /** Связанная сущность проекта: вид и постоянный ID */
+    target: {
+      /** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
+      kind: DocumentLinksPageKindEnum1;
+      /**
+       * Постоянный ID связанной сущности
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      id: string;
+    };
+    /** references — контекст для сущности; documents — документ описывает сущность */
+    type: DocumentLinksPageTypeEnum;
+    /** Полное Markdown-пояснение отношения страницы; пустая строка у прежней области */
+    description: string;
+  }[];
+  /** Уникальные доступные цели только этой страницы; без тел, аннотаций и прежних этапов */
+  references: {
+    /** Постоянный адрес в выбранном проекте */
+    ref: {
+      /** Вид основной сущности */
+      kind: DocumentLinksPageKindEnum2;
+      /**
+       * Постоянный ID; внутренние отношения сохраняют только этот адрес
+       * @minLength 1
+       * @maxLength 128
+       */
+      id: string;
+    };
+    /** Текущий читаемый ключ для человека и агента */
+    key: string;
+    /** Однострочное название */
+    title: string;
+  }[];
+  /**
+   * Полное число результатов выбранной области
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Смещение продолжения; null в конце */
+  nextOffset: number | null;
+  /** Версия согласованного снимка */
+  version: string;
+}
+
+/** Страница разделов выбранного проекта в сохранённом порядке */
+export interface DocumentSectionsQuery {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+}
+
+export interface DocumentSectionsPage {
+  /** Постоянный адрес выбранного проекта */
+  project: {
+    /** Вид основной сущности */
+    kind: DocumentSectionsPageKindEnum;
+    /**
+     * Постоянный ID; внутренние отношения сохраняют только этот адрес
+     * @minLength 1
+     * @maxLength 128
+     */
+    id: string;
+  };
+  /** Текущий ключ проекта для заголовка без дополнительного чтения */
+  projectKey: string;
+  /**
+   * Ревизия записи владельца
+   * @min 0
+   * @max 9007199254740991
+   */
+  revision: number;
+  /** Разделы страницы в сохранённом порядке */
+  items: {
+    /**
+     * Постоянный ID раздела библиотеки
+     * @pattern ^[a-zA-Z0-9_-]{1,64}$
+     */
+    id: string;
+    /**
+     * Название раздела библиотеки
+     * @minLength 1
+     */
+    name: string;
+  }[];
+  /**
+   * Полное число результатов выбранной области
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Смещение продолжения; null в конце */
+  nextOffset: number | null;
+  /** Версия согласованного снимка */
+  version: string;
+}
+
+export type DocumentRelationChange =
+  | {
+      /**
+       * Исходная прочитанная ревизия; при конфликте запись отменяется
+       * @min 0
+       * @max 9007199254740991
+       */
+      ifRevision: number;
+      /**
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      requestId: string;
+      /** Автор изменения; при отсутствии используется автор вызова */
+      actor?: string;
+      /**
+       * Ключ, ID или постоянный адрес изменяемого документа
+       * @minLength 1
+       * @maxLength 257
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      ref: string;
+      /**
+       * Ключ, ID или постоянный адрес цели прикрепления
+       * @minLength 1
+       * @maxLength 257
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      target: string;
+      /** Изменить адресное отношение, сохранив прежние области */
+      source: "relations";
+      /**
+       * references — контекст для сущности; documents — документ описывает сущность
+       * @default "documents"
+       */
+      relation?: DocumentRelationChangeRelationEnum;
+      /** Добавить отношение или изменить его пояснение */
+      action: "link";
+      /** Отсутствие сохраняет пояснение, для нового отношения означает пустое; пустая строка очищает */
+      description?: string;
+    }
+  | {
+      /**
+       * Исходная прочитанная ревизия; при конфликте запись отменяется
+       * @min 0
+       * @max 9007199254740991
+       */
+      ifRevision: number;
+      /**
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      requestId: string;
+      /** Автор изменения; при отсутствии используется автор вызова */
+      actor?: string;
+      /**
+       * Ключ, ID или постоянный адрес изменяемого документа
+       * @minLength 1
+       * @maxLength 257
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      ref: string;
+      /**
+       * Ключ, ID или постоянный адрес цели прикрепления
+       * @minLength 1
+       * @maxLength 257
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      target: string;
+      /** Изменить адресное отношение, сохранив прежние области */
+      source: "relations";
+      /**
+       * references — контекст для сущности; documents — документ описывает сущность
+       * @default "documents"
+       */
+      relation?: DocumentRelationChangeRelationEnum1;
+      /** Снять существующее адресное отношение выбранного типа */
+      action: "unlink";
+    }
+  | {
+      /**
+       * Исходная прочитанная ревизия; при конфликте запись отменяется
+       * @min 0
+       * @max 9007199254740991
+       */
+      ifRevision: number;
+      /**
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      requestId: string;
+      /** Автор изменения; при отсутствии используется автор вызова */
+      actor?: string;
+      /**
+       * Ключ, ID или постоянный адрес изменяемого документа
+       * @minLength 1
+       * @maxLength 257
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      ref: string;
+      /**
+       * Ключ, ID или постоянный адрес цели прикрепления
+       * @minLength 1
+       * @maxLength 257
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      target: string;
+      /** Изменить прежнюю продуктовую область без типа и пояснения */
+      source: "links";
+      /** Сохранить прежнюю область или снять существующую */
+      action: DocumentRelationChangeActionEnum;
+    };
+
+export type DocumentSectionChange =
+  | {
+      /**
+       * Исходная прочитанная ревизия; при конфликте запись отменяется
+       * @min 0
+       * @max 9007199254740991
+       */
+      ifRevision: number;
+      /**
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      requestId: string;
+      /** Автор изменения; при отсутствии используется автор вызова */
+      actor?: string;
+      /**
+       * Постоянный ID раздела библиотеки
+       * @pattern ^[a-zA-Z0-9_-]{1,64}$
+       */
+      id: string;
+      /** Добавить раздел в конец или изменить его название */
+      action: DocumentSectionChangeActionEnum;
+      /** Название раздела библиотеки */
+      name: string;
+    }
+  | {
+      /**
+       * Исходная прочитанная ревизия; при конфликте запись отменяется
+       * @min 0
+       * @max 9007199254740991
+       */
+      ifRevision: number;
+      /**
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      requestId: string;
+      /** Автор изменения; при отсутствии используется автор вызова */
+      actor?: string;
+      /**
+       * Постоянный ID раздела библиотеки
+       * @pattern ^[a-zA-Z0-9_-]{1,64}$
+       */
+      id: string;
+      /** Переместить существующий раздел, сохранив его ID и название */
+      action: "move";
+      /** ID следующего раздела; null — конец списка */
+      before: string | null;
+    }
+  | {
+      /**
+       * Исходная прочитанная ревизия; при конфликте запись отменяется
+       * @min 0
+       * @max 9007199254740991
+       */
+      ifRevision: number;
+      /**
+       * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      requestId: string;
+      /** Автор изменения; при отсутствии используется автор вызова */
+      actor?: string;
+      /**
+       * Постоянный ID раздела библиотеки
+       * @pattern ^[a-zA-Z0-9_-]{1,64}$
+       */
+      id: string;
+      /** Удалить раздел, сохранив документы и их ревизии */
+      action: "remove";
+    };
+
 export interface PlansQuery {
   /**
    * Смещение страницы
@@ -3791,6 +4156,31 @@ export interface EntityDetail {
     linkCount: number;
     /** Фрагмент совпадения полнотекстового поиска */
     excerpt?: string;
+  };
+  /** Метаданные той же записи и ревизии; отсутствие не заменяется выдуманными значениями */
+  metadata?: {
+    /**
+     * Сохранённое время создания текущей записи
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Сохранённый автор создания записи
+     * @maxLength 128
+     */
+    createdBy: string;
+    /**
+     * Сохранённое время последнего изменения записи
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    updatedAt: string;
+    /**
+     * Сохранённый автор последнего изменения записи
+     * @maxLength 128
+     */
+    updatedBy: string;
   };
   /** Полные типизированные данные; Markdown передаётся строками */
   data:
@@ -11145,6 +11535,87 @@ export interface ApiFailure {
   };
 }
 
+/** Вид основной сущности */
+export type DocumentLinksPageKindEnum =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Поле документа: адресные отношения или прежние области */
+export type DocumentLinksPageSourceEnum = "relations" | "links";
+
+/** Вид связанной сущности проекта; plan-stage — только чтение сохранённой связи с прежним адресом этапа, новые прикрепления к этапу запрещены */
+export type DocumentLinksPageKindEnum1 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "plan-stage"
+  | "release";
+
+/** references — контекст для сущности; documents — документ описывает сущность */
+export type DocumentLinksPageTypeEnum = "references" | "documents";
+
+/** Вид основной сущности */
+export type DocumentLinksPageKindEnum2 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Вид основной сущности */
+export type DocumentSectionsPageKindEnum =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/**
+ * references — контекст для сущности; documents — документ описывает сущность
+ * @default "documents"
+ */
+export type DocumentRelationChangeRelationEnum = "references" | "documents";
+
+/**
+ * references — контекст для сущности; documents — документ описывает сущность
+ * @default "documents"
+ */
+export type DocumentRelationChangeRelationEnum1 = "references" | "documents";
+
+/** Сохранить прежнюю область или снять существующую */
+export type DocumentRelationChangeActionEnum = "link" | "unlink";
+
+/** Добавить раздел в конец или изменить его название */
+export type DocumentSectionChangeActionEnum = "create" | "update";
+
 /** Фильтр состояния плана */
 export type PlansQueryStatusEnum =
   | "draft"
@@ -14840,6 +15311,65 @@ export type MoveEntityTaskOkEnum = true;
 
 export type LinkEntityTaskOkEnum = true;
 
+export type GetDocumentLinksOkEnum = true;
+
+export interface GetDocumentLinksParams {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+  /**
+   * Ключ, ID или постоянный адрес документа
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+}
+
+export type GetDocumentSectionsOkEnum = true;
+
+export interface GetDocumentSectionsParams {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+}
+
+export type ChangeDocumentSectionOkEnum = true;
+
+export type ChangeDocumentRelationOkEnum = true;
+
 export type GetContextForProjectOkEnum = true;
 
 export interface GetContextForProjectParams {
@@ -16683,6 +17213,79 @@ export interface MoveEntityTaskForProjectParams {
 export type LinkEntityTaskForProjectOkEnum = true;
 
 export interface LinkEntityTaskForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetDocumentLinksForProjectOkEnum = true;
+
+export interface GetDocumentLinksForProjectParams {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+  /**
+   * Ключ, ID или постоянный адрес документа
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetDocumentSectionsForProjectOkEnum = true;
+
+export interface GetDocumentSectionsForProjectParams {
+  /**
+   * Смещение страницы
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы от 1 до 100
+   * @min 1
+   * @max 100
+   * @default 40
+   */
+  limit?: number;
+  /**
+   * Версия первой страницы; изменение требует начать чтение заново
+   * @maxLength 128
+   */
+  version?: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type ChangeDocumentSectionForProjectOkEnum = true;
+
+export interface ChangeDocumentSectionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type ChangeDocumentRelationForProjectOkEnum = true;
+
+export interface ChangeDocumentRelationForProjectParams {
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }

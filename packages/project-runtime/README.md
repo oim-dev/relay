@@ -23,7 +23,11 @@ Backend охватывает настройки проекта, продукт, 
 полную пару имени/slug через Core либо REST `/context/settings`. Если потребителю нужна
 частичная правка, он дополняет отсутствующее поле прочитанным значением, сохраняя исходную
 пользовательскую `ifRevision`; адаптер не перечитывает ревизию и не повторяет запись.
-Разделы `documentSections` изменяются через generic `entities.update`, а не settings.
+`documents.links` и `documents.sections` читают ограниченные страницы библиотеки;
+`documents.changeRelation` и `documents.changeSection` выполняют адресные изменения
+под исходной ревизией без полного чтения/перезаписи массивов на клиенте. Они вызывают
+`DocumentLibraryService` либо REST `/documents`; HTTP требует `relay-document-library-v1`.
+Полная замена `documentSections` остаётся в generic `entities.update`, не в settings.
 `deletion.preview({ref, kind})` возвращает полный предпросмотр, а
 `deletion.delete({ref, kind, ifVersion, requestId, actor?}, defaultActor)` подтверждает
 его через `EntityDeletionService` либо существующие REST-операции удаления. Типы

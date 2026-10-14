@@ -97,7 +97,7 @@ test("local: init, карточка, квитанция и обслуживан�
     ],
     [
       ["document", "get", "DOC-1"],
-      ["document links DOC-1", "inspect graph context DOC-1"],
+      ["document links DOC-1", "inspect graph context DOC-1", "document delete-preview DOC-1"],
     ],
     [["storage", "status"], ["doctor check"]],
   ] as const) {

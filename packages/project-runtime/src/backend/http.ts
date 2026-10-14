@@ -2,6 +2,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { actorSchema } from "@relay/contracts/primitives";
 import {
+  documentLinksQuerySchema,
+  documentLinksPageSchema,
+  documentSectionsQuerySchema,
+  documentSectionsPageSchema,
+  documentRelationChangeSchema,
+  documentSectionChangeSchema,
+} from "@relay/contracts/document-library";
+import {
   plansQuerySchema,
   planningPageQuerySchema,
   plansPageSchema,
@@ -122,6 +130,8 @@ import type { ProductOverviewMetric } from "@relay/core/domain/product";
 
 /** Возможность сервера: snapshot.operator и детализация метрик оператора обзора. */
 export const OVERVIEW_METRICS_CAPABILITY = "relay-overview-metrics-v1";
+/** Страницы библиотеки и адресные записи без клиентского полного чтения документа/проекта. */
+export const DOCUMENT_LIBRARY_CAPABILITY = "relay-document-library-v1";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -290,6 +300,15 @@ export async function createHttpBackend(url: string, project?: string): Promise<
     operation: () => Promise<{ ok: true; data: unknown }>,
     requestId: string,
   ) => decode(planningSavedSchema, await call(operation, "write", requestId));
+  const requireDocumentLibrary = () => {
+    if (!context.capabilities?.includes(DOCUMENT_LIBRARY_CAPABILITY))
+      throw new AppError(
+        "SERVER_INCOMPATIBLE",
+        `Операции библиотеки требуют Relay Server с ${DOCUMENT_LIBRARY_CAPABILITY}. Обновите и перезапустите сервер той же версии, что и клиент.`,
+        5,
+        { url },
+      );
+  };
   return {
     kind: "http",
     projectSettings: {
@@ -628,6 +647,50 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             input.requestId,
           ),
         ),
+    },
+    documents: {
+      links: async (input) => {
+        requireDocumentLibrary();
+        const query = parse(documentLinksQuerySchema, input, "прикрепления документа");
+        return decode(
+          documentLinksPageSchema,
+          await call(() => api.documents.getDocumentLinks(defined(query))),
+        );
+      },
+      sections: async (input = {}) => {
+        requireDocumentLibrary();
+        const query = parse(documentSectionsQuerySchema, input, "разделы библиотеки");
+        return decode(
+          documentSectionsPageSchema,
+          await call(() => api.documents.getDocumentSections(defined(query))),
+        );
+      },
+      changeRelation: async (input, defaultActor) => {
+        requireDocumentLibrary();
+        const command = parse(documentRelationChangeSchema, input, "изменение прикрепления");
+        const actor = parse(actorSchema, command.actor ?? defaultActor, "автор изменения");
+        return decode(
+          entitySavedSchema,
+          await call(
+            () => api.documents.changeDocumentRelation(defined({ ...command, actor })),
+            "write",
+            command.requestId,
+          ),
+        );
+      },
+      changeSection: async (input, defaultActor) => {
+        requireDocumentLibrary();
+        const command = parse(documentSectionChangeSchema, input, "изменение раздела");
+        const actor = parse(actorSchema, command.actor ?? defaultActor, "автор изменения");
+        return decode(
+          entitySavedSchema,
+          await call(
+            () => api.documents.changeDocumentSection(defined({ ...command, actor })),
+            "write",
+            command.requestId,
+          ),
+        );
+      },
     },
     deletion: {
       preview: async (input) => {

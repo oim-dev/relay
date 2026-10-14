@@ -151,28 +151,35 @@ REST `/product/{state,overview,records,entities,entity,context,implementations}`
 | Изменить тип документа, включая предложение → решение     | Есть | Есть | Есть | Есть | Есть | `documentKind`: в том числе proposal → decision; не отдельная операция принятия решения.                       |
 | Установить адресные отношения references/documents        | Есть | Есть | Есть | Есть | Есть | Поле `relations`; Web позволяет прикрепление из задач, целей, планов и релизов.                                |
 | Изменить пояснение адресного отношения документа          | Есть | Есть | Есть | Есть | Есть | Markdown-пояснение в `relations`.                                                                              |
-| Снять адресное отношение документа                        | Есть | Есть | Есть | Есть | Есть | Web — через документ; CLI/MCP — обновление набора отношений.                                                   |
+| Снять адресное отношение документа                        | Есть | Есть | Есть | Есть | Есть | Web — через документ; CLI — точечная операция Core, MCP — обновление набора отношений.                         |
 | Задать или очистить прежние продуктовые области документа | Есть | Есть | Нет  | Есть | Есть | Совместимые поля `links` / `targets`; современная Web-библиотека использует `relations`.                       |
 
 Входы: `document list/get/create/update`, `document links/link/unlink`, `document section`;
 MCP `entity_document_create/update`, `product_document_save`, `entity_project_update`;
-REST `/entities`, `/entities/update`, `/product/records`.
-Разделы меняются через общую операцию изменения проекта, а не через settings PUT.
+REST `/entities`, `/entities/update`, `/product/records`, `/documents/links`,
+`/documents/relations`, `/documents/sections`.
+Серверные страницы прикреплений и разделов передают выбранный диапазон; текст документа
+не передаётся вместе со страницей прикреплений. Точечные операции библиотеки исполняет
+Core под исходной ревизией владельца. Общая операция изменения проекта также сохраняется;
+settings PUT разделы не изменяет.
 В CLI состояние, раздел и закрепление меняются через `document update`, адресные
 отношения точечно — через `document link/unlink`. Полный современный набор можно
 атомарно сохранить вместе с содержанием через `document create/update`
 с `--relations` или `--relations-file`; непереданные современные и прежние поля
 при обновлении сохраняются. Формат ввода описан в [справочнике CLI](../apps/cli/docs/CLI.md#документы-и-разделы).
 Прежние области задаются `--targets` либо `--legacy`.
-`document section` сохраняет массив разделов read-modify-write под
-исходной ревизией PROJECT, не повторяя запись при конфликте.
+`document section` вызывает предметную операцию Core под исходной ревизией PROJECT,
+не читая и не переписывая полный массив на клиенте и не повторяя запись при конфликте.
 
 Основания: [Core сущности](../packages/core/src/application/entities/service.ts),
+[Core библиотека](../packages/core/src/application/documents/library.ts),
 [Core продукт](../packages/core/src/application/product/service.ts),
 [документный контракт](../packages/contracts/src/entities/document-library.ts),
+[операции библиотеки](../packages/contracts/src/document-library.ts),
 [CLI документы](../apps/cli/src/commands/product-documents.ts),
 [MCP сущности](../apps/mcp/src/entity-tools.ts),
 [REST сущности](../packages/server-runtime/src/modules/entities/entities.module.ts),
+[REST библиотека](../packages/server-runtime/src/modules/documents/documents.module.ts),
 [Web библиотека](../apps/web/src/compositions/screens/product-documents/product-documents.screen.tsx),
 [Web форма документа](../apps/web/src/compositions/screens/product-document-editor/ui/documentation-form/documentation-form.tsx).
 
@@ -351,8 +358,8 @@ REST `/entities`, `/graph`, `/graph/context`, `/product/context`.
 
 | Пользовательское действие                                          | Core | REST | Web  | CLI      | MCP  | Способ и границы                                                                                                                                                                                                                              |
 | ------------------------------------------------------------------ | ---- | ---- | ---- | -------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Просмотреть каскад удаления и снимаемые внешние связи              | Есть | Есть | Есть | Частично | Нет  | Core/REST/Web: шесть видов; CLI: application delete-preview. Каскад приложения включает доску и задачи; ограничения ссылок планов — ниже.                                                                                                     |
-| Подтвердить удаление просмотренного каскада                        | Есть | Есть | Есть | Частично | Нет  | CLI: application delete с исходной --if-version; остальные пять видов пока без CLI-пути. Общая операция изменения сущности не заменяет удаление.                                                                                              |
+| Просмотреть каскад удаления и снимаемые внешние связи              | Есть | Есть | Есть | Частично | Нет  | Core/REST/Web: шесть видов; CLI: application/document delete-preview. Каскад приложения включает доску и задачи; ограничения ссылок планов — ниже.                                                                                            |
+| Подтвердить удаление просмотренного каскада                        | Есть | Есть | Есть | Частично | Нет  | CLI: application/document delete с исходной --if-version; остальные четыре вида пока без CLI-пути. Общая операция изменения сущности не заменяет удаление.                                                                                    |
 | Удалить проект, паспорт или системную доску                        | Нет  | Нет  | Нет  | Нет      | Нет  | Удаление регистрации проекта не удаляет его данные.                                                                                                                                                                                           |
 | Проверить целостность проекта                                      | Есть | Есть | Нет  | Есть     | Есть | Полная проверка сохранённых файлов и индексов, сверка управляемых отношений с предметными ссылками; без автоматического ремонта. Адресные причины сохраняются в details.                                                                      |
 | Проверить структурную целостность продукта и его предметные ссылки | Есть | Есть | Нет  | Есть     | Нет  | Core state вызывает validateProduct; REST — через /product/state, CLI — product validate. Проверка не подтверждает полноту требований или корректность всех задач.                                                                            |
@@ -370,6 +377,7 @@ REST `/entities`, `/graph`, `/graph/context`, `/product/context`.
 `storage status/migrate/reindex/reconcile-relations`; MCP `project_validate`, `product_lint`;
 REST `/validation`, `/product/state`, `/entities/deletion-preview`, `/entities/delete`, `/events`.
 Предметный CLI-путь удаления приложения: `application delete-preview` → `application delete`.
+Для документа: `document delete-preview` → `document delete`.
 Локальное обслуживание использует файловую рабочую область, а не удалённый метод Backend.
 
 Основания: [Core удаление](../packages/core/src/application/entities/deletion.ts),

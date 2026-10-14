@@ -122,6 +122,7 @@ for (const mode of ["local", "workspace"] as const) {
               "relay-projects-v1",
               "relay-full-context-v1",
               "relay-overview-metrics-v1",
+              "relay-document-library-v1",
             ],
             projectId: config.projectId,
             configPath: target.projectConfig,
