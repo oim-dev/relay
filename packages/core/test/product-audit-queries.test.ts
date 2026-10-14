@@ -361,6 +361,107 @@ test("новые FI+SI публикуются одной mutation; компак�
   );
 });
 
+for (const initialStatus of ["done", "partial"] as const)
+  test(`QA-01: FI/SI ${initialStatus} → inactive none → текущая готовность, savedStatus и generic detail согласованы`, async (t) => {
+    const { product, workspace, replace } = await setup(t);
+    await replace();
+    const tasks = new BoardTasksService(workspace);
+    const engine = new EntityEngine(workspace);
+    const selected = await product.participation({ application: "WEB" });
+    const si = selected.items.find((entry) => entry.implementationTarget === "scenario")!;
+    await product.updateImplementation(
+      { ref: si.ref.id, ifRevision: si.revision, status: "none", requestId: "saved-si-status" },
+      actor,
+    );
+    const savedStatuses = new Map(
+      selected.items.map((entry) => [entry.ref.id, entry.ref.id === si.ref.id ? "none" : "done"]),
+    );
+    const work = [];
+    for (const entry of selected.items) {
+      const saved = await tasks.create(
+        {
+          board: "web",
+          column: initialStatus === "done" ? "done" : "inbox",
+          productLinks: [{ kind: "implementation", id: entry.ref.id }],
+          requestId: `task-${entry.ref.id}`,
+        },
+        actor,
+      );
+      work.push(await tasks.get(saved.id));
+    }
+
+    const check = async (active: boolean, expected: "none" | "partial" | "done") => {
+      const page = await product.participation({ application: "WEB", limit: 100 });
+      assert.equal(page.total, 2);
+      assert.equal(page.items.length, 2);
+      for (const entry of page.items) {
+        assert.equal(entry.active, active);
+        assert.equal(entry.status, expected);
+        assert.equal(entry.savedStatus, savedStatuses.get(entry.ref.id));
+        const generic = await engine.get({ kind: "implementation", ref: entry.key });
+        assert.equal(generic.active, active);
+        // Прежний generic DTO различает участие внешним status=inactive;
+        // его совместимое data.status не подменяем новой проекцией.
+        assert.equal(generic.status, active ? expected : "inactive");
+        assert.equal(generic.savedStatus, entry.savedStatus);
+        assert.equal(generic.ref.id, entry.ref.id);
+        const detail = await product.implementation(entry.key);
+        assert.equal(detail.fields.active, active);
+        assert.equal(detail.fields.status, entry.status);
+        assert.equal(detail.savedStatus, entry.savedStatus);
+      }
+      const raw = (await new ProductRepository(workspace).all()).flatMap((entry) =>
+        entry.fields.kind === "scope" ? entry.fields.contracts : [],
+      );
+      assert.deepEqual(new Map(raw.map((entry) => [entry.id, entry.status])), savedStatuses);
+      return page;
+    };
+
+    const active = await check(true, initialStatus);
+    await product.replaceParticipation(
+      {
+        application: "WEB",
+        selections: [],
+        ifRevision: active.revision,
+        ifVersion: active.version,
+        requestId: "withdraw",
+      },
+      actor,
+    );
+    await check(false, "none");
+
+    // Существующие ссылки сохраняются, и задачи могут измениться в период снятого участия.
+    // Возврат обязан показать новый расчёт, а не прежний status или savedStatus.
+    for (const task of work) {
+      await tasks.move(
+        task.id,
+        {
+          column: initialStatus === "done" ? "inbox" : "done",
+          ifRevision: task.revision,
+          requestId: `change-${task.id}`,
+        },
+        actor,
+      );
+      assert.deepEqual((await tasks.get(task.id)).productLinks, task.productLinks);
+    }
+    const inactive = await check(false, "none");
+    await product.replaceParticipation(
+      {
+        application: "WEB",
+        selections: inactive.items.map((entry) => ({ kind: "existing", ref: entry.key })),
+        ifRevision: inactive.revision,
+        ifVersion: inactive.version,
+        requestId: "restore",
+      },
+      actor,
+    );
+    const restored = await check(true, initialStatus === "done" ? "partial" : "done");
+    assert.deepEqual(
+      restored.items.map((entry) => [entry.ref.id, entry.key]),
+      selected.items.map((entry) => [entry.ref.id, entry.key]),
+    );
+  });
+
 test("снятый вклад редактируется с key и без него, включая generic update, без реактивации и потери отношений", async (t) => {
   const { product, workspace, replace } = await setup(t);
   await replace();

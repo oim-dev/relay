@@ -68,7 +68,7 @@ export class ProductParticipation extends ProductService {
           target: publicProductCard(addresses, entry.scenarioId ?? entry.featureId),
           feature: publicProductCard(addresses, entry.featureId),
           active: entry.active,
-          status: statuses.get(entry.id) ?? "none",
+          status: entry.active ? (statuses.get(entry.id) ?? "none") : "none",
           savedStatus: entry.status,
         })),
       });
@@ -203,7 +203,9 @@ export class ProductParticipation extends ProductService {
         savedStatus: record.fields.status,
         fields: {
           ...record.fields,
-          status: computed.fields.contracts.find((entry) => entry.id === selected.id)!.status,
+          status: record.fields.active
+            ? computed.fields.contracts.find((entry) => entry.id === selected.id)!.status
+            : "none",
         },
       });
     });
