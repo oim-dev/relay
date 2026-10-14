@@ -94,6 +94,10 @@ import { HttpClient, ApiError } from "@relay/rest-sdk/http-client";
 import { createApiClient } from "@relay/rest-sdk/create-api-client";
 import { operationsTree } from "@relay/rest-sdk/operations-tree";
 import { configSchema } from "@relay/core/domain/config";
+import {
+  projectSettingsSchema,
+  saveProjectSettingsSchema,
+} from "@relay/core/domain/project-settings";
 import { parse } from "@relay/core/domain/validation";
 import { AppError } from "@relay/core/shared/errors";
 import { isStorageCompatibility } from "../storage-errors.js";
@@ -281,6 +285,17 @@ export async function createHttpBackend(url: string, project?: string): Promise<
   ) => decode(planningSavedSchema, await call(operation, "write", requestId));
   return {
     kind: "http",
+    projectSettings: {
+      get: async () =>
+        decode(projectSettingsSchema, await call(() => api.context.getProjectSettings())),
+      save: async (input) => {
+        const command = parse(saveProjectSettingsSchema, input, "настройки проекта");
+        return decode(
+          projectSettingsSchema,
+          await call(() => api.context.saveProjectSettings(command), "write"),
+        );
+      },
+    },
     plans: {
       candidates: async (query = {}) =>
         decode(

@@ -12,9 +12,11 @@ import {
   initializedText,
   projectText,
   projectSavedText,
+  projectSettingsSavedText,
 } from "../presentation/project.js";
 import { randomUUID } from "node:crypto";
-import { entityUpdateSchema } from "@relay/contracts/entities";
+import { entityUpdateSchema, entityRenameSchema } from "@relay/contracts/entities";
+import { saveProjectSettingsSchema } from "@relay/contracts/entities/project-settings";
 import { parse } from "@relay/core/domain/validation";
 import { author } from "../context.js";
 import { integer } from "../options.js";
@@ -26,6 +28,7 @@ import {
   shellCommand,
 } from "../command-kit.js";
 import { receiptText } from "../presentation/common.js";
+import { entitySavedText } from "../presentation/entities.js";
 
 export function registerProject(program: Command, runtime: Runtime): void {
   // init — единственная операция, которой ещё не нужен открытый Workspace.
@@ -109,71 +112,165 @@ export function registerProject(program: Command, runtime: Runtime): void {
   const project = commandGroup(program, {
     name: "project",
     description: "Паспорт текущего проекта",
-    details: "Единственная запись проекта PROJECT. Не управление регистрациями workspace.",
+    details:
+      "Единственная запись проекта: get не принимает ref, в том числе после смены ключа. update меняет отображаемое имя и slug Web-адреса; rename — публичный ключ (изначально PROJECT). ID и регистрация workspace не меняются.\nПрикреплённые документы: document list --target PROJECT. Полный контекст связей: inspect graph context PROJECT. Старый ключ PROJECT сохраняется как алиас.",
     examples: [["npx @oim-dev/relay-cli project get", "Прочитать проект"]],
   });
   registerCommand(project, runtime, {
     name: "get",
     description: "Прочитать проект и его ревизию",
-    details: "Название и настройки выбранного проекта. Ревизия нужна для project update.",
+    details:
+      "Название, slug, ключ, ID и ревизия выбранного проекта. Text показывает число разделов; полный список с порядком — document section list. JSON сохраняет полную карточку, включая разделы.\nРевизия нужна для project update и project rename. Прикреплённые документы: document list --target PROJECT; полный контекст: inspect graph context PROJECT.",
     examples: [["npx @oim-dev/relay-cli project get", "Прочитать перед изменением"]],
     async run(context) {
       const data = await context.backend.entities.get({ ref: "PROJECT", kind: "project" });
       return {
         data,
         text: (options) =>
-          projectText(data, options, commandInvocation(context, ["project", "update", "--help"])),
+          projectText(data, options, [
+            {
+              label: "Прочитать разделы и их порядок",
+              command: commandInvocation(context, ["document", "section", "list"]),
+            },
+            {
+              label: "Изменить имя или slug по прочитанной ревизии: справка",
+              command: commandInvocation(context, ["project", "update", "--help"]),
+            },
+          ]),
       };
     },
   });
-  registerCommand<{ name?: string; ifRevision: number; requestId?: string }>(project, runtime, {
-    name: "update",
-    description: "Изменить название проекта",
+  registerCommand<{ name?: string; slug?: string; ifRevision: number; requestId?: string }>(
+    project,
+    runtime,
+    {
+      name: "update",
+      description: "Изменить имя или slug проекта",
+      details:
+        "Передайте имя (--name/--name-file) и/или --slug и исходную ревизию из project get. Slug — адресный идентификатор, не текстовое содержание: 2–64 строчные латинские буквы/цифры с одиночными дефисами между частями; --slug-file нет.\nБез --slug сохраняется только имя, JSON — квитанция сущности. С --slug возвращаются настройки ProjectSettings (name, slug, revision, documentSections при наличии), не EntitySaved; --request-id в этом режиме не поддерживается. Непереданное имя и разделы сохраняются. Старый slug не становится алиасом.\nОписание не поддерживается. Публичный ключ меняется через project rename; ID и регистрация workspace неизменны. После конфликта или потери ответа перечитайте project get; скрытых повторов нет.",
+      examples: [
+        [
+          "npx @oim-dev/relay-cli project update --actor human --name 'Мой проект' --if-revision 1",
+          "Изменить имя по прочитанной ревизии",
+        ],
+        [
+          "npx @oim-dev/relay-cli project update --actor human --slug my-project --if-revision 1",
+          "Изменить slug, сохранив непереданное имя",
+        ],
+      ],
+      configure(command) {
+        textOption(command, "name", "Название проекта");
+        return command
+          .option("--slug <slug>", "Канонический Web-адрес проекта, не публичный ключ")
+          .requiredOption(
+            "--if-revision <n>",
+            "Прочитанная ревизия",
+            integer(0, Number.MAX_SAFE_INTEGER),
+          )
+          .option("--request-id <id>", "Корреляция изменения имени без --slug, не дедупликация");
+      },
+      async run(context, input) {
+        const changes = await readTextFields(context, input.options, ["name"]);
+        invariant(
+          changes.name !== undefined || input.options.slug !== undefined,
+          "INVALID_ARGUMENT",
+          "Передайте --name, --name-file или --slug; справка: npx @oim-dev/relay-cli project update --help",
+        );
+        if (input.options.slug !== undefined) {
+          invariant(
+            input.options.requestId === undefined,
+            "INVALID_ARGUMENT",
+            "--request-id поддерживается только при изменении имени без --slug",
+          );
+          // Проверяем весь пользовательский ввод до чтения недостающего имени и записи.
+          const supplied = parse(
+            saveProjectSettingsSchema.partial({ name: true }),
+            { ...changes, slug: input.options.slug, ifRevision: input.options.ifRevision },
+            "настройки проекта",
+          );
+          author(context);
+          const name = supplied.name ?? (await context.backend.projectSettings.get()).name;
+          const data = await context.backend.projectSettings.save({ ...supplied, name });
+          // Прежний slug больше не селектор: квитанция ведёт к той же базе по её ID.
+          const readContext =
+            context.backend.kind === "http" &&
+            context.globals.project === context.workspace.config.projectSettings?.slug &&
+            context.workspace.config.projectId
+              ? {
+                  ...context,
+                  globals: { ...context.globals, project: context.workspace.config.projectId },
+                }
+              : context;
+          return {
+            data,
+            text: (options) =>
+              projectSettingsSavedText(
+                data,
+                commandInvocation(readContext, ["project", "get"]),
+                options,
+              ),
+          };
+        }
+        const command = parse(
+          entityUpdateSchema,
+          {
+            ref: "PROJECT",
+            changes: { kind: "project", ...changes },
+            ifRevision: input.options.ifRevision,
+            requestId: input.options.requestId ?? randomUUID(),
+          },
+          "изменение проекта",
+        );
+        const data = await context.backend.entities.update(command, author(context));
+        return {
+          data,
+          text: (options) =>
+            projectSavedText(
+              data,
+              commandInvocation(context, ["project", "get"]),
+              options,
+              command.changes.kind === "project" ? command.changes.name : undefined,
+            ),
+        };
+      },
+    },
+  );
+  registerCommand<{ ifRevision: number; requestId?: string }>(project, runtime, {
+    name: "rename <key>",
+    arguments: { key: "Новый публичный ключ проекта, не имя и не slug" },
+    description: "Изменить публичный ключ с сохранением ID и алиасов",
     details:
-      "Передайте новое имя и ревизию из project get. Описание не поддерживается контрактом проекта. Slug и регистрация workspace не меняются.",
+      "Передайте ревизию из project get. Имя, slug, разделы и регистрация workspace сохраняются. Прежние ключи остаются алиасами; коллизия отклоняется. project get по-прежнему вызывается без ref.\nКлючи и алиасы: inspect keys PROJECT. Имя и slug меняются через project update.",
     examples: [
       [
-        "npx @oim-dev/relay-cli project update --actor human --name 'Мой проект' --if-revision 1",
-        "Изменить имя по прочитанной ревизии",
+        "npx @oim-dev/relay-cli project rename PROJECT-TEAM --actor human --if-revision 1",
+        "Сменить ключ по прочитанной ревизии",
       ],
     ],
-    configure(command) {
-      textOption(command, "name", "Название проекта");
-      return command
+    configure: (command) =>
+      command
         .requiredOption(
           "--if-revision <n>",
           "Прочитанная ревизия",
           integer(0, Number.MAX_SAFE_INTEGER),
         )
-        .option("--request-id <id>", "Идентификатор корреляции, не дедупликации");
-    },
+        .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
     async run(context, input) {
-      const changes = await readTextFields(context, input.options, ["name"]);
-      invariant(
-        changes.name !== undefined,
-        "INVALID_ARGUMENT",
-        "Передайте --name или --name-file; справка: npx @oim-dev/relay-cli project update --help",
-      );
       const command = parse(
-        entityUpdateSchema,
+        entityRenameSchema,
         {
           ref: "PROJECT",
-          changes: { kind: "project", ...changes },
+          key: input.argument(),
           ifRevision: input.options.ifRevision,
           requestId: input.options.requestId ?? randomUUID(),
         },
-        "изменение проекта",
+        "изменение ключа проекта",
       );
-      const data = await context.backend.entities.update(command, author(context));
+      const data = await context.backend.entities.rename(command, author(context));
       return {
         data,
         text: (options) =>
-          projectSavedText(
-            data,
-            commandInvocation(context, ["project", "get"]),
-            options,
-            changes.name,
-          ),
+          entitySavedText(data, commandInvocation(context, ["project", "get"]), options),
       };
     },
   });

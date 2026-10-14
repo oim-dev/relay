@@ -1,4 +1,5 @@
 import type { Config } from "@relay/core/domain/config";
+import type { ProjectSettings, SaveProjectSettings } from "@relay/core/domain/project-settings";
 import type { validateWorkspace } from "@relay/core/application/validate";
 import type { Workspace } from "@relay/core/storage/workspace";
 import type { ProductQueries } from "@relay/core/application/product/queries";
@@ -16,6 +17,10 @@ export interface WorkspaceInfo {
   root: string;
 }
 export interface Backend {
+  projectSettings: {
+    get(): Promise<ProjectSettings>;
+    save(input: SaveProjectSettings): Promise<ProjectSettings>;
+  };
   plans: Pick<
     PlanningService,
     | "list"

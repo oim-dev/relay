@@ -47,6 +47,7 @@ import {
 import type { EntityCatalog } from "./catalog.js";
 import { entityHandlers, entitySaved } from "./handlers.js";
 import type { EntityOperationContext } from "./handlers.js";
+import { readProjectDetail } from "./project.js";
 
 /** Общий движок адресации, чтения и исполнения зарегистрированных предметных операций. */
 export class EntityEngine {
@@ -257,7 +258,10 @@ export class EntityEngine {
   }
   async get(input: EntityGetQuery): Promise<EntityDetail> {
     const query = parse(entityGetQuerySchema, input, "адрес сущности");
-    return this.read((catalog) => {
+    return this.workspace.locked(async (owned) => {
+      const project = await readProjectDetail(this.workspace, query);
+      if (project) return project;
+      const catalog = await readEntityCatalog(this.workspace, owned);
       const entry = resolveEntity(catalog, query.ref, query.kind);
       const refs: { kind: string; id: string }[] = [];
       const data = entry.data;

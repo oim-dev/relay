@@ -1,10 +1,12 @@
 import type { Config } from "@relay/core/domain/config";
 import type { RelayProject, ServerContextResponse } from "@relay/contracts";
 import type { EntityDetail, EntitySaved } from "@relay/contracts/entities";
+import { defaultDocumentSections } from "@relay/contracts/entities";
+import type { ProjectSettings } from "@relay/contracts/entities/project-settings";
 import { defaultTextOptions, type TextOptions } from "./theme.js";
 import { safeText } from "./safe.js";
 import { section, table, wrap } from "./layout.js";
-import { cardText, listText, receiptText, type OutputField } from "./common.js";
+import { cardText, listText, receiptText, type OutputField, type OutputCommand } from "./common.js";
 import { shellCommand } from "../command-kit.js";
 
 export function initializedText(
@@ -112,7 +114,7 @@ export function configText(
 export function projectText(
   entity: EntityDetail,
   options: TextOptions,
-  updateHelp?: string,
+  commands: OutputCommand[] = [],
 ): string {
   const project = entity.data;
   if (project.kind !== "project") return "Ответ не является проектом.";
@@ -121,31 +123,29 @@ export function projectText(
       title: `${entity.key} — ${project.name}`,
       fields: [
         ["Ревизия", entity.revision],
-        ["Slug", project.slug],
-        ["ID проекта", entity.ref.id],
+        ["Slug", project.slug, "opaque"],
+        ["ID проекта", entity.ref.id, "opaque"],
+        ["Разделов документов", (project.documentSections ?? defaultDocumentSections).length],
       ],
-      sections: [
-        {
-          title: "Разделы документов",
-          body:
-            project.documentSections === undefined
-              ? "Разделы явно не заданы; используются стандартные разделы библиотеки."
-              : listText(
-                  {
-                    title: "",
-                    items: project.documentSections.map((item) => ({
-                      key: item.id,
-                      title: item.name,
-                    })),
-                    emptyMessage: "Разделов нет.",
-                  },
-                  options,
-                ),
-        },
+      commands,
+    },
+    options,
+  );
+}
+
+export function projectSettingsSavedText(
+  settings: ProjectSettings,
+  readCommand: string,
+  options: TextOptions,
+): string {
+  return receiptText(
+    {
+      title: `✓ Настройки проекта сохранены: ${settings.name}`,
+      fields: [
+        ["Slug", settings.slug, "opaque"],
+        ["Ревизия", settings.revision],
       ],
-      commands: updateHelp
-        ? [{ label: "Изменить имя по прочитанной ревизии: справка", command: updateHelp }]
-        : [],
+      commands: [{ label: "Прочитать сохранённый проект", command: readCommand }],
     },
     options,
   );

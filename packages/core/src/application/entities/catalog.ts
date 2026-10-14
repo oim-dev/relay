@@ -8,20 +8,15 @@ import type {
 import { ProductRepository } from "../../storage/product.js";
 import { BoardRepository } from "../../storage/boards.js";
 import { BoardTaskRepository } from "../../storage/board-tasks.js";
-import { projectSettings } from "../../storage/project-settings.js";
-import { readJson } from "../../storage/files.js";
 import type { Workspace } from "../../storage/workspace.js";
-import { configSchema } from "../../domain/config.js";
 import { defaultBoardPrefix } from "../../domain/board.js";
-import { parse } from "../../domain/validation.js";
 import { invariant } from "../../shared/errors.js";
 import { productState, validateProduct } from "../product/model.js";
 import { resolveAddress } from "./resolver.js";
 import { EntityDeletionRepository } from "../../storage/entity-deletion.js";
 import { defaultDocumentSections } from "@relay/contracts/entities";
-import { storedProjectSettingsSchema } from "../../domain/project-settings.js";
-import { relative } from "node:path";
 import { planningRecords } from "../../storage/planning.js";
+import { projectEntityEntry, readEntityConfig } from "./project.js";
 
 export type EntityEntry = Omit<EntityDetail, "references"> & {
   aliases: string[];
@@ -87,20 +82,7 @@ export async function readEntityCatalog(
   workspace: Workspace,
   owned: () => void,
 ): Promise<EntityCatalog> {
-  const config = parse(
-    configSchema,
-    workspace.storageSession
-      ? await workspace.storageSession.readFile(
-          relative(workspace.storageSession.store.root, workspace.configPath),
-        )
-      : await readJson(workspace.configPath),
-    "конфигурация проекта",
-  );
-  if (workspace.storageSession)
-    config.projectSettings = storedProjectSettingsSchema.parse(
-      await workspace.storageSession.indexGet("configuration", "project"),
-    );
-  Object.assign(workspace.config, config);
+  const config = await readEntityConfig(workspace);
   const repository = new ProductRepository(workspace);
   const source = await repository.snapshot(owned);
   validateProduct(source.records);
@@ -138,25 +120,7 @@ export async function readEntityCatalog(
       ...options,
     });
   };
-  const settings = projectSettings(config, workspace.configPath);
-  add(
-    "project",
-    config.projectId ?? "project",
-    config.projectSettings?.entityKey ?? "PROJECT",
-    settings.name,
-    "Область данных и настроек выбранного проекта",
-    settings.revision,
-    {
-      kind: "project",
-      name: settings.name,
-      slug: settings.slug,
-      documentSections: config.projectSettings?.documentSections ?? defaultDocumentSections,
-    },
-    {
-      aliases: config.projectSettings?.aliases ?? [],
-      selectors: [settings.slug],
-    },
-  );
+  entries.push(projectEntityEntry(config, workspace.configPath));
   if (!source.records.some((record) => record.fields.kind === "passport"))
     add(
       "product",

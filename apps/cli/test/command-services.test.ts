@@ -193,7 +193,9 @@ test("init / config get / project get/update: сохранность, ревиз
   assert.doesNotMatch(human.stdout, /\u001b/);
   const hint = human.stdout.split("\n").find((line) => line.includes("npx @oim-dev/relay-cli"));
   assert.ok(
-    hint?.includes("--local") && hint.includes(configPath) && hint.includes("project update"),
+    hint?.includes("--local") &&
+      hint.includes(configPath) &&
+      hint.includes("document section list"),
     human.stdout,
   );
 });

@@ -257,6 +257,9 @@ function recoveryText(error: AppError): string {
   if (/INVALID|VALIDATION|ARGUMENT|UNKNOWN_METRIC/.test(error.code)) {
     return "Проверьте указанные поля и параметры. Синтаксис и примеры доступны через --help у этой команды.";
   }
+  if (error.code === "CONFIG_NOT_FOUND") {
+    return "Проверьте текущий каталог и подключение к существующему проекту: --config или RELAY_CONFIG, либо --server-url. Для workspace выберите --project. Выполняйте init только для заведомо нового проекта, не вместо поиска существующей базы.";
+  }
   if (/NOT_FOUND/.test(error.code)) {
     return "Проверьте ключ записи и выбранный проект; найдите запись в соответствующем списке.";
   }
