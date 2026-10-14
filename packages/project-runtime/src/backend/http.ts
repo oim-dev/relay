@@ -192,7 +192,7 @@ function projectClient(url: string, project?: string) {
   );
 }
 
-/** Единственный REST-адаптер CLI и MCP; после подключения проект закреплён по UUID. */
+/** Единственный REST-адаптер CLI и MCP; после подключения проект закреплён по ID сервера. */
 export async function createHttpBackend(url: string, project?: string): Promise<Backend> {
   async function call<T>(
     operation: () => Promise<{ ok: true; data: T }>,
@@ -273,8 +273,10 @@ export async function createHttpBackend(url: string, project?: string): Promise<
       5,
       { url },
     );
-  const api = projectClient(url, decode(z.string().min(1), context.projectId));
+  const projectId = decode(z.string().min(1), context.projectId);
+  const api = projectClient(url, projectId);
   const workspace: WorkspaceInfo = {
+    projectId,
     config: parse(configSchema, context.config, "конфигурация сервера"),
     configPath: context.configPath,
     root: context.storagePath,

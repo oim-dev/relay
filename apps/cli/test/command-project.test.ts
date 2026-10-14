@@ -7,6 +7,7 @@ import { test } from "node:test";
 import type { EntityDetail, EntitySaved } from "@relay/contracts/entities";
 import { defaultDocumentSections } from "@relay/contracts/entities";
 import type { ProjectSettings } from "@relay/contracts/entities/project-settings";
+import type { Config } from "@relay/core/domain/config";
 import { createLocalBackend } from "@relay/project-runtime/backend/local";
 import {
   binary,
@@ -93,6 +94,10 @@ test("project: local slug/rename, исходная CAS, alias/ID и совмес
     "REVISION_CONFLICT",
     4,
   );
+  const config = successful(await app.run<Config>(["config", "get"])).data;
+  assert.equal(config.projectSettings?.slug, settings.slug);
+  assert.equal(config.projectSettings?.revision, settings.revision);
+  assert.equal(config.projectId, before.ref.id);
   const saved = successful(
     await app.run<EntitySaved>([
       "project",
@@ -452,6 +457,10 @@ test("project: HTTP settings/rename без лишнего get и retry; CAS ме
     projectData(successful(await remote<EntityDetail>(["project", "get"])).data).documentSections,
     projectData(before).documentSections,
   );
+  const config = successful(await remote<Config>(["config", "get"])).data;
+  assert.equal(config.projectSettings?.slug, settings.slug);
+  assert.equal(config.projectSettings?.revision, settings.revision);
+  assert.equal(config.projectId, before.ref.id);
   calls.length = 0;
   const both = successful(
     await remote<ProjectSettings>([

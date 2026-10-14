@@ -733,7 +733,7 @@ test("foundation: native token не подменяется; пустая live с
   // Минимальный контекст границы адаптера; это не имитация предметной операции Backend.
   const context = {
     backend: { kind: "http" },
-    connection: "http://127.0.0.1:4700",
+    connection: { transport: "http", serverUrl: "http://127.0.0.1:4700" },
     globals: { project: "alpha" },
     runtime: { cwd: "/fixture", env: {} },
     workspace: {

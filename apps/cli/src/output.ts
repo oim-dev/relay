@@ -316,6 +316,13 @@ export function printError(stream: Writable, error: AppError, options: OutputOpt
               : recoveryText(error)
                 ? ["", wrap(`Следующий шаг: ${recoveryText(error)}`, text.width)]
                 : []),
+            ...(error.code === "CONFIG_NOT_FOUND"
+              ? [
+                  "",
+                  wrap("Справка для заведомо нового проекта (не восстановление базы):", text.width),
+                  commandText("npx @oim-dev/relay-cli init --help", text),
+                ]
+              : []),
             "",
           ].join("\n");
   stream.write(encode());

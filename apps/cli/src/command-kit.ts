@@ -254,12 +254,19 @@ function projectInvocation(context: CommandContext): string[] {
   if (context.backend.kind === "local") {
     if (globals.project) args.push("--project", globals.project);
   } else {
-    const url = context.connection ?? globals.serverUrl ?? context.runtime.env.RELAY_SERVER_URL;
+    const url =
+      context.connection?.serverUrl ?? globals.serverUrl ?? context.runtime.env.RELAY_SERVER_URL;
     invariant(url, "CONNECTION_REQUIRED", "Не удалось сохранить адрес подключения для команды");
     args.push("--server-url", url);
-    const project = globals.project ?? context.workspace.config.projectId;
+    const project =
+      globals.project ?? context.connection?.projectId ?? context.workspace.config.projectId;
     if (project) args.push("--project", project);
-    const config = globals.config ?? context.runtime.env.RELAY_CONFIG;
+    const config =
+      context.connection?.clientConfig?.source !== "discovered"
+        ? (context.connection?.clientConfig?.path ??
+          globals.config ??
+          context.runtime.env.RELAY_CONFIG)
+        : undefined;
     if (config) args.push("--config", resolve(context.runtime.cwd, config));
   }
   if (globals.actor) args.push("--actor", globals.actor);
@@ -281,7 +288,9 @@ function projectPaginationContext(context: CommandContext): PaginationContext {
       root: context.workspace.root,
       config: context.workspace.configPath,
       connection:
-        context.connection ?? context.globals.serverUrl ?? context.runtime.env.RELAY_SERVER_URL,
+        context.connection?.serverUrl ??
+        context.globals.serverUrl ??
+        context.runtime.env.RELAY_SERVER_URL,
     },
     defaultLimit: context.workspace.config.output.defaultLimit,
     invocation: projectInvocation(context),

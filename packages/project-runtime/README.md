@@ -31,6 +31,17 @@ Backend охватывает настройки проекта, продукт, 
 `backend/http`, `backend/server` выбирают ESM и декларации из `dist`; условие
 `tasks-source` предоставляет TypeScript. Адаптеры не копируют бизнес-правила Core.
 
+Для чтения конфигурационного контекста без подготовки legacy-каталогов используйте
+`createLocalBackend(cwd, config?, { createLegacyDirectories: false })`. Значение по
+умолчанию — `true`. Опция передаётся `openWorkspace`: актуальная проекция PROJECT,
+проверки совместимости и recovery обычного WAL сохраняются. Она не делает Backend
+read-only и не отменяет возможные записи при последующих предметных операциях.
+
+`Backend.workspace.projectId` сообщает ID, за которым закреплён HTTP Backend после
+проверки `/context.projectId`, даже если legacy `config.projectId` отсутствует.
+Local Backend передаёт только существующий `config.projectId`, без вычисляемого ID.
+Сам `workspace.config` сохраняет конфигурационную проекцию без подстановки этого поля.
+
 ## Разработка
 
 Из корня репозитория, с актуальными сборками зависимостей:

@@ -9,12 +9,33 @@ import { localInvocation, shellCommand } from "../command-kit.js";
 import { requireLocalMaintenance } from "@relay/project-runtime/maintenance";
 import { resolve } from "node:path";
 
+/** Сведения клиента, не поля Config и не пути серверного реестра. */
+export interface ConnectionInfo {
+  transport: "local" | "http";
+  serverUrl?: string;
+  serverUrlSource?: "flag" | "env" | "config";
+  serverUrlConfigField?: "server.url" | "server.port";
+  projectId?: string;
+  clientConfig?: {
+    path: string;
+    mode: "local" | "workspace";
+    source: "flag" | "env" | "discovered";
+  };
+}
+
+export interface ConnectOptions {
+  localOnly?: boolean;
+  /** Только конфигурационное чтение: без подготовки legacy-каталогов. */
+  createLegacyDirectories?: boolean;
+}
+
 /** Выбор выполняется до openWorkspace: HTTP-команды не создают даже .tasks-runtime. */
 export async function connectBackend(
   runtime: Runtime,
   globals: GlobalOptions,
-  localOnly = false,
-): Promise<Backend> {
+  options: ConnectOptions = {},
+): Promise<{ backend: Backend; connection: ConnectionInfo }> {
+  const { localOnly = false } = options;
   if (localOnly) {
     const serverUrl = globals.serverUrl ?? runtime.env.RELAY_SERVER_URL;
     requireLocalMaintenance({
@@ -37,14 +58,27 @@ export async function connectBackend(
     "WORKSPACE_REQUIRES_SERVER",
     "В workspace операции с данными выполняются через Relay Server",
   );
-  const target =
-    source && !(globals.serverUrl && source.kind === "project" && globals.project)
-      ? selectProject(source, globals.project)
-      : {};
   const configuredUrl =
     globals.serverUrl ??
     runtime.env.RELAY_SERVER_URL ??
-    (source?.kind === "registry" ? serverAddress(source) : target.serverUrl);
+    (source?.kind === "registry" ? serverAddress(source) : source?.value.server.url);
+  // Селектор local не ограничивает удалённый проект из-за источника HTTP URL.
+  const target =
+    source && (source.kind === "registry" || globals.local || configuredUrl === undefined)
+      ? selectProject(source, globals.project)
+      : {};
+  const clientConfig: ConnectionInfo["clientConfig"] = source
+    ? {
+        path: source.path,
+        mode: source.kind === "registry" ? "workspace" : "local",
+        source:
+          globals.config !== undefined
+            ? "flag"
+            : runtime.env.RELAY_CONFIG !== undefined
+              ? "env"
+              : "discovered",
+      }
+    : undefined;
   if (!globals.local && configuredUrl !== undefined) {
     // Адрес из config/реестра: тот же отказ, что и для флага, без запроса к Server.
     if (localOnly) requireLocalMaintenance({ serverUrl: configuredUrl });
@@ -64,10 +98,29 @@ export async function connectBackend(
     ];
     runtime.recovery = { command: (args) => shellCommand([...invocation, ...args]) };
     const { createHttpBackend } = await import("@relay/project-runtime/backend/http");
-    return createHttpBackend(
-      url,
-      globals.project ?? (source?.kind === "project" ? source.value.projectId : undefined),
-    );
+    const backend = await createHttpBackend(url, project);
+    return {
+      backend,
+      connection: {
+        transport: "http",
+        serverUrl: url,
+        serverUrlSource:
+          globals.serverUrl !== undefined
+            ? "flag"
+            : runtime.env.RELAY_SERVER_URL !== undefined
+              ? "env"
+              : "config",
+        ...(globals.serverUrl === undefined && runtime.env.RELAY_SERVER_URL === undefined
+          ? {
+              serverUrlConfigField: source?.value.server.url
+                ? ("server.url" as const)
+                : ("server.port" as const),
+            }
+          : {}),
+        ...(backend.workspace.projectId ? { projectId: backend.workspace.projectId } : {}),
+        ...(clientConfig ? { clientConfig } : {}),
+      },
+    };
   }
   invariant(
     target.configPath,
@@ -90,5 +143,19 @@ export async function connectBackend(
     actorAvailable: !!(globals.actor ?? runtime.env.RELAY_ACTOR),
   };
   const { createLocalBackend } = await import("@relay/project-runtime/backend/local");
-  return createLocalBackend(runtime.cwd, target.configPath);
+  const backend = await createLocalBackend(runtime.cwd, target.configPath, {
+    ...(options.createLegacyDirectories === undefined
+      ? {}
+      : { createLegacyDirectories: options.createLegacyDirectories }),
+  });
+  return {
+    backend,
+    connection: {
+      transport: "local",
+      ...(backend.workspace.config.projectId
+        ? { projectId: backend.workspace.config.projectId }
+        : {}),
+      ...(clientConfig ? { clientConfig } : {}),
+    },
+  };
 }

@@ -135,7 +135,15 @@ HTTP-сценарии также должны завершать только с
 | `src/terminal.ts`                        | Ширина терминала                                                     |
 
 Текущий `CommandContext` содержит `backend`, `workspace` (сведения о проекте),
-`runtime`, `output`, `globals`. В нём нет прежнего `context.tasks`; числовая доска
+`connection` (CLI `ConnectionInfo`), `runtime`, `output`, `globals`.
+`connectBackend` возвращает Backend вместе с уже разрешёнными сведениями подключения:
+транспорт, origin и происхождение URL, клиентский конфиг и подтверждённый ID проекта.
+Контекст, подсказки и представление используют эти сведения без повторного
+`cliConfiguration`. Тип CLI не расширяет предметный Config или REST-схему.
+Опция регистрации `createLegacyDirectories: false` используется только у `config get`
+и передаётся через action/connect в local Backend: она отключает подготовку legacy-каталогов,
+но не PROJECT-проекцию, compatibility guard или recovery обычного WAL.
+В нём нет прежнего `context.tasks`; числовая доска
 не является текущим входом. Общий Backend и адаптеры находятся в
 `packages/project-runtime/src/backend`. Прямой доступ к файловой базе допускается
 в явно локальном обслуживании, не как обход отсутствующего HTTP-метода команды.

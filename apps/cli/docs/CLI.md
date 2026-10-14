@@ -367,8 +367,31 @@ npx @oim-dev/relay-cli project rename PROJECT-TEAM \
 ### config get
 
 `npx @oim-dev/relay-cli config get` — чтение конфигурации без собственных флагов.
-JSON data — конфиг; meta.configPath и meta.storagePath — фактические пути.
+JSON `data` — полный Config без изменения его полей: `data.mode=local` описывает
+проектный конфиг, а не транспорт клиента. `meta.configPath` и `meta.storagePath` —
+фактические пути проекта (при HTTP — на сервере).
+
+`meta.connection` описывает фактически установленное подключение:
+
+- `transport`: `local` или `http`;
+- `serverUrl` и `serverUrlSource`: только при HTTP, нормализованный origin и его
+  источник `flag` (`--server-url`), `env` (`RELAY_SERVER_URL`) или `config`
+  (`server.url`, для workspace также адрес из `server.port`);
+- `serverUrlConfigField`: только для URL из конфига, `server.url` или `server.port`;
+- `projectId`: подтверждённый Backend ID, если доступен; не ключ регистрации;
+- `clientConfig`: только при наличии клиентского конфига — абсолютный `path`,
+  `mode: local|workspace` и `source: flag|env|discovered` для `--config`,
+  `RELAY_CONFIG` или поиска вверх от cwd. Это не серверный реестр.
+
+Выбор URL выполняется до локального селектора: одинаковые HTTP origin и `--project`
+действуют одинаково для флага, env и конфига, включая cwd другого local-проекта.
+Повреждённый найденный конфиг не игнорируется; `--local` не разрешён для workspace,
+а ошибка HTTP не включает local fallback.
+Подключение и подсказки используют один разрешённый источник; конфиг не перечитывается
+повторно ради представления. Чтение не создаёт legacy-каталоги; актуальная PROJECT-проекция,
+проверка совместимости и штатное восстановление обычного WAL Core сохраняются.
 Совместимые статусы не меняют фиксированные колонки досок. Это не редактор настроек.
+Выдача всегда полная, включая все совместимые статусы; отдельного краткого view нет.
 
 ### workspace project init
 

@@ -5,7 +5,7 @@ import type { ContextResponse, RelayProject, ServerContextResponse } from "@rela
 import { actorSchema, parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { openWorkspace, readWorkspaceConfig } from "@relay/core/storage/workspace";
-import type { Workspace } from "@relay/core/storage/workspace";
+import type { OpenWorkspaceOptions, Workspace } from "@relay/core/storage/workspace";
 import { configurationMode, entryTarget, readConfiguration } from "@relay/project-runtime/config";
 import { registerProject, unregisterProject } from "@relay/project-runtime/registry";
 import { saveProjectSettings } from "@relay/core/application/project-settings/service";
@@ -70,9 +70,9 @@ export class ProjectContext {
     readonly projectId: string,
   ) {}
 
-  async open(): Promise<Workspace> {
+  async open(options: OpenWorkspaceOptions = {}): Promise<Workspace> {
     try {
-      return await openWorkspace(this.options.cwd, this.options.configPath);
+      return await openWorkspace(this.options.cwd, this.options.configPath, options);
     } catch (error) {
       throw openFailure(error);
     }
@@ -218,7 +218,7 @@ export class ProjectCatalog {
     return context;
   }
 
-  async select(selector?: string): Promise<ProjectContext> {
+  async select(selector?: string, options: OpenWorkspaceOptions = {}): Promise<ProjectContext> {
     if (this.options.mode === "local") {
       const context =
         this.contexts.get(resolve(this.options.configPath)) ??
@@ -235,7 +235,8 @@ export class ProjectCatalog {
       // SSE по постоянному ID должен сообщать повреждение конфига и уметь переподключаться.
       if (selector === undefined || selector === "local" || selector === context.projectId)
         return context;
-      const workspace = await context.open();
+      // Выбор по slug тоже открывает проект: сохраняем режим конфигурационного чтения.
+      const workspace = await context.open(options);
       const settings = projectSettings(workspace.config, workspace.configPath);
       invariant(
         selector === settings.slug,

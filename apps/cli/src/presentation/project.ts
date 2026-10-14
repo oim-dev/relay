@@ -8,6 +8,7 @@ import { safeText } from "./safe.js";
 import { section, table, wrap } from "./layout.js";
 import { cardText, listText, receiptText, type OutputField, type OutputCommand } from "./common.js";
 import { shellCommand } from "../command-kit.js";
+import type { ConnectionInfo } from "../backend/connect.js";
 
 export function initializedText(
   configPath: string,
@@ -43,16 +44,19 @@ export function configText(
   configPath: string,
   root: string,
   options: TextOptions,
-  connection?: string,
+  connection?: ConnectionInfo,
   readCommand?: string,
 ): string {
+  const client = connection?.clientConfig;
+  const http = connection?.transport === "http";
+  const separateClient = client && client.path !== configPath;
   return cardText(
     {
       title: `Конфигурация — ${config.projectSettings?.entityKey ?? "PROJECT"} — ${config.projectSettings?.name ?? "проект"}`,
       fields: [
         ["Ревизия проекта", config.projectSettings?.revision],
         ["Slug", config.projectSettings?.slug],
-        ["ID проекта", config.projectId],
+        ["ID проекта", connection?.projectId ?? config.projectId],
         ["Версия конфигурации", config.version],
       ],
       sections: [
@@ -62,9 +66,43 @@ export function configText(
             {
               title: "",
               fields: [
-                ["Текущий доступ", connection],
-                ["Конфигурация", configPath],
-                ["Хранилище", root],
+                [
+                  "Текущий доступ",
+                  http ? `HTTP: ${connection.serverUrl}` : "Прямой Core (local)",
+                  "opaque",
+                ],
+                [
+                  "Источник URL",
+                  connection?.serverUrlSource
+                    ? {
+                        flag: "--server-url",
+                        env: "RELAY_SERVER_URL",
+                        config: `${connection.serverUrlConfigField} ${client?.mode === "workspace" ? "реестра" : "конфига"} клиента`,
+                      }[connection.serverUrlSource]
+                    : undefined,
+                ],
+                [
+                  "Выбор конфига клиента",
+                  client
+                    ? {
+                        flag: "--config",
+                        env: "RELAY_CONFIG",
+                        discovered: "поиск вверх от cwd",
+                      }[client.source]
+                    : "без локального конфига",
+                ],
+                ["Режим конфига клиента", client?.mode],
+                ...(separateClient
+                  ? [
+                      [
+                        client.mode === "workspace" ? "Реестр клиента" : "Конфиг клиента",
+                        client.path,
+                        "opaque",
+                      ] as OutputField,
+                    ]
+                  : []),
+                [http ? "Конфиг проекта на сервере" : "Конфигурация", configPath, "opaque"],
+                [http ? "Хранилище на сервере" : "Хранилище", root, "opaque"],
                 ["URL в конфиге", config.server.url],
                 ["Порт REST в конфиге", config.server.port],
                 ["Порт MCP в конфиге", config.mcp?.port],

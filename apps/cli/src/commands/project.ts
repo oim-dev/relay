@@ -373,9 +373,10 @@ export function registerProject(program: Command, runtime: Runtime): void {
   });
   registerCommand(config, runtime, {
     name: "get",
+    createLegacyDirectories: false,
     description: "Показать конфиг, совместимые статусы и пути",
     details:
-      "Конфиг ищется вверх от текущего каталога; --config имеет приоритет. Совместимые поля статусов не изменяют колонки текущих задач.\nФормат CLI выбирается флагом --format; настройки output.format и output.maxBytes не применяются. Вывод CLI всегда бесцветный.",
+      "Конфиг ищется вверх от текущего каталога; --config имеет приоритет. JSON сохраняет полный Config в data; meta.connection сообщает фактический транспорт, источник URL и клиентский конфиг. Пути проекта при HTTP относятся к серверу.\nЧтение не создаёт legacy-каталоги; штатное восстановление обычного WAL сохраняется. Совместимые поля статусов не изменяют колонки текущих задач.\nФормат CLI выбирается флагом --format; настройки output.format и output.maxBytes не применяются. Вывод CLI всегда бесцветный.",
     examples: [
       ["npx @oim-dev/relay-cli config get", "Показать настройки текущего проекта"],
       [
@@ -386,16 +387,18 @@ export function registerProject(program: Command, runtime: Runtime): void {
     async run(context) {
       return {
         data: context.workspace.config,
-        meta: { configPath: context.workspace.configPath, storagePath: context.workspace.root },
+        meta: {
+          configPath: context.workspace.configPath,
+          storagePath: context.workspace.root,
+          connection: context.connection,
+        },
         text: (options) =>
           configText(
             context.workspace.config,
             context.workspace.configPath,
             context.workspace.root,
             options,
-            context.backend.kind === "local"
-              ? "Прямой Core (local)"
-              : `HTTP: ${context.connection ?? context.globals.serverUrl ?? context.runtime.env.RELAY_SERVER_URL}`,
+            context.connection,
             commandInvocation(context, ["project", "get"]),
           ),
       };

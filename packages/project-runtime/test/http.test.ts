@@ -24,6 +24,15 @@ const context = {
   },
 };
 
+test("HTTP: workspace сообщает подтверждённый ID, не дописывая его в legacy config", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => Response.json(context));
+  const backend = await createHttpBackend("http://127.0.0.1:4700", "registration");
+  assert.equal(backend.workspace.projectId, context.data.projectId);
+  assert.equal(backend.workspace.config.projectId, undefined);
+  assert.equal(backend.workspace.configPath, context.data.configPath);
+  assert.equal(backend.workspace.root, context.data.storagePath);
+});
+
 for (const failure of [
   "network",
   "500",

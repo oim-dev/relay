@@ -12,8 +12,12 @@ import { ProgressService } from "@relay/core/application/progress/service";
 import { PlanningService } from "@relay/core/application/planning/service";
 import { ReleasesService } from "@relay/core/application/releases/service";
 
-export async function createLocalBackend(cwd: string, config?: string): Promise<Backend> {
-  const workspace = await openWorkspace(cwd, config);
+export async function createLocalBackend(
+  cwd: string,
+  config?: string,
+  options: { createLegacyDirectories?: boolean } = {},
+): Promise<Backend> {
+  const workspace = await openWorkspace(cwd, config, options);
   return {
     kind: "local",
     projectSettings: {
@@ -30,6 +34,9 @@ export async function createLocalBackend(cwd: string, config?: string): Promise<
     boards: new BoardsService(workspace),
     product: new ProductQueries(workspace),
     workspace: {
+      ...(workspace.config.projectId === undefined
+        ? {}
+        : { projectId: workspace.config.projectId }),
       config: workspace.config,
       configPath: workspace.configPath,
       root: workspace.dataRoot,

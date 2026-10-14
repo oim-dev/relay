@@ -12,6 +12,8 @@ import type { PlanningService } from "@relay/core/application/planning/service";
 import type { ReleasesService } from "@relay/core/application/releases/service";
 
 export interface WorkspaceInfo {
+  /** Подтверждённый ID HTTP-контекста; в local — только сохранённый config.projectId. */
+  projectId?: string;
   config: Config;
   configPath: string;
   root: string;
