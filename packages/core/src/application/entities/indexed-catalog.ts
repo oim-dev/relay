@@ -29,7 +29,7 @@ const emptyProduct: EntityCard = {
   selectors: [],
 };
 
-async function requireIndexes(session: StorageSession) {
+export async function requireEntityIndexes(session: StorageSession) {
   // В проекте всегда есть PROJECT. Потеря корня не означает пустой каталог.
   const roots = await session.snapshotRoots();
   for (const name of ["records", "cards", "addresses", "file-hashes"])
@@ -54,7 +54,7 @@ export async function readEntityCard(
 
 /** Компактный реестр определяет состав, карточки читаются только для выбранных владельцев. */
 export async function readEntityCards(session: StorageSession, kind?: EntityKind) {
-  await requireIndexes(session);
+  await requireEntityIndexes(session);
   const cards: EntityCard[] = [];
   for (const [address, raw] of await session.indexEntries("records")) {
     const record = recordSchema.parse(raw);
@@ -85,7 +85,7 @@ export async function resolveEntityCard(
   kind?: EntityKind,
   selectors?: (value: string) => Promise<EntityCard[]>,
 ): Promise<EntityCard> {
-  await requireIndexes(session);
+  await requireEntityIndexes(session);
   const pieces = reference.split(":");
   const value = pieces.at(-1)!;
   const candidates = z

@@ -14,6 +14,7 @@ import {
   planningPageQuerySchema,
   planningPage,
   planSummarySchema,
+  planCompactSchema,
 } from "./planning.js";
 
 export const releaseStatusSchema = z
@@ -55,7 +56,11 @@ export const releaseReadinessSchema = z.strictObject({
 });
 export const releaseSummarySchema = releaseSchema.extend({ readiness: releaseReadinessSchema });
 export const releasesQuerySchema = planningPageQuerySchema.extend({
-  q: z.string().max(1024).optional().describe("Поиск по ключу, названию, версии и описанию"),
+  q: z
+    .string()
+    .max(1024)
+    .optional()
+    .describe("Поиск по ключу, названию, версии, краткому и полному описанию"),
   status: releaseStatusSchema.optional(),
 });
 export const releasesPageSchema = planningPage(releaseSummarySchema).extend({
@@ -98,6 +103,57 @@ export const releasePlanItemSchema = z.strictObject({
 export const releaseCompositionSchema = planningPage(releasePlanItemSchema).extend({
   readiness: releaseReadinessSchema,
 });
+export const releaseCompactSchema = releaseSummarySchema.pick({
+  kind: true,
+  id: true,
+  key: true,
+  revision: true,
+  title: true,
+  version: true,
+  summary: true,
+  status: true,
+  plannedFor: true,
+  releasedAt: true,
+  releasedBy: true,
+  updatedAt: true,
+  readiness: true,
+});
+export const releasesCompactQuerySchema = releasesQuerySchema.extend({
+  projection: z
+    .literal("compact")
+    .describe("Обзор без полного Markdown-описания и массива planIds"),
+});
+export const releasesCompactPageSchema = planningPage(releaseCompactSchema).extend({
+  statusCounts: releasesPageSchema.shape.statusCounts,
+});
+export const releaseCompositionCompactQuerySchema = planningPageQuerySchema.extend({
+  projection: z
+    .literal("compact")
+    .describe("Состав с обзорными карточками планов без полного Markdown"),
+});
+export const releasePreviewCompactSchema = releasePreviewSchema.extend({
+  projection: releaseCompositionCompactQuerySchema.shape.projection,
+});
+export const releaseCompositionCompactSchema = planningPage(
+  releasePlanItemSchema.extend({
+    plan: planCompactSchema
+      .nullable()
+      .describe("Актуальная обзорная карточка плана либо null при недоступности"),
+  }),
+).extend({ readiness: releaseReadinessSchema });
+const releasePlanReferencesSchema = z
+  .array(entityReferenceSchema.describe("Ключ, ID или work-plan:ID плана"))
+  .min(1)
+  .max(200)
+  .describe(
+    "Полный состав: 1–200 ссылок; разрешается и проверяется в одной мутации, без повторов ID",
+  );
+export const saveReleaseByRefsSchema = saveReleaseSchema.omit({ planIds: true }).extend({
+  plans: releasePlanReferencesSchema,
+});
+export const updateReleaseByRefsSchema = updateReleaseSchema.omit({ planIds: true }).extend({
+  plans: releasePlanReferencesSchema,
+});
 export type Release = z.infer<typeof releaseSchema>;
 export type ReleaseSummary = z.infer<typeof releaseSummarySchema>;
 export type SaveRelease = z.input<typeof saveReleaseSchema>;
@@ -105,3 +161,11 @@ export type UpdateRelease = z.input<typeof updateReleaseSchema>;
 export type ReleaseAction = z.input<typeof releaseActionSchema>;
 export type ReleasesQuery = z.input<typeof releasesQuerySchema>;
 export type ReleasePreview = z.input<typeof releasePreviewSchema>;
+export type ReleaseCompact = z.infer<typeof releaseCompactSchema>;
+export type ReleasesCompactQuery = z.input<typeof releasesCompactQuerySchema>;
+export type ReleasesCompactPage = z.infer<typeof releasesCompactPageSchema>;
+export type ReleaseCompositionCompactQuery = z.input<typeof releaseCompositionCompactQuerySchema>;
+export type ReleasePreviewCompact = z.input<typeof releasePreviewCompactSchema>;
+export type ReleaseCompositionCompact = z.infer<typeof releaseCompositionCompactSchema>;
+export type SaveReleaseByRefs = z.input<typeof saveReleaseByRefsSchema>;
+export type UpdateReleaseByRefs = z.input<typeof updateReleaseByRefsSchema>;

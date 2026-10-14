@@ -82,6 +82,23 @@ export const progressItemSchema = progressAddressSchema.extend({
 export const progressTaskItemSchema = progressItemSchema.extend({
   column: kanbanColumnSchema.describe("Сохранённая колонка; не заменяет фактическое выполнение"),
 });
+export const taskDependenciesQuerySchema = progressQuerySchema.describe(
+  "Страница прямых обязательных зависимостей задачи; продолжение требует исходную версию",
+);
+export const taskDependenciesPageSchema = page(
+  progressTaskItemSchema.extend({
+    kind: z.literal("task").describe("Прямая обязательная задача"),
+  }),
+).extend({
+  entity: progressAddressSchema
+    .extend({
+      kind: z.literal("task").describe("Задача-владелец зависимостей"),
+    })
+    .describe("Адрес задачи-владельца зависимостей"),
+  version: z
+    .string()
+    .describe("Версия согласованного состояния задач и параметров страницы зависимостей"),
+});
 const base = {
   entity: progressAddressSchema.describe("Адрес выбранной сущности"),
   completed: z.boolean().describe("Фактически выполнен весь обязательный состав"),
@@ -200,6 +217,8 @@ export type ProgressPageQuery = z.input<typeof progressPageQuerySchema>;
 export type ProgressAddress = z.infer<typeof progressAddressSchema>;
 export type ProgressReason = z.infer<typeof progressReasonSchema>;
 export type TaskProgress = z.infer<typeof taskProgressSchema>;
+export type TaskDependenciesQuery = z.input<typeof taskDependenciesQuerySchema>;
+export type TaskDependenciesPage = z.infer<typeof taskDependenciesPageSchema>;
 export type ImplementationProgress = z.infer<typeof implementationProgressSchema>;
 export type ScenarioProgress = z.infer<typeof scenarioProgressSchema>;
 export type FeatureProgress = z.infer<typeof featureProgressSchema>;

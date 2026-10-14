@@ -100,20 +100,32 @@ export class EntityDeletionService {
     }
     for (const entry of catalog.entries) {
       const data = entry.data;
-      if (data.kind === "work-plan")
-        invariant(
-          !data.stages.some((stage) => stage.taskIds.some((id) => has("task", id))),
-          "PLANNING_REFERENCE_IN_USE",
-          `Удаление затрагивает задачи плана ${entry.key}. Сначала явно пересмотрите его состав.`,
-          4,
-        );
-      if (data.kind === "work-plan")
-        invariant(
-          !data.scope.some((ref) => has(ref.kind, ref.id)),
-          "PLANNING_REFERENCE_IN_USE",
-          `Область используется планом ${entry.key}. Сначала явно пересмотрите область плана.`,
-          4,
-        );
+      if (data.kind !== "work-plan") continue;
+      const stages = data.stages.filter((stage) => stage.taskIds.some((id) => has("task", id)));
+      const scope = data.scope.filter((ref) => has(ref.kind, ref.id));
+      const closed = data.status === "completed" || data.status === "cancelled";
+      invariant(
+        !stages.length && !scope.length,
+        "PLANNING_REFERENCE_IN_USE",
+        `Удаление затрагивает ${stages.length ? "задачи" : "область"} плана ${entry.key} (${data.status}). ` +
+          (closed
+            ? "Закрытый план неизменяем: пересмотр, повторное открытие и снятие его ссылок публичными операциями не поддерживаются. Удаление недоступно."
+            : stages.length
+              ? `Прочитайте план ${entry.key} и явно исключите удаляемые задачи из этапов ${stages.map((stage) => stage.id).join(", ")} под его актуальной ревизией.`
+              : `Прочитайте план ${entry.key} и явно измените его scope, исключив удаляемые адреса, под актуальной ревизией.`),
+        4,
+        {
+          plan: entry.ref,
+          key: entry.key,
+          status: data.status,
+          editable: !closed,
+          stages: stages.map((stage) => ({
+            id: stage.id,
+            taskIds: stage.taskIds.filter((id) => has("task", id)),
+          })),
+          scope,
+        },
+      );
     }
     const detached = new Set<string>();
     for (const entry of catalog.entries) {

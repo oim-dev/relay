@@ -49,6 +49,7 @@ import { productTaskTargets } from "../product/task-progress.js";
 import { syncTaskRelations } from "../entities/owned-relations.js";
 import { resolveAddress } from "../entities/resolver.js";
 import { taskCompletions } from "./completion.js";
+import type { TaskCompletion } from "./completion.js";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const versionOf = (tasks: BoardTaskRecord[]) => hash(tasks.map((task) => [task.id, task.revision]));
@@ -200,7 +201,12 @@ function resolveBoard(boards: Board[], reference: string): Board {
   invariant(board, "NOT_FOUND", "Доска не найдена в выбранном проекте", 3);
   return board;
 }
-function view(task: BoardTaskRecord, tasks: BoardTaskRecord[], boards: Board[]): BoardTaskView {
+function view(
+  task: BoardTaskRecord,
+  tasks: BoardTaskRecord[],
+  boards: Board[],
+  index?: ReadonlyMap<string, TaskCompletion>,
+): BoardTaskView {
   const {
     version: _version,
     keys: _keys,
@@ -213,9 +219,8 @@ function view(task: BoardTaskRecord, tasks: BoardTaskRecord[], boards: Board[]):
     total: acceptanceCriteria.length,
     completed: acceptanceCriteria.filter((criterion) => criterion.completed).length,
   };
-  const completion = taskCompletions(
-    [...tasks.filter((entry) => entry.id !== task.id), task],
-    "blocked",
+  const completion = (
+    index ?? taskCompletions([...tasks.filter((entry) => entry.id !== task.id), task], "blocked")
   ).get(task.id)!;
   const { blockers } = completion;
   const board = resolveBoard(boards, task.boardId);
@@ -229,8 +234,13 @@ function view(task: BoardTaskRecord, tasks: BoardTaskRecord[], boards: Board[]):
     ready: task.column === "ready" && blockers.length === 0,
   };
 }
-function summary(task: BoardTaskRecord, tasks: BoardTaskRecord[], boards: Board[]) {
-  const { description: _description, ...result } = view(task, tasks, boards);
+/** Проекция уже прочитанного состояния; не читает репозитории и не пересчитывает граф. */
+export function boardTaskSummary(
+  task: BoardTaskRecord,
+  boards: Board[],
+  completion: ReadonlyMap<string, TaskCompletion>,
+) {
+  const { description: _description, ...result } = view(task, [], boards, completion);
   return result;
 }
 function page<T>(
@@ -258,16 +268,27 @@ function page<T>(
 export class BoardTasksService {
   constructor(readonly workspace: Workspace) {}
 
-  private async read<T>(operation: (tasks: BoardTaskRecord[], boards: Board[]) => T): Promise<T> {
+  private async read<T>(
+    operation: (
+      tasks: BoardTaskRecord[],
+      boards: Board[],
+      completion: () => ReadonlyMap<string, TaskCompletion>,
+    ) => T,
+  ): Promise<T> {
     return this.workspace.locked(async () => {
       const tasks = await new BoardTaskRepository(this.workspace).all();
       validateBoardTasks(tasks, this.workspace.storageSession !== undefined);
-      return operation(tasks, await new BoardRepository(this.workspace).all());
+      let completion: ReadonlyMap<string, TaskCompletion> | undefined;
+      return operation(
+        tasks,
+        await new BoardRepository(this.workspace).all(),
+        () => (completion ??= taskCompletions(tasks, "blocked")),
+      );
     });
   }
   async list(input: BoardTasksQuery = {}) {
     const query = parse(boardTasksQuerySchema, input, "список задач доски");
-    return this.read(async (tasks, boards) => {
+    return this.read(async (tasks, boards, completion) => {
       let targetAddresses: Set<string> | undefined;
       let pageVersion = versionOf(tasks);
       if (query.productTarget) {
@@ -297,9 +318,12 @@ export class BoardTasksService {
       }
       const board = query.board === undefined ? undefined : resolveBoard(boards, query.board);
       const parent = query.parentId === undefined ? undefined : resolveTask(tasks, query.parentId);
+      const index = completion();
       const selected = tasks
         .filter((task) => {
-          const state = view(task, tasks, boards);
+          // Прежняя проверка досок не зависит от фильтра и размера страницы.
+          resolveBoard(boards, task.boardId);
+          const blocked = index.get(task.id)!.blockers.length > 0;
           return (
             (!board || task.boardId === board.id) &&
             (!parent || task.parentId === parent.id) &&
@@ -313,16 +337,22 @@ export class BoardTasksService {
               `${task.id} ${task.keys.join(" ")} ${task.title} ${query.searchIn === "title" ? "" : task.description}`
                 .toLocaleLowerCase()
                 .includes(query.q.toLocaleLowerCase())) &&
-            (!query.readiness || (query.readiness === "blocked" ? state.blocked : state.ready))
+            (!query.readiness ||
+              (query.readiness === "blocked" ? blocked : task.column === "ready" && !blocked))
           );
         })
-        .sort(ordered)
-        .map((task) => summary(task, tasks, boards));
-      return page(selected, query, pageVersion);
+        .sort(ordered);
+      const result = page(selected, query, pageVersion);
+      return {
+        ...result,
+        items: result.items.map((task) => boardTaskSummary(task, boards, index)),
+      };
     });
   }
   async get(reference: string) {
-    return this.read((tasks, boards) => view(resolveTask(tasks, reference), tasks, boards));
+    return this.read((tasks, boards, completion) =>
+      view(resolveTask(tasks, reference), tasks, boards, completion()),
+    );
   }
 
   /** Ограниченная лента, без чтения полного Markdown всех событий. */
@@ -507,22 +537,32 @@ export class BoardTasksService {
 
   async links(reference: string, input: BoardTasksQuery = {}) {
     const query = parse(boardTasksQuerySchema, input, "список связей задачи");
-    return this.read((tasks, boards) => {
+    return this.read((tasks, boards, completion) => {
       const task = resolveTask(tasks, reference);
       const items: {
         relation: "depends-on" | "blocks" | "related" | "parent" | "child";
-        task: ReturnType<typeof summary>;
+        task: BoardTaskRecord;
       }[] = [];
       for (const other of tasks) {
         const add = (relation: (typeof items)[number]["relation"]) =>
-          items.push({ relation, task: summary(other, tasks, boards) });
+          items.push({ relation, task: other });
         if (task.dependencies.includes(other.id)) add("depends-on");
         if (other.dependencies.includes(task.id)) add("blocks");
         if (task.related.includes(other.id) || other.related.includes(task.id)) add("related");
         if (task.parentId === other.id) add("parent");
         if (other.parentId === task.id) add("child");
       }
-      return page(items, query, versionOf(tasks));
+      const result = page(items, query, versionOf(tasks));
+      // Проверяем все найденные доски, даже если повреждённая ссылка оказалась за страницей.
+      for (const item of items) resolveBoard(boards, item.task.boardId);
+      const index = completion();
+      return {
+        ...result,
+        items: result.items.map(({ relation, task }) => ({
+          relation,
+          task: boardTaskSummary(task, boards, index),
+        })),
+      };
     });
   }
 

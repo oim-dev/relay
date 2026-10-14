@@ -633,6 +633,7 @@ test("Contracts: схемы результата обслуживания про
     blockers: [],
     blockersTotal: 0,
     warnings: [],
+    warningsTotal: 0,
   };
   storageStatusSchema.parse(status);
   assert.equal(storageStatusSchema.safeParse({ ...status, extra: true }).success, false);
@@ -651,7 +652,7 @@ test("Contracts: схемы результата обслуживания про
     owners: ["work-plan"],
     records: { checked: 1, changed: 1, removed: 0 },
   };
-  storageMigrationPlanSchema.parse({
+  const plan = storageMigrationPlanSchema.parse({
     ...status,
     steps: [step],
     profiles: { from: 1, to: 2 },
@@ -672,6 +673,24 @@ test("Contracts: схемы результата обслуживания про
     planFingerprint: "a".repeat(64),
     applicable: true,
   });
+  for (const [schema, value] of [
+    [storageStatusSchema, status],
+    [storageMigrationPlanSchema, plan],
+  ] as const) {
+    const { warningsTotal, ...withoutWarningsTotal } = value;
+    assert.equal(warningsTotal, 0);
+    assert.equal(
+      schema.safeParse(withoutWarningsTotal).success,
+      false,
+      "полное число предупреждений обязательно и не подставляется по длине массива",
+    );
+    for (const invalidTotal of [-1, 0.5])
+      assert.equal(
+        schema.safeParse({ ...value, warningsTotal: invalidTotal }).success,
+        false,
+        "число предупреждений должно быть целым и неотрицательным",
+      );
+  }
   const result = {
     migrated: true,
     format: "relay-entities",

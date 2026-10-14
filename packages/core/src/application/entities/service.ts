@@ -51,6 +51,8 @@ import { entityKeySpacePrefix, readEntityCards, resolveEntityCard } from "./inde
 import { readBoardDetail } from "../boards/read.js";
 import { readDocumentDetail } from "../documents/read.js";
 import { readDocumentList } from "../documents/list.js";
+import { readIndexedEntityList, withDocumentSearchMatches } from "./indexed-list.js";
+import { compareEntitySummaries, matchesEntry, searchEntitySummary } from "./query.js";
 
 /** Общий движок адресации, чтения и исполнения зарегистрированных предметных операций. */
 export class EntityEngine {
@@ -121,6 +123,7 @@ export class EntityEngine {
       application,
       feature,
       scenario,
+      implementationTarget,
       target,
       parent,
       status,
@@ -137,6 +140,7 @@ export class EntityEngine {
       application,
       feature,
       scenario,
+      implementationTarget,
       target,
       parent,
       status,
@@ -159,12 +163,21 @@ export class EntityEngine {
     return this.workspace.locked(async (owned) => {
       if (kind === "document") {
         const documents = await readDocumentList(this.workspace, query);
-        if (documents)
+        if (documents) {
+          const page = this.page(
+            documents.items.map((item) => ({ ...item, updatedAt: item.document!.updatedAt })),
+            pagination,
+            documents.version,
+          );
           return {
-            ...this.page(documents.items, pagination, documents.version),
+            ...page,
+            items: await withDocumentSearchMatches(this.workspace, page.items, query),
             libraryCounts: documents.libraryCounts,
           };
+        }
       }
+      const indexed = await readIndexedEntityList(this.workspace, query);
+      if (indexed) return this.page(indexed.items, pagination, indexed.version);
       const catalog = await readEntityCatalog(this.workspace, owned);
       // Полный адрес прежнего этапа плана (запись совместимости) не входит в публичный
       // каталог и не роняет адресное чтение: такой ref пропускается, остальные читаются.
@@ -202,48 +215,16 @@ export class EntityEngine {
                 .filter((ref) => !relocated.has(ref))
                 .map((ref) => entityAddress(resolveEntity(catalog, ref, kind).ref)),
             );
-      const needle = q?.trim().toLocaleLowerCase();
       const items = catalog.entries
         .filter(
           (entry) =>
-            (!kind || entry.ref.kind === kind) &&
             (!selected || selected.has(entityAddress(entry.ref))) &&
-            (!needle ||
-              `${entry.key} ${entry.aliases.join(" ")} ${entityAddress(entry.ref)} ${entry.title} ${entry.summary} ${entry.context ?? ""} ${entry.data.kind === "document" ? entry.data.body : ""}`
-                .toLocaleLowerCase()
-                .includes(needle)) &&
-            (status === undefined || entry.status === status) &&
-            (active === undefined || entry.active === (active === "true")) &&
-            (section === undefined || (entry.document?.sectionId ?? "none") === section) &&
-            (documentKind === undefined || entry.document?.kind === documentKind) &&
-            (pinned === undefined || entry.document?.pinned === (pinned === "true")) &&
-            (archived === undefined ||
-              (entry.document?.status === "archived") === (archived === "true")) &&
-            Object.entries(resolved).every(([name, value]) =>
-              Array.isArray(entry.filters[name])
-                ? entry.filters[name].includes(value)
-                : entry.filters[name] === value,
-            ),
+            matchesEntry(entry, query, resolved),
         )
-        .sort(
-          (a, b) =>
-            (sort === "updated"
-              ? (b.document?.updatedAt ?? "").localeCompare(a.document?.updatedAt ?? "")
-              : a[sort].localeCompare(b[sort], "ru", { numeric: true })) ||
-            entityAddress(a.ref).localeCompare(entityAddress(b.ref)),
+        .map((entry) =>
+          searchEntitySummary(entry, query, catalog.metadata?.get(entityAddress(entry.ref))),
         )
-        .map((entry) => {
-          const summary = entitySummary(entry);
-          if (needle && entry.data.kind === "document" && summary.document) {
-            const match = entry.data.body.toLocaleLowerCase().indexOf(needle);
-            if (match >= 0)
-              summary.document.excerpt = entry.data.body.slice(
-                Math.max(0, match - 50),
-                match + needle.length + 100,
-              );
-          }
-          return summary;
-        });
+        .sort((a, b) => compareEntitySummaries(a, b, sort));
       const page = this.page(items, pagination, catalog.version);
       if (kind !== "document") return page;
       const counts: Record<string, number> = { all: 0, draft: 0, pinned: 0, archived: 0, none: 0 };
@@ -324,9 +305,13 @@ export class EntityEngine {
         entityDetailSchema,
         {
           ...entitySummary(entry),
+          ...(entry.implementation === undefined ? {} : { implementation: entry.implementation }),
+          ...(entry.savedStatus === undefined ? {} : { savedStatus: entry.savedStatus }),
           data: entry.data,
           references,
-          ...(catalog.metadata?.has(entityAddress(entry.ref))
+          ...(entry.ref.kind !== "board" &&
+          entry.ref.kind !== "project" &&
+          catalog.metadata?.has(entityAddress(entry.ref))
             ? { metadata: catalog.metadata.get(entityAddress(entry.ref)) }
             : {}),
         },

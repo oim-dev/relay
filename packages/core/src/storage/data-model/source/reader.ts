@@ -128,8 +128,8 @@ export type StorageSource = {
   readonly blockers: readonly StorageBlocker[];
   readonly warnings: readonly StorageWarning[];
   /**
-   * Потерянные или повреждённые страницы рабочих индексов (кроме `file-hashes`) при целых
-   * источниках истины. Для базы без шагов — блокеры с действием `storage reindex`; перенос
+   * Отметка внешней правки, расхождение с файлами, потерянные или повреждённые страницы
+   * рабочих индексов (кроме `file-hashes`). Для базы без шагов — блокеры `storage reindex`; перенос
    * перестраивает индексы сам, поэтому для него это предупреждения.
    */
   readonly indexIssues: readonly StorageBlocker[];
@@ -732,11 +732,7 @@ export async function readStorageSource(
     if (kind.category === "legacy-transactions")
       pending.push({ kind: "legacy", path: item.path, area });
     if (item.path === INDEX_STALE_PATH)
-      warnings.push({
-        code: "STORAGE_INDEX_STALE",
-        message: "Обнаружена отметка внешних изменений; индексы будут построены заново",
-        path: item.path,
-      });
+      indexIssues.push(indexStale(item.path, "Обнаружена отметка внешних изменений"));
     if (kind.category === "entities" && kind.owner) {
       const record = readRecord(item.path, kind.owner, decoded.value, physical, registry, blockers);
       if (!record) {
@@ -1151,7 +1147,7 @@ function checkExpectedFiles(
   const files = new Set(
     entries.filter((entry) => entry.type === "file").map((entry) => entry.path),
   );
-  let stale = 0;
+  const stale = new Set<string>();
   for (const [path, hash] of [...expected].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     if (!files.has(path)) {
       blockers.push(
@@ -1164,15 +1160,14 @@ function checkExpectedFiles(
       continue;
     }
     const actual = digests.get(path);
-    if (actual !== undefined && actual !== hash) stale++;
+    if (actual !== undefined && actual !== hash) stale.add(path);
   }
   for (const path of digests.keys())
-    if (/^(entities|relations|keyspaces)\//.test(path) && !expected.has(path)) stale++;
-  if (stale)
-    warnings.push({
-      code: "STORAGE_INDEX_STALE",
-      message: `Индекс расходится с постоянными файлами (${stale}); индексы будут построены заново из записей`,
-    });
+    if (/^(entities|relations|keyspaces)\//.test(path) && !expected.has(path)) stale.add(path);
+  // Адрес причины нужен и doctor: schema-ошибка того же файла первична, независимые
+  // расхождения других файлов не скрываются общей причиной на `.indexes/state.json`.
+  for (const path of [...stale].sort(byName))
+    indexIssues.push(indexStale(path, "Постоянный файл расходится с индексом"));
 }
 
 /** Шаги, нужные источнику: физический перенос раскладки и упорядоченные предметные переходы. */
@@ -1257,7 +1252,7 @@ export function diagnoseStorageSource(
         blockers.push(blockerOf(error));
       }
   }
-  // Потерянные страницы рабочих индексов: базе без шагов нужен явный reindex (не passed),
+  // Устаревшие рабочие индексы: базе без шагов нужен явный reindex (не passed),
   // перенос строит индексы заново из целых источников — для него это предупреждение.
   const rebuilds = steps !== null && (steps.physical || steps.data.length > 0 || steps.marker);
   const indexWarnings: StorageWarning[] = [];
@@ -1265,7 +1260,7 @@ export function diagnoseStorageSource(
     if (rebuilds)
       indexWarnings.push({
         code: "STORAGE_INDEX_STALE",
-        message: "Страница рабочего индекса потеряна; перенос построит индексы заново",
+        message: `${issue.message}; перенос построит индексы заново`,
         ...(issue.path ? { path: issue.path } : {}),
       });
     else blockers.push(issue);
@@ -1327,6 +1322,7 @@ export function diagnoseStorageSource(
     blockers: blockers.slice(0, LIST_LIMIT),
     blockersTotal: blockers.length,
     warnings: [...source.warnings, ...indexWarnings].slice(0, LIST_LIMIT),
+    warningsTotal: source.warnings.length + indexWarnings.length,
   };
   return { status: storageStatusSchema.parse(value), steps, blockers };
 }

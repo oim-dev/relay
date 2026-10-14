@@ -34,6 +34,7 @@ export type EntityCatalog = {
 export const entityAddress = (ref: { kind: string; id: string }) => `${ref.kind}:${ref.id}`;
 export const entityDigest = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
+/** Базовая адресная карточка. Дополнения query/detail не меняют её постоянный формат. */
 export const entitySummary = ({
   ref,
   key,
@@ -109,7 +110,14 @@ export async function readEntityCatalog(
     options: Partial<
       Pick<
         EntityEntry,
-        "aliases" | "selectors" | "filters" | "status" | "active" | "document" | "context"
+        | "aliases"
+        | "selectors"
+        | "filters"
+        | "status"
+        | "active"
+        | "document"
+        | "context"
+        | "savedStatus"
       >
     > = {},
   ) => {
@@ -172,6 +180,7 @@ export async function readEntityCatalog(
           },
           {
             aliases: stored?.reservedKeys ?? [],
+            ...(stored === undefined ? {} : { savedStatus: stored.fields.status }),
             status: contract.active ? contract.status : "inactive",
             active: contract.active,
             filters: {
@@ -182,10 +191,13 @@ export async function readEntityCatalog(
             },
           },
         );
+        // FI/SI имеют собственную запись. В старой inline-модели собственной даты нет.
+        if (stored) metadata.set(`implementation:${contract.id}`, documentMetadata(stored));
       }
       continue;
     }
     const kind = fields.kind === "passport" ? "product" : fields.kind;
+    metadata.set(`${kind}:${record.id}`, documentMetadata(record));
     const readiness = state.readiness.find((entry) => entry.id === record.id);
     add(
       kind,
@@ -213,6 +225,7 @@ export async function readEntityCatalog(
     entries.push(boardEntityEntry(board, name));
   }
   for (const task of tasks) {
+    metadata.set(`task:${task.id}`, documentMetadata(task));
     const board = boards.find((entry) => entry.id === task.boardId);
     const {
       version: _version,
@@ -252,6 +265,7 @@ export async function readEntityCatalog(
   if (workspace.storageSession) {
     for (const kind of ["work-plan", "release"] as const) {
       for (const record of await planningRecords(workspace, kind)) {
+        metadata.set(`${kind}:${record.id}`, documentMetadata(record));
         const {
           id,
           key,
@@ -280,6 +294,33 @@ export async function readEntityCatalog(
             : null;
     const parent = entries.find((candidate) => candidate.ref.id === parentId);
     if (parent) entry.context = `${parent.key} · ${parent.title}`;
+    if (data.kind === "implementation") {
+      const targetKind = data.scenarioId === null ? "feature" : "scenario";
+      const target = entries.find(
+        (candidate) =>
+          candidate.ref.kind === targetKind &&
+          candidate.ref.id === (data.scenarioId ?? data.featureId),
+      );
+      invariant(
+        parent && target,
+        "INVALID_REFERENCE",
+        "Не найдены приложение или цель реализации",
+        5,
+      );
+      const addressCard = ({ ref, key, title }: EntityEntry) => ({ ref, key, title });
+      entry.implementation = {
+        type: data.scenarioId === null ? "FI" : "SI",
+        application: addressCard(parent),
+        target: addressCard(target),
+      };
+    }
+    // Совместимые адаптеры PROJECT/board не отдают updatedAt. Читаем настоящую оболочку,
+    // а не выдаём дату создания или mtime за время последнего изменения.
+    if (workspace.storageSession && (data.kind === "project" || data.kind === "board"))
+      metadata.set(
+        entityAddress(entry.ref),
+        documentMetadata(await workspace.storageSession.get(entry.ref)),
+      );
   }
   entries.sort((a, b) => entityAddress(a.ref).localeCompare(entityAddress(b.ref)));
   const reservedKeys = await new EntityDeletionRepository(workspace).reservedKeys();

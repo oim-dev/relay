@@ -6,8 +6,7 @@ import { BoardTaskRepository } from "../../storage/board-tasks.js";
 import { GraphRepository } from "../../storage/graph.js";
 import * as unified from "../../storage/unified-adapter.js";
 import {
-  syncBoardRelations,
-  syncProductRelations,
+  syncProductRelationsSnapshot,
   syncProductRootRelations,
   syncTaskRelations,
 } from "../entities/owned-relations.js";
@@ -97,15 +96,13 @@ export class StorageService {
         "Для согласования предметных связей сначала выполните relay-cli --local storage migrate",
         4,
       );
-      const products = await new ProductRepository(this.workspace).all();
-      validateProduct(products);
+      const products = await new ProductRepository(this.workspace).snapshot(owned);
+      validateProduct(products.records);
       const boards = await new BoardRepository(this.workspace).all();
       const tasks = await new BoardTaskRepository(this.workspace).all();
       const graph = new GraphRepository(this.workspace);
       const before = (await graph.open(owned)).index.entries;
-      await syncProductRootRelations(this.workspace, author);
-      await syncBoardRelations(this.workspace, boards, author);
-      for (const record of products) await syncProductRelations(this.workspace, record, author);
+      await syncProductRelationsSnapshot(this.workspace, products, boards, author);
       await syncTaskRelations(this.workspace, tasks, author);
       for (const plan of await planningRecords(this.workspace, "work-plan"))
         await syncPlanRelations(this.workspace, plan, author);

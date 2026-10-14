@@ -179,7 +179,10 @@ test("движок: все виды, вложенные ссылки ключ/ID
   );
   for (const item of all.items) {
     assert.deepEqual(await engine.get({ ref: item.key }), await engine.get({ ref: item.ref.id }));
-    assert.deepEqual(await engine.resolve({ ref: `${item.ref.kind}:${item.ref.id}` }), item);
+    // Разрешение читает компактную адресную карточку; дополнительные поля списка
+    // берутся из собственной записи и не меняют постоянную схему индексов.
+    const { updatedAt: _updatedAt, implementation: _implementation, ...addressCard } = item;
+    assert.deepEqual(await engine.resolve({ ref: `${item.ref.kind}:${item.ref.id}` }), addressCard);
   }
   const task = await engine.get({ ref: app.task.key });
   assert.equal(task.data.kind, "task");
