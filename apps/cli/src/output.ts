@@ -10,6 +10,11 @@ import { safeJson } from "./presentation/safe.js";
 import { cardText, commandText } from "./presentation/common.js";
 import { localizeStorageCommand, storageNextText } from "./presentation/storage.js";
 import type { OutputField } from "./presentation/common.js";
+import {
+  diagnosticRecovery,
+  unwrapServerDetails,
+  type RecoveryContext,
+} from "./presentation/recovery.js";
 
 export interface OutputOptions {
   format: OutputFormat;
@@ -18,6 +23,7 @@ export interface OutputOptions {
   text?: TextOptions;
   /** Вызов обслуживания с явными параметрами выбора базы; подсказки Core в JSON не меняются. */
   maintenanceCommand?: string;
+  recovery?: RecoveryContext;
 }
 
 /**
@@ -47,7 +53,46 @@ function errorDetailsText(
   options: TextOptions,
   code?: string,
   maintenanceCommand?: string,
+  hasRecovery = false,
 ): string {
+  const serverDetails = unwrapServerDetails(details);
+  if (isRecord(details) && serverDetails !== details) {
+    const transport = { ...details };
+    delete transport.serverDetails;
+    return [
+      ...(serverDetails === undefined
+        ? []
+        : [errorDetailsText(serverDetails, options, code, maintenanceCommand, hasRecovery)]),
+      errorDetailsText(transport, options),
+    ].join("\n\n");
+  }
+  if (code === "VALIDATION_FAILED" && Array.isArray(details)) {
+    return [
+      `Причин: ${details.length}`,
+      ...details.map((issue, index) => {
+        if (!isRecord(issue) || typeof issue.code !== "string" || typeof issue.message !== "string")
+          return wrap(diagnosticValueText(issue), options.width);
+        const checks = Array.isArray(issue.checks)
+          ? issue.checks.filter((check) => typeof check === "string")
+          : [];
+        return [
+          wrap(`${index + 1}. ${safeText(issue.code)} — ${safeText(issue.message)}`, options.width),
+          ...(checks.length ? [`Проверок: ${checks.length}`] : []),
+          ...(issue.details === undefined
+            ? []
+            : [
+                errorDetailsText(
+                  issue.details,
+                  options,
+                  issue.code,
+                  maintenanceCommand,
+                  hasRecovery,
+                ),
+              ]),
+        ].join("\n");
+      }),
+    ].join("\n\n");
+  }
   if (details !== null && typeof details === "object" && !Array.isArray(details)) {
     const labels: Record<string, string> = {
       field: "Поле",
@@ -59,17 +104,35 @@ function errorDetailsText(
       actualRevision: "Текущая ревизия",
       ref: "Запись",
       requestId: "ID запроса",
+      url: "URL сервера",
       reason: "Причина",
       cause: "Причина",
+      owner: "Владелец",
+      id: "ID",
+      slot: "Группа отношений",
     };
     const fields: OutputField[] = [];
     const steps: string[] = [];
+    const issues: string[] = [];
     const rest: [string, unknown][] = [];
     for (const [name, value] of Object.entries(details)) {
       // Машинная причина хранилища повторяет заголовок ошибки.
       if (name === "code" && value === code) continue;
       if (["hint", "recovery", "nextCommand", "next"].includes(name) && typeof value === "string") {
         if (!value.trim()) continue;
+        if (
+          hasRecovery &&
+          [
+            "STORAGE_INDEX_STALE",
+            "STORAGE_INDEX_CORRUPT",
+            "INVALID_DATA",
+            "STORAGE_DATA_CORRUPT",
+            "STORAGE_REFERENCE_BROKEN",
+            "RELATION_MANAGED",
+            "MANAGED_RELATIONS_MISMATCH",
+          ].includes(code ?? "")
+        )
+          continue;
         const match = /^(?:Синтаксис и примеры: )?(npx @oim-dev\/relay-cli(?:[\s].*)?)$/s.exec(
           value,
         );
@@ -78,14 +141,30 @@ function errorDetailsText(
             ? commandText(localizeStorageCommand(match[1]!, maintenanceCommand), options)
             : storageNextText(value, options.width, maintenanceCommand),
         );
+      } else if (name === "issues" && Array.isArray(value)) {
+        issues.push(...value.map((issue) => schemaIssueText(issue, options)));
+      } else if (
+        code === "MANAGED_RELATIONS_MISMATCH" &&
+        ["missing", "extra", "drift"].includes(name) &&
+        Array.isArray(value)
+      ) {
+        fields.push([
+          { missing: "Недостающих", extra: "Лишних", drift: "Изменённых пояснений" }[name]!,
+          value.length,
+        ]);
       } else if (Object.hasOwn(labels, name)) {
         fields.push([
           labels[name]!,
-          name === "path"
+          name === "path" || name === "field"
             ? diagnosticPath(value)
-            : typeof value === "string" && value !== "" && !["expected", "actual"].includes(name)
-              ? safeText(value)
-              : diagnosticValueText(value),
+            : ["ref", "owner"].includes(name) && referenceText(value)
+              ? referenceText(value)!
+              : typeof value === "string" && value !== "" && !["expected", "actual"].includes(name)
+                ? safeText(value)
+                : diagnosticValueText(value),
+          ...(["path", "field", "ref", "id", "owner", "requestId", "url"].includes(name)
+            ? (["opaque"] as const)
+            : ([] as const)),
         ]);
       } else {
         rest.push([name, value]);
@@ -93,6 +172,7 @@ function errorDetailsText(
     }
     return [
       cardText({ title: "", fields }, options),
+      ...issues,
       ...(rest.length
         ? [`Подробности:\n${wrap(diagnosticValueText(Object.fromEntries(rest)), options.width)}`]
         : []),
@@ -103,6 +183,32 @@ function errorDetailsText(
       .join("\n\n");
   }
   return wrap(diagnosticValueText(details), options.width);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function referenceText(value: unknown): string | undefined {
+  return isRecord(value) && typeof value.kind === "string" && typeof value.id === "string"
+    ? `${safeText(value.kind)}:${safeText(value.id)}`
+    : undefined;
+}
+
+function schemaIssueText(issue: unknown, options: TextOptions): string {
+  if (!isRecord(issue) || !Array.isArray(issue.path) || typeof issue.message !== "string")
+    return wrap(diagnosticValueText(issue), options.width);
+  const fields: OutputField[] = [];
+  if (issue.path !== undefined) fields.push(["Поле", diagnosticPath(issue.path), "opaque"]);
+  if (issue.expected !== undefined) fields.push(["Ожидалось", diagnosticValueText(issue.expected)]);
+  if (issue.received !== undefined) fields.push(["Получено", diagnosticValueText(issue.received)]);
+  return cardText(
+    {
+      title: issue.code === "invalid_type" ? "Неверный тип значения" : issue.message,
+      fields,
+    },
+    options,
+  );
 }
 
 function diagnosticPath(value: unknown): string {
@@ -164,6 +270,10 @@ export function printError(stream: Writable, error: AppError, options: OutputOpt
   };
   const text = { ...(options.text ?? defaultTextOptions), color: false };
   const colors = palette(text);
+  const recovery =
+    options.format === "text" && !(error instanceof PresentedError)
+      ? diagnosticRecovery(error, text, options.recovery)
+      : undefined;
   const encode = () =>
     options.format === "json"
       ? `${safeJson(payload)}\n`
@@ -183,11 +293,14 @@ export function printError(stream: Writable, error: AppError, options: OutputOpt
                     text,
                     payload.error.code,
                     options.maintenanceCommand,
+                    !!recovery,
                   ),
                 ]),
-            ...(recoveryText(error)
-              ? ["", wrap(`Следующий шаг: ${recoveryText(error)}`, text.width)]
-              : []),
+            ...(recovery
+              ? ["", recovery]
+              : recoveryText(error)
+                ? ["", wrap(`Следующий шаг: ${recoveryText(error)}`, text.width)]
+                : []),
             "",
           ].join("\n");
   stream.write(encode());

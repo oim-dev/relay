@@ -87,6 +87,32 @@ const versionsOf = (records: { kind: string; dataVersion: number }[]) => {
   return map;
 };
 
+test("проекция индексов: descriptor меняет digest реестра, generic-реестр не получает Workspace", () => {
+  const input = syntheticInput(13);
+  const indexProjection = { id: "synthetic-cards", version: 1, async apply() {} };
+  const plain = createTransitionRegistry(input);
+  const projected = createTransitionRegistry({ ...input, indexProjection });
+  assert.notEqual(projected.digest, plain.digest);
+  assert.notEqual(
+    projected.digest,
+    createTransitionRegistry({ ...input, indexProjection: { ...indexProjection, version: 2 } })
+      .digest,
+  );
+  assert.equal(projected.digest, createTransitionRegistry({ ...input, indexProjection }).digest);
+  fails(
+    () =>
+      createTransitionRegistry({ ...input, indexProjection: { ...indexProjection, id: "Bad ID" } }),
+    "STORAGE_REGISTRY_INVALID",
+    "invalid-id",
+  );
+  fails(
+    () =>
+      createTransitionRegistry({ ...input, indexProjection: { ...indexProjection, version: 0 } }),
+    "STORAGE_REGISTRY_INVALID",
+    "invalid-version",
+  );
+});
+
 test("A06: цепочка из трёх шагов равна последовательному применению, порядок и ID видны", () => {
   const source = [
     note("n1", 1, { name: "Отчёт: квартал", text: "строка 1\nстрока 2", tags: ["work", "q1"] }),

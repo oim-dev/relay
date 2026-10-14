@@ -4,7 +4,11 @@ import type { TextOptions } from "./theme.js";
 import { pad, wrap } from "./layout.js";
 import stringWidth from "string-width";
 
-export type OutputField = readonly [label: string, value: string | number | null | undefined];
+export type OutputField = readonly [
+  label: string,
+  value: string | number | null | undefined,
+  mode?: "opaque",
+];
 export interface OutputSection {
   title: string;
   body: string;
@@ -28,9 +32,17 @@ function metadata(fields: readonly OutputField[], options: TextOptions): string 
   const labels = present.map(([label]) => safeText(label));
   const labelWidth = Math.max(0, ...labels.map((label) => stringWidth(label)));
   return present
-    .map(([, value], index) => {
+    .map(([, value, mode], index) => {
       const label = labels[index]!;
       const text = safeText(String(value));
+      // Адреса и версии копируются буквально: переносим метку, но не сам токен.
+      if (mode === "opaque") {
+        const token = text.replaceAll("\n", "\\n").replaceAll("\r", "\\r");
+        const prefix = pad(label + ":", labelWidth + 1) + " ";
+        return label.includes("\n") || stringWidth(prefix + token) > width
+          ? `${wrap(label + ":", width)}\n  ${token}`
+          : prefix + token;
+      }
       if (labelWidth > Math.floor(width / 2) || label.includes("\n")) {
         return `${wrap(label + ":", width)}\n${wrap(text, width - 2)
           .split("\n")
@@ -92,7 +104,12 @@ export function listText(
   input: {
     title: string;
     filters?: readonly OutputField[];
-    items: readonly { key: string; title: string; details?: readonly string[] }[];
+    items: readonly {
+      key: string;
+      title: string;
+      details?: readonly string[];
+      fields?: readonly OutputField[];
+    }[];
     emptyMessage?: string;
     commands?: readonly OutputCommand[];
   },
@@ -104,7 +121,7 @@ export function listText(
     metadata(input.filters ?? [], options),
     input.items.length
       ? input.items
-          .map(({ key, title, details }) =>
+          .map(({ key, title, details, fields }) =>
             [
               wrap(safeText([key, title].filter(Boolean).join(" — ")), width),
               ...(details ?? [])
@@ -115,6 +132,7 @@ export function listText(
                     .map((line) => `  ${line}`)
                     .join("\n"),
                 ),
+              ...(fields?.length ? [metadata(fields, options)] : []),
             ].join("\n"),
           )
           .join("\n\n")

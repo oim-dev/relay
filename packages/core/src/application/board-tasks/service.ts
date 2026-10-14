@@ -56,7 +56,7 @@ const ordered = (a: BoardTaskRecord, b: BoardTaskRecord) =>
   a.rank - b.rank || a.id.localeCompare(b.id);
 
 /** Проверяет целостность и ацикличность зависимостей и декомпозиции независимо. */
-function validate(tasks: BoardTaskRecord[], allowKeyCollisions = false) {
+export function validateBoardTasks(tasks: BoardTaskRecord[], allowKeyCollisions = false) {
   const ids = new Set(tasks.map((task) => task.id));
   const keys = new Set<string>();
   for (const task of tasks) {
@@ -261,7 +261,7 @@ export class BoardTasksService {
   private async read<T>(operation: (tasks: BoardTaskRecord[], boards: Board[]) => T): Promise<T> {
     return this.workspace.locked(async () => {
       const tasks = await new BoardTaskRepository(this.workspace).all();
-      validate(tasks, this.workspace.storageSession !== undefined);
+      validateBoardTasks(tasks, this.workspace.storageSession !== undefined);
       return operation(tasks, await new BoardRepository(this.workspace).all());
     });
   }
@@ -553,7 +553,7 @@ export class BoardTasksService {
         invariant(session, "STORAGE_MIGRATION_REQUIRED", "Для записи выполните storage migrate", 4);
         const repository = new BoardTaskRepository(this.workspace);
         const tasks = await repository.all();
-        validate(tasks, true);
+        validateBoardTasks(tasks, true);
         const boards = await new BoardRepository(this.workspace).all();
         const previous = reference ? resolveTask(tasks, reference) : undefined;
         invariant(
@@ -617,7 +617,7 @@ export class BoardTasksService {
         const candidates = [...tasks.filter((task) => task.id !== next.id), next].map((task) =>
           parse(boardTaskRecordSchema, task, "задача"),
         );
-        validate(candidates, this.workspace.storageSession !== undefined);
+        validateBoardTasks(candidates, this.workspace.storageSession !== undefined);
         validateCompletionChanges(tasks, candidates);
         const activity: ActivityFile[] = [];
         if (!this.workspace.storageSession)

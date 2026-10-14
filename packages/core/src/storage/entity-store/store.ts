@@ -38,6 +38,7 @@ import { CURRENT_DATA_MODEL } from "../data-model/profiles.js";
 import { storageError } from "../data-model/errors.js";
 import { STATE_PATH, EMPTY_STATE, stateSchema, RECORD_BYTES, digest, jsonValue } from "./format.js";
 import type { StoreState, FileChange } from "./format.js";
+import { fileError, fileRef } from "./diagnostics.js";
 
 const candidateSchema = z.strictObject({
   ref: entityRefSchema,
@@ -86,10 +87,11 @@ export function entityRelocated(
 }
 
 /**
- * STORAGE_DATA_MIGRATION_REQUIRED реестра дополняется details по общей схеме:
- * вид, фактическая и ожидаемая версия, относительный путь. Текст записи не раскрывается.
+ * Ошибки кодека получают относительный путь, ref и структурированные issues схемы.
+ * STORAGE_DATA_MIGRATION_REQUIRED сохраняет общую форму details обслуживания:
+ * вид, фактическая и ожидаемая версия. Содержание записи в диагностику не копируется.
  */
-function withRecordDetails<T>(
+export function withRecordDetails<T>(
   registry: EntityStorageRegistry,
   raw: unknown,
   path: string,
@@ -103,7 +105,7 @@ function withRecordDetails<T>(
       error.code !== "STORAGE_DATA_MIGRATION_REQUIRED" ||
       error.details !== undefined
     )
-      throw error;
+      throw fileError(error, path, fileRef(registry, path));
     const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
     const kind = kindSchema.safeParse(value.kind);
     const codec = kind.success
@@ -391,7 +393,7 @@ export class EntityStore {
         "STORAGE_INDEX_CORRUPT",
         "Состояние индексов отсутствует или повреждено. Выполните перестроение",
         5,
-        { cause: error instanceof Error ? error.message : String(error) },
+        { path: STATE_PATH, cause: error instanceof Error ? error.message : String(error) },
       );
     }
   }
@@ -768,15 +770,19 @@ export class StorageSession {
       if (await exists(full)) {
         if (path.startsWith("entities/")) this.store.metrics.entityReads++;
         if (path.startsWith("relations/")) this.store.metrics.relationReads++;
-        this.originals.set(
-          path,
-          jsonValue(
-            await readJson(
-              full,
-              path.startsWith("entities/") ? Number.POSITIVE_INFINITY : RECORD_BYTES,
+        try {
+          this.originals.set(
+            path,
+            jsonValue(
+              await readJson(
+                full,
+                path.startsWith("entities/") ? Number.POSITIVE_INFINITY : RECORD_BYTES,
+              ),
             ),
-          ),
-        );
+          );
+        } catch (error) {
+          throw fileError(error, path, fileRef(this.store.registry, path));
+        }
       } else this.originals.set(path, null);
     }
     return structuredClone(this.originals.get(path)!);
@@ -804,11 +810,14 @@ export class StorageSession {
   async get(ref: EntityRef): Promise<EntityRecord> {
     const path = this.store.registry.path(ref);
     const raw = await this.readFile(path);
-    invariant(raw, "ENTITY_NOT_FOUND", "Сущность не найдена в выбранном проекте", 3);
+    invariant(raw, "ENTITY_NOT_FOUND", "Сущность не найдена в выбранном проекте", 3, { path, ref });
     const record = withRecordDetails(this.store.registry, raw, path, () =>
       this.store.registry.decode(raw),
     );
-    invariant(sameRef(record, ref), "INVALID_DATA", "Файл содержит другую сущность", 5);
+    invariant(sameRef(record, ref), "INVALID_DATA", "Файл содержит другую сущность", 5, {
+      path,
+      ref,
+    });
     return record;
   }
 

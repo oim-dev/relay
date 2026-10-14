@@ -12,6 +12,8 @@ import { terminalOptions } from "./terminal.js";
 import type { ColorMode } from "./terminal.js";
 import { cliConfiguration } from "./configuration.js";
 import { selectProject, serverAddress } from "@relay/project-runtime/config";
+import { commandInvocation } from "./command-kit.js";
+import type { RecoveryContext } from "./presentation/recovery.js";
 
 export interface GlobalOptions {
   config?: string;
@@ -35,6 +37,7 @@ export interface Runtime {
    * подставляется вместо плейсхолдера `<config>` в подсказках Core только в text-выводе.
    */
   maintenanceCommand?: string;
+  recovery?: RecoveryContext;
 }
 export interface CommandContext {
   /** Версия, проверяемая Backend при продолжении offset-страницы. */
@@ -68,6 +71,7 @@ export function outputOptions(
     format,
     text: terminalOptions(runtime.stdout, runtime.env),
     ...(runtime.maintenanceCommand ? { maintenanceCommand: runtime.maintenanceCommand } : {}),
+    ...(runtime.recovery ? { recovery: runtime.recovery } : {}),
   };
 }
 
@@ -101,6 +105,7 @@ export function action(
       }
       if (url) context.connection = new URL(url).origin;
     }
+    if (runtime.recovery) runtime.recovery.command = (args) => commandInvocation(context, args);
     let result: Result;
     try {
       result = await handler(context);

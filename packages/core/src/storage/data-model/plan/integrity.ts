@@ -43,6 +43,8 @@ export type IntegrityInput = {
   readonly keyspaces: Iterable<StoredKeySpace>;
   /** Конфигурация проекта: путь и значение projectId; null — не проверяется. */
   readonly config: { readonly path: string; readonly projectId: string | null } | null;
+  /** Адреса неразобранных записей: их schema-ошибка уже сообщена, отсутствие не доказано. */
+  readonly unreadable?: ReadonlySet<string>;
 };
 
 /** Факты записи, прошедшей схему своей версии. */
@@ -132,6 +134,7 @@ export function integrityBlockers(
       linked.add(`${record.kind}:${record.id}\0${ref.field}\0${ref.kind}:${ref.id}`);
   for (const record of records)
     for (const ref of record.refs) {
+      if (input.unreadable?.has(`${ref.kind}:${ref.id}`)) continue;
       const target = byAddress.get(`${ref.kind}:${ref.id}`);
       if (!target) {
         blockers.push(
@@ -157,7 +160,10 @@ export function integrityBlockers(
 
   // Владельцы пространств ключей.
   for (const space of [...input.keyspaces].sort((a, b) => byText(a.id, b.id)))
-    if (!byAddress.has(`${space.owner.kind}:${space.owner.id}`))
+    if (
+      !byAddress.has(`${space.owner.kind}:${space.owner.id}`) &&
+      !input.unreadable?.has(entityAddress(space.owner))
+    )
       blockers.push(
         sourceBlocker(
           "STORAGE_REFERENCE_BROKEN",
@@ -197,6 +203,7 @@ export function integrityBlockers(
       else edges.set(edge.id, entityAddress(owner));
       if (!edge.active) continue;
       for (const end of [edge.from, edge.to]) {
+        if (input.unreadable?.has(`${String(end?.kind)}:${String(end?.id)}`)) continue;
         const record = byAddress.get(`${String(end?.kind)}:${String(end?.id)}`);
         if (!record || !record.live || !record.addressable)
           blockers.push(
@@ -215,7 +222,7 @@ export function integrityBlockers(
   if (input.config && registry.catalog.entry("project")) {
     const id = input.config.projectId ?? "project";
     const project = byAddress.get(`project:${id}`);
-    if (!project || !project.live)
+    if ((!project || !project.live) && !input.unreadable?.has(`project:${id}`))
       blockers.push(
         sourceBlocker(
           "STORAGE_REFERENCE_BROKEN",

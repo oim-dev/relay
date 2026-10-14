@@ -209,7 +209,14 @@ test("missing/corrupt config и повреждение хранения: не п
   await writeFile(markerPath, marker);
   await writeFile(taskPath, "{invalid-record");
   const corrupt = await app.run(["doctor", "check"]);
-  failed(corrupt, "STORAGE_INDEX_STALE", 4);
+  failed(corrupt, "VALIDATION_FAILED", 5);
+  assert.ok(!corrupt.body.ok);
+  assert.ok(
+    (corrupt.body.error.details as Array<{ code: string; details?: { path?: string } }>).some(
+      (issue) => issue.code === "INVALID_DATA" && issue.details?.path?.endsWith(`${task.id}.json`),
+    ),
+    corrupt.stdout,
+  );
   assert.equal(corrupt.stderr, "");
   assert.equal(await readFile(taskPath, "utf8"), "{invalid-record");
   const rebuild = await app.run(["--local", "storage", "reindex"]);

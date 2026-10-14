@@ -38,7 +38,7 @@ function relationshipsText(
             title: `${labels.get(entityAddress(edge.from)) ?? entityAddress(edge.from)} ── ${meanings[edge.type] ?? edge.type} → ${labels.get(entityAddress(edge.to)) ?? entityAddress(edge.to)}`,
             fields: [
               ["Тип", edge.type],
-              ["ID отношения", edge.id],
+              ["ID отношения", edge.id, "opaque"],
               ["Ревизия", edge.revision],
             ],
             sections: edge.description
@@ -69,7 +69,7 @@ export function fullContextText(
         ["Полнота графа", context.complete ? "Подтверждена" : "Не подтверждена"],
         ["Сущностей", context.nodes.length],
         ["Отношений", context.edges.length],
-        ["Версия", context.version],
+        ["Версия", context.version, "opaque"],
       ],
       sections: [
         {
@@ -89,8 +89,8 @@ export function fullContextText(
                 title: node.title,
                 details: [
                   `Вид: ${node.ref.kind} · ревизия: ${node.revision}${node.status ? ` · состояние: ${node.status}` : ""}`,
-                  `Постоянный адрес: ${entityAddress(node.ref)}`,
                 ],
+                fields: [["Постоянный адрес", entityAddress(node.ref), "opaque"]],
               })),
             },
             options,
@@ -127,9 +127,12 @@ export function graphText(
   const paths = page.paths
     .filter((path) => path.edges.length > 0)
     .map((path) =>
-      wrap(
-        `${safeText(labels.get(entityAddress(path.target)) ?? entityAddress(path.target))}: ${(path.keys ?? path.nodes.map(entityAddress)).map(safeText).join(" → ")}\nID отношений пути: ${path.edges.map(safeText).join(", ")}`,
-        options.width,
+      cardText(
+        {
+          title: `${labels.get(entityAddress(path.target)) ?? entityAddress(path.target)}: ${(path.keys ?? path.nodes.map(entityAddress)).join(" → ")}`,
+          fields: path.edges.map((id) => ["ID отношения пути", id, "opaque"]),
+        },
+        options,
       ),
     )
     .join("\n\n");
@@ -137,7 +140,7 @@ export function graphText(
     {
       title: query.root ? `Связи — ${query.root}` : "Граф проекта",
       fields: [
-        ["Корень", query.root ?? "Весь проект"],
+        query.root ? ["Корень", query.root, "opaque"] : ["Корень", "Весь проект"],
         [
           "Направление",
           { both: "Оба направления", outgoing: "Исходящие", incoming: "Входящие" }[
@@ -149,7 +152,7 @@ export function graphText(
         ["Профиль", selection.profile === "context" ? "context (совместимое имя all)" : "all"],
         ["Глубина", selection.depth],
         ["Лимит каждого списка", selection.limit],
-        ["Версия", page.version],
+        ["Версия", page.version, "opaque"],
       ],
       sections: [
         {
@@ -169,8 +172,8 @@ export function graphText(
                 title: node.title,
                 details: [
                   `Вид: ${node.ref.kind} · ревизия: ${node.revision}${node.status ? ` · состояние: ${node.status}` : ""}`,
-                  `Постоянный адрес: ${entityAddress(node.ref)}`,
                 ],
+                fields: [["Постоянный адрес", entityAddress(node.ref), "opaque"]],
               })),
               emptyMessage:
                 "Сущностей на этой странице нет; отношения читаются отдельной коллекцией.",
@@ -211,10 +214,10 @@ export function graphSavedText(
       title: "Пакет операций над диагностическими связями применён",
       fields: [
         ["Ревизия графа", saved.revision],
-        ["Версия", saved.version],
+        ["Версия", saved.version, "opaque"],
         ["ID в ответе", saved.ids.length],
-        ["Отношения", saved.ids.join(", ") || "Нет ID в ответе"],
-        ["Идентификатор запроса", saved.requestId],
+        ...saved.ids.map((id) => ["ID отношения", id, "opaque"] as const),
+        ["Идентификатор запроса", saved.requestId, "opaque"],
         [
           "Границы",
           "Предметные линки и статусы этим действием не изменяются. Проверьте сохранённые отношения.",
