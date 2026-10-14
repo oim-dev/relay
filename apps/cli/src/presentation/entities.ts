@@ -210,7 +210,13 @@ export function entityTypesText(
 export function entityText(
   entity: EntityDetail,
   options: TextOptions,
-  commands: { scenarios?: string; overview?: string; context?: string; links?: string } = {},
+  commands: {
+    scenarios?: string;
+    overview?: string;
+    context?: string;
+    links?: string;
+    deletion?: string;
+  } = {},
 ): string {
   const addresses = new Map(
     entity.references.map((item) => [
@@ -304,6 +310,7 @@ export function entityText(
               overview: "Карта продукта",
               context: data.kind === "document" ? "Связи графа: полная компонента" : "Контекст",
               links: "Прикрепления: адреса и полные пояснения страницами",
+              deletion: "Жизненный цикл: предпросмотр удаления приложения с доской (без изменений)",
             }[label] ?? label,
           command,
         })),

@@ -9,6 +9,11 @@ export interface RecoveryContext {
   command: (args: readonly string[]) => string;
   maintenance?: (args: readonly string[]) => string;
   actorAvailable?: boolean;
+  deletion?: {
+    preview: readonly string[];
+    catalogs: readonly { label: string; args: readonly string[] }[];
+    confirming: boolean;
+  };
 }
 
 type Cause = { code: string; details?: unknown };
@@ -44,6 +49,50 @@ export function diagnosticRecovery(
   options: TextOptions,
   context?: RecoveryContext,
 ): string | undefined {
+  const deletion = context?.deletion;
+  if (context && deletion) {
+    if (error.code === "REVISION_CONFLICT")
+      return [
+        wrap(
+          "Следующий шаг: заново изучите полный предпросмотр и согласуйте решение. Не подставляйте свежую версию к прежнему подтверждению автоматически.",
+          options.width,
+        ),
+        actionsText(
+          [
+            {
+              label: "Прочитать полный каскад без удаления",
+              command: context.command(deletion.preview),
+            },
+          ],
+          options,
+        ),
+      ].join("\n\n");
+    if (error.code === "PLANNING_REFERENCE_IN_USE")
+      return [
+        wrap(
+          "Следующий шаг: изучите ссылки планов из причины отказа. Удаление заблокировано; закрытый план неизменяем и штатного снятия его ссылок нет. После согласованного изменения открытого плана заново изучите полный предпросмотр.",
+          options.width,
+        ),
+        actionsText(
+          [{ label: "Найти планы выбранного проекта", command: context.command(["plan", "list"]) }],
+          options,
+        ),
+      ].join("\n\n");
+    if (
+      deletion.confirming &&
+      ["SERVER_UNAVAILABLE", "INVALID_SERVER_RESPONSE"].includes(error.code)
+    )
+      return [
+        wrap(
+          "Следующий шаг: ответ удаления не получен, но запись могла завершиться. Сначала проверьте оставшиеся каталоги и снятые ссылки; не повторяйте POST вслепую. request-id не обеспечивает дедупликацию.",
+          options.width,
+        ),
+        actionsText(
+          deletion.catalogs.map(({ label, args }) => ({ label, command: context.command(args) })),
+          options,
+        ),
+      ].join("\n\n");
+  }
   const details = unwrapServerDetails(error.details);
   const causes: Cause[] =
     error.code === "VALIDATION_FAILED" && Array.isArray(details)

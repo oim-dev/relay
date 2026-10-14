@@ -38,6 +38,7 @@ import { cardText } from "../presentation/common.js";
 import { registerEntityProgress } from "./progress.js";
 import { registerDocumentRelations, registerDocumentSections } from "./product-documents.js";
 import { registerParticipation } from "./product-participation.js";
+import { registerEntityDeletion } from "./entity-deletion.js";
 
 type Kind = "product" | "feature" | "scenario" | "application" | "implementation" | "document";
 type Options = Record<string, unknown> & {
@@ -404,6 +405,9 @@ export function registerProduct(program: Command, runtime: Runtime): void {
           ...(kind === "product"
             ? { overview: commandInvocation(context, ["product", "overview"]) }
             : {}),
+          ...(kind === "application"
+            ? { deletion: commandInvocation(context, ["application", "delete-preview", data.key]) }
+            : {}),
         };
         return { data, text: (options) => entityText(data, options, commands) };
       },
@@ -516,7 +520,22 @@ export function registerProduct(program: Command, runtime: Runtime): void {
       registerDocumentRelations(group, runtime);
       registerDocumentSections(group, runtime);
     }
-    if (kind === "application") registerParticipation(group, runtime);
+    if (kind === "application") {
+      registerParticipation(group, runtime);
+      registerEntityDeletion(group, runtime, {
+        kind,
+        example: examples[kind],
+        details:
+          "Удаление приложения включает его реализации, доску и задачи доски; общие требования и документы сохраняются.",
+        catalogs: [
+          {
+            label: "Проверить оставшиеся приложения (удаление не повторять)",
+            args: ["application", "list"],
+          },
+          { label: "Проверить оставшиеся доски", args: ["board", "list"] },
+        ],
+      });
+    }
     if (kind === "product") registerProductReading(group, runtime);
   }
 }

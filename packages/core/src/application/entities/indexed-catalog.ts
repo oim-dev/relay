@@ -36,7 +36,10 @@ async function requireIndexes(session: StorageSession) {
     invariant(roots[name], "STORAGE_INDEX_CORRUPT", `Потерян индекс ${name}`, 5);
 }
 
-async function readCard(session: StorageSession, address: string): Promise<EntityCard> {
+export async function readEntityCard(
+  session: StorageSession,
+  address: string,
+): Promise<EntityCard> {
   const raw = await session.indexGet("cards", address);
   invariant(raw, "STORAGE_INDEX_CORRUPT", `Потеряна карточка ${address}`, 5);
   const parsed = cardSchema.safeParse(raw);
@@ -62,7 +65,7 @@ export async function readEntityCards(session: StorageSession, kind?: EntityKind
       5,
     );
     if (!record.deleted && publicKind(record.ref.kind) && (!kind || record.ref.kind === kind))
-      cards.push(await readCard(session, address));
+      cards.push(await readEntityCard(session, address));
   }
   // Прежний логический каталог показывает незаполненный паспорт даже в перенесённой
   // базе без его записи. Реальная запись без карточки по-прежнему является ошибкой.
@@ -80,6 +83,7 @@ export async function resolveEntityCard(
   session: StorageSession,
   reference: string,
   kind?: EntityKind,
+  selectors?: (value: string) => Promise<EntityCard[]>,
 ): Promise<EntityCard> {
   await requireIndexes(session);
   const pieces = reference.split(":");
@@ -113,7 +117,7 @@ export async function resolveEntityCard(
       `Адрес ссылается на отсутствующую запись ${address}`,
       5,
     );
-    const card = await readCard(session, address);
+    const card = await readEntityCard(session, address);
     invariant(
       [card.ref.id, card.key, ...card.aliases].includes(value),
       "STORAGE_INDEX_CORRUPT",
@@ -125,7 +129,7 @@ export async function resolveEntityCard(
   // В каноническом каталоге selectors есть только у PROJECT и досок. Префикс доски
   // уже сохранён в карточке, но не во всех прежних деревьях индекса selectors.
   if ((kind === "project" || kind === "board") && !cards.some((card) => card.ref.kind === kind))
-    for (const card of await readEntityCards(session, kind))
+    for (const card of await (selectors ? selectors(value) : readEntityCards(session, kind)))
       if (card.selectors.includes(value)) cards.push(card);
   if (
     ["PRODUCT", "passport"].includes(value) &&

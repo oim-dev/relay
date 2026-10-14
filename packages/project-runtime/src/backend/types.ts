@@ -7,6 +7,7 @@ import type { BoardTasksService } from "@relay/core/application/board-tasks/serv
 import type { BoardsService } from "@relay/core/application/boards/service";
 import type { GraphService } from "@relay/core/application/graph/service";
 import type { EntityEngine } from "@relay/core/application/entities/service";
+import type { EntityDeletionService } from "@relay/core/application/entities/deletion";
 import type { ProgressService } from "@relay/core/application/progress/service";
 import type { PlanningService } from "@relay/core/application/planning/service";
 import type { ReleasesService } from "@relay/core/application/releases/service";
@@ -68,6 +69,7 @@ export interface Backend {
     | "moveTask"
     | "linkTask"
   >;
+  deletion: Pick<EntityDeletionService, "preview" | "delete">;
   graph: Pick<GraphService, "read" | "context" | "mutate">;
   boardTasks: Pick<
     BoardTasksService,

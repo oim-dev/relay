@@ -972,13 +972,14 @@ export class StorageSession {
       );
     }
     await this.writeFile(path, jsonValue(stored));
-    await this.indexRecord(stored);
+    await this.indexRecord(stored, previous);
     this.touched.add(entityAddress(ref));
   }
 
   async remove(ref: EntityRef, ifRevision: number, actor: string): Promise<void> {
     const record = await this.get(ref);
-    this.requireRelocationWritable(this.store.registry.encode(record));
+    const previous = this.store.registry.encode(record);
+    this.requireRelocationWritable(previous);
     invariant(record.revision === ifRevision, "REVISION_CONFLICT", "Сущность изменилась", 4);
     invariant(
       (await this.postings("adjacency", entityAddress(ref))).length === 0,
@@ -1001,11 +1002,11 @@ export class StorageSession {
       schemaVersion: 3,
     });
     await this.writeFile(this.store.registry.path(ref), jsonValue(tombstone));
-    await this.indexRecord(tombstone);
+    await this.indexRecord(tombstone, previous);
     this.touched.add(entityAddress(ref));
   }
 
-  async indexRecord(record: StoredRecord) {
+  async indexRecord(record: StoredRecord, previous?: StoredRecord) {
     const ref = refOf(record);
     const address = entityAddress(ref);
     this.indexSet("records", address, { ref, deleted: "deleted" in record });
@@ -1046,7 +1047,13 @@ export class StorageSession {
       }
     }
     const oldCard = await this.indexGet("cards", address);
-    const oldSelectors = oldCard ? storageCardSchema.parse(oldCard).selectors : [];
+    // Каноническая карточка может скрывать selectors кодека (например, slug приложения).
+    // При замене/удалении берём их из предыдущей записи той же сессии, до writeFile.
+    // Это работает и для уже опубликованных карточек, не требуя reindex или нового формата.
+    const oldSelectors = [
+      ...(oldCard ? storageCardSchema.parse(oldCard).selectors : []),
+      ...(previous && !("deleted" in previous) ? this.store.registry.card(previous).selectors : []),
+    ];
     const card = "deleted" in record ? undefined : this.store.registry.card(record);
     for (const selector of new Set([...oldSelectors, ...(card?.selectors ?? [])])) {
       const key = JSON.stringify([record.kind, selector]);

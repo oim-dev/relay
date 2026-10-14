@@ -267,7 +267,9 @@ export function boardTaskLinksText(
 export function boardsText(
   page: Awaited<ReturnType<BoardsService["list"]>>,
   options: TextOptions,
+  invoke = defaultInvocation,
 ): string {
+  const first = page.items[0];
   return listText(
     {
       title: "Доски проекта",
@@ -279,6 +281,18 @@ export function boardsText(
         ],
       })),
       emptyMessage: "На этой странице досок нет.",
+      commands: first
+        ? [
+            {
+              label: "Свойства — board get с ключом выбранной доски. Пример этой страницы:",
+              command: invoke(["board", "get", first.key ?? first.slug]),
+            },
+            {
+              label: "Работа по доскам и счётчики",
+              command: invoke(["product", "overview", "--metric", "board-work"]),
+            },
+          ]
+        : [],
     },
     options,
   );
@@ -290,6 +304,10 @@ export function boardText(
 ): string {
   const data = entity.data;
   if (data.kind !== "board") return "Backend не вернул свойства доски.";
+  const owner = entity.references.find(
+    (item) => item.ref.kind === "application" && item.ref.id === data.applicationId,
+  );
+  const application = owner?.key ?? data.applicationId;
   return cardText(
     {
       title: `${entity.key} · ${entity.title}`,
@@ -298,11 +316,18 @@ export function boardText(
         ["Область", scopes[data.scope] ?? data.scope],
         ["Адрес", data.slug],
         ["Префикс", data.prefix ?? "не задан"],
-        ["Приложение", data.applicationId ?? "не задано"],
-        ["Постоянный ID", entity.ref.id],
+        ["Приложение", application, "opaque"],
       ],
       commands: [
         { label: "Задачи доски", command: invoke(["task", "list", "--board", data.slug]) },
+        ...(application
+          ? [
+              {
+                label: "Приложение-владелец: содержание и жизненный цикл",
+                command: invoke(["application", "get", application]),
+              },
+            ]
+          : []),
       ],
     },
     options,

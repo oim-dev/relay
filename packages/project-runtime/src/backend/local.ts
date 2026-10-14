@@ -8,6 +8,7 @@ import { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import { BoardsService } from "@relay/core/application/boards/service";
 import { GraphService } from "@relay/core/application/graph/service";
 import { EntityEngine } from "@relay/core/application/entities/service";
+import { EntityDeletionService } from "@relay/core/application/entities/deletion";
 import { ProgressService } from "@relay/core/application/progress/service";
 import { PlanningService } from "@relay/core/application/planning/service";
 import { ReleasesService } from "@relay/core/application/releases/service";
@@ -29,6 +30,7 @@ export async function createLocalBackend(
     releases: new ReleasesService(workspace),
     progress: new ProgressService(workspace),
     entities: new EntityEngine(workspace),
+    deletion: new EntityDeletionService(workspace),
     graph: new GraphService(workspace),
     boardTasks: new BoardTasksService(workspace),
     boards: new BoardsService(workspace),

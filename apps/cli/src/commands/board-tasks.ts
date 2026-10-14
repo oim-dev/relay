@@ -113,14 +113,23 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
   const board = commandGroup(program, {
     name: "board",
     description: "Доски проекта",
-    details: "Доски создаются вместе с проектом и приложениями.",
-    examples: [["npx @oim-dev/relay-cli board list", "Выбрать доску"]],
+    details:
+      "Системные доски создаются проектом, прикладные — через application create. Имя прикладной доски меняется через application update --name, удаление с полным каскадом — через application delete-preview/delete. Самостоятельных board create/delete нет. board rename меняет только ключ. Поиск по имени/ключу — search --kind board; показатели работы — product overview --metric board-work.",
+    examples: [
+      ["npx @oim-dev/relay-cli board list", "Выбрать доску"],
+      ["npx @oim-dev/relay-cli search --kind board --q Web", "Найти доску по имени или ключу"],
+      [
+        "npx @oim-dev/relay-cli application delete-preview --help",
+        "Условия удаления приложения с доской",
+      ],
+    ],
   });
   registerCommand<PageOptions>(board, runtime, {
     name: "list",
     description: "Прочитать каталог досок",
     configure: paging,
-    details: "Продолжение сохраняет снимок каталога. Ключ доски используется при создании задач.",
+    details:
+      "Каталог свойств, не состав задач и не счётчики работы. Продолжение проверяет неизменность каталога; исторического снимка нет. Свойства выбранной записи — board get, показатели — product overview --metric board-work.",
     examples: [["npx @oim-dev/relay-cli board list --limit 20", "Прочитать страницу"]],
     async run(context, input) {
       const command = ["board", "list"];
@@ -129,15 +138,16 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       return {
         data,
         page: pageResult(context, command, {}, query, data),
-        text: (options) => boardsText(data, options),
+        text: (options) => boardsText(data, options, taskInvocation(context)),
       };
     },
   });
   registerCommand(board, runtime, {
     name: "get <ref>",
     description: "Прочитать свойства доски",
-    arguments: { ref: "Ключ или ID доски" },
-    details: "Адрес разрешается как board; ответ содержит канонический ключ и ревизию.",
+    arguments: { ref: "Ключ, алиас, slug, префикс или ID доски" },
+    details:
+      "Адрес разрешается как board; ответ содержит канонический ключ и ревизию. Задачи читаются отдельно через task list --board. Карточка прикладной доски ведёт к application get: имя меняется у приложения, удаление с доской — через application delete-preview/delete.",
     examples: [["npx @oim-dev/relay-cli board get BOARD-PRODUCT", "Открыть доску"]],
     async run(context, input) {
       const data = await context.backend.entities.get({ ref: input.argument(), kind: "board" });

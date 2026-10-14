@@ -49,6 +49,7 @@ import { entityHandlers, entitySaved } from "./handlers.js";
 import type { EntityOperationContext } from "./handlers.js";
 import { readProjectDetail } from "./project.js";
 import { entityKeySpacePrefix, readEntityCards, resolveEntityCard } from "./indexed-catalog.js";
+import { readBoardDetail } from "../boards/read.js";
 
 /** Общий движок адресации, чтения и исполнения зарегистрированных предметных операций. */
 export class EntityEngine {
@@ -262,6 +263,8 @@ export class EntityEngine {
     return this.workspace.locked(async (owned) => {
       const project = await readProjectDetail(this.workspace, query);
       if (project) return project;
+      const board = await readBoardDetail(this.workspace, query);
+      if (board) return board;
       const catalog = await readEntityCatalog(this.workspace, owned);
       const entry = resolveEntity(catalog, query.ref, query.kind);
       const refs: { kind: string; id: string }[] = [];

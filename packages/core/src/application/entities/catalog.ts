@@ -9,7 +9,6 @@ import { ProductRepository } from "../../storage/product.js";
 import { BoardRepository } from "../../storage/boards.js";
 import { BoardTaskRepository } from "../../storage/board-tasks.js";
 import type { Workspace } from "../../storage/workspace.js";
-import { defaultBoardPrefix } from "../../domain/board.js";
 import { invariant } from "../../shared/errors.js";
 import { productState, validateProduct } from "../product/model.js";
 import { resolveAddress } from "./resolver.js";
@@ -17,6 +16,7 @@ import { EntityDeletionRepository } from "../../storage/entity-deletion.js";
 import { defaultDocumentSections } from "@relay/contracts/entities";
 import { planningRecords } from "../../storage/planning.js";
 import { projectEntityEntry, readEntityConfig } from "./project.js";
+import { boardEntityEntry } from "./board.js";
 
 export type EntityEntry = Omit<EntityDetail, "references"> & {
   aliases: string[];
@@ -224,27 +224,7 @@ export async function readEntityCatalog(
         : board.kind === "product"
           ? "Продукт"
           : "Инфраструктура";
-    const prefix = board.prefix ?? defaultBoardPrefix(board.slug);
-    add(
-      "board",
-      board.id,
-      board.key ?? `BOARD-${prefix}`,
-      name,
-      `Доска задач: ${name}`,
-      board.revision,
-      {
-        kind: "board",
-        slug: board.slug,
-        prefix,
-        scope: board.kind,
-        applicationId: board.applicationId,
-      },
-      {
-        aliases: board.aliases ?? [],
-        selectors: [board.slug, prefix],
-        filters: { application: board.applicationId },
-      },
-    );
+    entries.push(boardEntityEntry(board, name));
   }
   for (const task of tasks) {
     const board = boards.find((entry) => entry.id === task.boardId);

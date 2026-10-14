@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
+import { actorSchema } from "@relay/contracts/primitives";
 import {
   plansQuerySchema,
   planningPageQuerySchema,
@@ -59,6 +60,10 @@ import {
   entityRenameSchema,
   entityMoveTaskSchema,
   entityLinkTaskSchema,
+  entityDeletionQuerySchema,
+  entityDeletionPreviewSchema,
+  deleteEntitySchema,
+  entityDeletedSchema,
 } from "@relay/contracts/entities";
 import {
   graphPageSchema,
@@ -623,6 +628,27 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             input.requestId,
           ),
         ),
+    },
+    deletion: {
+      preview: async (input) => {
+        const query = parse(entityDeletionQuerySchema, input, "предпросмотр удаления");
+        return decode(
+          entityDeletionPreviewSchema,
+          await call(() => api.entities.previewEntityDeletion(query)),
+        );
+      },
+      delete: async (input, defaultActor) => {
+        const command = parse(deleteEntitySchema, input, "удаление сущности");
+        const actor = parse(actorSchema, command.actor ?? defaultActor, "автор удаления");
+        return decode(
+          entityDeletedSchema,
+          await call(
+            () => api.entities.deleteEntity(defined({ ...command, actor })),
+            "write",
+            command.requestId,
+          ),
+        );
+      },
     },
     graph: {
       context: async (input) => {
