@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { entityKindSchema } from "@relay/contracts/entities";
 import type { EntitiesQuery, EntityKind } from "@relay/contracts/entities";
+import { entityAddress } from "@relay/contracts/entities/graph";
 import { parse } from "@relay/core/domain/validation";
 import { invariant } from "@relay/core/shared/errors";
 import { commandGroup, registerCommand } from "../command.js";
@@ -190,7 +191,27 @@ export function registerEntities(program: Command, runtime: Runtime): void {
             listText(
               {
                 title: `Пространства ключей: ${input.argument()}`,
-                items: data.items.map((item) => ({ key: item.pattern, title: item.title })),
+                items: data.items.map((item) => ({
+                  key: item.pattern,
+                  title: item.title,
+                  fields: item.scope ? [["Владелец", entityAddress(item.scope), "opaque"]] : [],
+                  details: item.scope
+                    ? []
+                    : ["Общее пространство вида (scope: null); отдельного владельца нет."],
+                })),
+                commands: data.items.flatMap((item) =>
+                  item.scope
+                    ? [
+                        {
+                          label: `Прочитать владельца ${entityAddress(item.scope)}`,
+                          command: commandInvocation(
+                            context,
+                            entityReadArgs({ ref: item.scope, key: entityAddress(item.scope) }),
+                          ),
+                        },
+                      ]
+                    : [],
+                ),
                 emptyMessage: "На этой странице пространств ключей нет.",
               },
               options,

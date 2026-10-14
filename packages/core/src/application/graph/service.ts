@@ -24,7 +24,7 @@ import { GraphRepository } from "../../storage/graph.js";
 import { graphDigest } from "../../storage/graph-format.js";
 import type { GraphCurrent, GraphSummary } from "../../storage/graph-format.js";
 import type { Workspace } from "../../storage/workspace.js";
-import { projectGraphCatalog } from "./catalog.js";
+import { indexedProjectGraphCatalog, projectGraphCatalog } from "./catalog.js";
 import type { GraphCatalogProvider, GraphCatalog } from "./catalog.js";
 import { resolveAddress } from "../entities/resolver.js";
 import { AppError } from "../../shared/errors.js";
@@ -47,12 +47,18 @@ const versionOf = (catalogHash: string, fingerprint: string) =>
 /** Универсальные отношения: адресный индекс отделяет обход от чтения Markdown и истории. */
 export class GraphService {
   readonly repository: GraphRepository;
+  readonly catalog: GraphCatalogProvider;
+  private readonly mutationCatalog: GraphCatalogProvider;
   constructor(
     readonly workspace: Workspace,
-    readonly catalog: GraphCatalogProvider = () => projectGraphCatalog(workspace),
+    catalog?: GraphCatalogProvider,
     readonly validateMutation?: (catalog: GraphCatalog, edges: readonly GraphEdge[]) => void,
   ) {
     this.repository = new GraphRepository(workspace);
+    this.catalog = catalog ?? (() => indexedProjectGraphCatalog(workspace));
+    // Пользовательский источник остаётся владельцем обеих операций. Только стандартный
+    // каталог разделяет индексное чтение и прежнюю полную проверку перед записью.
+    this.mutationCatalog = catalog ?? (() => projectGraphCatalog(workspace));
   }
 
   /**
@@ -94,8 +100,8 @@ export class GraphService {
     nodes.sort((a, b) => entityAddress(a.ref).localeCompare(entityAddress(b.ref)));
   }
 
-  private async snapshot(assertOwned: () => void) {
-    const source = await this.catalog();
+  private async snapshot(assertOwned: () => void, purpose: "read" | "mutation" = "read") {
+    const source = await (purpose === "mutation" ? this.mutationCatalog() : this.catalog());
     const catalog = {
       nodes: source.nodes
         .map((node) => graphNodeSchema.parse(node))
@@ -132,7 +138,7 @@ export class GraphService {
       "Повтор адреса сущности в каталоге",
       5,
     );
-    if (versions.get(this.repository.root) !== version) {
+    if (this.workspace.storageSession || versions.get(this.repository.root) !== version) {
       const ids = new Set<string>();
       for (const edge of store.index.active) {
         invariant(!ids.has(edge.id), "INVALID_DATA", "Повтор ID отношения", 5);
@@ -146,6 +152,35 @@ export class GraphService {
       }
       versions.set(this.repository.root, version);
       if (versions.size > 8) versions.delete(versions.keys().next().value!);
+    }
+    if (this.workspace.storageSession) {
+      // Не подменяем потерянную смежность пустым окружением. Сверяем компактные
+      // индексы, не открывая содержание соседей или всех сохранённых отношений.
+      const expected = new Map<string, Set<string>>();
+      for (const edge of store.index.active)
+        for (const ref of [edge.from, edge.to]) {
+          const address = entityAddress(ref);
+          const ids = expected.get(address) ?? new Set<string>();
+          ids.add(edge.id);
+          expected.set(address, ids);
+        }
+      const session = this.workspace.storageSession;
+      const addresses = new Set([
+        ...expected.keys(),
+        ...(await session.indexEntries("adjacency")).map(([address]) => address),
+      ]);
+      for (const address of addresses) {
+        const ids = await session.postings("adjacency", address);
+        const wanted = expected.get(address) ?? new Set<string>();
+        invariant(
+          ids.length === wanted.size &&
+            new Set(ids).size === ids.length &&
+            ids.every((id) => wanted.has(id)),
+          "STORAGE_INDEX_CORRUPT",
+          `Индекс смежности не соответствует отношениям ${address}`,
+          5,
+        );
+      }
     }
     return { catalog, catalogHash, store, version, addresses, references };
   }
@@ -345,8 +380,10 @@ export class GraphService {
           return receipt.result;
         }
       }
-      const { catalog, catalogHash, store, version, addresses, references } =
-        await this.snapshot(assertOwned);
+      const { catalog, catalogHash, store, version, addresses, references } = await this.snapshot(
+        assertOwned,
+        "mutation",
+      );
       invariant(
         !store.legacy,
         "GRAPH_MIGRATION_REQUIRED",

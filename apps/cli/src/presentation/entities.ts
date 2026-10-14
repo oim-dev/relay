@@ -1,7 +1,8 @@
 import { cardText, listText, receiptText, commandText } from "./common.js";
 import type { OutputField } from "./common.js";
 import { defaultTextOptions } from "./theme.js";
-import { entityDefinitions } from "@relay/contracts/entities";
+import { entityDefinitions, entityKindSchema } from "@relay/contracts/entities";
+import { entityAddress, type GraphNode } from "@relay/contracts/entities/graph";
 import type {
   EntitiesPage,
   EntityDetail,
@@ -56,7 +57,9 @@ function entityStateFields(entity: EntitySummary): OutputField[] {
       : []),
   ];
 }
-export function entityReadArgs(item: Pick<EntitySummary, "ref" | "key">): string[] {
+export function entityReadArgs(item: Pick<GraphNode, "ref" | "key">): string[] {
+  if (!entityKindSchema.safeParse(item.ref.kind).success)
+    return ["inspect", "resolve", entityAddress(item.ref)];
   if (item.ref.kind === "product" || item.ref.kind === "project") return [item.ref.kind, "get"];
   return [item.ref.kind === "work-plan" ? "plan" : item.ref.kind, "get", item.key];
 }

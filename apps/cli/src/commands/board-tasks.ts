@@ -17,7 +17,15 @@ import { commandGroup, registerCommand } from "../command.js";
 import { author } from "../context.js";
 import type { Runtime } from "../context.js";
 import { integer } from "../options.js";
-import { paging, offsetQuery, pageResult, textOption, readTextFields } from "../command-kit.js";
+import {
+  paging,
+  offsetQuery,
+  pageResult,
+  textOption,
+  readTextFields,
+  commandInvocation,
+} from "../command-kit.js";
+import { entitySavedText } from "../presentation/entities.js";
 import { registerTaskActivity } from "./task-activity.js";
 import { registerEntityProgress } from "./progress.js";
 import {
@@ -134,6 +142,52 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     async run(context, input) {
       const data = await context.backend.entities.get({ ref: input.argument(), kind: "board" });
       return { data, text: (options) => boardText(data, options, taskInvocation(context)) };
+    },
+  });
+  registerCommand<{ ifRevision: number; requestId?: string }>(board, runtime, {
+    name: "rename <ref> <key>",
+    description: "Изменить публичный ключ доски с сохранением ID и алиасов",
+    arguments: { ref: "Ключ, алиас или ID доски", key: "Новый публичный ключ доски" },
+    details:
+      "Требуются автор и ревизия из board get. Меняется только ключ: имя, slug, префикс задач и принадлежность приложению сохраняются. Прежние ключи остаются алиасами. Коллизии и устаревшая ревизия отклоняются; после потери ответа перечитайте доску, не повторяйте запись вслепую.",
+    examples: [
+      [
+        "npx @oim-dev/relay-cli board rename BOARD-PRODUCT BOARD-TEAM --actor human --if-revision 1",
+        "Изменить ключ по прочитанной ревизии",
+      ],
+    ],
+    configure: (command) =>
+      command
+        .requiredOption(
+          "--if-revision <n>",
+          "Прочитанная ревизия доски",
+          integer(0, Number.MAX_SAFE_INTEGER),
+        )
+        .option("--request-id <id>", "Идентификатор корреляции, не дедупликации"),
+    async run(context, input) {
+      const actor = author(context);
+      const target = await context.backend.entities.resolve({
+        ref: input.argument(),
+        kind: "board",
+      });
+      const data = await context.backend.entities.rename(
+        parse(
+          entityRenameSchema,
+          {
+            ref: `board:${target.ref.id}`,
+            key: input.argument(1),
+            ifRevision: input.options.ifRevision,
+            requestId: input.options.requestId ?? randomUUID(),
+          },
+          "ключ доски",
+        ),
+        actor,
+      );
+      return {
+        data,
+        text: (options) =>
+          entitySavedText(data, commandInvocation(context, ["board", "get", data.key]), options),
+      };
     },
   });
   const group = commandGroup(program, {

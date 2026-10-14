@@ -4,25 +4,67 @@ import type {
   GraphQuery,
   GraphSaved,
   FullContext,
+  GraphNode,
+  EntityRef,
 } from "@relay/core/domain/entity-graph";
 import { safeText } from "./text.js";
 import { renderMarkdown } from "./markdown.js";
 import { wrap } from "./layout.js";
 import { defaultTextOptions, type TextOptions } from "./theme.js";
-import { cardText, emptyText, listText, receiptText, type OutputCommand } from "./common.js";
+import {
+  cardText,
+  commandText,
+  emptyText,
+  listText,
+  receiptText,
+  type OutputCommand,
+} from "./common.js";
 
-const meanings: Record<string, string> = {
-  "depends-on": "зависит от",
-  blocks: "блокирует",
-  related: "связано с",
-  parent: "родитель",
-  child: "подзадача",
-  references: "ссылается на",
-  documents: "документирует",
-  implements: "реализует",
-  "part-of": "часть",
-  contains: "содержит",
-};
+export interface GraphNavigation {
+  read?: (node: GraphNode) => string;
+  descriptions?: (ref: EntityRef) => string | undefined;
+  boundary?: (ref: EntityRef) => string;
+}
+
+/** Полное название — только в словаре; рёбра и пути используют короткие ключи. */
+function nodesText(
+  nodes: readonly GraphNode[],
+  options: TextOptions,
+  navigation: GraphNavigation,
+): string {
+  return (
+    nodes
+      .map((node) => {
+        const descriptions = navigation.descriptions?.(node.ref);
+        return [
+          listText(
+            {
+              title: "",
+              items: [
+                {
+                  key: node.key,
+                  title: node.title,
+                  details: [
+                    `Вид: ${node.ref.kind} · ревизия: ${node.revision}${node.status ? ` · состояние: ${node.status}` : ""}`,
+                  ],
+                  fields: [["Постоянный адрес", entityAddress(node.ref), "opaque"]],
+                },
+              ],
+            },
+            options,
+          ),
+          ...(navigation.read ? [`Чтение:\n${commandText(navigation.read(node), options)}`] : []),
+          ...(descriptions
+            ? [
+                `${wrap("Пояснения исходящих отношений (ограниченный обзор):", options.width)}\n${commandText(descriptions, options)}`,
+              ]
+            : []),
+        ].join("\n");
+      })
+      .join("\n\n") ||
+    emptyText("Сущностей на этой странице нет; отношения читаются отдельной коллекцией.", options)
+  );
+}
 
 /** Каждое ребро выводится отдельно: параллельные отношения и циклы не сворачиваются. */
 function relationshipsText(
@@ -35,14 +77,23 @@ function relationshipsText(
       .map((edge) =>
         cardText(
           {
-            title: `${labels.get(entityAddress(edge.from)) ?? entityAddress(edge.from)} ── ${meanings[edge.type] ?? edge.type} → ${labels.get(entityAddress(edge.to)) ?? entityAddress(edge.to)}`,
+            title: "",
             fields: [
-              ["Тип", edge.type],
               ["ID отношения", edge.id, "opaque"],
+              [
+                "Связь",
+                `${labels.get(entityAddress(edge.from)) ?? entityAddress(edge.from)} ── ${edge.type} → ${labels.get(entityAddress(edge.to)) ?? entityAddress(edge.to)}`,
+                "opaque",
+              ],
               ["Ревизия", edge.revision],
             ],
             sections: edge.description
-              ? [{ title: "Пояснение", body: renderMarkdown(edge.description, options) }]
+              ? [
+                  {
+                    title: "Пользовательский Markdown",
+                    body: `Начало пояснения ${safeText(edge.id)}\n${renderMarkdown(edge.description, options)}\nКонец пояснения ${safeText(edge.id)}`,
+                  },
+                ]
               : [],
           },
           options,
@@ -57,10 +108,9 @@ export function fullContextText(
   context: FullContext,
   options: TextOptions,
   commands: readonly OutputCommand[] = [],
+  navigation: GraphNavigation = {},
 ): string {
-  const labels = new Map(
-    context.nodes.map((node) => [entityAddress(node.ref), `${node.key} — ${node.title}`]),
-  );
+  const labels = new Map(context.nodes.map((node) => [entityAddress(node.ref), node.key]));
   return cardText(
     {
       title: `Полный контекст — ${labels.get(entityAddress(context.root)) ?? entityAddress(context.root)}`,
@@ -81,26 +131,13 @@ export function fullContextText(
         },
         {
           title: "Сущности",
-          body: listText(
-            {
-              title: "",
-              items: context.nodes.map((node) => ({
-                key: node.key,
-                title: node.title,
-                details: [
-                  `Вид: ${node.ref.kind} · ревизия: ${node.revision}${node.status ? ` · состояние: ${node.status}` : ""}`,
-                ],
-                fields: [["Постоянный адрес", entityAddress(node.ref), "opaque"]],
-              })),
-            },
-            options,
-          ),
+          body: nodesText(context.nodes, options, navigation),
         },
         { title: "Сохранённые отношения", body: relationshipsText(context.edges, labels, options) },
         {
           title: "Пояснения отношений",
           body: wrap(
-            "Ответ context не содержит описаний отношений. Для их чтения используйте inspect graph list; полные тексты сущностей читайте предметными get.",
+            "Ответ context не содержит пояснений отношений. Выберите начало нужного ребра и выполните предложенный у этого узла list: глубина 1, исходящий обход. Найдите ID отношения среди результатов, при необходимости продолжите страницы. Это ограниченный обзор, не адресное чтение одного ребра. Стрелка в списке отношений обозначает сохранённое направление ребра.",
             options.width,
           ),
         },
@@ -116,21 +153,22 @@ export function graphText(
   query: GraphQuery,
   options: TextOptions,
   commands: readonly OutputCommand[] = [],
+  navigation: GraphNavigation = {},
 ): string {
   const selection = graphQuerySchema.parse(query);
   const labels = new Map(
-    [...page.nodes, ...page.endpoints].map((node) => [
-      entityAddress(node.ref),
-      `${node.key} — ${node.title}`,
-    ]),
+    [...page.nodes, ...page.endpoints].map((node) => [entityAddress(node.ref), node.key]),
   );
   const paths = page.paths
     .filter((path) => path.edges.length > 0)
     .map((path) =>
       cardText(
         {
-          title: `${labels.get(entityAddress(path.target)) ?? entityAddress(path.target)}: ${(path.keys ?? path.nodes.map(entityAddress)).join(" → ")}`,
-          fields: path.edges.map((id) => ["ID отношения пути", id, "opaque"]),
+          title: "",
+          fields: [
+            ["Путь обхода", (path.keys ?? path.nodes.map(entityAddress)).join(" → "), "opaque"],
+            ["ID отношений пути", path.edges.join(" → "), "opaque"],
+          ],
         },
         options,
       ),
@@ -142,7 +180,7 @@ export function graphText(
       fields: [
         query.root ? ["Корень", query.root, "opaque"] : ["Корень", "Весь проект"],
         [
-          "Направление",
+          "Направление обхода",
           { both: "Оба направления", outgoing: "Исходящие", incoming: "Входящие" }[
             query.direction ?? "both"
           ],
@@ -164,35 +202,54 @@ export function graphText(
         },
         {
           title: "Сущности страницы",
-          body: listText(
-            {
-              title: "",
-              items: page.nodes.map((node) => ({
-                key: node.key,
-                title: node.title,
-                details: [
-                  `Вид: ${node.ref.kind} · ревизия: ${node.revision}${node.status ? ` · состояние: ${node.status}` : ""}`,
-                ],
-                fields: [["Постоянный адрес", entityAddress(node.ref), "opaque"]],
-              })),
-              emptyMessage:
-                "Сущностей на этой странице нет; отношения читаются отдельной коллекцией.",
-            },
-            options,
-          ),
+          body: nodesText(page.nodes, options, navigation),
         },
+        ...(() => {
+          const visible = new Set(page.nodes.map((node) => entityAddress(node.ref)));
+          const endpoints = page.endpoints.filter((node) => !visible.has(entityAddress(node.ref)));
+          return endpoints.length
+            ? [
+                {
+                  title: "Концы отношений вне страницы узлов (не увеличивают счётчик страницы)",
+                  body: nodesText(endpoints, options, navigation),
+                },
+              ]
+            : [];
+        })(),
         { title: "Отношения страницы", body: relationshipsText(page.edges, labels, options) },
         ...(paths
-          ? [{ title: "Почему включено — объясняющие пути, не дерево всех связей", body: paths }]
+          ? [
+              {
+                title: "Почему включено — пути обхода, не направления сохранённых рёбер",
+                body: paths,
+              },
+            ]
           : []),
         ...(page.depthLimited
           ? [
               {
                 title: "Достигнута граница глубины",
-                body: wrap(
-                  `Граничные сущности:\n${page.boundary.map((ref) => safeText(labels.get(entityAddress(ref)) ?? entityAddress(ref))).join("\n")}\nДля всей достижимой компоненты используйте inspect graph context с выбранным корнем.`,
-                  options.width,
-                ),
+                body: page.boundary.length
+                  ? [
+                      wrap(
+                        "В выборке есть граница глубины. Продолжить ограниченный обход от граничного узла:",
+                        options.width,
+                      ),
+                      ...page.boundary.map((ref) =>
+                        [
+                          safeText(
+                            `${labels.get(entityAddress(ref)) ?? entityAddress(ref)} · ${entityAddress(ref)}`,
+                          ),
+                          navigation.boundary ? commandText(navigation.boundary(ref), options) : "",
+                        ]
+                          .filter(Boolean)
+                          .join("\n"),
+                      ),
+                    ].join("\n")
+                  : wrap(
+                      "В выборке есть граница глубины; на этой странице граничных узлов нет. Конец страниц не доказывает полноту контекста.",
+                      options.width,
+                    ),
               },
             ]
           : []),

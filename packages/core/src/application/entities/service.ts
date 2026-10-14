@@ -48,6 +48,7 @@ import type { EntityCatalog } from "./catalog.js";
 import { entityHandlers, entitySaved } from "./handlers.js";
 import type { EntityOperationContext } from "./handlers.js";
 import { readProjectDetail } from "./project.js";
+import { entityKeySpacePrefix, readEntityCards, resolveEntityCard } from "./indexed-catalog.js";
 
 /** Общий движок адресации, чтения и исполнения зарегистрированных предметных операций. */
 export class EntityEngine {
@@ -335,8 +336,13 @@ export class EntityEngine {
   }
   async keys(input: z.input<typeof entityKeysQuerySchema>) {
     const { ref, kind, ...page } = parse(entityKeysQuerySchema, input, "ключи сущности");
-    return this.read((catalog) => {
-      const entry = resolveEntity(catalog, ref, kind);
+    return this.workspace.locked(async (owned) => {
+      const session = this.workspace.storageSession;
+      // До завершения общей мутации карточки ещё могут содержать базовую проекцию кодека.
+      const entry =
+        session && !session.changed
+          ? await resolveEntityCard(session, ref, kind)
+          : resolveEntity(await readEntityCatalog(this.workspace, owned), ref, kind);
       const items = [...new Set([entry.key, ...entry.aliases])].map((key) => ({
         ref: entry.ref,
         key,
@@ -347,34 +353,51 @@ export class EntityEngine {
   }
   async keySpaces(input: z.input<typeof entityKeySpacesQuerySchema>) {
     const { kind, ...page } = parse(entityKeySpacesQuerySchema, input, "пространства ключей");
-    return this.read((catalog) => {
+    return this.workspace.locked(async (owned) => {
       const dynamic =
         kind === "task" || kind === "board" || kind === "implementation" || kind === "application";
       const scopeKind =
         kind === "implementation" || kind === "application" ? "application" : "board";
-      const items: { scope: EntityRef | null; title: string; prefix: string; pattern: string }[] =
-        dynamic
-          ? catalog.entries
-              .filter((entry) => entry.ref.kind === scopeKind)
-              .map((entry) => {
-                const prefix =
+      const session = this.workspace.storageSession;
+      const owners: { ref: EntityRef; title: string; prefix: string }[] = [];
+      if (dynamic) {
+        if (session && !session.changed)
+          for (const entry of await readEntityCards(session, scopeKind))
+            owners.push({
+              ref: entry.ref,
+              title: entry.title,
+              prefix: await entityKeySpacePrefix(session, entry),
+            });
+        else
+          for (const entry of (await readEntityCatalog(this.workspace, owned)).entries)
+            if (entry.ref.kind === scopeKind)
+              owners.push({
+                ref: entry.ref,
+                title: entry.title,
+                prefix:
                   entry.data.kind === "board" || entry.data.kind === "application"
                     ? (entry.data.prefix ?? entry.key)
-                    : "";
-                return {
-                  scope: entry.ref,
-                  title: entry.title,
-                  prefix: kind === "board" ? `BOARD-${prefix}` : prefix,
-                  pattern:
-                    kind === "implementation"
-                      ? `${prefix}-FI/SI-<номер>`
-                      : kind === "application"
-                        ? prefix
-                        : kind === "board"
-                          ? `BOARD-${prefix}`
-                          : `${prefix}-<номер>`,
-                };
-              })
+                    : "",
+              });
+      }
+      const items: { scope: EntityRef | null; title: string; prefix: string; pattern: string }[] =
+        dynamic
+          ? owners.map((entry) => {
+              const prefix = entry.prefix;
+              return {
+                scope: entry.ref,
+                title: entry.title,
+                prefix: kind === "board" ? `BOARD-${prefix}` : prefix,
+                pattern:
+                  kind === "implementation"
+                    ? `${prefix}-FI/SI-<номер>`
+                    : kind === "application"
+                      ? prefix
+                      : kind === "board"
+                        ? `BOARD-${prefix}`
+                        : `${prefix}-<номер>`,
+              };
+            })
           : [
               {
                 scope: null,
