@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Ajv } from "ajv";
@@ -11,21 +12,30 @@ import {
   projectRegistrationReceiptSchema,
   projectUnregistrationReceiptSchema,
 } from "@relay/contracts/server-context";
-import { createServer } from "@relay/server-runtime";
+// Runtime и DI-токены берём из одной реализации, независимо от условия tasks-source.
+import { createServer } from "../src/bootstrap.js";
+import { EventsService } from "../src/modules/events/events.service.js";
 import { ProjectCatalog } from "../src/modules/workspace/catalog.js";
 
 test("WSP-08: source страницы передают диапазон, сохраняют guard, старый каталог и компактные записи", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-workspace-pages-");
+  const root = await mkdtemp(join(tmpdir(), "relay-workspace-pages-"));
+  let closeServer: (() => Promise<void>) | undefined;
+  t.after(async () => {
+    try {
+      await closeServer?.();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   const a = await initialize(join(root, "a"), "tasks");
   const b = await initialize(join(root, "b"), "tasks");
   const registry = await initializeRegistry(root);
   for (let n = 0; n < 30; n++)
     await registerProject(registry.configPath, `project-${n}`, { path: n % 2 ? "b" : "a" });
   const app = await createServer({ cwd: root, actor: "test", config: registry.configPath });
-  t.after(async () => {
-    await app.close();
-    await rm(root, { recursive: true, force: true });
-  });
+  closeServer = () => app.close();
+  // Измеряем только HTTP-вызовы: ждём остановки фонового чтения каталога и наблюдателей.
+  await app.get(EventsService).onModuleDestroy();
   const catalog = app.get(ProjectCatalog);
   const originalContext = catalog.context.bind(catalog);
   let catalogReads = 0;
@@ -48,7 +58,10 @@ test("WSP-08: source страницы передают диапазон, сох�
   ])
     assert.ok(context.json().data.capabilities.includes(capability));
 
+  const beforeFull = catalogReads;
   const full = await app.inject("/api/v1/projects");
+  assert.equal(full.statusCode, 200, full.body);
+  assert.equal(catalogReads, beforeFull + 1, "Счётчик видит чтение настоящего HTTP-каталога");
   assert.equal(full.json().data.projects.length, 30);
   const first = await app.inject("/api/v1/projects/page?limit=2");
   assert.equal(first.statusCode, 200, first.body);
@@ -83,12 +96,14 @@ test("WSP-08: source страницы передают диапазон, сох�
   assert.equal((await app.inject("/api/v1/projects/page?limit=0")).statusCode, 400);
   assert.equal((await app.inject("/api/v1/projects/page?offset=-1")).statusCode, 400);
 
+  const beforeCompactAdd = catalogReads;
   const added = await app.inject({
     method: "PUT",
     url: "/api/v1/projects/extra/registration",
     payload: { path: "a" },
   });
   assert.equal(added.statusCode, 200, added.body);
+  assert.equal(catalogReads, beforeCompactAdd, "Компактная регистрация не читает полный каталог");
   assert.deepEqual(projectRegistrationReceiptSchema.parse(added.json().data), {
     action: "register",
     key: "extra",
@@ -108,11 +123,17 @@ test("WSP-08: source страницы передают диапазон, сох�
   assert.equal(oldAdd.statusCode, 200);
   assert.equal(oldAdd.json().data.projects.length, 32, "Default REST сохраняет полный каталог");
   for (const removed of [true, false]) {
+    const beforeCompactRemove: number = catalogReads;
     const result = await app.inject({
       method: "DELETE",
       url: "/api/v1/projects/extra/registration",
     });
     assert.equal(result.statusCode, 200);
+    assert.equal(
+      catalogReads,
+      beforeCompactRemove,
+      "Компактное удаление не читает полный каталог, включая повтор",
+    );
     assert.deepEqual(projectUnregistrationReceiptSchema.parse(result.json().data), {
       action: "unregister",
       key: "extra",
@@ -166,13 +187,18 @@ test("WSP-08: source страницы передают диапазон, сох�
 });
 
 test("WSP-08: source local page сообщает настоящий defaultProject, compact mutations недоступны", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-local-page-");
+  const root = await mkdtemp(join(tmpdir(), "relay-local-page-"));
+  let closeServer: (() => Promise<void>) | undefined;
+  t.after(async () => {
+    try {
+      await closeServer?.();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   const project = await initialize(root, "tasks");
   const app = await createServer({ cwd: root, actor: "test" });
-  t.after(async () => {
-    await app.close();
-    await rm(root, { recursive: true, force: true });
-  });
+  closeServer = () => app.close();
   const response = await app.inject("/api/v1/projects/page?limit=1");
   assert.equal(response.statusCode, 200);
   const page = projectCatalogPageSchema.parse(response.json().data);

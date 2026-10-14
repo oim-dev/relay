@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { Ajv } from "ajv";
@@ -18,7 +19,7 @@ import { initializeRegistry, registerProject } from "@relay/project-runtime/regi
 import { createServer } from "../src/bootstrap.js";
 
 async function fixture(t: TestContext, scoped: boolean) {
-  const root = await mkdtemp("/tmp/opencode/relay-domain-transport-");
+  const root = await mkdtemp(join(tmpdir(), "relay-domain-transport-"));
   let close: (() => Promise<unknown>) | undefined;
   t.after(async () => {
     await close?.();
@@ -551,7 +552,7 @@ for (const scoped of [false, true]) {
 }
 
 test("Новые scoped операции изолированы проектом, ссылки не разрешаются в соседней базе", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-domain-isolation-");
+  const root = await mkdtemp(join(tmpdir(), "relay-domain-isolation-"));
   let close: (() => Promise<unknown>) | undefined;
   t.after(async () => {
     await close?.();

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { test, type TestContext } from "node:test";
@@ -21,7 +22,7 @@ import {
 import { httpProxy, httpServer } from "./helpers/http.js";
 
 async function setup(t: TestContext) {
-  const root = await mkdtemp("/tmp/opencode/relay-workspace-audit-");
+  const root = await mkdtemp(join(tmpdir(), "relay-workspace-audit-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const serverRoot = join(root, "сервер 'каталог'");
   const clientRoot = join(root, "клиент 'каталог'");
@@ -245,7 +246,7 @@ test("WSP-04/05: local Server доступен для discovery, не выдаё
 });
 
 test("WSP-02: runtime schema отвергает неверные успешные конверты/DTO и не повторяет записи", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-workspace-wire-");
+  const root = await mkdtemp(join(tmpdir(), "relay-workspace-wire-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   let response: unknown;
   let invalidJson = false;

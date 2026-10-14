@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { cp, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Ajv } from "ajv";
@@ -13,7 +14,7 @@ import { initializeRegistry, registerProject } from "@relay/project-runtime/regi
 import { ProjectCatalog } from "../src/modules/workspace/catalog.js";
 
 test("WSP-02: общий каталог соответствует фактической OpenAPI для list/server/add/remove", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-workspace-openapi-");
+  const root = await mkdtemp(join(tmpdir(), "relay-workspace-openapi-"));
   const registry = await initializeRegistry(root);
   await initialize(join(root, "a"), "tasks");
   const app = await createServer({ cwd: root, config: registry.configPath, actor: "test" });
@@ -43,7 +44,7 @@ test("WSP-02: общий каталог соответствует фактич�
 });
 
 test("WSP-08: context читает config один раз на realpath, aliases не создают коллизий и кеш не переживает запрос", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-workspace-catalog-");
+  const root = await mkdtemp(join(tmpdir(), "relay-workspace-catalog-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const a = await initialize(join(root, "a"), "tasks");
   const b = await initialize(join(root, "b"), "tasks");
@@ -103,7 +104,7 @@ test("WSP-08: context читает config один раз на realpath, aliases
 });
 
 test("WSP-08: недоступные, duplicate ID и slug→key/ID сохраняют диагностику и порядок", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-workspace-collisions-");
+  const root = await mkdtemp(join(tmpdir(), "relay-workspace-collisions-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const a = await initialize(join(root, "a"), "tasks");
   const b = await initialize(join(root, "b"), "tasks");

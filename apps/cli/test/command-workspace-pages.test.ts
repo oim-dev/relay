@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { test, type TestContext } from "node:test";
@@ -22,7 +23,7 @@ import { httpProxy, httpServer } from "./helpers/http.js";
 type Wire = { method: string; path: string; bytes: number; data: any };
 
 async function setup(t: TestContext, count = 23) {
-  const root = await mkdtemp("/tmp/opencode/relay-workspace-pages-cli-");
+  const root = await mkdtemp(join(tmpdir(), "relay-workspace-pages-cli-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const serverRoot = join(root, "server");
   const cwd = join(root, "remote");

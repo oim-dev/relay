@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initialize, openWorkspace } from "../src/storage/workspace.js";
 import { BoardTasksService } from "../src/application/board-tasks/service.js";
@@ -34,7 +35,7 @@ import {
 import { taskDependenciesPageSchema, releaseProgressSchema } from "@relay/contracts/progress";
 
 async function fixture(t: TestContext) {
-  const root = await mkdtemp("/tmp/opencode/relay-work-read-models-");
+  const root = await mkdtemp(join(tmpdir(), "relay-work-read-models-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
   return {

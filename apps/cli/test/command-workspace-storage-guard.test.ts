@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
@@ -35,7 +36,7 @@ async function runHint(cwd: string, command: string) {
 }
 
 test("STR-03: workspace maintenance предлагает исполнимый direct-config лист без сети и переключения базы", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-workspace-storage-");
+  const root = await mkdtemp(join(tmpdir(), "relay-workspace-storage-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const projects = {
     alpha: await initialize(join(root, "альфа 'кавычки'"), "tasks"),
