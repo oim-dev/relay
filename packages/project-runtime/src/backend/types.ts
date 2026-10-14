@@ -28,6 +28,7 @@ export interface Backend {
   plans: Pick<
     PlanningService,
     | "list"
+    | "listCompact"
     | "get"
     | "stages"
     | "tasks"
@@ -42,11 +43,23 @@ export interface Backend {
   >;
   releases: Pick<
     ReleasesService,
-    "list" | "get" | "composition" | "preview" | "create" | "update" | "transition"
+    | "list"
+    | "listCompact"
+    | "get"
+    | "composition"
+    | "compositionCompact"
+    | "preview"
+    | "previewCompact"
+    | "create"
+    | "createByRefs"
+    | "update"
+    | "updateByRefs"
+    | "transition"
   >;
   progress: Pick<
     ProgressService,
     | "task"
+    | "taskDependencies"
     | "implementation"
     | "scenario"
     | "feature"
@@ -96,6 +109,12 @@ export interface Backend {
   product: Pick<
     ProductQueries,
     | "state"
+    | "validate"
+    | "lint"
+    | "overviewMap"
+    | "participation"
+    | "replaceParticipation"
+    | "implementation"
     | "mutate"
     | "overview"
     | "overviewMetric"

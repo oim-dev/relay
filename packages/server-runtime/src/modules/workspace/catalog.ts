@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { realpath } from "node:fs/promises";
 import type { ContextResponse, RelayProject, ServerContextResponse } from "@relay/contracts";
+import {
+  PROJECT_CATALOG_CAPABILITY,
+  projectCatalogPageQuerySchema,
+} from "@relay/contracts/server-context";
+import type { ProjectCatalogPageQuery } from "@relay/contracts/server-context";
 import { actorSchema, parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { openWorkspace, readWorkspaceConfig } from "@relay/core/storage/workspace";
@@ -87,6 +92,11 @@ export class ProjectContext {
         // Детализация метрик оператора обзора и snapshot.operator.
         "relay-overview-metrics-v1",
         "relay-document-library-v1",
+        "relay-product-queries-v1",
+        "relay-work-read-models-v1",
+        "relay-release-refs-v1",
+        "relay-entity-search-v2",
+        PROJECT_CATALOG_CAPABILITY,
       ],
       projectId: this.projectId,
       configPath: workspace.configPath,
@@ -123,32 +133,71 @@ export class ProjectCatalog {
     return { source, entries };
   }
 
+  /** Кеш только одного чтения каталога/разрешения: aliases разделяют чтение realpath. */
+  private reader() {
+    type Loaded = { context: ProjectContext; config: Workspace["config"] };
+    const paths = new Map<string, Promise<Loaded>>();
+    const configs = new Map<string, Promise<Loaded>>();
+    return (configPath: string): Promise<Loaded> => {
+      const target = resolve(configPath);
+      let pending = paths.get(target);
+      if (!pending) {
+        pending = (async () => {
+          const path = await realpath(target);
+          let loaded = configs.get(path);
+          if (!loaded) {
+            loaded = (async () => {
+              let config;
+              try {
+                // source() может вернуть только метаданные несовместимой local-базы для
+                // запуска Server. Они не подтверждают доступность проектной проекции Core.
+                config = (await readWorkspaceConfig(dirname(path), path)).config;
+              } catch (error) {
+                throw openFailure(error);
+              }
+              const context = new ProjectContext(
+                { ...this.options, configPath: path },
+                config.projectId ?? derivedProjectId(path),
+              );
+              return { context, config };
+            })();
+            configs.set(path, loaded);
+          }
+          const result = await loaded;
+          this.contexts.set(target, result.context);
+          return result;
+        })();
+        paths.set(target, pending);
+      }
+      return pending;
+    };
+  }
+
   async at(configPath: string): Promise<ProjectContext> {
-    const path = await realpath(configPath);
-    let config;
-    try {
-      ({ config } = await readWorkspaceConfig(dirname(path), path));
-    } catch (error) {
-      throw openFailure(error);
-    }
-    const id = config.projectId ?? derivedProjectId(path);
-    const context = new ProjectContext({ ...this.options, configPath: path }, id);
-    this.contexts.set(resolve(configPath), context);
-    return context;
+    return (await this.reader()(configPath)).context;
   }
 
   async context(): Promise<ServerContextResponse> {
     const { source, entries } = await this.entries();
+    const read = this.reader();
+    const manifests = new Map<string, Promise<void>>();
     const projects: RelayProject[] = await Promise.all(
       entries.map(async ({ key, configPath }) => {
         try {
-          const project = await this.at(configPath);
+          const { context: project, config } = await read(configPath);
           // Дешёвая проверка профиля по manifest без скана: база, которой нужна миграция,
           // не объявляется доступной (запросы к ней всё равно получат код совместимости).
-          const manifest = await readStorageManifest(dirname(project.options.configPath));
-          if (manifest) requireCurrentProfile(manifest);
-          const { config } = await readWorkspaceConfig(dirname(configPath), configPath);
-          const settings = projectSettings(config, configPath);
+          const path = project.options.configPath;
+          let manifest = manifests.get(path);
+          if (!manifest) {
+            manifest = (async () => {
+              const value = await readStorageManifest(dirname(path));
+              if (value) requireCurrentProfile(value);
+            })();
+            manifests.set(path, manifest);
+          }
+          await manifest;
+          const settings = projectSettings(config, path);
           return {
             key,
             id: project.projectId,
@@ -169,19 +218,22 @@ export class ProjectCatalog {
         }
       }),
     );
+    const selectors = new Map<string, Set<string>>();
+    const identityPaths = new Map<string, Set<string>>();
+    for (const project of projects) {
+      for (const selector of [project.key, project.id, project.slug]) {
+        if (selector === undefined) continue;
+        const ids = selectors.get(selector) ?? new Set<string>();
+        ids.add(project.id);
+        selectors.set(selector, ids);
+      }
+      const paths = identityPaths.get(project.id) ?? new Set<string>();
+      paths.add(project.configPath);
+      identityPaths.set(project.id, paths);
+    }
     const ambiguousIds = new Set(
       projects
-        .filter(
-          (project) =>
-            project.slug !== undefined &&
-            projects.some(
-              (other) =>
-                other.id !== project.id &&
-                (other.slug === project.slug ||
-                  other.key === project.slug ||
-                  other.id === project.slug),
-            ),
-        )
+        .filter((project) => project.slug !== undefined && selectors.get(project.slug)!.size > 1)
         .map((project) => project.id),
     );
     for (const project of projects) {
@@ -189,9 +241,7 @@ export class ProjectCatalog {
         // Коллизия не закрывает доступ по ID: пользователь может исправить slug в настройках.
         delete project.slug;
       }
-      if (
-        projects.some((other) => other.id === project.id && other.configPath !== project.configPath)
-      ) {
+      if (identityPaths.get(project.id)!.size > 1) {
         project.available = false;
         project.error = "DUPLICATE_PROJECT_ID: разные базы имеют одинаковый projectId";
       }
@@ -204,9 +254,16 @@ export class ProjectCatalog {
     };
   }
 
-  private async unique(context: ProjectContext, entries: { configPath: string }[]) {
+  private async unique(
+    context: ProjectContext,
+    entries: { configPath: string }[],
+    read = this.reader(),
+  ) {
     for (const entry of entries) {
-      const other = await this.at(entry.configPath).catch(() => undefined);
+      const other = await read(entry.configPath).then(
+        (loaded) => loaded.context,
+        () => undefined,
+      );
       invariant(
         !other ||
           other.projectId !== context.projectId ||
@@ -217,6 +274,29 @@ export class ProjectCatalog {
       );
     }
     return context;
+  }
+
+  /** Проверяем весь актуальный каталог, но по сети передаём только страницу. */
+  async page(input: ProjectCatalogPageQuery = {}) {
+    const query = parse(projectCatalogPageQuerySchema, input, "страница каталога проектов");
+    const catalog = await this.context();
+    const version = createHash("sha256").update(JSON.stringify(catalog)).digest("hex");
+    invariant(
+      query.version === undefined || query.version === version,
+      "VERSION_CONFLICT",
+      "Каталог проектов изменился. Начните чтение заново без cursor/version; исторический снимок не хранится.",
+      4,
+    );
+    const total = catalog.projects.length;
+    return {
+      catalog: {
+        ...catalog,
+        projects: catalog.projects.slice(query.offset, query.offset + query.limit),
+      },
+      total,
+      nextOffset: query.offset + query.limit < total ? query.offset + query.limit : null,
+      version,
+    };
   }
 
   async select(selector?: string, options: OpenWorkspaceOptions = {}): Promise<ProjectContext> {
@@ -248,35 +328,39 @@ export class ProjectCatalog {
       return context;
     }
     const { source, entries } = await this.entries();
+    const read = this.reader();
     invariant(
       selector !== undefined || source.kind === "project",
       "PROJECT_REQUIRED",
       "В workspace укажите проект",
     );
-    if (selector === undefined) return this.at(entries[0]!.configPath);
+    if (selector === undefined) return (await read(entries[0]!.configPath)).context;
     const direct = entries.find(({ key }) => key === selector);
-    if (direct) return this.unique(await this.at(direct.configPath), entries);
+    if (direct) return this.unique((await read(direct.configPath)).context, entries, read);
     for (const entry of entries) {
       let context: ProjectContext;
       try {
-        context = await this.at(entry.configPath);
+        context = (await read(entry.configPath)).context;
       } catch (error) {
         // Недоступный проект, выбранный по постоянному ID, сообщает свою причину, а не 404.
         if ((await rawProjectId(entry.configPath)) === selector) throw error;
         continue;
       }
-      if (context.projectId === selector) return this.unique(context, entries);
+      if (context.projectId === selector) return this.unique(context, entries, read);
     }
     const matches: ProjectContext[] = [];
+    const matchedIds = new Set<string>();
     for (const entry of entries) {
-      const context = await this.at(entry.configPath).catch(() => undefined);
-      if (!context) continue;
-      const { config } = await readWorkspaceConfig(dirname(entry.configPath), entry.configPath);
+      const loaded = await read(entry.configPath).catch(() => undefined);
+      if (!loaded) continue;
+      const { context, config } = loaded;
       if (
         projectSettings(config, entry.configPath).slug === selector &&
-        !matches.some((match) => match.projectId === context.projectId)
-      )
+        !matchedIds.has(context.projectId)
+      ) {
         matches.push(context);
+        matchedIds.add(context.projectId);
+      }
     }
     invariant(
       matches.length <= 1,
@@ -284,7 +368,7 @@ export class ProjectCatalog {
       "Этот slug принадлежит нескольким проектам. Откройте проект по ID и измените slug.",
       4,
     );
-    if (matches[0]) return this.unique(matches[0], entries);
+    if (matches[0]) return this.unique(matches[0], entries, read);
     throw new AppError("PROJECT_NOT_FOUND", `Проект ${selector} не зарегистрирован`, 3);
   }
 
@@ -298,11 +382,11 @@ export class ProjectCatalog {
     const source = await this.source();
     const save = async (assertOwned: () => void) => {
       const { entries } = await this.entries();
+      const read = this.reader();
       invariant(input.slug !== "local", "PROJECT_SLUG_TAKEN", "Адрес local зарезервирован.", 4);
       for (const entry of entries) {
-        const other = await this.at(entry.configPath);
+        const { context: other, config } = await read(entry.configPath);
         if (other.projectId === context.projectId) continue;
-        const { config } = await readWorkspaceConfig(dirname(entry.configPath), entry.configPath);
         invariant(
           input.slug !== projectSettings(config, entry.configPath).slug &&
             input.slug !== other.projectId &&
@@ -339,7 +423,10 @@ export class ProjectCatalog {
       await this.at(target.configPath),
       entries.filter((entry) => entry.key !== key),
     );
-    return registerProject(source.path, key, entry, replace);
+    return {
+      ...(await registerProject(source.path, key, entry, replace)),
+      configPath: source.path,
+    };
   }
 
   async unregister(key: string) {
@@ -349,7 +436,7 @@ export class ProjectCatalog {
       "WORKSPACE_REQUIRED",
       "Удаление регистрации доступно в workspace",
     );
-    return unregisterProject(source.path, key);
+    return { ...(await unregisterProject(source.path, key)), configPath: source.path };
   }
 
   actor(override?: string) {

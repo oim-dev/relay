@@ -2,6 +2,20 @@ import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { actorSchema } from "@relay/contracts/primitives";
 import {
+  productValidationSchema,
+  productLintQuerySchema,
+  productLintPageSchema,
+  productOverviewMapQuerySchema,
+  productOverviewMapPageSchema,
+} from "@relay/contracts/product-query";
+import {
+  productParticipationQuerySchema,
+  productParticipationPageSchema,
+  productParticipationReplaceSchema,
+  productParticipationSavedSchema,
+  productImplementationDetailSchema,
+} from "@relay/contracts/product-participation";
+import {
   documentLinksQuerySchema,
   documentLinksPageSchema,
   documentSectionsQuerySchema,
@@ -11,6 +25,8 @@ import {
 } from "@relay/contracts/document-library";
 import {
   plansQuerySchema,
+  plansCompactQuerySchema,
+  plansCompactPageSchema,
   planningPageQuerySchema,
   plansPageSchema,
   planSummarySchema,
@@ -29,6 +45,13 @@ import {
 } from "@relay/contracts/planning";
 import {
   releasesQuerySchema,
+  releasesCompactQuerySchema,
+  releasesCompactPageSchema,
+  releaseCompositionCompactQuerySchema,
+  releaseCompositionCompactSchema,
+  releasePreviewCompactSchema,
+  saveReleaseByRefsSchema,
+  updateReleaseByRefsSchema,
   releasesPageSchema,
   releaseSummarySchema,
   saveReleaseSchema,
@@ -39,6 +62,8 @@ import {
 } from "@relay/contracts/releases";
 import {
   progressQuerySchema,
+  taskDependenciesQuerySchema,
+  taskDependenciesPageSchema,
   progressPageQuerySchema,
   taskProgressSchema,
   implementationProgressSchema,
@@ -85,6 +110,7 @@ import {
   productEntitySchema,
   productEntitiesSchema,
   productEntitiesQuerySchema,
+  productEntityQuerySchema,
 } from "@relay/core/domain/product-implementation";
 import { boardsPageSchema, boardViewSchema, boardsQuerySchema } from "@relay/core/domain/board";
 import {
@@ -132,6 +158,14 @@ import type { ProductOverviewMetric } from "@relay/core/domain/product";
 export const OVERVIEW_METRICS_CAPABILITY = "relay-overview-metrics-v1";
 /** Страницы библиотеки и адресные записи без клиентского полного чтения документа/проекта. */
 export const DOCUMENT_LIBRARY_CAPABILITY = "relay-document-library-v1";
+/** Адресные продуктовые чтения и атомарная замена участия без full-state fallback. */
+export const PRODUCT_QUERIES_CAPABILITY = "relay-product-queries-v1";
+/** Явные компактные проекции планирования и специализированная страница зависимостей. */
+export const WORK_READ_MODELS_CAPABILITY = "relay-work-read-models-v1";
+/** Разрешение публичных адресов планов внутри единственной записи релиза. */
+export const RELEASE_REFS_CAPABILITY = "relay-release-refs-v1";
+/** Полнотекстовый поиск и типовые FI/SI-фильтры общего каталога. */
+export const ENTITY_SEARCH_CAPABILITY = "relay-entity-search-v2";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -309,6 +343,15 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         { url },
       );
   };
+  const requireCapability = (capability: string) => {
+    if (!context.capabilities?.includes(capability))
+      throw new AppError(
+        "SERVER_INCOMPATIBLE",
+        `Операция требует Relay Server с ${capability}. Обновите и перезапустите сервер той же версии, что и клиент.`,
+        5,
+        { url },
+      );
+  };
   return {
     kind: "http",
     projectSettings: {
@@ -323,6 +366,15 @@ export async function createHttpBackend(url: string, project?: string): Promise<
       },
     },
     plans: {
+      listCompact: async (input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        return decode(
+          plansCompactPageSchema,
+          await call(() =>
+            api.plans.getPlansCompact(defined(plansCompactQuerySchema.parse(input))),
+          ),
+        );
+      },
       candidates: async (query = {}) =>
         decode(
           planningCandidatesPageSchema,
@@ -437,6 +489,57 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
     },
     releases: {
+      listCompact: async (input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        return decode(
+          releasesCompactPageSchema,
+          await call(() =>
+            api.releases.getReleasesCompact(defined(releasesCompactQuerySchema.parse(input))),
+          ),
+        );
+      },
+      compositionCompact: async (reference, input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        return decode(
+          releaseCompositionCompactSchema,
+          await call(() =>
+            api.releases.getReleasePlansCompact({
+              reference,
+              ...defined(releaseCompositionCompactQuerySchema.parse(input)),
+            }),
+          ),
+        );
+      },
+      previewCompact: async (input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        const { projection, ...body } = releasePreviewCompactSchema.parse(input);
+        return decode(
+          releaseCompositionCompactSchema,
+          await call(() => api.releases.previewReleaseCompact({ projection }, defined(body))),
+        );
+      },
+      createByRefs: async (input, defaultActor) => {
+        requireCapability(RELEASE_REFS_CAPABILITY);
+        const command = saveReleaseByRefsSchema.parse({
+          ...input,
+          actor: input.actor ?? defaultActor,
+        });
+        return writePlanning(
+          () => api.releases.createReleaseByRefs(defined(command)),
+          command.requestId,
+        );
+      },
+      updateByRefs: async (reference, input, defaultActor) => {
+        requireCapability(RELEASE_REFS_CAPABILITY);
+        const command = updateReleaseByRefsSchema.parse({
+          ...input,
+          actor: input.actor ?? defaultActor,
+        });
+        return writePlanning(
+          () => api.releases.updateReleaseByRefs({ reference }, defined(command)),
+          command.requestId,
+        );
+      },
       list: async (query = {}) =>
         decode(
           releasesPageSchema,
@@ -487,6 +590,15 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
     },
     progress: {
+      taskDependencies: async (input) => {
+        requireCapability(WORK_READ_MODELS_CAPABILITY);
+        return decode(
+          taskDependenciesPageSchema,
+          await call(() =>
+            api.progress.getTaskDependencies(defined(taskDependenciesQuerySchema.parse(input))),
+          ),
+        );
+      },
       workPlan: async (input) =>
         decode(
           workPlanProgressSchema,
@@ -552,11 +664,20 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
       describe: async (input) =>
         decode(entityTypeDetailSchema, await call(() => api.entities.describeEntityType(input))),
-      list: async (input = {}) =>
-        decode(
+      list: async (input = {}) => {
+        const query = entitiesQuerySchema.parse(input);
+        if (
+          query.implementationTarget !== undefined ||
+          (query.q !== undefined && query.kind !== "document") ||
+          (query.sort === "updated" && query.kind !== "document") ||
+          (query.kind === undefined && (query.active !== undefined || query.section !== undefined))
+        )
+          requireCapability(ENTITY_SEARCH_CAPABILITY);
+        return decode(
           entitiesPageSchema,
-          await call(() => api.entities.listEntities(defined(entitiesQuerySchema.parse(input)))),
-        ),
+          await call(() => api.entities.listEntities(defined(query))),
+        );
+      },
       get: async (input) =>
         decode(
           entityDetailSchema,
@@ -880,6 +1001,64 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
     },
     product: {
+      validate: async () => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(productValidationSchema, await call(() => api.product.validateProduct()));
+      },
+      lint: async (input = {}) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(
+          productLintPageSchema,
+          await call(() => api.product.lintProduct(defined(productLintQuerySchema.parse(input)))),
+        );
+      },
+      overviewMap: async (input = {}) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(
+          productOverviewMapPageSchema,
+          await call(() =>
+            api.product.getProductOverviewMap(defined(productOverviewMapQuerySchema.parse(input))),
+          ),
+        );
+      },
+      participation: async (input) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(
+          productParticipationPageSchema,
+          await call(() =>
+            api.product.getProductParticipation(
+              defined(productParticipationQuerySchema.parse(input)),
+            ),
+          ),
+        );
+      },
+      implementation: async (ref) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        return decode(
+          productImplementationDetailSchema,
+          await call(() =>
+            api.product.getProductImplementation(productEntityQuerySchema.parse({ ref })),
+          ),
+        );
+      },
+      replaceParticipation: async (input, defaultActor) => {
+        requireCapability(PRODUCT_QUERIES_CAPABILITY);
+        const command = productParticipationReplaceSchema.parse({
+          ...input,
+          actor: input.actor ?? defaultActor,
+        });
+        return decode(
+          productParticipationSavedSchema,
+          await call(
+            () =>
+              api.product.replaceProductParticipation(
+                defined({ ...command, selections: command.selections.map(defined) }),
+              ),
+            "write",
+            command.requestId,
+          ),
+        );
+      },
       entity: async (ref) =>
         decode(productEntitySchema, await call(() => api.product.getProductEntity({ ref }))),
       entities: async (input = {}) =>

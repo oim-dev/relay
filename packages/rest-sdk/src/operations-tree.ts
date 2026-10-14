@@ -20,6 +20,8 @@ import { createEntityForProject } from "./operations/create-entity-for-project.j
 import { createEntity } from "./operations/create-entity.js";
 import { createPlanForProject } from "./operations/create-plan-for-project.js";
 import { createPlan } from "./operations/create-plan.js";
+import { createReleaseByRefsForProject } from "./operations/create-release-by-refs-for-project.js";
+import { createReleaseByRefs } from "./operations/create-release-by-refs.js";
 import { createReleaseForProject } from "./operations/create-release-for-project.js";
 import { createRelease } from "./operations/create-release.js";
 import { deleteEntityForProject } from "./operations/delete-entity-for-project.js";
@@ -67,6 +69,8 @@ import { getPlanStages } from "./operations/get-plan-stages.js";
 import { getPlan } from "./operations/get-plan.js";
 import { getPlanningCandidatesForProject } from "./operations/get-planning-candidates-for-project.js";
 import { getPlanningCandidates } from "./operations/get-planning-candidates.js";
+import { getPlansCompactForProject } from "./operations/get-plans-compact-for-project.js";
+import { getPlansCompact } from "./operations/get-plans-compact.js";
 import { getPlansForProject } from "./operations/get-plans-for-project.js";
 import { getPlans } from "./operations/get-plans.js";
 import { getProductContextForProject } from "./operations/get-product-context-for-project.js";
@@ -75,29 +79,41 @@ import { getProductEntitiesForProject } from "./operations/get-product-entities-
 import { getProductEntities } from "./operations/get-product-entities.js";
 import { getProductEntityForProject } from "./operations/get-product-entity-for-project.js";
 import { getProductEntity } from "./operations/get-product-entity.js";
+import { getProductImplementationForProject } from "./operations/get-product-implementation-for-project.js";
+import { getProductImplementation } from "./operations/get-product-implementation.js";
 import { getProductOverviewForProject } from "./operations/get-product-overview-for-project.js";
+import { getProductOverviewMapForProject } from "./operations/get-product-overview-map-for-project.js";
+import { getProductOverviewMap } from "./operations/get-product-overview-map.js";
 import { getProductOverviewMetricForProject } from "./operations/get-product-overview-metric-for-project.js";
 import { getProductOverviewMetric } from "./operations/get-product-overview-metric.js";
 import { getProductOverview } from "./operations/get-product-overview.js";
+import { getProductParticipationForProject } from "./operations/get-product-participation-for-project.js";
+import { getProductParticipation } from "./operations/get-product-participation.js";
 import { getProductProgressForProject } from "./operations/get-product-progress-for-project.js";
 import { getProductProgress } from "./operations/get-product-progress.js";
 import { getProductRecordsForProject } from "./operations/get-product-records-for-project.js";
 import { getProductRecords } from "./operations/get-product-records.js";
 import { getProductStateForProject } from "./operations/get-product-state-for-project.js";
 import { getProductState } from "./operations/get-product-state.js";
+import { getProjectCatalogPage } from "./operations/get-project-catalog-page.js";
 import { getProjectSettingsForProject } from "./operations/get-project-settings-for-project.js";
 import { getProjectSettings } from "./operations/get-project-settings.js";
 import { getProjects } from "./operations/get-projects.js";
 import { getReleaseForProject } from "./operations/get-release-for-project.js";
+import { getReleasePlansCompactForProject } from "./operations/get-release-plans-compact-for-project.js";
+import { getReleasePlansCompact } from "./operations/get-release-plans-compact.js";
 import { getReleasePlansForProject } from "./operations/get-release-plans-for-project.js";
 import { getReleasePlans } from "./operations/get-release-plans.js";
 import { getReleaseProgressForProject } from "./operations/get-release-progress-for-project.js";
 import { getReleaseProgress } from "./operations/get-release-progress.js";
 import { getRelease } from "./operations/get-release.js";
+import { getReleasesCompactForProject } from "./operations/get-releases-compact-for-project.js";
+import { getReleasesCompact } from "./operations/get-releases-compact.js";
 import { getReleasesForProject } from "./operations/get-releases-for-project.js";
 import { getReleases } from "./operations/get-releases.js";
 import { getScenarioProgressForProject } from "./operations/get-scenario-progress-for-project.js";
 import { getScenarioProgress } from "./operations/get-scenario-progress.js";
+import { getServerCapabilities } from "./operations/get-server-capabilities.js";
 import { getServerContext } from "./operations/get-server-context.js";
 import { getTaskCommentForProject } from "./operations/get-task-comment-for-project.js";
 import { getTaskComment } from "./operations/get-task-comment.js";
@@ -107,6 +123,8 @@ import { getTaskCriteriaForProject } from "./operations/get-task-criteria-for-pr
 import { getTaskCriteria } from "./operations/get-task-criteria.js";
 import { getTaskCriterionForProject } from "./operations/get-task-criterion-for-project.js";
 import { getTaskCriterion } from "./operations/get-task-criterion.js";
+import { getTaskDependenciesForProject } from "./operations/get-task-dependencies-for-project.js";
+import { getTaskDependencies } from "./operations/get-task-dependencies.js";
 import { getTaskPlanMembershipsForProject } from "./operations/get-task-plan-memberships-for-project.js";
 import { getTaskPlanMemberships } from "./operations/get-task-plan-memberships.js";
 import { getTaskProgressForProject } from "./operations/get-task-progress-for-project.js";
@@ -117,6 +135,8 @@ import { linkBoardTaskForProject } from "./operations/link-board-task-for-projec
 import { linkBoardTask } from "./operations/link-board-task.js";
 import { linkEntityTaskForProject } from "./operations/link-entity-task-for-project.js";
 import { linkEntityTask } from "./operations/link-entity-task.js";
+import { lintProductForProject } from "./operations/lint-product-for-project.js";
+import { lintProduct } from "./operations/lint-product.js";
 import { listEntitiesForProject } from "./operations/list-entities-for-project.js";
 import { listEntities } from "./operations/list-entities.js";
 import { listEntityTypesForProject } from "./operations/list-entity-types-for-project.js";
@@ -131,13 +151,18 @@ import { mutateProductForProject } from "./operations/mutate-product-for-project
 import { mutateProduct } from "./operations/mutate-product.js";
 import { previewEntityDeletionForProject } from "./operations/preview-entity-deletion-for-project.js";
 import { previewEntityDeletion } from "./operations/preview-entity-deletion.js";
+import { previewReleaseCompactForProject } from "./operations/preview-release-compact-for-project.js";
+import { previewReleaseCompact } from "./operations/preview-release-compact.js";
 import { previewReleaseForProject } from "./operations/preview-release-for-project.js";
 import { previewRelease } from "./operations/preview-release.js";
 import { publishTaskCommentForProject } from "./operations/publish-task-comment-for-project.js";
 import { publishTaskComment } from "./operations/publish-task-comment.js";
+import { registerProjectCompact } from "./operations/register-project-compact.js";
 import { registerProject } from "./operations/register-project.js";
 import { renameEntityKeyForProject } from "./operations/rename-entity-key-for-project.js";
 import { renameEntityKey } from "./operations/rename-entity-key.js";
+import { replaceProductParticipationForProject } from "./operations/replace-product-participation-for-project.js";
+import { replaceProductParticipation } from "./operations/replace-product-participation.js";
 import { resolveEntityForProject } from "./operations/resolve-entity-for-project.js";
 import { resolveEntity } from "./operations/resolve-entity.js";
 import { saveProjectSettingsForProject } from "./operations/save-project-settings-for-project.js";
@@ -148,6 +173,7 @@ import { transitionPlanForProject } from "./operations/transition-plan-for-proje
 import { transitionPlan } from "./operations/transition-plan.js";
 import { transitionReleaseForProject } from "./operations/transition-release-for-project.js";
 import { transitionRelease } from "./operations/transition-release.js";
+import { unregisterProjectCompact } from "./operations/unregister-project-compact.js";
 import { unregisterProject } from "./operations/unregister-project.js";
 import { updateBoardTaskForProject } from "./operations/update-board-task-for-project.js";
 import { updateBoardTask } from "./operations/update-board-task.js";
@@ -157,8 +183,12 @@ import { updatePlanForProject } from "./operations/update-plan-for-project.js";
 import { updatePlan } from "./operations/update-plan.js";
 import { updateProductImplementationForProject } from "./operations/update-product-implementation-for-project.js";
 import { updateProductImplementation } from "./operations/update-product-implementation.js";
+import { updateReleaseByRefsForProject } from "./operations/update-release-by-refs-for-project.js";
+import { updateReleaseByRefs } from "./operations/update-release-by-refs.js";
 import { updateReleaseForProject } from "./operations/update-release-for-project.js";
 import { updateRelease } from "./operations/update-release.js";
+import { validateProductForProject } from "./operations/validate-product-for-project.js";
+import { validateProduct } from "./operations/validate-product.js";
 import { validateProjectForProject } from "./operations/validate-project-for-project.js";
 import { validateProject } from "./operations/validate-project.js";
 import { watchEventsForProject } from "./operations/watch-events-for-project.js";
@@ -170,9 +200,13 @@ export const operationsTree = {
   },
   server: {
     getServerContext: getServerContext,
+    getServerCapabilities: getServerCapabilities,
   },
   projects: {
     getProjects: getProjects,
+    getProjectCatalogPage: getProjectCatalogPage,
+    registerProjectCompact: registerProjectCompact,
+    unregisterProjectCompact: unregisterProjectCompact,
     registerProject: registerProject,
     unregisterProject: unregisterProject,
   },
@@ -189,6 +223,12 @@ export const operationsTree = {
     validateProjectForProject: validateProjectForProject,
   },
   product: {
+    validateProduct: validateProduct,
+    lintProduct: lintProduct,
+    getProductOverviewMap: getProductOverviewMap,
+    getProductParticipation: getProductParticipation,
+    replaceProductParticipation: replaceProductParticipation,
+    getProductImplementation: getProductImplementation,
     getProductEntities: getProductEntities,
     getProductEntity: getProductEntity,
     updateProductImplementation: updateProductImplementation,
@@ -198,6 +238,13 @@ export const operationsTree = {
     getProductRecords: getProductRecords,
     mutateProduct: mutateProduct,
     getProductContext: getProductContext,
+    validateProductForProject: validateProductForProject,
+    lintProductForProject: lintProductForProject,
+    getProductOverviewMapForProject: getProductOverviewMapForProject,
+    getProductParticipationForProject: getProductParticipationForProject,
+    replaceProductParticipationForProject:
+      replaceProductParticipationForProject,
+    getProductImplementationForProject: getProductImplementationForProject,
     getProductEntitiesForProject: getProductEntitiesForProject,
     getProductEntityForProject: getProductEntityForProject,
     updateProductImplementationForProject:
@@ -210,6 +257,7 @@ export const operationsTree = {
     getProductContextForProject: getProductContextForProject,
   },
   progress: {
+    getTaskDependencies: getTaskDependencies,
     getWorkPlanProgress: getWorkPlanProgress,
     getReleaseProgress: getReleaseProgress,
     getTaskProgress: getTaskProgress,
@@ -218,6 +266,7 @@ export const operationsTree = {
     getFeatureProgress: getFeatureProgress,
     getApplicationProgress: getApplicationProgress,
     getProductProgress: getProductProgress,
+    getTaskDependenciesForProject: getTaskDependenciesForProject,
     getWorkPlanProgressForProject: getWorkPlanProgressForProject,
     getReleaseProgressForProject: getReleaseProgressForProject,
     getTaskProgressForProject: getTaskProgressForProject,
@@ -230,6 +279,7 @@ export const operationsTree = {
   plans: {
     getPlans: getPlans,
     createPlan: createPlan,
+    getPlansCompact: getPlansCompact,
     getTaskPlanMemberships: getTaskPlanMemberships,
     getPlanningCandidates: getPlanningCandidates,
     getPlan: getPlan,
@@ -242,6 +292,7 @@ export const operationsTree = {
     transferPlanTask: transferPlanTask,
     getPlansForProject: getPlansForProject,
     createPlanForProject: createPlanForProject,
+    getPlansCompactForProject: getPlansCompactForProject,
     getTaskPlanMembershipsForProject: getTaskPlanMembershipsForProject,
     getPlanningCandidatesForProject: getPlanningCandidatesForProject,
     getPlanForProject: getPlanForProject,
@@ -256,16 +307,26 @@ export const operationsTree = {
   releases: {
     getReleases: getReleases,
     createRelease: createRelease,
+    getReleasesCompact: getReleasesCompact,
     previewRelease: previewRelease,
+    previewReleaseCompact: previewReleaseCompact,
     getRelease: getRelease,
     getReleasePlans: getReleasePlans,
+    getReleasePlansCompact: getReleasePlansCompact,
+    createReleaseByRefs: createReleaseByRefs,
+    updateReleaseByRefs: updateReleaseByRefs,
     updateRelease: updateRelease,
     transitionRelease: transitionRelease,
     getReleasesForProject: getReleasesForProject,
     createReleaseForProject: createReleaseForProject,
+    getReleasesCompactForProject: getReleasesCompactForProject,
     previewReleaseForProject: previewReleaseForProject,
+    previewReleaseCompactForProject: previewReleaseCompactForProject,
     getReleaseForProject: getReleaseForProject,
     getReleasePlansForProject: getReleasePlansForProject,
+    getReleasePlansCompactForProject: getReleasePlansCompactForProject,
+    createReleaseByRefsForProject: createReleaseByRefsForProject,
+    updateReleaseByRefsForProject: updateReleaseByRefsForProject,
     updateReleaseForProject: updateReleaseForProject,
     transitionReleaseForProject: transitionReleaseForProject,
   },
