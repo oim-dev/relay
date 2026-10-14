@@ -16,17 +16,25 @@ import { planningPageQuerySchema } from "@relay/contracts/planning";
 import type { PlanningPageQuery } from "@relay/contracts/planning";
 import {
   releasesQuerySchema,
+  releasesCompactQuerySchema,
+  releaseCompositionCompactQuerySchema,
   saveReleaseSchema,
   updateReleaseSchema,
   releaseActionSchema,
   releasePreviewSchema,
+  saveReleaseByRefsSchema,
+  updateReleaseByRefsSchema,
 } from "@relay/contracts/releases";
 import type {
   ReleasesQuery,
+  ReleasesCompactQuery,
+  ReleaseCompositionCompactQuery,
   SaveRelease,
   UpdateRelease,
   ReleaseAction,
   ReleasePreview,
+  SaveReleaseByRefs,
+  UpdateReleaseByRefs,
 } from "@relay/contracts/releases";
 import { ReleasesService } from "@relay/core/application/releases/service";
 import { WorkspaceService } from "../workspace/workspace.module.js";
@@ -34,6 +42,7 @@ import { EventsService } from "../events/events.service.js";
 import { EventsModule } from "../events/events.module.js";
 import { ApiEndpoint } from "../../openapi/endpoint.js";
 import { ZodValidationPipe } from "../../common/validation.js";
+import { releasePreviewProjectionQuerySchema } from "./transport.js";
 
 @ApiTags("releases")
 @Controller("releases")
@@ -58,6 +67,18 @@ class ReleasesController {
   async list(@Query(new ZodValidationPipe(releasesQuerySchema)) query: ReleasesQuery) {
     return success(await new ReleasesService(await this.workspace.open()).list(query));
   }
+  @Get("compact")
+  @ApiEndpoint({
+    id: "getReleasesCompact",
+    summary: "Компактный каталог релизов без полного описания и planIds; projection=compact",
+    query: "ReleasesCompactQuery",
+    response: "ReleasesCompactPage",
+  })
+  async listCompact(
+    @Query(new ZodValidationPipe(releasesCompactQuerySchema)) query: ReleasesCompactQuery,
+  ) {
+    return success(await new ReleasesService(await this.workspace.open()).listCompact(query));
+  }
   @Post("preview")
   @HttpCode(200)
   @ApiEndpoint({
@@ -68,6 +89,28 @@ class ReleasesController {
   })
   async preview(@Body(new ZodValidationPipe(releasePreviewSchema)) input: ReleasePreview) {
     return success(await new ReleasesService(await this.workspace.open()).preview(input));
+  }
+  @Post("preview/compact")
+  @HttpCode(200)
+  @ApiEndpoint({
+    id: "previewReleaseCompact",
+    summary:
+      "Предпросмотр готовности выбранных планов без записи и полного Markdown; projection=compact",
+    body: "ReleasePreview",
+    query: "ReleasePreviewProjectionQuery",
+    response: "ReleaseCompositionCompact",
+  })
+  async previewCompact(
+    @Body(new ZodValidationPipe(releasePreviewSchema)) input: ReleasePreview,
+    @Query(new ZodValidationPipe(releasePreviewProjectionQuerySchema))
+    query: { projection: "compact" },
+  ) {
+    return success(
+      await new ReleasesService(await this.workspace.open()).previewCompact({
+        ...input,
+        projection: query.projection,
+      }),
+    );
   }
   @Get(":reference")
   @ApiParam({ name: "reference", description: "ID или ключ релиза" })
@@ -94,6 +137,51 @@ class ReleasesController {
     return success(
       await new ReleasesService(await this.workspace.open()).composition(reference, query),
     );
+  }
+  @Get(":reference/plans/compact")
+  @ApiParam({ name: "reference", type: String, description: "ID или ключ релиза" })
+  @ApiEndpoint({
+    id: "getReleasePlansCompact",
+    summary: "Компактный актуальный состав релиза без полных текстов планов; projection=compact",
+    query: "ReleaseCompositionCompactQuery",
+    response: "ReleaseCompositionCompact",
+  })
+  async compositionCompact(
+    @Param("reference", new ZodValidationPipe(entityReferenceSchema)) reference: string,
+    @Query(new ZodValidationPipe(releaseCompositionCompactQuerySchema))
+    query: ReleaseCompositionCompactQuery,
+  ) {
+    return success(
+      await new ReleasesService(await this.workspace.open()).compositionCompact(reference, query),
+    );
+  }
+  @Post("by-refs")
+  @HttpCode(200)
+  @ApiEndpoint({
+    id: "createReleaseByRefs",
+    summary: "Создать релиз, разрешая ссылки планов в одной записи Core",
+    body: "SaveReleaseByRefs",
+    response: "PlanningSaved",
+  })
+  async createByRefs(
+    @Body(new ZodValidationPipe(saveReleaseByRefsSchema)) input: SaveReleaseByRefs,
+  ) {
+    return this.write((service, actor) => service.createByRefs(input, actor));
+  }
+  @Post(":reference/update-by-refs")
+  @HttpCode(200)
+  @ApiParam({ name: "reference", type: String, description: "ID или ключ релиза" })
+  @ApiEndpoint({
+    id: "updateReleaseByRefs",
+    summary: "Изменить релиз, разрешая ссылки планов под исходной ревизией в одной записи",
+    body: "UpdateReleaseByRefs",
+    response: "PlanningSaved",
+  })
+  async updateByRefs(
+    @Param("reference", new ZodValidationPipe(entityReferenceSchema)) reference: string,
+    @Body(new ZodValidationPipe(updateReleaseByRefsSchema)) input: UpdateReleaseByRefs,
+  ) {
+    return this.write((service, actor) => service.updateByRefs(reference, input, actor));
   }
   @Post()
   @HttpCode(200)

@@ -3,35 +3,38 @@ import type {
   EntityData,
   EntityDetail,
   EntityKind,
+  EntityMetadata,
   EntitySummary,
 } from "@relay/contracts/entities";
 import { ProductRepository } from "../../storage/product.js";
 import { BoardRepository } from "../../storage/boards.js";
 import { BoardTaskRepository } from "../../storage/board-tasks.js";
-import { projectSettings } from "../../storage/project-settings.js";
-import { readJson } from "../../storage/files.js";
 import type { Workspace } from "../../storage/workspace.js";
-import { configSchema } from "../../domain/config.js";
-import { defaultBoardPrefix } from "../../domain/board.js";
-import { parse } from "../../domain/validation.js";
 import { invariant } from "../../shared/errors.js";
 import { productState, validateProduct } from "../product/model.js";
 import { resolveAddress } from "./resolver.js";
 import { EntityDeletionRepository } from "../../storage/entity-deletion.js";
-import { defaultDocumentSections } from "@relay/contracts/entities";
-import { storedProjectSettingsSchema } from "../../domain/project-settings.js";
-import { relative } from "node:path";
+import { documentEntityEntry, documentMetadata } from "../documents/projection.js";
 import { planningRecords } from "../../storage/planning.js";
+import { projectEntityEntry, readEntityConfig } from "./project.js";
+import { boardEntityEntry } from "./board.js";
 
-export type EntityEntry = Omit<EntityDetail, "references"> & {
+export type EntityEntry = Omit<EntityDetail, "references" | "metadata"> & {
   aliases: string[];
   selectors: string[];
   filters: Record<string, string | string[] | null>;
 };
-export type EntityCatalog = { entries: EntityEntry[]; version: string; reservedKeys: string[] };
+export type EntityCatalog = {
+  entries: EntityEntry[];
+  version: string;
+  reservedKeys: string[];
+  /** Не входит в entries/version и производные карточки. */
+  metadata?: ReadonlyMap<string, EntityMetadata>;
+};
 export const entityAddress = (ref: { kind: string; id: string }) => `${ref.kind}:${ref.id}`;
 export const entityDigest = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
+/** Базовая адресная карточка. Дополнения query/detail не меняют её постоянный формат. */
 export const entitySummary = ({
   ref,
   key,
@@ -87,20 +90,7 @@ export async function readEntityCatalog(
   workspace: Workspace,
   owned: () => void,
 ): Promise<EntityCatalog> {
-  const config = parse(
-    configSchema,
-    workspace.storageSession
-      ? await workspace.storageSession.readFile(
-          relative(workspace.storageSession.store.root, workspace.configPath),
-        )
-      : await readJson(workspace.configPath),
-    "конфигурация проекта",
-  );
-  if (workspace.storageSession)
-    config.projectSettings = storedProjectSettingsSchema.parse(
-      await workspace.storageSession.indexGet("configuration", "project"),
-    );
-  Object.assign(workspace.config, config);
+  const config = await readEntityConfig(workspace);
   const repository = new ProductRepository(workspace);
   const source = await repository.snapshot(owned);
   validateProduct(source.records);
@@ -108,6 +98,7 @@ export async function readEntityCatalog(
   const tasks = await new BoardTaskRepository(workspace).all();
   const state = productState(repository.productId, source.records, tasks);
   const entries: EntityEntry[] = [];
+  const metadata = new Map<string, EntityMetadata>();
   const add = (
     kind: EntityKind,
     id: string,
@@ -119,7 +110,14 @@ export async function readEntityCatalog(
     options: Partial<
       Pick<
         EntityEntry,
-        "aliases" | "selectors" | "filters" | "status" | "active" | "document" | "context"
+        | "aliases"
+        | "selectors"
+        | "filters"
+        | "status"
+        | "active"
+        | "document"
+        | "context"
+        | "savedStatus"
       >
     > = {},
   ) => {
@@ -138,25 +136,7 @@ export async function readEntityCatalog(
       ...options,
     });
   };
-  const settings = projectSettings(config, workspace.configPath);
-  add(
-    "project",
-    config.projectId ?? "project",
-    config.projectSettings?.entityKey ?? "PROJECT",
-    settings.name,
-    "Область данных и настроек выбранного проекта",
-    settings.revision,
-    {
-      kind: "project",
-      name: settings.name,
-      slug: settings.slug,
-      documentSections: config.projectSettings?.documentSections ?? defaultDocumentSections,
-    },
-    {
-      aliases: config.projectSettings?.aliases ?? [],
-      selectors: [settings.slug],
-    },
-  );
+  entries.push(projectEntityEntry(config, workspace.configPath));
   if (!source.records.some((record) => record.fields.kind === "passport"))
     add(
       "product",
@@ -170,6 +150,13 @@ export async function readEntityCatalog(
     );
   for (const record of state.records) {
     const fields = record.fields;
+    if (fields.kind === "document") {
+      entries.push(
+        documentEntityEntry({ ...record, fields }, config.projectSettings?.documentSections),
+      );
+      metadata.set(`document:${record.id}`, documentMetadata(record));
+      continue;
+    }
     if (fields.kind === "scope") {
       for (const contract of fields.contracts) {
         const stored = source.implementations.get(contract.id);
@@ -193,6 +180,7 @@ export async function readEntityCatalog(
           },
           {
             aliases: stored?.reservedKeys ?? [],
+            ...(stored === undefined ? {} : { savedStatus: stored.fields.status }),
             status: contract.active ? contract.status : "inactive",
             active: contract.active,
             filters: {
@@ -203,10 +191,13 @@ export async function readEntityCatalog(
             },
           },
         );
+        // FI/SI имеют собственную запись. В старой inline-модели собственной даты нет.
+        if (stored) metadata.set(`implementation:${contract.id}`, documentMetadata(stored));
       }
       continue;
     }
     const kind = fields.kind === "passport" ? "product" : fields.kind;
+    metadata.set(`${kind}:${record.id}`, documentMetadata(record));
     const readiness = state.readiness.find((entry) => entry.id === record.id);
     add(
       kind,
@@ -218,37 +209,8 @@ export async function readEntityCatalog(
       fields.kind === "passport" ? { ...fields, kind: "product" } : fields,
       {
         aliases: record.reservedKeys ?? [],
-        status:
-          fields.kind === "document"
-            ? (fields.documentStatus ?? "active")
-            : (readiness?.status ?? null),
-        ...(fields.kind !== "document"
-          ? {}
-          : {
-              document: {
-                kind: fields.documentKind,
-                status: fields.documentStatus ?? "active",
-                sectionId: (
-                  config.projectSettings?.documentSections ?? defaultDocumentSections
-                ).some((section) => section.id === fields.sectionId)
-                  ? (fields.sectionId ?? null)
-                  : null,
-                pinned: fields.pinned ?? false,
-                updatedAt: record.updatedAt,
-                linkCount: fields.links.length + (fields.relations?.length ?? 0),
-              },
-            }),
-        filters:
-          fields.kind === "scenario"
-            ? { feature: fields.featureId }
-            : fields.kind === "document"
-              ? {
-                  target: [
-                    ...fields.links.map((link) => (link.kind === "product" ? "passport" : link.id)),
-                    ...(fields.relations ?? []).map((link) => link.target.id),
-                  ],
-                }
-              : {},
+        status: readiness?.status ?? null,
+        filters: fields.kind === "scenario" ? { feature: fields.featureId } : {},
       },
     );
   }
@@ -260,29 +222,10 @@ export async function readEntityCatalog(
         : board.kind === "product"
           ? "Продукт"
           : "Инфраструктура";
-    const prefix = board.prefix ?? defaultBoardPrefix(board.slug);
-    add(
-      "board",
-      board.id,
-      board.key ?? `BOARD-${prefix}`,
-      name,
-      `Доска задач: ${name}`,
-      board.revision,
-      {
-        kind: "board",
-        slug: board.slug,
-        prefix,
-        scope: board.kind,
-        applicationId: board.applicationId,
-      },
-      {
-        aliases: board.aliases ?? [],
-        selectors: [board.slug, prefix],
-        filters: { application: board.applicationId },
-      },
-    );
+    entries.push(boardEntityEntry(board, name));
   }
   for (const task of tasks) {
+    metadata.set(`task:${task.id}`, documentMetadata(task));
     const board = boards.find((entry) => entry.id === task.boardId);
     const {
       version: _version,
@@ -322,6 +265,7 @@ export async function readEntityCatalog(
   if (workspace.storageSession) {
     for (const kind of ["work-plan", "release"] as const) {
       for (const record of await planningRecords(workspace, kind)) {
+        metadata.set(`${kind}:${record.id}`, documentMetadata(record));
         const {
           id,
           key,
@@ -350,8 +294,35 @@ export async function readEntityCatalog(
             : null;
     const parent = entries.find((candidate) => candidate.ref.id === parentId);
     if (parent) entry.context = `${parent.key} · ${parent.title}`;
+    if (data.kind === "implementation") {
+      const targetKind = data.scenarioId === null ? "feature" : "scenario";
+      const target = entries.find(
+        (candidate) =>
+          candidate.ref.kind === targetKind &&
+          candidate.ref.id === (data.scenarioId ?? data.featureId),
+      );
+      invariant(
+        parent && target,
+        "INVALID_REFERENCE",
+        "Не найдены приложение или цель реализации",
+        5,
+      );
+      const addressCard = ({ ref, key, title }: EntityEntry) => ({ ref, key, title });
+      entry.implementation = {
+        type: data.scenarioId === null ? "FI" : "SI",
+        application: addressCard(parent),
+        target: addressCard(target),
+      };
+    }
+    // Совместимые адаптеры PROJECT/board не отдают updatedAt. Читаем настоящую оболочку,
+    // а не выдаём дату создания или mtime за время последнего изменения.
+    if (workspace.storageSession && (data.kind === "project" || data.kind === "board"))
+      metadata.set(
+        entityAddress(entry.ref),
+        documentMetadata(await workspace.storageSession.get(entry.ref)),
+      );
   }
   entries.sort((a, b) => entityAddress(a.ref).localeCompare(entityAddress(b.ref)));
   const reservedKeys = await new EntityDeletionRepository(workspace).reservedKeys();
-  return { entries, reservedKeys, version: entityDigest([entries, reservedKeys]) };
+  return { entries, reservedKeys, version: entityDigest([entries, reservedKeys]), metadata };
 }

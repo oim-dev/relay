@@ -1,4 +1,18 @@
 import { z } from "zod";
+import { workspaceCatalogSchemas } from "../modules/workspace/catalog-schemas.js";
+import { planningTransportSchemas } from "../modules/planning/transport.js";
+import { releaseTransportSchemas } from "../modules/releases/transport.js";
+import { productTransportSchemas } from "../modules/product/transport.js";
+import { taskDependenciesQuerySchema, taskDependenciesPageSchema } from "@relay/contracts/progress";
+import { serverContextSchema } from "@relay/contracts/server-context";
+import {
+  documentLinksQuerySchema,
+  documentLinksPageSchema,
+  documentSectionsQuerySchema,
+  documentSectionsPageSchema,
+  documentRelationChangeSchema,
+  documentSectionChangeSchema,
+} from "@relay/contracts/document-library";
 import {
   plansQuerySchema,
   planningPageQuerySchema,
@@ -144,6 +158,18 @@ const serverEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export const schemas = {
+  ...workspaceCatalogSchemas,
+  ...planningTransportSchemas,
+  ...releaseTransportSchemas,
+  ...productTransportSchemas,
+  TaskDependenciesQuery: taskDependenciesQuerySchema,
+  TaskDependenciesPage: taskDependenciesPageSchema,
+  DocumentLinksQuery: documentLinksQuerySchema,
+  DocumentLinksPage: documentLinksPageSchema,
+  DocumentSectionsQuery: documentSectionsQuerySchema,
+  DocumentSectionsPage: documentSectionsPageSchema,
+  DocumentRelationChange: documentRelationChangeSchema,
+  DocumentSectionChange: documentSectionChangeSchema,
   PlansQuery: plansQuerySchema,
   PlanningCandidatesQuery: planningCandidatesQuerySchema,
   PlanningCandidatesPage: planningCandidatesPageSchema,
@@ -228,25 +254,7 @@ export const schemas = {
   UpdateBoardTask: updateBoardTaskSchema,
   MoveBoardTask: moveBoardTaskSchema,
   LinkBoardTask: linkBoardTaskSchema,
-  ServerContextResponse: z.strictObject({
-    mode: z.enum(["local", "workspace"]),
-    configPath: z.string(),
-    defaultProject: z.string().nullable(),
-    projects: z.array(
-      z.strictObject({
-        key: z.string(),
-        id: z.string(),
-        name: z.string(),
-        slug: z
-          .string()
-          .optional()
-          .describe("Человекочитаемый адрес проекта; постоянный id не меняется"),
-        configPath: z.string(),
-        available: z.boolean(),
-        error: z.string().optional(),
-      }),
-    ),
-  }),
+  ServerContextResponse: serverContextSchema,
   RegisterProjectRequest: z.strictObject({
     path: z.string().optional(),
     config: z.string().optional(),

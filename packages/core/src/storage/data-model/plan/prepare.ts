@@ -566,6 +566,7 @@ async function buildChanges(
   relationFiles: ReadonlyMap<string, string[]>,
   removals: readonly Removal[],
   blockers: Blockers,
+  finalConfig: unknown,
 ): Promise<Built> {
   const { source, registry, owned } = input;
   const storage = registry.storage;
@@ -644,6 +645,19 @@ async function buildChanges(
   }
   blockers.throwIfAny("Подготовленный результат не прошёл проверку");
 
+  owned();
+  try {
+    await registry.projectIndexes({
+      session,
+      configPath: source.configPath,
+      config: finalConfig,
+      productId: model.productId,
+      owned,
+    });
+  } catch (error) {
+    sessionBlocker(blockers, error, { path: ".indexes/state.json" });
+  }
+  blockers.throwIfAny("Предметная проекция индексов не прошла проверку");
   owned();
   const prepared = await session.prepare(randomUUID());
   const pages = new Set(
@@ -914,7 +928,7 @@ export async function prepareMigration(input: PrepareInput): Promise<PreparedMig
   blockers.throwIfAny("Подготовленный результат не прошёл проверку");
 
   // 4. Публикация в память: сессия над пустым снимком индексов строит индексы заново.
-  const built = await buildChanges(model, input, relationFiles, removals, blockers);
+  const built = await buildChanges(model, input, relationFiles, removals, blockers, finalConfig);
   const changes = built.changes;
 
   // Полный состав после публикации: каждый исходный файл перенесён, удалён по правилу или допустим.

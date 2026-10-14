@@ -187,10 +187,12 @@ test("реализации: ID-пути, отдельное чтение и ре
   const second = await service.updateImplementation(command, "agent");
   assert.equal(first.revision, featureImpl.revision + 1);
   assert.equal(second.revision, scenarioImpl.revision + 1);
+  // Прежний ключ остаётся алиасом; повтор останавливает исходная ревизия, не резолвер.
   await assert.rejects(service.updateImplementation(command, "agent"), {
-    code: "INVALID_REFERENCE",
+    code: "REVISION_CONFLICT",
   });
   const renamed = await service.entity("WEB-SI-99");
+  assert.deepEqual(await service.entity("WEB-SI-1"), renamed);
   assert.ok(renamed.fields.kind === "implementation");
   assert.equal(renamed.id, scenarioImpl.id);
   assert.equal(renamed.fields.scenarioId, scenario.id);

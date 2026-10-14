@@ -44,10 +44,10 @@ export function storageStatusTitle(status: StorageStatus): string {
 
 /** Подсказка Core с плейсхолдером `<config>` получает фактический вызов; JSON не меняется. */
 export function localizeStorageCommand(text: string, command?: string): string {
-  return command ? text.replaceAll(STORAGE_CLI, command) : text;
+  return command ? text.replaceAll(STORAGE_CLI, () => command) : text;
 }
 
-/** Команда в прозе: префикс CLI и аргументы до первого русского слова, `;` или конца. */
+/** Только исходный шаблон в прозе Core, никогда не готовый вызов с путём пользователя. */
 const EMBEDDED_COMMAND =
   /npx @oim-dev\/relay-cli(?:@\S+)?(?:[ \t]+(?:<[^>\n]*>|'(?:[^']|'\\'')*'|[^\s;<>'\p{Script=Cyrillic}][^\s;<>]*))*/gu;
 
@@ -56,7 +56,6 @@ const EMBEDDED_COMMAND =
  * строками целиком, чтобы их можно было скопировать.
  */
 export function storageNextText(text: string, width: number, command?: string): string {
-  const localized = localizeStorageCommand(text, command);
   const lines: string[] = [];
   let last = 0;
   // Связки между командами («; затем выполните:») — отдельная фраза с заглавной буквы.
@@ -64,12 +63,16 @@ export function storageNextText(text: string, width: number, command?: string): 
     const text = part.replace(/^[\s;,.]+/, "").trim();
     if (text) lines.push(wrap(safeText(text.charAt(0).toUpperCase() + text.slice(1)), width));
   };
-  for (const match of localized.matchAll(EMBEDDED_COMMAND)) {
-    prose(localized.slice(last, match.index));
-    lines.push(commandText(match[0]));
+  // Сначала выделяем команды из авторского шаблона, затем буквально вставляем invocation.
+  // Повторный разбор shell-строки повредил бы ANSI-C quoting, кириллицу и `$'` в пути.
+  for (const match of text.matchAll(EMBEDDED_COMMAND)) {
+    prose(text.slice(last, match.index));
+    const template = command ? match[0].replaceAll(STORAGE_CLI, "") : match[0];
+    if (/<[^>]+>/.test(template)) prose("Шаблон команды: замените значения в <…> перед запуском.");
+    lines.push(commandText(localizeStorageCommand(match[0], command)));
     last = match.index + match[0].length;
   }
-  prose(localized.slice(last));
+  prose(text.slice(last));
   return lines.join("\n");
 }
 
@@ -109,18 +112,30 @@ function blockersText(
   command?: string,
 ): string {
   const width = lineWidth(options);
-  const items = blockers.map((blocker) => {
+  const groups = new Map<string, StorageBlocker[]>();
+  for (const blocker of blockers) {
+    const { code, message, owner, step, current, expected, next } = blocker;
+    const key = JSON.stringify([code, message, owner, step, current, expected, next]);
+    const group = groups.get(key);
+    if (group) group.push(blocker);
+    else groups.set(key, [blocker]);
+  }
+  const items = [...groups.values()].map((group) => {
+    const blocker = group[0]!;
     const where = [
-      blocker.path && `путь ${blocker.path}`,
       blocker.owner && `вид ${blocker.owner}`,
-      blocker.id && `ID ${blocker.id}`,
       blocker.step && `шаг ${blocker.step}`,
       blocker.current !== undefined && `фактически ${blocker.current}`,
       blocker.expected !== undefined && `ожидается ${blocker.expected}`,
     ].filter(Boolean);
     return [
       wrap(safeText(`${blocker.code} — ${blocker.message}`), width),
+      ...(group.length > 1 ? [`  Блокеров в группе: ${group.length}`] : []),
       ...(where.length ? [indent(where.join(", "), width)] : []),
+      ...group.flatMap((item) => [
+        ...(item.path ? [`  путь ${safeText(item.path)}`] : []),
+        ...(item.id ? [`  ID ${safeText(item.id)}`] : []),
+      ]),
       `  Действие:\n${storageNextText(blocker.next, width, command)}`,
     ].join("\n");
   });
@@ -129,16 +144,43 @@ function blockersText(
   return items.join("\n\n");
 }
 
-function warningsText(warnings: readonly StorageWarning[], options: TextOptions): string {
+/** Действие группы уже напечатано: footer не повторяет ту же готовую команду. */
+function withoutBlockerCommands(
+  commands: OutputCommand[],
+  blockers: readonly StorageBlocker[],
+  invocation: Invocation,
+): OutputCommand[] {
+  const shown = new Set(
+    blockers.flatMap((blocker) =>
+      [...blocker.next.matchAll(EMBEDDED_COMMAND)].map((match) =>
+        localizeStorageCommand(match[0], invocation([])),
+      ),
+    ),
+  );
+  return commands.filter((item) => !shown.has(item.command));
+}
+
+function warningsText(
+  warnings: readonly StorageWarning[],
+  total: number,
+  options: TextOptions,
+): string {
   const width = lineWidth(options);
-  return warnings
-    .map((warning) =>
-      [
-        wrap(safeText(`${warning.code} — ${warning.message}`), width),
-        ...(warning.path ? [indent(`путь ${warning.path}`, width)] : []),
-      ].join("\n"),
-    )
-    .join("\n\n");
+  const items = warnings.map((warning) =>
+    [
+      wrap(safeText(`${warning.code} — ${warning.message}`), width),
+      ...(warning.path ? [indent(`путь ${warning.path}`, width)] : []),
+    ].join("\n"),
+  );
+  items.push(
+    wrap(
+      total === 0
+        ? "Предупреждений нет."
+        : `Показано ${warnings.length} из ${total} предупреждений.`,
+      width,
+    ),
+  );
+  return items.join("\n\n");
 }
 
 function versionFields(status: StorageStatus): OutputField[] {
@@ -167,7 +209,8 @@ function statusCommands(status: StorageStatus, invocation: Invocation): OutputCo
           command: invocation(["storage", "migrate", "--dry-run"]),
         },
         {
-          label: "Затем выполните перенос с резервной копией вне базы и отпечатком плана",
+          label:
+            "Затем выполните перенос. Шаблон: замените DIR каталогом копии вне базы и Git, PLAN_FINGERPRINT — отпечатком плана",
           command: invocation([
             "storage",
             "migrate",
@@ -181,8 +224,15 @@ function statusCommands(status: StorageStatus, invocation: Invocation): OutputCo
     case "recovery-required":
       return [
         {
-          label: "Остановите процессы Relay и завершите незавершённую транзакцию",
-          command: invocation(["storage", "migrate"]),
+          label:
+            status.pending?.kind === "migration"
+              ? "Остановите процессы Relay и продолжите миграцию с исходной резервной копией"
+              : "Остановите процессы Relay. Шаблон: замените DIR каталогом новой резервной копии вне базы и Git-рабочей копии",
+          command: invocation([
+            "storage",
+            "migrate",
+            ...(status.pending?.kind === "migration" ? [] : ["--backup-dir", "DIR"]),
+          ]),
         },
         {
           label: "После этого повторите диагностику",
@@ -210,7 +260,7 @@ export function storageStatusText(
       title: "Блокеры",
       body: blockersText(status.blockers, status.blockersTotal, options, invocation([])),
     },
-    { title: "Предупреждения", body: warningsText(status.warnings, options) },
+    { title: "Предупреждения", body: warningsText(status.warnings, status.warningsTotal, options) },
   ];
   return cardText(
     {
@@ -231,7 +281,11 @@ export function storageStatusText(
         ["База не изменялась", "да"],
       ],
       sections,
-      commands: statusCommands(status, invocation),
+      commands: withoutBlockerCommands(
+        statusCommands(status, invocation),
+        status.blockers,
+        invocation,
+      ),
     },
     options,
   );
@@ -315,14 +369,18 @@ export function storagePlanText(
         ["Корень базы", plan.project.root],
         ["Профиль", `${plan.profiles.from ?? "до профилей"} → ${plan.profiles.to}`],
         ...versionFields(plan),
-        [
-          "Отношения",
-          `сохраняются ${plan.changes.relations.kept}, отзываются ${plan.changes.relations.revoked}, создаются ${plan.changes.relations.created}`,
-        ],
-        [
-          "Адреса",
-          `резервов сохраняется ${plan.changes.addresses.reservedKept}, перенаправляется ${plan.changes.addresses.relocated}`,
-        ],
+        ...(empty
+          ? ([["Отношения и адреса", "план не затрагивает"]] satisfies OutputField[])
+          : ([
+              [
+                "Отношения",
+                `сохраняются ${plan.changes.relations.kept}, отзываются ${plan.changes.relations.revoked}, создаются ${plan.changes.relations.created}`,
+              ],
+              [
+                "Адреса",
+                `резервов сохраняется ${plan.changes.addresses.reservedKept}, перенаправляется ${plan.changes.addresses.relocated}`,
+              ],
+            ] satisfies OutputField[])),
         ["Нужно места для backup, байт", plan.space.backupRequired],
         ["Нужно места в корне базы, байт", plan.space.rootRequired],
         ["Отпечаток плана", plan.planFingerprint],
@@ -341,20 +399,27 @@ export function storagePlanText(
           title: "Блокеры",
           body: blockersText(plan.blockers, plan.blockersTotal, options, invocation([])),
         },
-        { title: "Предупреждения", body: warningsText(plan.warnings, options) },
+        { title: "Предупреждения", body: warningsText(plan.warnings, plan.warningsTotal, options) },
       ],
       commands: !plan.applicable
-        ? [
-            {
-              label: "Устраните блокеры и повторите диагностику",
-              command: invocation(["storage", "status"]),
-            },
-          ]
+        ? withoutBlockerCommands(
+            plan.status === "recovery-required"
+              ? statusCommands(plan, invocation)
+              : [
+                  {
+                    label: "Устраните блокеры и повторите диагностику",
+                    command: invocation(["storage", "status"]),
+                  },
+                ],
+            plan.blockers,
+            invocation,
+          )
         : empty
           ? []
           : [
               {
-                label: "Применить именно этот план с резервной копией вне базы",
+                label:
+                  "Применить этот план. Шаблон: замените DIR каталогом резервной копии вне базы и Git-рабочей копии",
                 command: invocation([
                   "storage",
                   "migrate",

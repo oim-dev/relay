@@ -39,6 +39,35 @@ export interface RunOptions {
   timeoutMs?: number;
 }
 
+export type FixtureContext = Pick<TestContext, "after">;
+type Cleanup = () => void | Promise<void>;
+const fixtureCleanups = new WeakMap<FixtureContext, Cleanup[]>();
+
+/** Ресурсы закрываются до удаления их базы; ошибка не отменяет остальные cleanup. */
+export function fixtureCleanup(t: FixtureContext, cleanup: Cleanup): void {
+  let cleanups = fixtureCleanups.get(t);
+  if (!cleanups) {
+    cleanups = [];
+    fixtureCleanups.set(t, cleanups);
+    const pending = cleanups;
+    // Отдельные t.after идут FIFO и прекращаются после ошибки: rm опережал Server.close().
+    t.after(async () => {
+      const errors: unknown[] = [];
+      while (pending.length) {
+        try {
+          await pending.pop()!();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      fixtureCleanups.delete(t);
+      if (errors.length === 1) throw errors[0];
+      if (errors.length) throw new AggregateError(errors, "Ошибки очистки CLI fixtures");
+    });
+  }
+  cleanups.push(cleanup);
+}
+
 /** Не наследуем подключение к рабочей базе и настройки цвета. Явные env теста имеют приоритет. */
 export function cliEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const env = { ...process.env };
@@ -60,7 +89,7 @@ export const cliNodeArgs =
     ? ["--conditions=tasks-source", "--import", import.meta.resolve("tsx")]
     : [];
 
-export async function tempDirectory(t: TestContext): Promise<string> {
+export async function tempDirectory(t: FixtureContext): Promise<string> {
   let directory: string;
   try {
     directory = await mkdtemp(join(tmpdir(), "relay-cli-test-"));
@@ -73,7 +102,7 @@ export async function tempDirectory(t: TestContext): Promise<string> {
     await mkdir(base, { recursive: true });
     directory = await mkdtemp(join(base, "relay-cli-test-"));
   }
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  fixtureCleanup(t, () => rm(directory, { recursive: true, force: true }));
   return realpath(directory);
 }
 
@@ -161,7 +190,7 @@ export function failed(result: Invocation<unknown>, code: string, exitCode = 2):
   assert.equal(result.body.error.code, code, result.stdout);
 }
 
-export async function fixture(t: TestContext) {
+export async function fixture(t: FixtureContext) {
   const root = await tempDirectory(t);
   successful(await invoke(root, ["init"]));
   return {

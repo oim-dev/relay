@@ -240,6 +240,9 @@ export const storageStatusSchema = z
     blockers: z.array(storageBlockerSchema).max(50).describe("Первые блокеры (не более 50)"),
     blockersTotal: nonNegative.describe("Полное число найденных блокеров"),
     warnings: z.array(storageWarningSchema).max(50).describe("Первые предупреждения (не более 50)"),
+    warningsTotal: nonNegative.describe(
+      "Полное число найденных предупреждений; больше warnings.length означает усечённый перечень без постраничного продолжения",
+    ),
   })
   .describe("Полная диагностика хранилища без изменения постоянных данных");
 
@@ -402,7 +405,9 @@ export const storageMigrationResultSchema = z
         schemas: z.literal("passed").describe("Все записи прошли текущие схемы"),
         references: z.literal("passed").describe("Ссылки и отношения согласованы"),
         addresses: z.literal("passed").describe("ID, ключи и алиасы уникальны"),
-        indexes: z.literal("passed").describe("Индексы построены заново и согласованы"),
+        indexes: z
+          .literal("passed")
+          .describe("Индексы проверены; при переносе построены заново, при no-op не изменены"),
         budgets: z.literal("passed").describe("Пределы записи и WAL соблюдены"),
       })
       .describe("Результат обязательных проверок до публикации"),

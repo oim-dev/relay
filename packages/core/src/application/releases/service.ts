@@ -4,6 +4,13 @@ import {
   updateReleaseSchema,
   releaseActionSchema,
   releasePreviewSchema,
+  releasesCompactQuerySchema,
+  releaseCompactSchema,
+  releaseCompositionCompactQuerySchema,
+  releasePreviewCompactSchema,
+  releaseCompositionCompactSchema,
+  saveReleaseByRefsSchema,
+  updateReleaseByRefsSchema,
 } from "@relay/contracts/releases";
 import type {
   Release,
@@ -12,8 +19,15 @@ import type {
   ReleaseAction,
   ReleasesQuery,
   ReleasePreview,
+  ReleaseSummary,
+  ReleasesCompactQuery,
+  ReleaseCompositionCompactQuery,
+  ReleasePreviewCompact,
+  SaveReleaseByRefs,
+  UpdateReleaseByRefs,
 } from "@relay/contracts/releases";
 import type { PlanningPageQuery } from "@relay/contracts/planning";
+import { planCompactSchema } from "@relay/contracts/planning";
 import { actorSchema } from "@relay/contracts/primitives";
 import type { Workspace } from "../../storage/workspace.js";
 import {
@@ -28,7 +42,7 @@ import {
 } from "../../storage/planning.js";
 import { invariant } from "../../shared/errors.js";
 import { readPlanningState } from "../planning/model.js";
-import { releaseComposition } from "./model.js";
+import { releaseComposition, releaseCompositionPage, releaseSummary } from "./model.js";
 import { syncReleaseRelations } from "./relations.js";
 
 /** Самостоятельный владелец выпуска; планы и задачи не меняют состояния вслед за релизом. */
@@ -36,7 +50,17 @@ export class ReleasesService {
   constructor(readonly workspace: Workspace) {}
 
   async list(input: ReleasesQuery = {}) {
-    const query = releasesQuerySchema.parse(input);
+    return this.listPage(releasesQuerySchema.parse(input), (summary) => summary);
+  }
+  async listCompact(input: ReleasesCompactQuery) {
+    const { projection: _projection, ...query } = releasesCompactQuerySchema.parse(input);
+    return this.listPage(query, (summary) => releaseCompactSchema.strip().parse(summary), true);
+  }
+  private async listPage<T>(
+    query: ReturnType<typeof releasesQuerySchema.parse>,
+    project: (release: ReleaseSummary) => T,
+    compact = false,
+  ) {
     return this.workspace.locked(async () => {
       planningSession(this.workspace);
       const releases = await planningRecords(this.workspace, "release");
@@ -46,7 +70,7 @@ export class ReleasesService {
           (release) =>
             (!query.status || release.status === query.status) &&
             (!needle ||
-              `${release.key} ${release.title} ${release.version} ${release.summary}`
+              `${release.key} ${release.title} ${release.version} ${release.summary} ${release.description}`
                 .toLocaleLowerCase()
                 .includes(needle)),
         )
@@ -59,20 +83,9 @@ export class ReleasesService {
         query.limit,
         planningSession(this.workspace).state.version,
       ];
-      const page = planningPage(selected, query, source);
+      const page = planningPage(selected, query, compact ? [...source, "compact"] : source);
       const state = await readPlanningState(this.workspace);
-      const items = await Promise.all(
-        page.items.map(async (release) => {
-          const readiness = releaseComposition(release.planIds, state).readiness;
-          return {
-            ...release,
-            readiness: {
-              ...readiness,
-              canRelease: release.status === "planned" && readiness.canRelease,
-            },
-          };
-        }),
-      );
+      const items = page.items.map((release) => project(releaseSummary(release, state)));
       return {
         ...page,
         items,
@@ -88,57 +101,59 @@ export class ReleasesService {
   async get(reference: string) {
     return this.workspace.locked(async () => {
       const release = await planningRecord(this.workspace, reference, "release");
-      const readiness = releaseComposition(
-        release.planIds,
-        await readPlanningState(this.workspace),
-      ).readiness;
-      return {
-        ...release,
-        readiness: {
-          ...readiness,
-          canRelease: release.status === "planned" && readiness.canRelease,
-        },
-      };
+      return releaseSummary(release, await readPlanningState(this.workspace));
     });
   }
   async composition(reference: string, query: PlanningPageQuery = {}) {
     return this.workspace.locked(async () => {
       const release = await planningRecord(this.workspace, reference, "release");
       const state = await readPlanningState(this.workspace);
-      const result = releaseComposition(release.planIds, state);
-      return {
-        ...planningPage(result.items, query, [
-          release,
-          planningSession(this.workspace).state.version,
-          state.plans,
-          state.stages,
-          state.tasks,
-          query.limit,
-        ]),
-        readiness: {
-          ...result.readiness,
-          canRelease: release.status === "planned" && result.readiness.canRelease,
-        },
-      };
+      return releaseCompositionPage(this.workspace, release, state, query);
+    });
+  }
+  async compositionCompact(reference: string, input: ReleaseCompositionCompactQuery) {
+    const { projection: _projection, ...query } = releaseCompositionCompactQuerySchema.parse(input);
+    return this.workspace.locked(async () => {
+      const release = await planningRecord(this.workspace, reference, "release");
+      const state = await readPlanningState(this.workspace);
+      return this.compactComposition(
+        releaseCompositionPage(this.workspace, release, state, query, true),
+      );
     });
   }
   async preview(input: ReleasePreview) {
-    const query = releasePreviewSchema.parse(input);
+    return this.previewPage(releasePreviewSchema.parse(input));
+  }
+  async previewCompact(input: ReleasePreviewCompact) {
+    const { projection: _projection, ...query } = releasePreviewCompactSchema.parse(input);
+    return this.compactComposition(await this.previewPage(query, true));
+  }
+  private compactComposition(page: Awaited<ReturnType<ReleasesService["composition"]>>) {
+    return releaseCompositionCompactSchema.parse({
+      ...page,
+      items: page.items.map(({ id, plan }) => ({
+        id,
+        plan: plan === null ? null : planCompactSchema.strip().parse(plan),
+      })),
+    });
+  }
+  private async previewPage(query: ReturnType<typeof releasePreviewSchema.parse>, compact = false) {
     return this.workspace.locked(async () => {
       const ids = await this.resolvePlans(query.plans);
       const state = await readPlanningState(this.workspace);
       const result = releaseComposition(ids, state);
+      const source = [
+        this.workspace.config.projectId,
+        "preview",
+        ids,
+        planningSession(this.workspace).state.version,
+        state.plans,
+        state.stages,
+        state.tasks,
+        query.limit,
+      ];
       return {
-        ...planningPage(result.items, query, [
-          this.workspace.config.projectId,
-          "preview",
-          ids,
-          planningSession(this.workspace).state.version,
-          state.plans,
-          state.stages,
-          state.tasks,
-          query.limit,
-        ]),
+        ...planningPage(result.items, query, compact ? [...source, "compact"] : source),
         readiness: result.readiness,
       };
     });
@@ -155,6 +170,21 @@ export class ReleasesService {
   }
   async update(reference: string, input: UpdateRelease, actor: string) {
     return this.save(reference, updateReleaseSchema.parse(input), actor);
+  }
+  /** Явный вход пользовательских ссылок: разрешение выполняется только внутри save/mutate. */
+  async createByRefs(input: SaveReleaseByRefs, actor: string) {
+    const { plans, ...command } = saveReleaseByRefsSchema.parse(input);
+    invariant(
+      command.ifRevision === undefined,
+      "INVALID_ARGUMENT",
+      "Создание не принимает ревизию существующего релиза",
+      2,
+    );
+    return this.save(undefined, { ...command, planIds: plans }, actor);
+  }
+  async updateByRefs(reference: string, input: UpdateReleaseByRefs, actor: string) {
+    const { plans, ...command } = updateReleaseByRefsSchema.parse(input);
+    return this.save(reference, { ...command, planIds: plans }, actor);
   }
   private async save(
     reference: string | undefined,

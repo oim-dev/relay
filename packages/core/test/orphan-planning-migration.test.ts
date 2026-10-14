@@ -9,6 +9,7 @@ import { digest } from "../src/storage/entity-store/format.js";
 import { migrateStorage } from "../src/application/storage/maintenance.js";
 import { migrationBackupDir } from "./helpers/migration-bases.js";
 import { defaultConfig } from "../src/domain/config.js";
+import { storageCardSchema } from "@relay/contracts/storage";
 
 for (const interrupted of [false, true])
   test(`orphan audit удаляется без allowlist и без восстановления плана; WAL=${interrupted}`, async (t) => {
@@ -95,6 +96,16 @@ for (const interrupted of [false, true])
     assert.deepEqual(
       (await reopened.read((tx) => tx.indexEntries("records"))).map(([key]) => key),
       ["project:Project1"],
+    );
+    const cards = await reopened.read((tx) => tx.indexEntries("cards"));
+    assert.deepEqual(
+      cards.map(([key]) => key),
+      ["project:Project1"],
+    );
+    assert.equal(storageCardSchema.parse(cards[0]![1]).title, "Проект");
+    assert.equal(
+      storageCardSchema.parse(cards[0]![1]).summary,
+      "Область данных и настроек выбранного проекта",
     );
     assert(!(await readdir(join(root, "transactions"))).includes("pending.json"));
   });

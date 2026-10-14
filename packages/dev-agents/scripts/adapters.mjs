@@ -79,7 +79,7 @@ export async function renderAdapters(agents, orchestrator) {
     "opencode.json",
     await jsonDocument({
       $schema: "https://opencode.ai/config.json",
-      default_agent: orchestrator,
+      default_agent: "build",
     }),
   );
   output.set(".claude/settings.json", await jsonDocument({ agent: orchestrator }));

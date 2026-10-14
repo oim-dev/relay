@@ -106,7 +106,8 @@ class EntitiesController {
   @Get()
   @ApiEndpoint({
     id: "listEntities",
-    summary: "Найти сущности по виду, ключу и предметным фильтрам; до 100 карточек со снимком",
+    summary:
+      "Найти сущности по ключам, полным текстам и предметным фильтрам, включая FI/SI; до 100 карточек с версией",
     query: "EntitiesQuery",
     response: "EntitiesPage",
   })

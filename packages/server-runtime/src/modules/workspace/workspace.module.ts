@@ -2,7 +2,7 @@ import { Global, Inject, Injectable, Module, Scope } from "@nestjs/common";
 import type { DynamicModule } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import type { FastifyRequest } from "fastify";
-import type { Workspace } from "@relay/core/storage/workspace";
+import type { OpenWorkspaceOptions, Workspace } from "@relay/core/storage/workspace";
 import { ProjectCatalog } from "./catalog.js";
 import type { ProjectContext, WorkspaceOptions } from "./catalog.js";
 import { PROJECT_SELECTOR } from "./routing.js";
@@ -20,15 +20,15 @@ export class WorkspaceService {
     @Inject(REQUEST) private readonly request: FastifyRequest,
   ) {}
 
-  async resolve(): Promise<ProjectContext> {
+  async resolve(options: OpenWorkspaceOptions = {}): Promise<ProjectContext> {
     const raw = this.request.raw as typeof this.request.raw & { [PROJECT_SELECTOR]?: string };
-    this.project ??= this.catalog.select(raw[PROJECT_SELECTOR]);
+    this.project ??= this.catalog.select(raw[PROJECT_SELECTOR], options);
     this.selected = await this.project;
     return this.selected;
   }
 
-  async open() {
-    return (await this.resolve()).open();
+  async open(options: OpenWorkspaceOptions = {}) {
+    return (await this.resolve(options)).open(options);
   }
 
   /** Сохраняет имя и адрес выбранного проекта с проверкой каталога. */

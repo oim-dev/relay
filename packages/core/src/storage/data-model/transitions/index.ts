@@ -38,6 +38,15 @@ export function productionTransitionRegistry(): TransitionRegistry {
     storage,
     historical: new HistoricalKindCatalog(storage, HISTORICAL_KINDS),
     config: configSchema,
+    indexProjection: {
+      id: "workspace-cards",
+      version: 2,
+      async apply(input) {
+        const { refreshMigrationEntityCards } =
+          await import("../../../application/entities/storage-projection.js");
+        await refreshMigrationEntityCards(input);
+      },
+    },
   });
   return cached;
 }

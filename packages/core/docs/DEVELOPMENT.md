@@ -41,21 +41,22 @@ node --conditions=tasks-source --import tsx --test packages/core/test/product-re
 Пути ниже относительны `packages/core/test`. Название теста само по себе не означает,
 что он доказывает прежние гарантии: assertions должны соответствовать текущему контракту.
 
-| Изменение                                                | Наборы                                                                                                                                                           |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Общая запись, WAL, индексы, конкурентные изменения       | `entity-store.test.ts`, `unified-workspace.test.ts`, `storage-initialization.test.ts`                                                                            |
-| Формат 4, удаление автоматического аудита, совместимость | `inline-storage.test.ts`, `storage-v3-migration.test.ts`, `migration-unified-sources.test.ts`, `legacy-write-guard.test.ts`, `orphan-planning-migration.test.ts` |
-| Профиль, manifest, реестр переходов                      | `data-model-registry.test.ts`, `data-model-open.test.ts`, `historical-client.test.ts`                                                                            |
-| Диагностика, план, backup, исполнение и сбои миграции    | `data-model-source.test.ts`, `data-model-executor.test.ts`, `data-model-backup.test.ts`, `data-model-crash.test.ts`                                              |
-| Исторические переходы и замороженные базы                | `data-model-physical.test.ts`, `data-model-planning.test.ts`, `data-model-fixtures.test.ts`                                                                      |
-| Каталог, адреса, обработчики                             | `entity-engine.test.ts`, `product-keys.test.ts`                                                                                                                  |
-| Предметные отношения и документный workflow              | `product-relations.test.ts`, `document-links.test.ts`, `document-library.test.ts`                                                                                |
-| Каскад, ссылки планов, резервы адресов                   | `entity-deletion.test.ts`, `product-cascade.test.ts`, `product-scenario-cascade.test.ts`                                                                         |
-| Граф, полный контекст, страницы                          | `entity-graph.test.ts`, `graph-storage.test.ts`                                                                                                                  |
-| Канбан, критерии и комментарии                           | `boards.test.ts`, `board-tasks.test.ts`, `board-targets.test.ts`, `task-acceptance.test.ts`, `task-comments.test.ts`, `task-receipt-scope.test.ts`               |
-| Планирование и выпуск                                    | `planning.test.ts`                                                                                                                                               |
-| Прогресс и состав реализаций                             | `progress.test.ts`, `implementation-progress.test.ts`, `project-requirement-progress.test.ts`                                                                    |
-| Границы пакетов и схем                                   | `architecture.test.ts`, `contract-compatibility.ts` (typecheck)                                                                                                  |
+| Изменение                                                  | Наборы                                                                                                                                                           |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Общая запись, WAL, индексы, конкурентные изменения         | `entity-store.test.ts`, `unified-workspace.test.ts`, `storage-initialization.test.ts`                                                                            |
+| Формат 4, удаление автоматического аудита, совместимость   | `inline-storage.test.ts`, `storage-v3-migration.test.ts`, `migration-unified-sources.test.ts`, `legacy-write-guard.test.ts`, `orphan-planning-migration.test.ts` |
+| Профиль, manifest, реестр переходов                        | `data-model-registry.test.ts`, `data-model-open.test.ts`, `historical-client.test.ts`                                                                            |
+| Диагностика, план, backup, исполнение и сбои миграции      | `data-model-source.test.ts`, `data-model-executor.test.ts`, `data-model-backup.test.ts`, `data-model-crash.test.ts`, `migration-index-projection.test.ts`        |
+| Исторические переходы и замороженные базы                  | `data-model-physical.test.ts`, `data-model-planning.test.ts`, `data-model-fixtures.test.ts`                                                                      |
+| Каталог, адреса, обработчики                               | `entity-engine.test.ts`, `product-keys.test.ts`                                                                                                                  |
+| Предметные отношения и документный workflow                | `product-relations.test.ts`, `document-links.test.ts`, `document-library.test.ts`, `document-library-service.test.ts`, `document-indexed-read.test.ts`           |
+| Каскад, ссылки планов, резервы адресов                     | `entity-deletion.test.ts`, `product-cascade.test.ts`, `product-scenario-cascade.test.ts`                                                                         |
+| Граф, полный контекст, страницы                            | `entity-graph.test.ts`, `graph-storage.test.ts`                                                                                                                  |
+| Полная read-only проверка, managed-группы, адресные ошибки | `workspace-validation.test.ts`, `product-relations.test.ts`, `data-model-source.test.ts`                                                                         |
+| Канбан, критерии и комментарии                             | `boards.test.ts`, `board-tasks.test.ts`, `board-targets.test.ts`, `task-acceptance.test.ts`, `task-comments.test.ts`, `task-receipt-scope.test.ts`               |
+| Планирование и выпуск                                      | `planning.test.ts`                                                                                                                                               |
+| Прогресс и состав реализаций                               | `progress.test.ts`, `implementation-progress.test.ts`, `project-requirement-progress.test.ts`                                                                    |
+| Границы пакетов и схем                                     | `architecture.test.ts`, `contract-compatibility.ts` (typecheck)                                                                                                  |
 
 При изменении транзакционной логики существенны не только успешная запись, но и отказ
 между предметным шагом и отношениями, повторный recovery, несовместимая внешняя правка,

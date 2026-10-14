@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createServer } from "node:http";
-import { once } from "node:events";
 import { lstat, mkdir, readFile, readdir, readlink, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +11,7 @@ import {
   storageStatusSchema,
 } from "@relay/contracts/storage-maintenance";
 import { fixture, invoke, invokeRaw, successful, failed, tempDirectory } from "./helpers/cli.js";
+import { httpProxy } from "./helpers/http.js";
 import { restoreFixtureTree } from "../../../packages/core/test/fixtures/data-migrations/restore-tree.mjs";
 
 const FIXTURES = fileURLToPath(
@@ -57,16 +56,11 @@ async function editJson(path: string, change: (value: Record<string, unknown>) =
 /** Server-заглушка: любой запрос считается нарушением «без сетевого запроса». */
 async function countingServer(t: TestContext) {
   let requests = 0;
-  const server = createServer((_request, response) => {
+  const server = await httpProxy(t, async (_request, response) => {
     requests++;
     response.writeHead(500).end();
   });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  t.after(() => new Promise((resolve) => server.close(resolve)));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
-  return { url: `http://127.0.0.1:${address.port}`, requests: () => requests };
+  return { url: server.url, requests: () => requests };
 }
 
 const human = { env: { FORCE_COLOR: "1", NO_COLOR: undefined, COLUMNS: "80" } };
@@ -115,10 +109,7 @@ test("storage status: текущая база — current, exit 0, JSON по с�
   assert.match(text.stdout, /Статус:\s+current/);
   assert.match(text.stdout, /Профиль данных:\s+2 → 2/);
   const hint = text.stdout.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli"));
-  assert.equal(
-    hint,
-    `npx @oim-dev/relay-cli --local --config ${join(app.root, ".relay/config.json")} doctor check`,
-  );
+  assert.equal(hint, "npx @oim-dev/relay-cli --local doctor check");
   assert.deepEqual(await treeHashes(app.root), before, "status не меняет ни одного байта");
 });
 
@@ -134,11 +125,10 @@ test("storage status: формат 4 прежней версии Relay — migra
   const text = await invokeRaw(project, ["--local", "storage", "status"], human);
   assert.equal(text.code, 0, text.stdout);
   assert.match(text.stdout, /^Требуется перенос хранилища/);
-  const config = join(project, ".relay/config.json");
   const commands = text.stdout.split("\n").filter((line) => line.startsWith("npx "));
   assert.deepEqual(commands, [
-    `npx @oim-dev/relay-cli --local --config ${config} storage migrate --dry-run`,
-    `npx @oim-dev/relay-cli --local --config ${config} storage migrate --backup-dir DIR --if-plan PLAN_FINGERPRINT`,
+    "npx @oim-dev/relay-cli --local storage migrate --dry-run",
+    "npx @oim-dev/relay-cli --local storage migrate --backup-dir DIR --if-plan PLAN_FINGERPRINT",
   ]);
   assert.deepEqual(await treeHashes(project), before);
 });
@@ -371,9 +361,8 @@ test("A02/A13: dry-run не меняет базу и даёт отпечаток
   assert.deepEqual(await treeHashes(app.root), current, "no-op не меняет файлы");
 });
 
-test("профиль 1 → 2: шаг profile в dry-run и результате, подсказка Core с фактическим config, счётчики", async (t) => {
+test("профиль 1 → 2: шаг profile в dry-run и результате, короткая подсказка Core, счётчики", async (t) => {
   const project = await frozenBase(t, "physical4-v0.7.0-52c4609");
-  const config = join(project, ".relay/config.json");
   const plan = storageMigrationPlanSchema.parse(
     successful(await invoke(project, ["--local", "storage", "migrate", "--dry-run"])).data,
   );
@@ -384,7 +373,7 @@ test("профиль 1 → 2: шаг profile в dry-run и результате,
   const dry = await invokeRaw(project, ["--local", "storage", "migrate", "--dry-run"], human);
   assert.match(dry.stdout, /1\. Метка профиля данных 1 → 2 \(profile\.1-to-2, версия 1\)/);
 
-  // Изменяющий перенос без backup: JSON сохраняет плейсхолдер Core, text — фактический путь.
+  // JSON сохраняет плейсхолдер Core, text оставляет только явно выбранный режим.
   const before = await treeHashes(project);
   const refused = await invoke(project, ["--local", "storage", "migrate"]);
   failed(refused, "STORAGE_BACKUP_REQUIRED", 2);
@@ -400,9 +389,7 @@ test("профиль 1 → 2: шаг profile в dry-run и результате,
     text.stdout
       .split("\n")
       .some((line) =>
-        line.startsWith(
-          `npx @oim-dev/relay-cli --local --config ${config} storage migrate --backup-dir`,
-        ),
+        line.startsWith("npx @oim-dev/relay-cli --local storage migrate --backup-dir"),
       ),
     text.stdout,
   );
@@ -466,6 +453,7 @@ test("обычная local-команда на базе профиля 1: text �
     "Остановите процессы Relay и проверьте план:",
     `npx @oim-dev/relay-cli --local --config ${config} storage migrate --dry-run`,
     "Затем выполните:",
+    "Шаблон команды: замените значения в <…> перед запуском.",
     `npx @oim-dev/relay-cli --local --config ${config} storage migrate --backup-dir <каталог вне базы> --if-plan <planFingerprint>`,
   ]);
   assert.match(text.stdout, /Фактически: 1\n/);

@@ -13,6 +13,18 @@ import { ApiParam, ApiTags } from "@nestjs/swagger";
 import { success } from "@relay/contracts";
 import { ProductQueries } from "@relay/core/application/product/queries";
 import {
+  productLintQuerySchema,
+  productOverviewMapQuerySchema,
+  type ProductLintQuery,
+  type ProductOverviewMapQuery,
+} from "@relay/contracts/product-query";
+import {
+  productParticipationQuerySchema,
+  productParticipationReplaceSchema,
+  type ProductParticipationQuery,
+  type ProductParticipationReplace,
+} from "@relay/contracts/product-participation";
+import {
   productContextQuerySchema,
   productListQuerySchema,
   productMutationSchema,
@@ -46,6 +58,88 @@ class ProductController {
     @Inject(WorkspaceService) private readonly workspace: WorkspaceService,
     @Inject(EventsService) private readonly events: EventsService,
   ) {}
+
+  @Get("validate")
+  @ApiEndpoint({
+    id: "validateProduct",
+    summary: "Проверить структурные инварианты продукта без передачи его текстов",
+    response: "ProductValidation",
+  })
+  async validate() {
+    return success(await new ProductQueries(await this.workspace.open()).validate());
+  }
+
+  @Get("lint")
+  @ApiEndpoint({
+    id: "lintProduct",
+    summary: "Страница адресуемых рекомендаций по содержанию продукта, включая FI/SI",
+    query: "ProductLintQuery",
+    response: "ProductLintPage",
+  })
+  async lint(@Query(new ZodValidationPipe(productLintQuerySchema)) query: ProductLintQuery) {
+    return success(await new ProductQueries(await this.workspace.open()).lint(query));
+  }
+
+  @Get("overview/map")
+  @ApiEndpoint({
+    id: "getProductOverviewMap",
+    summary: "Страница карты на snapshotVersion обзора без повторения общего среза",
+    query: "ProductOverviewMapQuery",
+    response: "ProductOverviewMapPage",
+  })
+  async overviewMap(
+    @Query(new ZodValidationPipe(productOverviewMapQuerySchema)) query: ProductOverviewMapQuery,
+  ) {
+    return success(await new ProductQueries(await this.workspace.open()).overviewMap(query));
+  }
+
+  @Get("participation")
+  @ApiEndpoint({
+    id: "getProductParticipation",
+    summary: "Страница активных и снятых FI/SI приложения с guards замены состава",
+    query: "ProductParticipationQuery",
+    response: "ProductParticipationPage",
+  })
+  async participation(
+    @Query(new ZodValidationPipe(productParticipationQuerySchema)) query: ProductParticipationQuery,
+  ) {
+    return success(await new ProductQueries(await this.workspace.open()).participation(query));
+  }
+
+  @Post("participation")
+  @HttpCode(200)
+  @ApiEndpoint({
+    id: "replaceProductParticipation",
+    summary:
+      "Атомарно заменить состав existing/new targets без перезаписи текстов существующих FI/SI",
+    body: "ProductParticipationReplace",
+    response: "ProductParticipationSaved",
+  })
+  async replaceParticipation(
+    @Body(new ZodValidationPipe(productParticipationReplaceSchema))
+    input: ProductParticipationReplace,
+  ) {
+    const workspace = await this.workspace.open();
+    const result = await new ProductQueries(workspace).replaceParticipation(
+      input,
+      this.workspace.actor(),
+    );
+    await this.events.apiChanged(workspace.config.projectId).catch(() => {});
+    return success(result);
+  }
+
+  @Get("implementation")
+  @ApiEndpoint({
+    id: "getProductImplementation",
+    summary: "Полная реализация: Markdown и сохранённый status отдельно от вычисленной готовности",
+    query: "ProductEntityQuery",
+    response: "ProductImplementationDetail",
+  })
+  async implementationDetail(
+    @Query(new ZodValidationPipe(productEntityQuerySchema)) query: { ref: string },
+  ) {
+    return success(await new ProductQueries(await this.workspace.open()).implementation(query.ref));
+  }
 
   @Get("entities")
   @ApiEndpoint({

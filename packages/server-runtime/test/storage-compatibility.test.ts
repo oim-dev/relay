@@ -252,6 +252,14 @@ test(
     assert.equal(context.projects.length, 1);
     assert.equal(context.projects[0]?.available, false);
     assert.match(context.projects[0]?.error ?? "", /^STORAGE_DATA_MIGRATION_REQUIRED: /);
+    const page = await app.inject("/api/v1/projects/page?limit=1");
+    assert.equal(page.statusCode, 200, page.body);
+    const blockedPage = page.json().data;
+    assert.equal(blockedPage.catalog.projects[0]?.available, false);
+    assert.match(
+      blockedPage.catalog.projects[0]?.error ?? "",
+      /^STORAGE_DATA_MIGRATION_REQUIRED: /,
+    );
     for (const path of [
       "/api/v1/context",
       "/api/v1/board-tasks",
@@ -280,6 +288,17 @@ test(
       (restored.json().data as { projectId: string }).projectId,
       blocked.workspace.config.projectId,
     );
+    const restoredPage = await app.inject("/api/v1/projects/page?limit=1");
+    assert.equal(restoredPage.json().data.catalog.projects[0]?.available, true);
+    assert.equal(
+      restoredPage.json().data.catalog.projects[0]?.id,
+      blocked.workspace.config.projectId,
+    );
+    const stalePage = await app.inject(
+      `/api/v1/projects/page?limit=1&version=${blockedPage.version}`,
+    );
+    assert.equal(stalePage.statusCode, 409, stalePage.body);
+    assert.equal(failure(stalePage).code, "VERSION_CONFLICT");
     await assert.rejects(readFile(join(root, ".relay/runtime/index-stale.json")), {
       code: "ENOENT",
     });

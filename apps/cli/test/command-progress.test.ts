@@ -356,7 +356,14 @@ test(
           entry.key,
           entry.title,
           "Не выполнено",
-          ...full.data.reasons.items.map((reason) => reason.message),
+          ...full.data.reasons.items.flatMap((reason) => [
+            reason.code,
+            reason.source.title,
+            reason.code === "COMPONENT_INCOMPLETE" &&
+            reason.message === `Не выполнена составляющая: ${reason.source.title}`
+              ? "Не выполнена составляющая."
+              : reason.message,
+          ]),
           ...full.data.reasons.items.map(
             (reason) => reason.source.key ?? `${reason.source.kind}:${reason.source.id}`,
           ),
@@ -417,6 +424,28 @@ test(
           full.data.reasons.items.length,
           "У каждой причины есть адресный следующий шаг",
         );
+        const expectedCommands = full.data.reasons.items.map((reason) => {
+          const source = reason.source;
+          const reference = source.key ?? `${source.kind}:${source.id}`;
+          const self = source.kind === full.data.entity.kind && source.id === full.data.entity.id;
+          if (source.kind === "task" && reason.criterionId)
+            return `task criterion get ${reference} ${reason.criterionId}`;
+          if (self && source.kind === "work-plan") return `plan stage list ${reference}`;
+          if (self && source.kind === "release") return `release plans ${reference}`;
+          return `${source.kind === "work-plan" ? "plan" : source.kind} ${self ? "get" : "progress"}${source.kind === "product" ? "" : ` ${reference}`}`;
+        });
+        assert.deepEqual(
+          reasonCommands.map((line) => line.slice("→ npx @oim-dev/relay-cli ".length)).sort(),
+          expectedCommands.sort(),
+          "Сохранены адрес и число переходов каждой причины, включая criterionId; порядок композиции может отличаться",
+        );
+        for (const code of new Set(full.data.reasons.items.map((reason) => reason.code)))
+          assert.equal(
+            text.split("\n").filter((line) => line === code || line.startsWith(`${code} · `))
+              .length,
+            full.data.reasons.items.filter((reason) => reason.code === code).length,
+            `Число причин ${code} не изменилось при объединении карточек`,
+          );
         const selfKind = entry.kind === "work-plan" ? "plan" : entry.kind;
         for (const line of reasonCommands) {
           const args = line
