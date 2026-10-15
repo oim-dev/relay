@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  CloseButton,
   Combobox,
   createTheme,
   DEFAULT_THEME,
@@ -20,6 +21,7 @@ import {
   NavLink,
   Notification,
   NumberInput,
+  Pill,
   Popover,
   Progress,
   Select,
@@ -208,9 +210,16 @@ export const theme = createTheme({
         return { root: {} };
       },
     }),
+    // Крестик закрытия — у Modal, Drawer, Alert, Notification и в потребителях — получает
+    // ту же область нажатия 44px на touch, что ActionIcon (controls.module.css).
+    CloseButton: CloseButton.extend({ classNames: { root: controlClasses.closeButton } }),
     Input: Input.extend({
       defaultProps: { size: "sm" },
       classNames: { input: controlClasses.field },
+    }),
+    // Кнопка очистки поля (clearable) рендерит CloseButton под собственным именем Styles API.
+    InputClearButton: Input.ClearButton.extend({
+      classNames: { root: controlClasses.closeButton },
     }),
     InputWrapper: InputWrapper.extend({
       classNames: { description: controlClasses.fieldNote, error: controlClasses.fieldError },
@@ -275,6 +284,8 @@ export const theme = createTheme({
       defaultProps: { radius: "lg", shadow: "md", transitionProps: { duration: 140 } },
       classNames: { item: controlClasses.menuItem },
     }),
+    // Кнопка удаления плашки не получает расширенную touch-область CloseButton.
+    Pill: Pill.extend({ classNames: { remove: controlClasses.pillRemove } }),
     Popover: Popover.extend({ defaultProps: { radius: "lg", shadow: "md" } }),
     // Текущий раздел — акцент, как текущее место навигации.
     Tabs: Tabs.extend({ defaultProps: { color: "accent" } }),

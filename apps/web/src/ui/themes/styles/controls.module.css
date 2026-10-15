@@ -4,10 +4,31 @@
  */
 
 /*
- * Иконка-действие остаётся компактной, но на touch получает область нажатия 44×44px.
+ * Компактные кнопки-иконки — ActionIcon и CloseButton (включая крестик Modal, Drawer, Alert,
+ * Notification и кнопку очистки поля Input.ClearButton) — на touch получают область нажатия
+ * 44×44px: прозрачный псевдоэлемент поверх кнопки. Визуал и размер на desktop не меняются,
+ * фокус-кольцо рисует outline самой кнопки. Кнопка удаления Pill (класс pillRemove) исключена:
+ * она внутри плашки, и расширение перекрыло бы соседние плашки и поле ввода — случайное
+ * касание удаляло бы значение; удаление доступно и клавишей Backspace в поле.
+ */
+.iconAction,
+.closeButton:not(.pillRemove) {
+  @media (pointer: coarse) {
+    &::after {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--tasks-touch-target));
+      height: max(100%, var(--tasks-touch-target));
+      transform: translate(-50%, -50%);
+      content: "";
+    }
+  }
+}
+
+/*
  * Mantine обрезает содержимое ActionIcon (overflow: hidden) ради анимации загрузки,
  * поэтому на touch вне загрузки обрезка снимается: иначе псевдо-область не принимает касание.
- * Визуал не меняется — иконка меньше кнопки, фокус-кольцо рисует outline.
  *
  * Состояния, которые нельзя передать одним цветом: открытое всплывающее окно — меню,
  * Popover, Drawer (aria-haspopup и aria-expanded) — заливка наведения и контур
@@ -43,16 +64,6 @@
   @media (pointer: coarse) {
     &:not([data-loading]) {
       overflow: visible;
-    }
-
-    &::after {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: max(100%, var(--tasks-touch-target));
-      height: max(100%, var(--tasks-touch-target));
-      transform: translate(-50%, -50%);
-      content: "";
     }
   }
 }
