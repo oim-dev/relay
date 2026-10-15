@@ -116,6 +116,15 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 
+  /*
+   * На touch область ручки переноса (44px) выходит за шапку высотой 24px на 10px вниз;
+   * отступ названия больше этого выхода, и касание верхнего края названия открывает
+   * задачу, а не попадает в ручку. На desktop отступ прежний.
+   */
+  @media (pointer: coarse) {
+    margin-top: calc((var(--tasks-touch-target) - 1.5rem) / 2 + 1px);
+  }
+
   &::after {
     position: absolute;
     inset: 0;

@@ -29,19 +29,44 @@
  * Соседние кнопки-иконки на touch разведены так, чтобы их области 44px не пересекались:
  * зазор не меньше 44px минус размер кнопки. В Group его часть уже даёт gap (--group-gap),
  * в другом контейнере зазор целиком добавляет отступ. Касание края одной кнопки не
- * попадает в соседнюю; на desktop расстояние не меняется.
+ * попадает в соседнюю; на desktop расстояние не меняется. Запас 1px здесь и ниже
+ * покрывает округление дробных координат при hit-testing псевдоэлемента. Контекст
+ * обёрнут в :where — явный отступ потребителя (например, margin-left: auto) не теряется.
  */
-.iconAction + .iconAction {
+:where(.iconAction) + .iconAction {
   @media (pointer: coarse) {
-    margin-inline-start: max(0px, calc(var(--tasks-touch-target) - var(--ai-size)));
+    margin-inline-start: max(0px, calc(var(--tasks-touch-target) - var(--ai-size) + 1px));
   }
 }
 
-.group > .iconAction + .iconAction {
+:where(.group > .iconAction) + .iconAction {
   @media (pointer: coarse) {
     margin-inline-start: max(
       0px,
-      calc(var(--tasks-touch-target) - var(--ai-size) - var(--group-gap, 0px))
+      calc(var(--tasks-touch-target) - var(--ai-size) + 1px - var(--group-gap, 0px))
+    );
+  }
+}
+
+/*
+ * Рядом с другим элементом Group (полем, кнопкой, подписью) область ActionIcon выходит
+ * за кнопку на (44px − размер) / 2 с каждой стороны. Если gap группы меньше, недостающее
+ * добавляет отступ с этой стороны — касание края поля не попадает в кнопку.
+ */
+:where(.group > :not(.iconAction)) + .iconAction {
+  @media (pointer: coarse) {
+    margin-inline-start: max(
+      0px,
+      calc((var(--tasks-touch-target) - var(--ai-size)) / 2 + 1px - var(--group-gap, 0px))
+    );
+  }
+}
+
+.iconAction:where(.group > :has(+ :not(.iconAction))) {
+  @media (pointer: coarse) {
+    margin-inline-end: max(
+      0px,
+      calc((var(--tasks-touch-target) - var(--ai-size)) / 2 + 1px - var(--group-gap, 0px))
     );
   }
 }

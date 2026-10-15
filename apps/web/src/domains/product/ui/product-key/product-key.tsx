@@ -30,6 +30,7 @@ export const ProductKey = (props: ProductKeyProps) => {
           <ActionIcon
             size="xs"
             variant="subtle"
+            className={styles.copy}
             aria-label={label}
             onClick={() => clipboard.copy(value)}
           >
