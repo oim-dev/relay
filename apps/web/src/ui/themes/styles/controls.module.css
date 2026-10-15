@@ -5,14 +5,13 @@
 
 /*
  * Компактные кнопки-иконки — ActionIcon и CloseButton (включая крестик Modal, Drawer, Alert,
- * Notification и кнопку очистки поля Input.ClearButton) — на touch получают область нажатия
- * 44×44px: прозрачный псевдоэлемент поверх кнопки. Визуал и размер на desktop не меняются,
- * фокус-кольцо рисует outline самой кнопки. Кнопка удаления Pill (класс pillRemove) исключена:
- * она внутри плашки, и расширение перекрыло бы соседние плашки и поле ввода — случайное
- * касание удаляло бы значение; удаление доступно и клавишей Backspace в поле.
+ * Notification, кнопку очистки поля Input.ClearButton и удаление плашки Pill) — на touch
+ * получают область нажатия 44×44px: прозрачный псевдоэлемент поверх кнопки. Визуал и размер
+ * на desktop не меняются, фокус-кольцо рисует outline самой кнопки. Соседние области не
+ * перекрываются за счёт геометрии: зазоров между кнопками-иконками и размеров плашек ниже.
  */
 .iconAction,
-.closeButton:not(.pillRemove) {
+.closeButton {
   @media (pointer: coarse) {
     &::after {
       position: absolute;
@@ -23,6 +22,68 @@
       transform: translate(-50%, -50%);
       content: "";
     }
+  }
+}
+
+/*
+ * Соседние кнопки-иконки на touch разведены так, чтобы их области 44px не пересекались:
+ * зазор не меньше 44px минус размер кнопки. В Group его часть уже даёт gap (--group-gap),
+ * в другом контейнере зазор целиком добавляет отступ. Касание края одной кнопки не
+ * попадает в соседнюю; на desktop расстояние не меняется.
+ */
+.iconAction + .iconAction {
+  @media (pointer: coarse) {
+    margin-inline-start: max(0px, calc(var(--tasks-touch-target) - var(--ai-size)));
+  }
+}
+
+.group > .iconAction + .iconAction {
+  @media (pointer: coarse) {
+    margin-inline-start: max(
+      0px,
+      calc(var(--tasks-touch-target) - var(--ai-size) - var(--group-gap, 0px))
+    );
+  }
+}
+
+/*
+ * Плашки Pill (TagsInput, MultiSelect) на touch крупнее: высота 32px, крестик удаления
+ * 32×32px, зазор между плашками и до поля ввода 12px. Область крестика 44px выходит
+ * на 6px за плашку — в пределах половины зазора, поэтому не заходит ни в соседнюю
+ * плашку, ни в её крестик, ни в поле ввода. Внутрь своей плашки область заходит
+ * только на подпись, которая не является контролом. Отступ в конце списка плашек
+ * отделяет крайний крестик от области кнопки очистки поля («Снять все теги»), которая
+ * заходит в содержимое поля на несколько пикселей. На desktop размеры прежние.
+ */
+.pill {
+  @media (pointer: coarse) {
+    /* Высота компактного контрола; зазор — разница с областью нажатия: 44 − 32 = 12px. */
+    --pill-height-xs: var(--tasks-control-height-compact);
+    --pill-height-sm: var(--tasks-control-height-compact);
+    --pill-height-md: var(--tasks-control-height-compact);
+    --pill-height-lg: var(--tasks-control-height-compact);
+  }
+}
+
+.pillGroup {
+  @media (pointer: coarse) {
+    --tasks-pill-gap: calc(var(--tasks-touch-target) - var(--tasks-control-height-compact));
+    --pg-gap-xs: var(--tasks-pill-gap);
+    --pg-gap-sm: var(--tasks-pill-gap);
+    --pg-gap-md: var(--tasks-pill-gap);
+    --pg-gap-lg: var(--tasks-pill-gap);
+    --pg-gap-xl: var(--tasks-pill-gap);
+
+    padding-inline-end: var(--tasks-pill-gap);
+  }
+}
+
+/* Значок крестика не растёт вместе с кнопкой: остаётся соразмерным подписи плашки. */
+.pillRemove {
+  @media (pointer: coarse) {
+    --cb-icon-size: 1rem;
+
+    min-width: var(--tasks-control-height-compact);
   }
 }
 

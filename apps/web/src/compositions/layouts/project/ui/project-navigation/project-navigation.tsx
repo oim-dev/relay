@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { useId, useState } from "react";
 import { Button, NavLink, Text } from "@mantine/core";
-import { NavLink as RouterNavLink, useLocation } from "react-router-dom";
+import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
 import { Box, ChartNoAxesCombined, LayoutDashboard } from "lucide-react";
 import { useBoards } from "domains/boards";
 import { useBoardTask } from "domains/board-tasks";
@@ -53,6 +53,10 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
   const isProductRoute = pathname === productPath || pathname.startsWith(`${productPath}/`);
   const isProductOpened = productChoice ?? isProductRoute;
   const overviewPath = `${basePath}/`;
+  // Обзор открывается по адресу проекта с конечным «/» и без него; сравнение NavLink с `end`
+  // учитывает только одну форму, поэтому текущий пункт определяется по обеим.
+  const isOverviewRoute = pathname === basePath || pathname === overviewPath;
+  const overviewCurrent = isOverviewRoute ? "page" : undefined;
   const productItems = PRODUCT_NAVIGATION.map((entry) => ({
     ...entry,
     href: `${productPath}/${entry.path}`,
@@ -66,9 +70,10 @@ export const ProjectNavigation = (props: ProjectNavigationProps) => {
   return (
     <nav {...rootAttrs} className={clsx(styles.root, className)} aria-label="Разделы проекта">
       <NavLink
-        component={RouterNavLink}
+        component={Link}
         to={overviewPath}
-        end
+        active={isOverviewRoute}
+        aria-current={overviewCurrent}
         label="Обзор"
         leftSection={<ChartNoAxesCombined size={17} aria-hidden="true" />}
         onClick={onNavigate}

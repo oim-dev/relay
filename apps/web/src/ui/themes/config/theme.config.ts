@@ -12,6 +12,7 @@ import {
   DEFAULT_THEME,
   defaultVariantColorsResolver,
   Drawer,
+  Group,
   Input,
   InputBase,
   InputWrapper,
@@ -22,6 +23,7 @@ import {
   Notification,
   NumberInput,
   Pill,
+  PillGroup,
   Popover,
   Progress,
   Select,
@@ -213,6 +215,8 @@ export const theme = createTheme({
     // Крестик закрытия — у Modal, Drawer, Alert, Notification и в потребителях — получает
     // ту же область нажатия 44px на touch, что ActionIcon (controls.module.css).
     CloseButton: CloseButton.extend({ classNames: { root: controlClasses.closeButton } }),
+    // Соседние ActionIcon в Group на touch разводятся с учётом gap группы (controls.module.css).
+    Group: Group.extend({ classNames: { root: controlClasses.group } }),
     Input: Input.extend({
       defaultProps: { size: "sm" },
       classNames: { input: controlClasses.field },
@@ -284,8 +288,12 @@ export const theme = createTheme({
       defaultProps: { radius: "lg", shadow: "md", transitionProps: { duration: 140 } },
       classNames: { item: controlClasses.menuItem },
     }),
-    // Кнопка удаления плашки не получает расширенную touch-область CloseButton.
-    Pill: Pill.extend({ classNames: { remove: controlClasses.pillRemove } }),
+    // На touch плашка и её крестик крупнее, а зазор между плашками вмещает область
+    // нажатия крестика 44px без перекрытия соседей (controls.module.css).
+    Pill: Pill.extend({
+      classNames: { root: controlClasses.pill, remove: controlClasses.pillRemove },
+    }),
+    PillGroup: PillGroup.extend({ classNames: { group: controlClasses.pillGroup } }),
     Popover: Popover.extend({ defaultProps: { radius: "lg", shadow: "md" } }),
     // Текущий раздел — акцент, как текущее место навигации.
     Tabs: Tabs.extend({ defaultProps: { color: "accent" } }),
