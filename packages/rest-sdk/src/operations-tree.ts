@@ -4,6 +4,12 @@
  * https://github.com/gromlab-ru/rest-api-codegen
  */
 
+import { attachWorkSessionForProject } from "./operations/attach-work-session-for-project.js";
+import { attachWorkSession } from "./operations/attach-work-session.js";
+import { cancelWorkCheckpointForProject } from "./operations/cancel-work-checkpoint-for-project.js";
+import { cancelWorkCheckpoint } from "./operations/cancel-work-checkpoint.js";
+import { cancelWorkSessionForProject } from "./operations/cancel-work-session-for-project.js";
+import { cancelWorkSession } from "./operations/cancel-work-session.js";
 import { changeDocumentRelationForProject } from "./operations/change-document-relation-for-project.js";
 import { changeDocumentRelation } from "./operations/change-document-relation.js";
 import { changeDocumentSectionForProject } from "./operations/change-document-section-for-project.js";
@@ -14,6 +20,10 @@ import { changePlanTasksForProject } from "./operations/change-plan-tasks-for-pr
 import { changePlanTasks } from "./operations/change-plan-tasks.js";
 import { changeTaskCriterionForProject } from "./operations/change-task-criterion-for-project.js";
 import { changeTaskCriterion } from "./operations/change-task-criterion.js";
+import { completeWorkCheckpointForProject } from "./operations/complete-work-checkpoint-for-project.js";
+import { completeWorkCheckpoint } from "./operations/complete-work-checkpoint.js";
+import { completeWorkSessionForProject } from "./operations/complete-work-session-for-project.js";
+import { completeWorkSession } from "./operations/complete-work-session.js";
 import { createBoardTaskForProject } from "./operations/create-board-task-for-project.js";
 import { createBoardTask } from "./operations/create-board-task.js";
 import { createEntityForProject } from "./operations/create-entity-for-project.js";
@@ -28,6 +38,8 @@ import { deleteEntityForProject } from "./operations/delete-entity-for-project.j
 import { deleteEntity } from "./operations/delete-entity.js";
 import { describeEntityTypeForProject } from "./operations/describe-entity-type-for-project.js";
 import { describeEntityType } from "./operations/describe-entity-type.js";
+import { forkWorkSessionForProject } from "./operations/fork-work-session-for-project.js";
+import { forkWorkSession } from "./operations/fork-work-session.js";
 import { getApplicationProgressForProject } from "./operations/get-application-progress-for-project.js";
 import { getApplicationProgress } from "./operations/get-application-progress.js";
 import { getBoardBySlugForProject } from "./operations/get-board-by-slug-for-project.js";
@@ -129,8 +141,26 @@ import { getTaskPlanMembershipsForProject } from "./operations/get-task-plan-mem
 import { getTaskPlanMemberships } from "./operations/get-task-plan-memberships.js";
 import { getTaskProgressForProject } from "./operations/get-task-progress-for-project.js";
 import { getTaskProgress } from "./operations/get-task-progress.js";
+import { getWorkCheckpointForProject } from "./operations/get-work-checkpoint-for-project.js";
+import { getWorkCheckpoint } from "./operations/get-work-checkpoint.js";
+import { getWorkHistoryForProject } from "./operations/get-work-history-for-project.js";
+import { getWorkHistoryGraphForProject } from "./operations/get-work-history-graph-for-project.js";
+import { getWorkHistoryGraphPointForProject } from "./operations/get-work-history-graph-point-for-project.js";
+import { getWorkHistoryGraphPoint } from "./operations/get-work-history-graph-point.js";
+import { getWorkHistoryGraph } from "./operations/get-work-history-graph.js";
+import { getWorkHistory } from "./operations/get-work-history.js";
 import { getWorkPlanProgressForProject } from "./operations/get-work-plan-progress-for-project.js";
 import { getWorkPlanProgress } from "./operations/get-work-plan-progress.js";
+import { getWorkSessionContextForProject } from "./operations/get-work-session-context-for-project.js";
+import { getWorkSessionContext } from "./operations/get-work-session-context.js";
+import { getWorkSessionForProject } from "./operations/get-work-session-for-project.js";
+import { getWorkSessionHistoryForProject } from "./operations/get-work-session-history-for-project.js";
+import { getWorkSessionHistory } from "./operations/get-work-session-history.js";
+import { getWorkSessionOpenIntentsForProject } from "./operations/get-work-session-open-intents-for-project.js";
+import { getWorkSessionOpenIntents } from "./operations/get-work-session-open-intents.js";
+import { getWorkSessionTreeForProject } from "./operations/get-work-session-tree-for-project.js";
+import { getWorkSessionTree } from "./operations/get-work-session-tree.js";
+import { getWorkSession } from "./operations/get-work-session.js";
 import { linkBoardTaskForProject } from "./operations/link-board-task-for-project.js";
 import { linkBoardTask } from "./operations/link-board-task.js";
 import { linkEntityTaskForProject } from "./operations/link-entity-task-for-project.js";
@@ -141,6 +171,8 @@ import { listEntitiesForProject } from "./operations/list-entities-for-project.j
 import { listEntities } from "./operations/list-entities.js";
 import { listEntityTypesForProject } from "./operations/list-entity-types-for-project.js";
 import { listEntityTypes } from "./operations/list-entity-types.js";
+import { listWorkSessionsForProject } from "./operations/list-work-sessions-for-project.js";
+import { listWorkSessions } from "./operations/list-work-sessions.js";
 import { moveBoardTaskForProject } from "./operations/move-board-task-for-project.js";
 import { moveBoardTask } from "./operations/move-board-task.js";
 import { moveEntityTaskForProject } from "./operations/move-entity-task-for-project.js";
@@ -149,6 +181,10 @@ import { mutateGraphForProject } from "./operations/mutate-graph-for-project.js"
 import { mutateGraph } from "./operations/mutate-graph.js";
 import { mutateProductForProject } from "./operations/mutate-product-for-project.js";
 import { mutateProduct } from "./operations/mutate-product.js";
+import { openWorkCheckpointForProject } from "./operations/open-work-checkpoint-for-project.js";
+import { openWorkCheckpoint } from "./operations/open-work-checkpoint.js";
+import { pauseWorkSessionForProject } from "./operations/pause-work-session-for-project.js";
+import { pauseWorkSession } from "./operations/pause-work-session.js";
 import { previewEntityDeletionForProject } from "./operations/preview-entity-deletion-for-project.js";
 import { previewEntityDeletion } from "./operations/preview-entity-deletion.js";
 import { previewReleaseCompactForProject } from "./operations/preview-release-compact-for-project.js";
@@ -165,8 +201,16 @@ import { replaceProductParticipationForProject } from "./operations/replace-prod
 import { replaceProductParticipation } from "./operations/replace-product-participation.js";
 import { resolveEntityForProject } from "./operations/resolve-entity-for-project.js";
 import { resolveEntity } from "./operations/resolve-entity.js";
+import { resumeWorkSessionForProject } from "./operations/resume-work-session-for-project.js";
+import { resumeWorkSession } from "./operations/resume-work-session.js";
 import { saveProjectSettingsForProject } from "./operations/save-project-settings-for-project.js";
 import { saveProjectSettings } from "./operations/save-project-settings.js";
+import { saveWorkCheckpointForProject } from "./operations/save-work-checkpoint-for-project.js";
+import { saveWorkCheckpoint } from "./operations/save-work-checkpoint.js";
+import { startWorkSessionForProject } from "./operations/start-work-session-for-project.js";
+import { startWorkSession } from "./operations/start-work-session.js";
+import { takeoverWorkSessionForProject } from "./operations/takeover-work-session-for-project.js";
+import { takeoverWorkSession } from "./operations/takeover-work-session.js";
 import { transferPlanTaskForProject } from "./operations/transfer-plan-task-for-project.js";
 import { transferPlanTask } from "./operations/transfer-plan-task.js";
 import { transitionPlanForProject } from "./operations/transition-plan-for-project.js";
@@ -329,6 +373,52 @@ export const operationsTree = {
     updateReleaseByRefsForProject: updateReleaseByRefsForProject,
     updateReleaseForProject: updateReleaseForProject,
     transitionReleaseForProject: transitionReleaseForProject,
+  },
+  workHistory: {
+    listWorkSessions: listWorkSessions,
+    getWorkSession: getWorkSession,
+    getWorkSessionTree: getWorkSessionTree,
+    getWorkSessionHistory: getWorkSessionHistory,
+    getWorkHistory: getWorkHistory,
+    getWorkSessionContext: getWorkSessionContext,
+    getWorkSessionOpenIntents: getWorkSessionOpenIntents,
+    getWorkCheckpoint: getWorkCheckpoint,
+    startWorkSession: startWorkSession,
+    forkWorkSession: forkWorkSession,
+    attachWorkSession: attachWorkSession,
+    pauseWorkSession: pauseWorkSession,
+    resumeWorkSession: resumeWorkSession,
+    takeoverWorkSession: takeoverWorkSession,
+    completeWorkSession: completeWorkSession,
+    cancelWorkSession: cancelWorkSession,
+    openWorkCheckpoint: openWorkCheckpoint,
+    saveWorkCheckpoint: saveWorkCheckpoint,
+    completeWorkCheckpoint: completeWorkCheckpoint,
+    cancelWorkCheckpoint: cancelWorkCheckpoint,
+    getWorkHistoryGraph: getWorkHistoryGraph,
+    getWorkHistoryGraphPoint: getWorkHistoryGraphPoint,
+    listWorkSessionsForProject: listWorkSessionsForProject,
+    getWorkSessionForProject: getWorkSessionForProject,
+    getWorkSessionTreeForProject: getWorkSessionTreeForProject,
+    getWorkSessionHistoryForProject: getWorkSessionHistoryForProject,
+    getWorkHistoryForProject: getWorkHistoryForProject,
+    getWorkSessionContextForProject: getWorkSessionContextForProject,
+    getWorkSessionOpenIntentsForProject: getWorkSessionOpenIntentsForProject,
+    getWorkCheckpointForProject: getWorkCheckpointForProject,
+    startWorkSessionForProject: startWorkSessionForProject,
+    forkWorkSessionForProject: forkWorkSessionForProject,
+    attachWorkSessionForProject: attachWorkSessionForProject,
+    pauseWorkSessionForProject: pauseWorkSessionForProject,
+    resumeWorkSessionForProject: resumeWorkSessionForProject,
+    takeoverWorkSessionForProject: takeoverWorkSessionForProject,
+    completeWorkSessionForProject: completeWorkSessionForProject,
+    cancelWorkSessionForProject: cancelWorkSessionForProject,
+    openWorkCheckpointForProject: openWorkCheckpointForProject,
+    saveWorkCheckpointForProject: saveWorkCheckpointForProject,
+    completeWorkCheckpointForProject: completeWorkCheckpointForProject,
+    cancelWorkCheckpointForProject: cancelWorkCheckpointForProject,
+    getWorkHistoryGraphForProject: getWorkHistoryGraphForProject,
+    getWorkHistoryGraphPointForProject: getWorkHistoryGraphPointForProject,
   },
   boards: {
     getBoards: getBoards,

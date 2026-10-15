@@ -30,6 +30,11 @@ export const appRouter = createBrowserRouter([
         children: [
           { index: true, Component: OverviewScreen, handle: breadcrumbHandle({ label: "Обзор" }) },
           {
+            path: "work-history",
+            lazy: () => import("compositions/screens/work-history/lazy"),
+            handle: breadcrumbHandle({ label: "История" }),
+          },
+          {
             path: "settings",
             lazy: () => import("compositions/screens/project-settings/lazy"),
             handle: breadcrumbHandle({ label: "Настройки проекта" }),

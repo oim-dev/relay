@@ -1,4 +1,14 @@
-import { AppWindow, FileText, Files, Flag, Rocket, Network, Server, Sparkles } from "lucide-react";
+import {
+  AppWindow,
+  FileText,
+  Files,
+  Flag,
+  Rocket,
+  Network,
+  Server,
+  Sparkles,
+  History,
+} from "lucide-react";
 
 /** Подразделы продукта в порядке знакомства с ним. */
 export const PRODUCT_NAVIGATION = [
@@ -9,6 +19,7 @@ export const PRODUCT_NAVIGATION = [
 
 /** Рабочие разделы проекта после продуктового контекста. */
 export const PROJECT_NAVIGATION = [
+  { path: "work-history", label: "История", Icon: History },
   { path: "plans", label: "Планы", Icon: Flag },
   { path: "releases", label: "Релизы", Icon: Rocket },
 ];

@@ -20,6 +20,8 @@
 | `@relay/contracts/document-library`      | Страницы прикреплений и разделов библиотеки, точечные изменения под ревизией владельца                              |
 | `@relay/contracts/planning`              | Планы, вложенные этапы, запросы и результаты планирования                                                           |
 | `@relay/contracts/releases`              | Релизы и их операции                                                                                                |
+| `@relay/contracts/work-history`          | Ветки работы агентов, отдельные участия, неизменяемые checkpoints и предметные операции истории                     |
+| `@relay/contracts/work-history-graph`    | Компактный граф истории проекта/ветки, явные границы страниц и полные материалы выбранной точки                     |
 | `@relay/contracts/progress`              | Предметные показатели и выборки прогресса                                                                           |
 | `@relay/contracts/product`               | Совместимые типы продуктовых представлений                                                                          |
 | `@relay/contracts/product-query`         | Проверка продукта, адресуемые рекомендации lint и отдельная страница карты обзора                                   |
@@ -289,6 +291,200 @@ query наследует ref и пагинацию прогресса. Guard с�
 limit и состояние задач. Продолжение требует исходную version, не версию полного
 TaskProgress; `PROGRESS_CHANGED` требует начать чтение заново. Зависимости имеют
 адрес, title, column и completed, но не ревизию соседней задачи.
+
+### История работы агентов
+
+`work-history.ts` — переносимый контракт возможности `relay-work-history-v1`.
+Наличие схем не подтверждает реализацию Core или интерфейсов.
+`workHistoryOperations` связывает единые имена методов с `input`/`output` схемами,
+`WorkHistoryServiceContract` задаёт сигнатуры Core: один объект входа, у мутаций
+дополнительно `defaultActor: string`. Все типы входа используют `z.input`.
+Выходные объекты строгие, без defaults/coercion и нормализации Markdown.
+
+- `WorkSession` — логическая ветка S-token с полными `title`, `description`, `result`,
+  неизменяемыми `parentSessionId`, `originCheckpointId`, `createdByRunId`, состоянием,
+  `currentRunId`, монотонным `sequence`, датами и `revision`.
+- `AgentRun` — отдельное участие RUN-token: ветка, автор, nullable `client` и
+  `sourceSessionId`, даты, `endReason`, `predecessorRunId`, исходная `reason` и
+  nullable `endSummary`, `operator` и `git`. Активный run не означает online; heartbeat отсутствует.
+- `WorkCheckpoint` — неизменяемая точка CP-token: ветка, run, sequence, вид,
+  `intentId`, `title`, `summary`, Markdown-поля `body`, `done`, `remaining`,
+  `nextStep`, `checks`, сохранённые подписи `references`, явные `acceptedSessionIds`,
+  дата и автор. У intent `intentId: null`, список принятия пуст; progress/result/cancel
+  ссылаются на исходный intent. Закрытие — отдельная запись, не изменение intent.
+  Ввод `body` обязателен и должен содержать непустой полноценный Markdown; одних
+  title/summary недостаточно. Переводы строк и пробелы не нормализуются.
+  Ввод references — адреса целей; Core сохраняет `{ref:{kind,id},key,title}`.
+
+`operator` — nullable снимок `{name:string|null,email:string|null,source}`;
+source — `explicit|environment|git|inherited`. Это атрибуция человека, не auth,
+учётная запись или глобальная email-идентичность. `git` — nullable
+`{branch:string|null,commit:string|null}` рабочей копии клиента. Вход подключения
+принимает оба объекта необязательно, включая null. CLI выбирает explicit flags,
+затем `RELAY_USER_NAME/EMAIL`, затем локальный Git config; Server/Core не читают
+свой Git вместо клиента. При attach отсутствие operator допускает наследование
+из createdByRun родителя; явный null оставляет атрибуцию неизвестной.
+
+Чтения: `list` возвращает `WorkSessionsPage`; `get` — `WorkSessionDetail`
+(`session`, полный `currentRun`, `counts`, компактный `latestRun`, `acceptance`); `tree` — `WorkTreePage`; `history` —
+`WorkHistoryPage`; `context` — карточку и страницу истории; `checkpoint` — полную
+точку; `openIntents` — `WorkOpenIntentsPage`. Страницы имеют
+`items/total/nextOffset/version`, вход — `offset/limit/version`
+(0/20, максимум 100). `list` фильтрует по unfinished/status/parent/actor/q;
+`parent: null` выбирает корни, отсутствие — все ветки. `history.ref` необязателен,
+есть `includeChildren`, `order` и фильтр `kind`. `context` читает только собственную
+ветку в порядке desc; продолжение — тем же методом. Усечение текстов не применяется.
+У дерева `parentSessionId/depth` есть на каждом узле, `totals` относятся ко всему
+поддереву, включая выбранный корень, а не к странице.
+
+Элементы list и `tree.items[].session` — `WorkSessionOverview`: прежний компактный
+`WorkSessionSummary` плюс `counts`, `latestRun`, `acceptance`. Summary остаётся
+формой storage-индекса и не получает вычисляемые поля. `AgentRunSummary` исключает
+только reason/endSummary; latestRun показывает последнее участие даже у закрытой
+или приостановленной ветки. `WorkSessionAcceptance` —
+`{checkpointId,checkpointKey,sessionId,runId,at}` первой точки родителя, явно
+принявшей completed-ребёнка. Null означает непринятое или неприменимое; различайте
+по parent/status, не объявляйте completed автоматически принятым.
+`list.projectTotals: WorkTreeTotals` считает весь проект без фильтров и пагинации;
+`total` остаётся числом найденных веток. `openIntents` принимает ref ветки,
+includeChildren (default false) и пагинацию; возвращает полные незакрытые intent
+страницы. Наличие result/cancel закрывает intent; progress не закрывает его.
+
+Мутации: `start`, `fork`, `attach`, `pause`, `resume`, `takeover`, `complete`,
+`cancel`, `openCheckpoint`, `saveCheckpoint`, `completeCheckpoint`,
+`cancelCheckpoint`. Общий результат `WorkHistoryMutation` содержит
+`{session,run,checkpoint,childSession}`; последние три поля nullable. При fork
+`session` — изменённый родитель, `childSession` — новый pending-ребёнок без run.
+`fork.ref` и ref save/complete/cancelCheckpoint адресуют **intent**, остальные ref —
+ветку. `ifRevision` всегда относится к ветке; start не требует CAS. Владелец
+передаёт постоянный `runId`; cancel для pending/paused допускает его отсутствие.
+Attach/resume/takeover создают новое участие под CAS ветки. `requestId` обеспечивает
+только корреляцию, не дедупликацию и не сохранённую квитанцию.
+
+Производная хронология объединяет `session-created`, `session-forked`,
+`session-closed`, `run-started`, `run-ended`, `checkpoint`, без отдельного event-store.
+Для неё сохраняются `WorkSession.parentSequence` (номер fork у родителя),
+`AgentRun.startedSequence/endedSequence`. Создание ветки занимает sequence 1;
+подключение и каждая следующая точка увеличивают счётчик ветки. Закрытие занимает
+последний sequence ветки; завершение run — отдельный предшествующий номер.
+Устойчивый порядок истории — `(at, sessionId, sequence, id)`; desc обращает его.
+`session` и `run` в производных точках — текущие сохранённые записи, не обещание
+исторических ревизий карточек. Только checkpoint представляет неизменяемый материал.
+
+`WORK_HISTORY_OWNER_KINDS` задаёт технических владельцев `work-session`, `agent-run`,
+`work-checkpoint`, но не расширяет `entityKinds`, generic CRUD или общий граф.
+Собственные ключи S-token/RUN-token/CP-token находятся в предметных данных; token
+допускает безопасные ASCII-буквы, цифры, `_`, `-`, `.` с буквой/цифрой в начале.
+Числовые ключи совместимы, но новый генератор использует случайный 128-битный token,
+без общего счётчика между рабочими копиями. Оболочка технического владельца имеет
+`key: null`. Коллизия собственного ключа после merge — адресная ошибка;
+reindex не разрешает конфликт содержимого одной и той же ветки.
+Реестр хранения, выделение ключей, CAS, проверка
+принадлежности intent и принятия завершённых прямых детей реализуются в Core.
+
+### Компактный граф истории
+
+`work-history-graph.ts` — отдельный переносимый контракт
+`WORK_HISTORY_GRAPH_CAPABILITY = "relay-work-history-graph-v2"`, не расширение
+прежних 19 операций, storage или профиля данных. `WorkHistoryGraphServiceContract`
+содержит только `graph(input): Promise<WorkHistoryGraphPage>` и
+`point(input): Promise<WorkHistoryGraphPointDetail>`; карта схем —
+`workHistoryGraphOperations.graph/point` с полями input/output. Наличие схем
+не подтверждает подключения нового графа в Core, REST или Web.
+
+Graph v2 обозначает несовместимый wire-формат рёбер fork/branch-end с родительскими
+линиями вместо прежних node-to-node fork/acceptance. Сервер должен объявлять только
+graph v2; dual-v1 fallback и прежняя графовая схема не поддерживаются. Core использует
+отдельный префикс версии проекции `work-graph-v2`, даже при неизменных исходных записях,
+чтобы прежнее продолжение не смешивалось с новыми рёбрами. Клиент включает graph
+capability в ключи кеша/SWR для страницы, проверки поддержки и point. Основная
+`relay-work-history-v1`, профиль хранения 3 и состав операций не меняются; прежние
+CP-key/raw checkpoint ID deep links остаются допустимыми.
+
+`WorkHistoryGraphQuery` принимает optional ref ветки, includeChildren (default true),
+order (default desc), offset/limit/version (0/50, максимум 100). Без ref область —
+весь проект. Web показывает граф без фильтров; q/status в эту проекцию не добавлены,
+прежние фильтры API каталога не изменяются.
+`WorkHistoryGraphPage` содержит scopeRootId (null для проекта), items, openEnds, edges,
+boundaryNodes, branches, runs, total/nextOffset/version. Total считает точки области
+до пагинации; openEnds/boundaryNodes не добавляют точки и не меняют пагинацию items. Порядок —
+`(at, sessionId, sequence, id)`, desc обращает его.
+
+`openEnds: WorkHistoryGraphPoint[]` содержит последнюю **отображаемую реальную**
+точку по sequence каждой незавершённой ветки selected scope (pending/open/paused),
+даже если она старше последних 50 точек. По sessionId элементы уникальны; совпадение
+ID с items допустимо только при полном совпадении полей той же точки, совпадение
+с boundaryNodes — при совпадении идентичности. Это компактные заголовки существующих
+материалов, не новые события, не фиктивный now и не дополнительные items. Source at
+остаётся временем последней реальной точки; Web рисует недатированное продолжение
+со статусом, а не новое событие в настоящем. Искусственное ребро не требуется.
+OpenEnds не ограничивается limit; чрезмерный объём Core может отклонить явной
+ошибкой бюджета, но не вернуть успешно усечённый набор. Полноту выбранной области
+и последнее положение по sequence вычисляет Core, не фронтенд и не первая страница.
+
+`WorkHistoryGraphPoint` содержит id, kind, sessionId, sequence, at, title, summary,
+checkpointId/checkpointKind, runId, predecessorRunId, intentState. Виды —
+session-created/session-closed/run-started/run-ended/checkpoint; ID —
+`<sessionId>:created|closed`, `<runId>:started|ended`, `<checkpointId>:checkpoint`.
+У lifecycle поля checkpoint и intentState равны null. Только intent получает
+intentState open/completed/cancelled, вычисленный по всему сохранённому набору,
+даже если terminal находится вне страницы. В проекции нет body/result/reason
+или их скрытых полнотекстовых замен в summary. Дублирующий первый run-started корня
+в момент создания и terminal run-ended при закрытии могут быть исключены проекцией;
+attach, pause, resume и handoff сохраняют содержательные маркеры. Исключение должно
+быть детерминированным и одинаковым для total, страниц и sequence-связей.
+
+Автор session-created корня — первый run, ребёнка — сохранённый createdByRunId
+родителя; автор checkpoint — его runId, не current/latest. `runs: AgentRunSummary[]`
+содержит только нужных авторов items/openEnds и непосредственных предшественников, включая
+operator/email для avatar. `branches` — WorkSessionSummary с contextOnly:
+true у ветки без точек в items, необходимой openEnds, границам пересекающих окно
+связей, авторству или цепочке предков.
+Полные Markdown в таблицы не входят; Gravatar вычисляет Web, без записи в storage.
+
+`WorkHistoryGraphEdge` — строгий union пяти форм:
+
+- `sequence {from:nodeId,to:nodeId}` связывает соседние отображаемые реальные точки одной ветки;
+- `fork {fromSessionId,to:childCreatedNodeId}` выходит из **линии родителя** в момент
+  создания ребёнка. Время задаёт сохранённое at целевой session-created; прежний intent
+  может быть намного старше и не является геометрическим концом ребра.
+  OriginCheckpointId остаётся предметным контекстом;
+- `branch-end {from:childClosedNodeId,toSessionId}` возвращает completed **или cancelled**
+  ребёнка в линию родителя на сохранённом at исходной session-closed;
+- `root-start {from:null,to:rootCreatedNodeId}` соединяет ось проекта с созданием корня;
+- `root-end {from:rootClosedNodeId,to:null}` возвращает completed **или cancelled** корень
+  к оси на времени закрытия. Это визуальное завершение линии, не утверждение успеха отмены.
+
+Kind присутствует в каждой форме. FromSessionId/toSessionId ссылаются на branches
+и должны совпадать с настоящим parentSessionId ребёнка. Никаких виртуальных checkpoints
+родителя, отдельного времени присоединения или сохраняемых событий не возникает.
+Acceptance **удалено только из графовых рёбер**: explicit acceptance по-прежнему
+сохраняется в checkpoint.acceptedSessionIds и прежнем workflow Core/CLI, но не
+управляет визуальным возвратом. Невлитыми остаются только pending/open/paused ветки.
+Handoff не создаёт новую ветку, выбранный дочерний scope не становится корнем.
+Связи вычисляет Core из сохранённых фактов.
+
+Только sequence может **пересекать окно** без видимого конца: оба конца — boundaryNodes
+с противоположными side before/after. Два before, два after и outside-scope не образуют
+spanning sequence без видимого конца. Fork/branch-end требуют видимой соответствующей
+точки создания/закрытия ребёнка, root-start/root-end — видимой точки корня.
+У fork один node-endpoint (to), у branch-end — один (from); родительская линия —
+не boundary node. Каждый невидимый node-endpoint sequence обязателен в boundaryNodes:
+`{id,sessionId,at,sequence,kind,side}`. Before/after относятся к порядку текущего
+запроса, outside-scope — к ref/includeChildren. Null означает только ось, не потерю
+конца страницы. OpenEnd сам по себе не заменяет boundary endpoint. Runtime-схема
+отклоняет потерянные концы и родительские линии, несовпадение реального parent,
+возврат незакрытой работы, отсутствующие ветки/авторов/предшественников openEnds,
+терминальные ветки в openEnds и противоречивую идентичность повторённой точки.
+
+`WorkHistoryGraphPointQuery.ref` принимает generated node ID либо CP-key/raw checkpoint
+ID/work-checkpoint:ID для прежних deep links. Detail —
+`{point,session:WorkSession,run:AgentRun|null,previousRun:AgentRunSummary|null,checkpoint:WorkCheckpoint|null}`.
+Это единственное чтение графа с полными Markdown: Modal использует содержание
+выбранного checkpoint либо description/result/reason/endSummary соответствующей
+ветки/участия lifecycle. Мнимый checkpoint для lifecycle не создаётся. Входы —
+`z.input`, выходы строгие без defaults/coercion; предметную принадлежность и актуальные
+связи по-прежнему проверяет Core, граф не создаёт event-store.
 
 ## Обслуживание хранилища
 

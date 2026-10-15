@@ -8,6 +8,10 @@ export type MarkdownViewParams = {
   compact?: boolean;
   /** Подсказка для незаполненного раздела. */
   emptyText?: string;
+  /** Смещение уровней заголовков во вложенном материале; текст Markdown не меняется. */
+  headingOffset?: 0 | 1 | 2 | 3 | 4 | 5;
+  /** Начальный уровень первого реального заголовка; нормализует иерархию без пропусков, имеет приоритет над headingOffset. */
+  headingStartLevel?: 1 | 2 | 3 | 4 | 5 | 6;
 };
 /** Атрибуты корневого элемента. */
 type RootAttrs = Omit<ComponentPropsWithoutRef<"div">, "children">;

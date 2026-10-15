@@ -1,0 +1,115 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  color: var(--tasks-ink);
+  background: var(--tasks-surface);
+  border: 1px solid var(--tasks-border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid var(--tasks-border);
+  min-height: 48px;
+}
+.count {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.toolbarSummary {
+  display: flex;
+  flex: 1 1 28rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.35rem;
+  margin-inline-start: auto;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--tasks-muted);
+}
+.update {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--tasks-muted);
+}
+.solidSample,
+.dashedSample {
+  width: 18px;
+  border-top: 2px solid currentColor;
+}
+
+.dashedSample {
+  border-top-style: dashed;
+}
+.zoom {
+  min-width: 2.5rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--tasks-muted);
+}
+.notice {
+  margin: 0;
+  padding: 0.7rem 1rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  background: var(--tasks-warning-surface);
+}
+.viewport {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overscroll-behavior: contain;
+  --xy-background-color: var(--tasks-surface);
+  --xy-background-color-default: var(--tasks-surface);
+  --xy-attribution-background-color: var(--tasks-surface);
+  --xy-node-color: var(--tasks-ink);
+  --xy-node-border: none;
+  --xy-node-boxshadow-selected: none;
+
+  & :global(.react-flow__attribution a) {
+    color: var(--tasks-muted);
+  }
+}
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-top: 1px solid var(--tasks-border);
+  color: var(--tasks-muted);
+  font-size: 0.7rem;
+  min-height: 44px;
+}
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

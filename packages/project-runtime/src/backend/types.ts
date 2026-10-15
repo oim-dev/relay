@@ -12,6 +12,7 @@ import type { DocumentLibraryService } from "@relay/core/application/documents/l
 import type { ProgressService } from "@relay/core/application/progress/service";
 import type { PlanningService } from "@relay/core/application/planning/service";
 import type { ReleasesService } from "@relay/core/application/releases/service";
+import type { WorkHistoryServiceContract } from "@relay/contracts/work-history";
 
 export interface WorkspaceInfo {
   /** Подтверждённый ID HTTP-контекста; в local — только сохранённый config.projectId. */
@@ -21,6 +22,7 @@ export interface WorkspaceInfo {
   root: string;
 }
 export interface Backend {
+  workHistory: WorkHistoryServiceContract;
   projectSettings: {
     get(): Promise<ProjectSettings>;
     save(input: SaveProjectSettings): Promise<ProjectSettings>;

@@ -427,3 +427,196 @@ npx @oim-dev/relay-cli release get "$RELEASE_ID"
 При продолжении после паузы читайте задачу, комментарии, требования и состав плана
 заново. Прежний комментарий не доказывает свежую проверку. Единый рабочий процесс —
 в [главном руководстве](../../SKILL.md), точный синтаксис — в [CLI](../interfaces/CLI.md).
+
+## 5. История агента и субагента
+
+Этот отдельный пример показывает протокол участия, а не требует повторить уже
+выполненную работу выше. Проверьте доступность команд через `session --help` и
+`checkpoint --help`. Правила — [история работы](../domain/WORK_HISTORY.md).
+Используйте тестовую область либо реальное поручение; не создавайте учебные ветки
+в пользовательской базе без разрешения. Server для человека уже должен быть доступен.
+
+### Начало и намерение
+
+```bash
+npx @oim-dev/relay-cli session list --unfinished --limit 10
+```
+
+Для нового поручения:
+
+```bash
+npx @oim-dev/relay-cli session start \
+  --actor "$ACTOR" \
+  --user-name "$USER_NAME" \
+  --user-email "$USER_EMAIL" \
+  --title 'Проверить сохранение Markdown' \
+  --description-file ./assignment.md
+```
+
+Не запускайте start, если поручено продолжить существующую ветку: прочитайте её get,
+отдельный список открытых намерений через `session intents`, затем context/history
+и выберите attach, resume или согласованный takeover по состоянию. Иначе старое открытое
+намерение может потеряться среди новых закрытых. `projectTotals` не зависит от страницы
+и фильтров, `total` считает отфильтрованные ветки, latestRun сохраняется и после закрытия.
+`$USER_NAME`/`$USER_EMAIL` — согласованный человек, не имя агента и не автор последнего
+коммита. Можно опустить оба флага: CLI выберет пару из RELAY_USER_NAME/RELAY_USER_EMAIL,
+затем Git-конфигурации текущего каталога внутри репозитория. Частичная пара не дополняется
+из другого источника. Git-ветка и commit снимаются отдельно; неизвестное остаётся null.
+
+Для продолжения `$SESSION_REF` — фактический ключ или ID выбранной ветки из списка:
+
+```bash
+npx @oim-dev/relay-cli session get "$SESSION_REF"
+npx @oim-dev/relay-cli session intents "$SESSION_REF" --include-children --limit 10
+npx @oim-dev/relay-cli session context "$SESSION_REF" --limit 10
+```
+
+Здесь `--include-children` выбирает также намерения всех потомков; это чтение,
+не передача их владения. Следуйте `--cursor` или готовой команде продолжения.
+Затем явно подключитесь или возобновите выбранную работу. Следующие шаги примера
+относятся к новой корневой ветке и отдельной дочерней проверке.
+
+Из фактического ответа возьмите `$ROOT_REF` (ключ или ID ветки), `$ROOT_RUN_ID`
+(постоянный `run.id`) и `$ROOT_REVISION` (ревизия ветки). Адреса случайные, не угадывайте
+следующий номер. `assignment.md` должен содержать полное поручение, границы и критерии.
+
+````bash
+npx @oim-dev/relay-cli checkpoint open "$ROOT_REF" \
+  --actor "$ACTOR" --run "$ROOT_RUN_ID" --if-revision "$ROOT_REVISION" \
+  --title 'Намерение: проверить полный Markdown' --body-file - <<'MD'
+## Цель
+
+Проверить сохранность полного многострочного материала через выбранный CLI.
+
+## Проверка
+
+- Прочитать точку целиком через checkpoint get.
+- Сравнить заголовки, списки, пустые строки и код, а не только аннотацию списка.
+
+```text
+  Отступ внутри блока должен сохраниться.
+```
+
+## Границы
+
+Эта проверка не доказывает доступность Web или успешность внешней разработки.
+MD
+````
+
+Сохраните `$ROOT_INTENT_REF` и новую ревизию. `checkpoint get "$ROOT_INTENT_REF"`
+должен показать весь материал. До каждого изменения обновляйте `$ROOT_REVISION`
+из результата или `session get`; не подставляйте старую ревизию к новой операции.
+
+### Родитель создаёт ветку до запуска
+
+```bash
+npx @oim-dev/relay-cli session fork "$ROOT_INTENT_REF" \
+  --actor "$ACTOR" --run "$ROOT_RUN_ID" --if-revision "$ROOT_REVISION" \
+  --title 'Независимо проверить сохранённый материал' \
+  --description-file ./child-assignment.md
+```
+
+Из `childSession` получите `$CHILD_REF` и постоянный `$CHILD_ID`. После fork ребёнок
+pending, run у него ещё нет. Только теперь запускайте разрешённого субагента,
+передав в prompt:
+
+- выбранный проект, реальный config и local/HTTP-подключение;
+- `$CHILD_REF`, `$ROOT_INTENT_REF`, задачу и документы-основания;
+- назначение, границы, критерии, файлы/ресурсы и контекст человека-оператора;
+- обязанность attach, собственного intent, результата и передачи refs родителю.
+
+Субагент проверяет проект и полное поручение, затем:
+
+```bash
+npx @oim-dev/relay-cli session get "$CHILD_REF"
+npx @oim-dev/relay-cli checkpoint get "$ROOT_INTENT_REF"
+npx @oim-dev/relay-cli session attach "$CHILD_REF" \
+  --actor "$CHILD_ACTOR" --if-revision "$CHILD_REVISION"
+```
+
+Без явных user-флагов и RELAY_USER_* attach наследует оператора родительского участия,
+создавшего ветку; Git-конфигурация ребёнка его не заменяет. Явная/env-пара переопределяет
+наследование. Сверьте сохранённый снимок. Получите собственный `$CHILD_RUN_ID`, затем
+свежие ревизии ребёнка перед каждым действием:
+
+```bash
+npx @oim-dev/relay-cli checkpoint open "$CHILD_REF" \
+  --actor "$CHILD_ACTOR" --run "$CHILD_RUN_ID" --if-revision "$CHILD_REVISION" \
+  --title 'Намерение независимой проверки' --body-file ./child-intent.md
+```
+
+Возьмите `$CHILD_INTENT_REF`. Выполните порученную проверку; на смысловой границе
+сохраните фактические наблюдения, не выдуманный успешный результат:
+
+```bash
+npx @oim-dev/relay-cli checkpoint save "$CHILD_INTENT_REF" \
+  --actor "$CHILD_ACTOR" --run "$CHILD_RUN_ID" --if-revision "$CHILD_REVISION" \
+  --title 'Промежуточные наблюдения' --body-file ./child-progress.md
+```
+
+Дальнейшее завершение допустимо только при выполненном поручении. Полный итог и
+ограничения запишите в `child-result.md`, фактические проверки — в `child-checks.md`.
+После каждой записи используйте новую ревизию **ветки**:
+
+```bash
+npx @oim-dev/relay-cli checkpoint complete "$CHILD_INTENT_REF" \
+  --actor "$CHILD_ACTOR" --run "$CHILD_RUN_ID" --if-revision "$CHILD_REVISION" \
+  --title 'Результат независимой проверки' \
+  --body-file ./child-result.md --checks-file ./child-checks.md
+npx @oim-dev/relay-cli session get "$CHILD_REF"
+```
+
+```bash
+npx @oim-dev/relay-cli session complete "$CHILD_REF" \
+  --actor "$CHILD_ACTOR" --run "$CHILD_RUN_ID" --if-revision "$CHILD_REVISION" \
+  --result-file ./child-result.md
+```
+
+Передайте родителю адреса и ограничения. Completed ребёнка ещё не означает принятия.
+
+### Принятие и завершение родителя
+
+Родитель читает итог и нужные полные материалы; `--limit` ограничивает страницу,
+не сокращает Markdown полученной точки. Следуйте продолжению при необходимости:
+
+```bash
+npx @oim-dev/relay-cli session get "$CHILD_REF"
+npx @oim-dev/relay-cli session context "$CHILD_REF" --limit 10
+npx @oim-dev/relay-cli session get "$ROOT_REF"
+```
+
+После проверки сохраните основание приёмки в `acceptance.md`. `--accept` получает
+**постоянный session.id**, не читаемый ключ ребёнка. Если есть нерешённые замечания,
+сначала организуйте доработку, не исполняйте успешную ветку ниже:
+
+```bash
+npx @oim-dev/relay-cli checkpoint save "$ROOT_INTENT_REF" \
+  --actor "$ACTOR" --run "$ROOT_RUN_ID" --if-revision "$ROOT_REVISION" \
+  --title 'Принят результат ребёнка' --body-file ./acceptance.md \
+  --accept "$CHILD_ID"
+```
+
+Завершите исходное намерение отдельной точкой и всю ветку с итогом. Снова обновите
+`$ROOT_REVISION` после каждой записи; `root-result.md` содержит сделанное, проверки,
+ограничения и оставшиеся ресурсы, а не только «готово»:
+
+```bash
+npx @oim-dev/relay-cli checkpoint complete "$ROOT_INTENT_REF" \
+  --actor "$ACTOR" --run "$ROOT_RUN_ID" --if-revision "$ROOT_REVISION" \
+  --title 'Проверка завершена' --body-file ./root-result.md
+npx @oim-dev/relay-cli session get "$ROOT_REF"
+```
+
+```bash
+npx @oim-dev/relay-cli session complete "$ROOT_REF" \
+  --actor "$ACTOR" --run "$ROOT_RUN_ID" --if-revision "$ROOT_REVISION" \
+  --result-file ./root-result.md
+npx @oim-dev/relay-cli session tree "$ROOT_REF" --limit 10
+```
+
+Вместо завершения незаконченной работы сохраните остаток и выполните pause с причиной.
+После обрыва прочитайте историю и реальный проект; resume/takeover создают новый run,
+старое авторство сохраняется. Takeover корня не передаёт детей. При независимой работе
+двух людей в разных Git-ветках сохраняйте разные сессии; после merge выполняйте явные
+reindex и doctor check. Конфликт постоянных файлов одной сессии требует согласования,
+не автоматического выбора по ревизии. Полный порядок — [восстановление](../guides/RECOVERY.md).

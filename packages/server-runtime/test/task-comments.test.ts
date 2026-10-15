@@ -59,9 +59,17 @@ test("HTTP: комментарии, авторство, повтор и отсу
     }
   }
   assert.equal(
-    Object.keys(schema.paths).some((path) => path.includes("/history")),
+    Object.keys(schema.paths).some(
+      (path) =>
+        path.includes("/history") &&
+        !/^\/api\/v1\/(?:projects\/\{project\}\/)?work-history\//.test(path),
+    ),
     false,
   );
+  // Явная история работы допустима, но комментарии/CRUD не создают её автоматически.
+  assert.ok(schema.paths["/api/v1/work-history/history"].get);
+  assert.ok(schema.paths["/api/v1/projects/{project}/work-history/history"].get);
+  assert.equal((await app.inject("/api/v1/work-history/history")).json().data.total, 0);
   for (const name of [
     "EntityHistory",
     "GraphHistory",

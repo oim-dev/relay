@@ -17,6 +17,7 @@ import { EntitiesModule } from "./modules/entities/entities.module.js";
 import { DocumentsModule } from "./modules/documents/documents.module.js";
 import { PlanningModule } from "./modules/planning/planning.module.js";
 import { ReleasesModule } from "./modules/releases/releases.module.js";
+import { WorkHistoryModule } from "./modules/work-history/work-history.module.js";
 
 @Module({})
 export class AppModule {
@@ -41,6 +42,7 @@ export class AppModule {
         ProgressModule,
         PlanningModule,
         ReleasesModule,
+        WorkHistoryModule,
         BoardsModule,
         BoardTasksModule,
         GraphModule,

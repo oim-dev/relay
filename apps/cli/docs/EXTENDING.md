@@ -129,6 +129,8 @@ HTTP-сценарии также должны завершать только с
 | `src/context.ts`                                       | Runtime, подключение Backend, автор, параметры вывода, печать Result            |
 | `src/commands/`                                        | Предметные адаптеры CLI                                                         |
 | `src/commands/product-queries.ts`                      | Чтения продукта: state/context, обзор, карта, validation/lint                   |
+| `src/commands/work-history.ts`                         | Ветки работы, открытые намерения, история, контекст и неизменяемые материалы    |
+| `src/commands/work-history-connection.ts`              | Пользователь и Git исходного cwd только при создании нового участия             |
 | `src/commands/planning.ts`, `src/commands/releases.ts` | Отдельные владельцы планов и релизов; общие аргументы — planning-release-shared |
 | `src/backend/connect.ts`                               | Выбор подключения через project-runtime                                         |
 | `src/input.ts`, `src/text-input.ts`                    | Общие средства чтения ввода                                                     |
@@ -278,7 +280,9 @@ Update передаёт только предоставленные поля. Н
 подставлять свежую ревизию; после потери ответа нельзя безусловно повторять.
 Публикация комментария не требует ревизии задачи, но повтор может дублировать сообщение.
 Формат 4 обслуживается `storage migrate`; product/graph migrate в CLI не
-зарегистрированы. Команд истории не добавляйте под видом диагностики.
+зарегистрированы. Предметная история работы — отдельные `session` и `checkpoint`
+через Backend.workHistory, не диагностический журнал команд. Git/пользовательский
+контекст клиента определяется только при новом участии; чтения не вызывают Git.
 
 ## Представление и транспорт
 
@@ -384,7 +388,8 @@ REST-контракт принадлежит [server-runtime](https://github.com
 - Предметные сценарии — `command-product`, `command-feature`, `command-scenario`,
   `command-application`, `command-implementation`, `command-documents`,
   `command-boards`, `command-tasks`, `command-task-criteria`, `command-task-comments`,
-  `command-plans`, `command-releases`, `command-progress`, `command-search`.
+  `command-plans`, `command-releases`, `command-progress`, `command-search`,
+  `command-work-history`.
 - `command-foundation` — общий ввод, представление, конверт, пагинация и запуск.
 - `command-help` и `command-documentation` — справка, регистрации, примеры,
   канонические страницы, ссылки и поставляемые материалы.

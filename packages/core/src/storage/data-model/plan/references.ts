@@ -26,6 +26,7 @@ export type RecordReference = {
   readonly kind: string;
   readonly id: string;
   readonly inverse?: string;
+  readonly allowDeleted?: boolean;
 };
 
 /** Ссылки действующей записи текущей версии кодека по правилам её владельца. */
@@ -51,6 +52,7 @@ export function recordReferences(
       kind: ref.kind,
       id,
       ...(ref.inverse === undefined ? {} : { inverse: ref.inverse }),
+      ...(ref.allowDeleted === undefined ? {} : { allowDeleted: ref.allowDeleted }),
     });
   }
   return [...output.values()];

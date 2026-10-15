@@ -454,6 +454,9 @@ importers:
         specifier: ^4.1.0
         version: 4.6.2
     devDependencies:
+      '@relay/rest-sdk':
+        specifier: workspace:*
+        version: link:../rest-sdk
       '@relay/typescript-config':
         specifier: workspace:*
         version: link:../typescript-config

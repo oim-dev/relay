@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { actorSchema } from "@relay/contracts/primitives";
+import { workHistoryOperations, WORK_HISTORY_CAPABILITY } from "@relay/contracts/work-history";
 import {
   productValidationSchema,
   productLintQuerySchema,
@@ -352,8 +353,137 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         { url },
       );
   };
+  const requireWorkHistory = () => {
+    if (!context.capabilities?.includes(WORK_HISTORY_CAPABILITY))
+      throw new AppError(
+        "UNSUPPORTED",
+        `История работы требует Relay Server с ${WORK_HISTORY_CAPABILITY}. Обновите и перезапустите сервер; локальный fallback не выполняется.`,
+        5,
+        { url, capability: WORK_HISTORY_CAPABILITY },
+      );
+  };
+  const readWorkHistory = async <I, O>(
+    operation: { input: z.ZodType<I>; output: z.ZodType<O> },
+    input: unknown,
+    request: (input: I) => Promise<{ ok: true; data: unknown }>,
+  ): Promise<O> => {
+    requireWorkHistory();
+    const query = parse(operation.input, input, "параметры истории работы");
+    return decode(operation.output, await call(() => request(query)));
+  };
+  const writeWorkHistory = async <I extends { actor?: string | undefined; requestId: string }, O>(
+    operation: { input: z.ZodType<I>; output: z.ZodType<O> },
+    input: { actor?: string | undefined; requestId: string },
+    defaultActor: string,
+    request: (input: I) => Promise<{ ok: true; data: unknown }>,
+  ): Promise<O> => {
+    requireWorkHistory();
+    const command = parse(
+      operation.input,
+      {
+        ...input,
+        actor: input.actor ?? defaultActor,
+      },
+      "операция истории работы",
+    );
+    return decode(operation.output, await call(() => request(command), "write", command.requestId));
+  };
   return {
     kind: "http",
+    workHistory: {
+      list: (input) =>
+        readWorkHistory(workHistoryOperations.list, input, (query) =>
+          api.workHistory.listWorkSessions(
+            defined({ ...query, parent: query.parent === null ? "null" : query.parent }),
+          ),
+        ),
+      get: (input) =>
+        readWorkHistory(workHistoryOperations.get, input, (query) =>
+          api.workHistory.getWorkSession({ ref: encodeURIComponent(query.ref) }),
+        ),
+      tree: (input) =>
+        readWorkHistory(workHistoryOperations.tree, input, (query) =>
+          api.workHistory.getWorkSessionTree({
+            ...defined(query),
+            ref: encodeURIComponent(query.ref),
+          }),
+        ),
+      history: (input) =>
+        readWorkHistory(workHistoryOperations.history, input, ({ ref, ...query }) =>
+          ref === undefined
+            ? api.workHistory.getWorkHistory(defined(query))
+            : api.workHistory.getWorkSessionHistory({
+                ...defined(query),
+                ref: encodeURIComponent(ref),
+              }),
+        ),
+      context: (input) =>
+        readWorkHistory(workHistoryOperations.context, input, (query) =>
+          api.workHistory.getWorkSessionContext({
+            ...defined(query),
+            ref: encodeURIComponent(query.ref),
+          }),
+        ),
+      checkpoint: (input) =>
+        readWorkHistory(workHistoryOperations.checkpoint, input, (query) =>
+          api.workHistory.getWorkCheckpoint({ ref: encodeURIComponent(query.ref) }),
+        ),
+      openIntents: (input) =>
+        readWorkHistory(workHistoryOperations.openIntents, input, (query) =>
+          api.workHistory.getWorkSessionOpenIntents({
+            ...defined(query),
+            ref: encodeURIComponent(query.ref),
+          }),
+        ),
+      start: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.start, input, actor, (command) =>
+          api.workHistory.startWorkSession(defined(command)),
+        ),
+      fork: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.fork, input, actor, (command) =>
+          api.workHistory.forkWorkSession(defined(command)),
+        ),
+      attach: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.attach, input, actor, (command) =>
+          api.workHistory.attachWorkSession(defined(command)),
+        ),
+      pause: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.pause, input, actor, (command) =>
+          api.workHistory.pauseWorkSession(defined(command)),
+        ),
+      resume: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.resume, input, actor, (command) =>
+          api.workHistory.resumeWorkSession(defined(command)),
+        ),
+      takeover: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.takeover, input, actor, (command) =>
+          api.workHistory.takeoverWorkSession(defined(command)),
+        ),
+      complete: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.complete, input, actor, (command) =>
+          api.workHistory.completeWorkSession(defined(command)),
+        ),
+      cancel: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.cancel, input, actor, (command) =>
+          api.workHistory.cancelWorkSession(defined(command)),
+        ),
+      openCheckpoint: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.openCheckpoint, input, actor, (command) =>
+          api.workHistory.openWorkCheckpoint(defined(command)),
+        ),
+      saveCheckpoint: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.saveCheckpoint, input, actor, (command) =>
+          api.workHistory.saveWorkCheckpoint(defined(command)),
+        ),
+      completeCheckpoint: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.completeCheckpoint, input, actor, (command) =>
+          api.workHistory.completeWorkCheckpoint(defined(command)),
+        ),
+      cancelCheckpoint: (input, actor) =>
+        writeWorkHistory(workHistoryOperations.cancelCheckpoint, input, actor, (command) =>
+          api.workHistory.cancelWorkCheckpoint(defined(command)),
+        ),
+    },
     projectSettings: {
       get: async () =>
         decode(projectSettingsSchema, await call(() => api.context.getProjectSettings())),

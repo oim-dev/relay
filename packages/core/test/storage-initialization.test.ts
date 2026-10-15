@@ -175,7 +175,7 @@ test("прямой init через symlink публикует конфигура
     format: "relay-entities",
     schemaVersion: 4,
     productId: initialized.config.projectId,
-    dataModelVersion: 2,
+    dataModelVersion: 3,
   });
   const task = await new BoardTasksService(reopened).create(
     { board: "product", requestId: "init-write" },

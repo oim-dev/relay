@@ -3,6 +3,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { API_DOCS_PATH, OPENAPI_PATH } from "@relay/contracts";
 import { schemas } from "./schemas.js";
 import { jsonSchema } from "./endpoint.js";
+import { workHistoryInputSchemas } from "../modules/work-history/transport.js";
 import {
   swaggerProjectRequest,
   swaggerProjectScript,
@@ -106,7 +107,7 @@ export function setupOpenApi(app: INestApplication): void {
           "LinkBoardTask",
           "BoardTasksQuery",
           "ProductOverviewMetricPageQuery",
-        ].includes(name)
+        ].includes(name) || workHistoryInputSchemas.has(name)
           ? "input"
           : "output",
       ),

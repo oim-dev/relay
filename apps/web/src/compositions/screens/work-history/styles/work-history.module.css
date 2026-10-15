@@ -1,0 +1,23 @@
+.root {
+  height: calc(100dvh - 7rem);
+  min-height: 24rem;
+  min-width: 0;
+  padding: 0.5rem;
+  color: var(--tasks-ink);
+
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: -3px;
+  }
+  @media (--md) {
+    padding: 0.75rem 1rem 1rem;
+  }
+}
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

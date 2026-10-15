@@ -16,6 +16,7 @@
 | [physical2-v0.6.1-ec4a2cc](physical2-v0.6.1-ec4a2cc/PROVENANCE.md)                         | ec4a2cc | v0.6.1 | 2, планы v2        | Первый npm-релиз                                                                                       |
 | [physical3-3875aee](physical3-3875aee/PROVENANCE.md)                                       | 3875aee | —      | 3                  | Единственный коммит, который пишет формат 3 (квитанции и события в записях)                            |
 | [physical4-v0.7.0-52c4609](physical4-v0.7.0-52c4609/PROVENANCE.md)                         | 52c4609 | v0.7.0 | 4                  | Текущий физический формат из старой версии приложения (no-op и контроль)                               |
+| [profile2-3dc1189](profile2-3dc1189/PROVENANCE.md)                                         | 3dc1189 | —      | 4, профиль 2       | Переход к профилю 3 без синтетической истории, сохранность прежнего Markdown                           |
 
 Исследование схем и неподтверждённых вариантов собрано в [HISTORY-VARIANTS.md](HISTORY-VARIANTS.md).
 
