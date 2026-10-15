@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile, writeFile, rm, copyFile } from "node:fs/promises";
+import { readFile, writeFile, rm, copyFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { GraphPage } from "@relay/core/domain/entity-graph";
@@ -283,6 +283,13 @@ test("doctor local/HTTP: malformed и schema требуют восстановл
     record.data.title = 17;
     const damaged = damage === "malformed" ? "{invalid-record" : JSON.stringify(record);
     await writeFile(path, damaged);
+    // Watcher отмечает внешнюю запись асинхронно. Сравниваем один и тот же снимок
+    // повреждения, не полагаясь на задержку запуска отдельного CLI-процесса.
+    await mkdir(join(app.root, ".relay/runtime"), { recursive: true });
+    await writeFile(
+      join(app.root, ".relay/runtime/index-stale.json"),
+      JSON.stringify({ paths: [`entities/tasks/${id}.json`], total: 1 }),
+    );
     let localDetails: unknown;
     for (const globals of [["--local"], ["--server-url", server.url]]) {
       const failure = await invoke(app.root, [...globals, "doctor", "check"]);

@@ -1248,48 +1248,6 @@ test(
 );
 
 test(
-  "plan/release/progress: русская help всех листьев без проекта",
-  { timeout: 120_000 },
-  async (t) => {
-    const cwd = await mkdtemp(join(tmpdir(), "relay-planning-help-"));
-    t.after(() => rm(cwd, { recursive: true, force: true }));
-    const leaves = [
-      ...["list", "get", "create", "update", "start", "complete", "cancel", "progress"].map((x) => [
-        "plan",
-        x,
-      ]),
-      ...["list", "get", "create", "update", "move", "remove"].map((x) => ["plan", "stage", x]),
-      ...["list", "add", "remove", "transfer"].map((x) => ["plan", "stage", "task", x]),
-      ...["candidates", "memberships"].map((x) => ["plan", "task", x]),
-      ...[
-        "list",
-        "get",
-        "create",
-        "update",
-        "preview",
-        "plan",
-        "cancel",
-        "publish",
-        "plans",
-        "progress",
-      ].map((x) => ["release", x]),
-      ...["product", "application", "feature", "scenario", "implementation", "task"].map((x) => [
-        x,
-        "progress",
-      ]),
-    ];
-    for (const leaf of leaves) {
-      const help = human(await invokeRaw(cwd, [...leaf, "--help"], narrow), [
-        "npx @oim-dev/relay-cli",
-      ]);
-      assert.match(help, /[А-Яа-яЁё]/);
-      assert.match(help, /Пример/);
-      assert.doesNotMatch(help, /--max-bytes|--color|--offset|--snapshot-version/);
-    }
-  },
-);
-
-test(
   "plan lifecycle: причины отказа, start/complete и историческое завершение при потере готовности",
   { timeout: 120_000 },
   async (t) => {

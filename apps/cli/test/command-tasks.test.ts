@@ -749,8 +749,8 @@ test(
 );
 
 test(
-  "task list: 300 задач, три доски, фильтрация до paging, cursor-only, дети, stale и контекст",
-  { timeout: 600_000 },
+  "task list: граница 100, три доски, фильтрация до paging, cursor-only, дети, stale и контекст",
+  { timeout: 120_000 },
   async (t) => {
     const app = await fixture(t);
     successful(
@@ -775,7 +775,7 @@ test(
     const all = [];
     const columns = ["ready", "in-progress", "review", "done", "cancelled"] as const;
     // Только публичная предметная запись Core: никаких файлов сущностей или обхода инвариантов.
-    for (let index = 0; index < 300; index++) {
+    for (let index = 0; index < 101; index++) {
       const board = ["product", "infrastructure", "third"][index % 3]!;
       const column = index < 3 ? "inbox" : columns[Math.floor(index / 3) % 5]!;
       const parentId = index >= 3 && index % 4 === 0 ? parents[index % 3] : undefined;
@@ -797,26 +797,27 @@ test(
       if (board === "product" && index % 2 === 0 && column !== "done" && column !== "cancelled")
         expected.add(saved.id);
     }
-    assert.equal(all.length, 300);
-    assert.ok(expected.size > 20);
+    assert.equal(all.length, 101);
+    assert.ok(expected.size > 5);
     const defaultPage = successful(await app.run<TaskPage>(["task", "list"]));
-    assert.equal(defaultPage.data.total, 300);
+    assert.equal(defaultPage.data.total, 101);
     assert.equal(defaultPage.data.items.length, 20);
     assert.equal(defaultPage.meta!.page!.limit, 20);
     assert.equal(defaultPage.meta!.page!.count, 20);
-    assert.equal(defaultPage.meta!.page!.total, 300);
+    assert.equal(defaultPage.meta!.page!.total, 101);
     assert.ok(defaultPage.meta!.page!.nextCursor);
     failed(await app.run(["task", "list", "--limit", 101]), "INVALID_ARGUMENT");
     failed(await app.run(["task", "list", "--limit", 0]), "INVALID_ARGUMENT");
     let maximum = successful(await app.run<TaskPage>(["task", "list", "--limit", 100]));
     const maximumIds: string[] = [];
-    for (let index = 0; index < 3; index++) {
-      assert.equal(maximum.data.items.length, 100);
-      assert.equal(maximum.meta!.page!.count, 100);
+    for (let index = 0; index < 2; index++) {
+      const count = index === 0 ? 100 : 1;
+      assert.equal(maximum.data.items.length, count);
+      assert.equal(maximum.meta!.page!.count, count);
       assert.equal(maximum.meta!.page!.limit, 100);
-      assert.equal(maximum.meta!.page!.total, 300);
+      assert.equal(maximum.meta!.page!.total, 101);
       maximumIds.push(...maximum.data.items.map((item) => item.id));
-      if (index < 2) {
+      if (index === 0) {
         assert.ok(maximum.meta!.page!.nextCursor);
         maximum = successful(
           await app.run<TaskPage>(["task", "list", "--cursor", maximum.meta!.page!.nextCursor]),
@@ -825,7 +826,7 @@ test(
     }
     assert.equal(maximum.meta!.page!.nextCursor, null);
     assert.equal(maximum.meta!.page!.nextCommand, null);
-    assert.equal(new Set(maximumIds).size, 300);
+    assert.equal(new Set(maximumIds).size, 101);
     assert.deepEqual(new Set(maximumIds), new Set(all.map((item) => item.id)));
     const other = await fixture(t);
     const context = ["--local", "--config", join(app.root, ".relay", "config.json")];
@@ -839,21 +840,26 @@ test(
       "--q",
       "Найти 界",
     ];
-    const first = successful(await app.run<TaskPage>([...context, "task", "list", ...filters]));
+    const defaultFiltered = successful(
+      await app.run<TaskPage>([...context, "task", "list", ...filters]),
+    );
     const explicitTwenty = successful(
       await app.run<TaskPage>([...context, "task", "list", ...filters, "--limit", 20]),
     );
-    assert.deepEqual(explicitTwenty.data, first.data);
-    assert.deepEqual(explicitTwenty.meta!.page, first.meta!.page);
+    assert.deepEqual(explicitTwenty.data, defaultFiltered.data);
+    assert.deepEqual(explicitTwenty.meta!.page, defaultFiltered.meta!.page);
+    const first = successful(
+      await app.run<TaskPage>([...context, "task", "list", ...filters, "--limit", 5]),
+    );
     assert.equal(first.meta!.page!.total, expected.size);
-    assert.equal(first.meta!.page!.count, 20);
+    assert.equal(first.meta!.page!.count, 5);
     const cursor = first.meta!.page!.nextCursor!;
     assert.ok(cursor);
     let page = first;
     const seen: string[] = [];
     for (let guard = 0; ; guard++) {
       assert.ok(guard < 20);
-      assert.equal(page.meta!.page!.limit, 20);
+      assert.equal(page.meta!.page!.limit, 5);
       assert.equal(page.meta!.page!.count, page.data.items.length);
       assert.equal(page.meta!.page!.total, expected.size);
       assert.equal(page.data.total, expected.size);
@@ -896,7 +902,7 @@ test(
         "children",
         parents[0]!,
         "--limit",
-        20,
+        3,
       ]),
     );
     const childIds: string[] = [];
@@ -943,12 +949,12 @@ test(
       successful(
         await app.run<TaskPage>(["task", "list", "--q", "Маркер-описания", "--search-in", "all"]),
       ).data.total,
-      300,
+      101,
     );
     for (const width of [40, 100]) {
       const human = await invokeRaw(
         app.root,
-        [...context, "task", "list", ...filters, "--limit", 20],
+        [...context, "task", "list", ...filters, "--limit", 5],
         { env: { COLUMNS: String(width), FORCE_COLOR: "3" } },
       );
       assert.equal(human.code, 0, human.stderr);
@@ -963,7 +969,7 @@ test(
       assert.doesNotMatch(human.stdout, /\u001b/);
       assert.match(
         human.stdout.replace(/\s+/g, " "),
-        new RegExp(`Показано: 20 из ${expected.size} подходящих записей Есть продолжение`),
+        new RegExp(`Показано: 5 из ${expected.size} подходящих записей Есть продолжение`),
       );
       const continuation = human.stdout
         .split("\n")

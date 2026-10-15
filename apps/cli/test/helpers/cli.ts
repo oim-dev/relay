@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { TestContext } from "node:test";
 import type { CliPage } from "../../src/queries/result.js";
@@ -37,6 +38,8 @@ export interface RunOptions {
   env?: NodeJS.ProcessEnv;
   nodeArgs?: string[];
   timeoutMs?: number;
+  /** Проверка границы процесса: main, stdio, сигналы или окружение Node.js. */
+  subprocess?: boolean;
 }
 
 export type FixtureContext = Pick<TestContext, "after">;
@@ -106,11 +109,54 @@ export async function tempDirectory(t: FixtureContext): Promise<string> {
   return realpath(directory);
 }
 
-/** Сквозные проверки запускают CLI отдельно; RELAY_CLI_TEST_SOURCE=1 выбирает исходники с tsx. */
+type EntryPoints = {
+  runtime: typeof import("../../src/context.js").runtime;
+  runCli: typeof import("../../src/run.js").runCli;
+};
+let entryPoints: Promise<EntryPoints> | undefined;
+
+/** Настоящий CLI и Backend; у каждого вызова свои потоки, cwd, env и дерево команд. */
 export async function invokeRaw(
   cwd: string,
   args: Array<string | number>,
   options: RunOptions = {},
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  if (
+    process.env.RELAY_CLI_TEST_SOURCE === "1" ||
+    options.subprocess ||
+    options.nodeArgs ||
+    options.timeoutMs !== undefined
+  )
+    return invokeProcess(cwd, args, options);
+  entryPoints ??= Promise.all([
+    import(new URL("../../dist/cli/context.js", import.meta.url).href),
+    import(new URL("../../dist/cli/run.js", import.meta.url).href),
+  ]).then(([context, run]) => ({ runtime: context.runtime, runCli: run.runCli }));
+  const { runtime, runCli } = await entryPoints;
+  let output = "";
+  const stdin = Readable.from(options.input === undefined ? [] : [options.input]);
+  const stdout = new Writable({
+    write(chunk, _encoding, callback) {
+      output += chunk.toString();
+      callback();
+    },
+  });
+  const io = runtime(stdin, stdout, cwd);
+  io.env = cliEnv(options.env);
+  try {
+    const code = await runCli(args.map(String), io);
+    return { code, stdout: output, stderr: "" };
+  } finally {
+    stdin.destroy();
+    stdout.destroy();
+  }
+}
+
+/** Настоящий main: exit code и stderr проверяются на границе отдельного процесса. */
+async function invokeProcess(
+  cwd: string,
+  args: Array<string | number>,
+  options: RunOptions,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(

@@ -15,10 +15,11 @@ test("help: все 146 листов и группы работают без conf
     const result = await renderHelp(root, [...path, "--help"]);
     assert.equal(result.code, 0, path.join(" ") + result.stdout);
     assert.match(result.stdout, /Примеры:/);
+    assert.match(result.stdout, /[А-Яа-яЁё]/);
     assert.match(result.stdout, /npx @oim-dev\/relay-cli/);
     assert.match(result.stdout, /--format/);
     assert.match(result.stdout, /--actor/);
-    assert.doesNotMatch(result.stdout, /\x1b|--color|--max-bytes/);
+    assert.doesNotMatch(result.stdout, /\x1b|--color|--max-bytes|--offset|--snapshot-version/);
     assert.doesNotMatch(result.stdout, /\bhistory\b/);
     if (command.commands.length) {
       assert.deepEqual(await renderHelp(root, path), result, path.join(" "));
@@ -35,7 +36,10 @@ test("help: все 146 листов и группы работают без conf
   assert.ifError(syntax.error);
   assert.equal(syntax.status, 0, syntax.stderr);
   assert.deepEqual(await readdir(root), []);
-  const child = await invokeRaw(root, ["task", "get", "--help"], { env: { FORCE_COLOR: "3" } });
+  const child = await invokeRaw(root, ["task", "get", "--help"], {
+    subprocess: true,
+    env: { FORCE_COLOR: "3" },
+  });
   assert.equal(child.code, 0);
   assert.equal(child.stderr, "");
   assert.doesNotMatch(child.stdout, /\x1b/);

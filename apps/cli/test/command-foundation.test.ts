@@ -831,6 +831,46 @@ test("foundation: PTY не включает ANSI при FORCE_COLOR", async (t) 
   assert.doesNotMatch(result.stdout, /\x1b/);
 });
 
+test("foundation: встроенный CLI и отдельный процесс одинаково читают stdin-запись, ошибки и help", async (t) => {
+  const app = await fixture(t);
+  const elsewhere = await tempDirectory(t);
+  const input = "\n\n## Содержание 雪 🧪\n\n  Отступ\n```ts\n\tconst value = 0;\n```\n\n";
+  const saved = successful(
+    await app.run<{ key: string }>(
+      ["document", "create", "--name", "Проверка запуска", "--body-file", "-"],
+      { input },
+    ),
+  ).data;
+  const env = {
+    RELAY_CONFIG: join(app.root, ".relay/config.json"),
+    COLUMNS: "24",
+    FORCE_COLOR: "3",
+  };
+  const parentEnv = { ...process.env };
+  const parentCwd = process.cwd();
+  for (const args of [
+    ["document", "get", saved.key],
+    ["document", "get", saved.key, "--format", "json"],
+    ["document", "get", "DOC-MISSING", "--format", "json"],
+    ["document", "get", saved.key, "--unknown"],
+    ["document", "get", "--help"],
+  ]) {
+    const direct = await invokeRaw(elsewhere, args, { env });
+    const child = await invokeRaw(elsewhere, args, { env, subprocess: true });
+    assert.deepEqual(direct, child, args.join(" "));
+  }
+  const read = successful(
+    await app.run<{ data: { body: string } }>(["document", "get", saved.key]),
+  ).data;
+  assert.equal(read.data.body, input);
+  assert.ok(
+    Object.keys(process.env).length === Object.keys(parentEnv).length &&
+      Object.entries(parentEnv).every(([key, value]) => process.env[key] === value),
+    "Вызовы CLI не должны менять окружение тестового процесса",
+  );
+  assert.equal(process.cwd(), parentCwd);
+});
+
 test("foundation: helper ограничивает subprocess и переживает EPIPE stdin", async (t) => {
   const root = await tempDirectory(t);
   await assert.rejects(
@@ -843,7 +883,10 @@ test("foundation: helper ограничивает subprocess и пережива
     }),
     /timeout 100/,
   );
-  const result = await invokeRaw(root, ["--version"], { input: Buffer.alloc(2 * 1024 * 1024) });
+  const result = await invokeRaw(root, ["--version"], {
+    subprocess: true,
+    input: Buffer.alloc(2 * 1024 * 1024),
+  });
   assert.equal(result.code, 0, result.stderr);
   assert.equal(result.stderr, "");
 });
