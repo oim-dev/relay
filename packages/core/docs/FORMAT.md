@@ -505,7 +505,7 @@ SHA-256, её завершённость и SHA-256 каждого файла, �
   и релиза получают только `dataVersion: 2`. Кодек задаёт `relocation`: индекс сохраняет
   адреса и нумерацию `STG`, карточка технической записи — `status: "relocated"`, `active: false`;
   разрешение адреса без ожидания `plan-stage` даёт `ENTITY_RELOCATED` с `details.from`,
-  `to`, `stageId`, `key`. Каталоги, поиск и прогресс такие записи не перечисляют.
+  `to`, `stageId`, `key` по `entityRelocatedDetailsSchema` из Contracts. Каталоги, поиск и прогресс такие записи не перечисляют.
 - Отношения: в наборе этапа все активные рёбра слота `planning-membership` получают
   `active: false` без изменения ID, ревизии и авторских `updatedAt`/`updatedBy`. В набор плана
   для каждой задачи этапа добавляется `task part-of work-plan` в том же слоте, если

@@ -5,7 +5,7 @@ import { notifications } from "@mantine/notifications";
 import { Link2, Plus } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useProjectBasePath, useProjectId } from "domains/project";
-import { isRelocatedEntityKind, useEntities } from "domains/entities";
+import { isRelocatedEntityKind, useEntities, useEntityRelocations } from "domains/entities";
 import {
   DocumentAccessError,
   DocumentConflictError,
@@ -17,6 +17,7 @@ import {
 import type { MaterialTargetKind } from "domains/documents";
 import { SectionPanel } from "ui/section-panel";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
+import { describeRelocatedStage } from "./helpers/describe-relocated-stage";
 import { parseRelationTarget } from "./helpers/parse-relation-target";
 import { RelationForm } from "./ui/relation-form/relation-form";
 import type { RelationFormValues } from "./ui/relation-form/types/relation-form-props.type";
@@ -60,7 +61,8 @@ export const DocumentRelations = ({ material }: DocumentRelationsProps) => {
   const openedRevisionRef = useRef<number | null>(null);
   const liveRevisionRef = useRef(material.revision);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const hasDetachedRef = useRef(false);
+  /* Адрес снятой связи, пока фокус ещё не перенесён с исчезающей строки на заголовок блока. */
+  const detachedAddressRef = useRef<string | null>(null);
   useEffect(() => {
     liveRevisionRef.current = material.revision;
   }, [material.revision]);
@@ -71,24 +73,72 @@ export const DocumentRelations = ({ material }: DocumentRelationsProps) => {
   const refs = [
     ...new Set(allRelations.map(({ relation }) => `${relation.target.kind}:${relation.target.id}`)),
   ];
+  const relocatedRefs = allRelations
+    .filter(({ relation }) => isRelocatedEntityKind(relation.target.kind))
+    .map(({ relation }) => `${relation.target.kind}:${relation.target.id}`);
   const entities = useEntities(projectId, { refs, limit: 100 });
+  // Владельца прежнего адреса называет Core в ответе на его разрешение.
+  const relocations = useEntityRelocations(projectId, relocatedRefs);
   const known = entities.data?.items ?? material.references;
   const entryItems: RelationEntry[] = allRelations.map(({ relation, isLegacy }) => {
-    const entity = known.find(
-      (item) => item.ref.kind === relation.target.kind && item.ref.id === relation.target.id,
-    );
+    const { kind, id } = relation.target;
+    const address = `${kind}:${id}:${relation.type}:${isLegacy ? "links" : "relations"}`;
+    const entity = known.find((item) => item.ref.kind === kind && item.ref.id === id);
     // Прежний адрес после миграции: карточки нет, это не потерянная сущность.
-    const isRelocated = entity === undefined && isRelocatedEntityKind(relation.target.kind);
+    const isRelocated = entity === undefined && isRelocatedEntityKind(kind);
+    if (!isRelocated)
+      return {
+        address,
+        relation,
+        isLegacy,
+        isRelocated,
+        title: entity?.title ?? "Сущность недоступна",
+        entityKey: entity?.key ?? id,
+        href: isDefined(entity) ? getEntityHref(entity) : null,
+        owner: null,
+      };
+    const relocation = relocations.get(`${kind}:${id}`);
+    // Название плана берётся только из уже прочитанных карточек, без отдельного запроса.
+    const plan = isDefined(relocation)
+      ? known.find(
+          (item) => item.ref.kind === relocation.owner.kind && item.ref.id === relocation.owner.id,
+        )
+      : undefined;
+    const text = describeRelocatedStage(relocation, plan?.title);
+    const ownerHref = isDefined(plan)
+      ? getEntityHref(plan)
+      : relocation?.owner.kind === "work-plan"
+        ? `${base}/plans/${encodeURIComponent(relocation.owner.id)}`
+        : null;
     return {
-      address: `${relation.target.kind}:${relation.target.id}:${relation.type}:${isLegacy ? "links" : "relations"}`,
+      address,
       relation,
       isLegacy,
       isRelocated,
-      title: entity?.title ?? (isRelocated ? relation.target.id : "Сущность недоступна"),
-      entityKey: isRelocated ? "только чтение" : (entity?.key ?? relation.target.id),
-      href: isDefined(entity) ? getEntityHref(entity) : null,
+      title: text.title,
+      entityKey: null,
+      href: null,
+      owner: ownerHref === null ? null : { href: ownerHref, label: text.ownerLinkLabel },
     };
   });
+  const entryAddresses = entryItems.map((entry) => entry.address).join("\n");
+  /** Переводит фокус со снятой связи на заголовок блока, а не в body. */
+  const focusAfterDetach = (): void => {
+    if (detachedAddressRef.current === null) return;
+    detachedAddressRef.current = null;
+    headingRef.current?.focus();
+  };
+  /*
+   * Строка снятой связи может исчезнуть раньше окончания анимации окна: возврат фокуса
+   * Mantine тогда попадает на удалённую кнопку «Открепить» и теряется в body.
+   */
+  useEffect(() => {
+    const address = detachedAddressRef.current;
+    if (address === null || detaching !== null) return;
+    if (entryAddresses.split("\n").includes(address)) return;
+    detachedAddressRef.current = null;
+    headingRef.current?.focus();
+  }, [entryAddresses, detaching]);
   const groupItems = KIND_ORDER.map((kind) => ({
     kind,
     label: MATERIAL_TARGET_KINDS[kind],
@@ -158,11 +208,11 @@ export const DocumentRelations = ({ material }: DocumentRelationsProps) => {
       const { relation } = detaching;
       await relateOnce({ action: "detach", target: relation.target, type: relation.type });
       notifications.show({ message: `Материал откреплён от «${detaching.title}»` });
-      hasDetachedRef.current = true;
+      detachedAddressRef.current = detaching.address;
       setDetaching(null);
     } catch (failure) {
       if (failure instanceof DocumentRelationError && failure.code === "RELATION_NOT_FOUND") {
-        hasDetachedRef.current = true;
+        detachedAddressRef.current = detaching.address;
         setDetaching(null);
       } else if (failure instanceof DocumentConflictError)
         setDetachError(
@@ -253,12 +303,7 @@ export const DocumentRelations = ({ material }: DocumentRelationsProps) => {
       <Modal
         opened={detaching !== null}
         onClose={() => setDetaching(null)}
-        onExitTransitionEnd={() => {
-          // Кнопка снятой связи исчезла: фокус переходит к заголовку блока, а не в body.
-          if (!hasDetachedRef.current) return;
-          hasDetachedRef.current = false;
-          headingRef.current?.focus();
-        }}
+        onExitTransitionEnd={focusAfterDetach}
         title="Открепить материал?"
         centered
         closeButtonProps={{ "aria-label": "Не откреплять" }}

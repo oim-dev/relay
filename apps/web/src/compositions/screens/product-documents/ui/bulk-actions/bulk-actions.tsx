@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import clsx from "clsx";
-import { ActionIcon, Button, Menu, Modal, Popover } from "@mantine/core";
+import { ActionIcon, Button, Menu, Modal } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { ChevronDown, FolderInput, MoreHorizontal, Tag, TagsIcon, X } from "lucide-react";
 import { isEmptyArray } from "shared/value-predicates";
@@ -50,8 +50,13 @@ export const BulkActions = (props: BulkActionsProps) => {
     ...rootAttrs
   } = props;
   const isWide = useMediaQuery("(min-width: 48em)", true, { getInitialValueInEffect: false });
+  // Режим окна тегов остаётся до конца анимации закрытия: заголовок и форма не меняются на лету.
   const [tagsMode, setTagsMode] = useState<"addTags" | "removeTags" | null>(null);
+  const [isTagsOpened, setTagsOpened] = useState(false);
   const actionsRef = useRef<HTMLButtonElement>(null);
+  const addTagsRef = useRef<HTMLButtonElement>(null);
+  const removeTagsRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
   const pendingTagsRef = useRef<{ mode: "addTags" | "removeTags"; tags: string[] } | null>(null);
   const isDisabled = isRunning || isOverLimit;
   const hasNoSelectedTags = isEmptyArray(selectedTags);
@@ -61,28 +66,38 @@ export const BulkActions = (props: BulkActionsProps) => {
     name: section.name,
   }));
   const tagsTitle = tagsMode === "removeTags" ? "Снять теги" : "Добавить теги";
+  /**
+   * Открывает окно тегов и запоминает, куда вернуть фокус после отмены: кнопку панели
+   * на широком экране или «Действия» на телефоне — пункта меню после закрытия уже нет.
+   */
+  const openTags = (mode: "addTags" | "removeTags"): void => {
+    const opener = isWide ? (mode === "addTags" ? addTagsRef : removeTagsRef) : actionsRef;
+    openerRef.current = opener.current;
+    setTagsMode(mode);
+    setTagsOpened(true);
+  };
   /** Запускает действие с тегами. */
   const runTags = (mode: "addTags" | "removeTags", tags: string[]): void => {
     const label = mode === "addTags" ? "Добавить теги" : "Снять теги";
     onRun({ type: mode, tags }, `${label}: ${tags.join(", ")}`);
   };
   /**
-   * Применяет набор тегов и закрывает поле. На телефоне действие запускается после закрытия
-   * окна: иначе исчезающее окно уносит фокус с результата операции.
+   * Применяет набор тегов после закрытия окна: иначе исчезающее окно уносит фокус
+   * с результата операции.
    */
   const handleTags = (mode: "addTags" | "removeTags", tags: string[]): void => {
-    if (isWide) runTags(mode, tags);
-    else pendingTagsRef.current = { mode, tags };
-    setTagsMode(null);
+    pendingTagsRef.current = { mode, tags };
+    setTagsOpened(false);
   };
   /**
    * После закрытия окна: запускает отложенное действие (результат сам получит фокус) или,
-   * при отмене, возвращает фокус к «Действия» — пункта меню, открывшего окно, уже нет.
+   * при отмене, возвращает фокус к кнопке, открывшей окно.
    */
   const handleTagsClosed = (): void => {
     const pending = pendingTagsRef.current;
     pendingTagsRef.current = null;
-    if (pending === null) actionsRef.current?.focus();
+    setTagsMode(null);
+    if (pending === null) openerRef.current?.focus();
     else runTags(pending.mode, pending.tags);
   };
   const sectionMenuItems = sectionItems.map((section) => (
@@ -128,8 +143,8 @@ export const BulkActions = (props: BulkActionsProps) => {
               <Menu.Label>В раздел</Menu.Label>
               {sectionMenuItems}
               <Menu.Divider />
-              <Menu.Item onClick={() => setTagsMode("addTags")}>Добавить теги…</Menu.Item>
-              <Menu.Item disabled={hasNoSelectedTags} onClick={() => setTagsMode("removeTags")}>
+              <Menu.Item onClick={() => openTags("addTags")}>Добавить теги…</Menu.Item>
+              <Menu.Item disabled={hasNoSelectedTags} onClick={() => openTags("removeTags")}>
                 Снять теги…
               </Menu.Item>
               <Menu.Divider />
@@ -164,62 +179,28 @@ export const BulkActions = (props: BulkActionsProps) => {
             </Menu.Target>
             <Menu.Dropdown>{sectionMenuItems}</Menu.Dropdown>
           </Menu>
-          <Popover
-            opened={tagsMode === "addTags"}
-            position="top-start"
-            width={320}
-            trapFocus
-            withinPortal
-            onChange={(isOpened) => setTagsMode(isOpened ? "addTags" : null)}
+          <Button
+            ref={addTagsRef}
+            size="xs"
+            variant="default"
+            disabled={isDisabled}
+            aria-haspopup="dialog"
+            leftSection={<Tag size={14} aria-hidden="true" />}
+            onClick={() => openTags("addTags")}
           >
-            <Popover.Target>
-              <Button
-                size="xs"
-                variant="default"
-                disabled={isDisabled}
-                leftSection={<Tag size={14} aria-hidden="true" />}
-                onClick={() => setTagsMode(tagsMode === "addTags" ? null : "addTags")}
-              >
-                Добавить теги
-              </Button>
-            </Popover.Target>
-            <Popover.Dropdown>
-              <BulkTagsForm
-                mode="addTags"
-                projectId={projectId}
-                selectedTags={selectedTags}
-                onApply={(tags) => handleTags("addTags", tags)}
-              />
-            </Popover.Dropdown>
-          </Popover>
-          <Popover
-            opened={tagsMode === "removeTags"}
-            position="top-start"
-            width={320}
-            trapFocus
-            withinPortal
-            onChange={(isOpened) => setTagsMode(isOpened ? "removeTags" : null)}
+            Добавить теги
+          </Button>
+          <Button
+            ref={removeTagsRef}
+            size="xs"
+            variant="default"
+            disabled={isDisabled || hasNoSelectedTags}
+            aria-haspopup="dialog"
+            leftSection={<TagsIcon size={14} aria-hidden="true" />}
+            onClick={() => openTags("removeTags")}
           >
-            <Popover.Target>
-              <Button
-                size="xs"
-                variant="default"
-                disabled={isDisabled || hasNoSelectedTags}
-                leftSection={<TagsIcon size={14} aria-hidden="true" />}
-                onClick={() => setTagsMode(tagsMode === "removeTags" ? null : "removeTags")}
-              >
-                Снять теги
-              </Button>
-            </Popover.Target>
-            <Popover.Dropdown>
-              <BulkTagsForm
-                mode="removeTags"
-                projectId={projectId}
-                selectedTags={selectedTags}
-                onApply={(tags) => handleTags("removeTags", tags)}
-              />
-            </Popover.Dropdown>
-          </Popover>
+            Снять теги
+          </Button>
           <Menu position="top-start" withinPortal>
             <Menu.Target>
               <Button
@@ -248,11 +229,15 @@ export const BulkActions = (props: BulkActionsProps) => {
       {isOverLimit && (
         <p className={styles.limit}>За один раз можно изменить не более 100 материалов.</p>
       )}
+      {/*
+        Одно окно на всех ширинах: Modal закрывает по Escape только закрытый список вариантов
+        (поле с открытым списком помечено data-mantine-stop-propagation) и держит фокус внутри.
+      */}
       <Modal
-        opened={!isWide && tagsMode !== null}
+        opened={isTagsOpened}
         title={tagsTitle}
         returnFocus={false}
-        onClose={() => setTagsMode(null)}
+        onClose={() => setTagsOpened(false)}
         onExitTransitionEnd={handleTagsClosed}
       >
         {tagsMode !== null && (

@@ -53,7 +53,8 @@
 }
 
 .type,
-.legacy {
+.legacy,
+.readOnly {
   padding: 0.0625rem var(--tasks-space-2);
   border-radius: var(--tasks-radius-pill);
   background: var(--tasks-card);
@@ -70,6 +71,25 @@
 .legacy {
   border: 1px dashed var(--tasks-border-strong);
   background: transparent;
+}
+
+/* Связь с прежним адресом только читается и снимается: нейтральная метка, не код. */
+.readOnly {
+  border: 1px solid var(--tasks-border-strong);
+  background: transparent;
+}
+
+.note {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.5;
+}
+
+.ownerLink {
+  font-size: inherit;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .description {

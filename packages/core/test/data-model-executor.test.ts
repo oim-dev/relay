@@ -14,6 +14,7 @@ import {
   storageMigrationResultSchema,
 } from "@relay/contracts/storage-maintenance";
 import type { StorageMigrationPlan } from "@relay/contracts/storage-maintenance";
+import { entityRelocatedDetailsSchema } from "@relay/contracts/storage-maintenance";
 import type { JsonValue } from "@relay/contracts/storage";
 import { AppError } from "../src/shared/errors.js";
 import {
@@ -239,11 +240,32 @@ test("A05/A13/A17/A23: формат 4 с планированием v1 — dry-r
     );
   }
   // Прежний адрес этапа не выдаётся повторно и указывает на план.
+  // Details — стабильный контракт (entityRelocatedDetailsSchema): Web по нему показывает
+  // прежнюю связь документа. Адрес и ключ этапа дают одинаковые details.
   const stageId = oracle.oldReader.p1Stages.items[0].id as string;
-  await assert.rejects(
-    new EntityEngine(workspace).resolve({ ref: `plan-stage:${stageId}` }),
-    code("ENTITY_RELOCATED"),
-  );
+  const planAddress = `work-plan:${oracle.entities.P1.id}`;
+  const engine = new EntityEngine(workspace);
+  const relocated = async (ref: string) => {
+    const error = await engine.resolve({ ref }).then(
+      () => assert.fail("ожидалась ENTITY_RELOCATED"),
+      (caught: unknown) => caught,
+    );
+    code("ENTITY_RELOCATED")(error);
+    const details = entityRelocatedDetailsSchema.parse((error as AppError).details);
+    assert.equal((error as AppError).exitCode, 3);
+    assert.match(details.key ?? "", /^STG-[1-9][0-9]*$/);
+    assert.deepEqual(details, {
+      code: "ENTITY_RELOCATED",
+      from: `plan-stage:${stageId}`,
+      to: planAddress,
+      stageId,
+      key: details.key,
+      next: `Используйте адрес ${planAddress}`,
+    });
+    return details;
+  };
+  const byAddress = await relocated(`plan-stage:${stageId}`);
+  assert.deepEqual(await relocated(byAddress.key!), byAddress);
 });
 
 test("A25 (Core): после миграции работают CAS-обновление, комментарий, документ/контекст, план, релиз, прогресс; повторное открытие", async (t) => {

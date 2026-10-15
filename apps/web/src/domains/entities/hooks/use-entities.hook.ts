@@ -7,9 +7,14 @@ import {
   getEntities,
   getEntitySummary,
   getEntityContent,
-  EntityAccessError,
+  getEntityRelocation,
 } from "../adapters/entities.adapter";
+import { EntityAccessError } from "../errors/entity-errors";
 import type { EntityContent } from "../types/entity-content.type";
+import type { EntityRelocation } from "../types/entity-relocation.type";
+
+/** Пустой результат без прежних адресов: одна ссылка между показами. */
+const EMPTY_RELOCATIONS: ReadonlyMap<string, EntityRelocation> = new Map();
 
 /**
  * Перечитывает проекции каскада во всех доменах только выбранного проекта.
@@ -80,4 +85,38 @@ export const useEntityContent = (
   if (response.error !== undefined && !(response.error instanceof EntityAccessError))
     throw response.error;
   return response;
+};
+
+/**
+ * Узнаёт владельцев прежних адресов одним кешируемым пакетом: перенос не меняется,
+ * поэтому повторные показы и возврат фокуса не повторяют запросы. Адрес, который не
+ * удалось разрешить, отсутствует в результате — связь показывается без сведений о переносе.
+ *
+ * @returns Переносы по адресу `kind:id`.
+ */
+export const useEntityRelocations = (
+  projectId: string,
+  refs: readonly string[],
+): ReadonlyMap<string, EntityRelocation> => {
+  const sortedRefs = [...new Set(refs)].sort();
+  const response = useSWR<ReadonlyMap<string, EntityRelocation>, Error>(
+    sortedRefs.length === 0 ? null : ["entity-relocations", projectId, sortedRefs],
+    async () => {
+      const entries = await Promise.all(
+        sortedRefs.map(async (ref) => [ref, await getEntityRelocation(projectId, ref)] as const),
+      );
+      return new Map(
+        entries.flatMap(([ref, relocation]) => (relocation === null ? [] : [[ref, relocation]])),
+      );
+    },
+    {
+      shouldRetryOnError: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      keepPreviousData: true,
+    },
+  );
+  if (response.error !== undefined) throw response.error;
+  return response.data ?? EMPTY_RELOCATIONS;
 };

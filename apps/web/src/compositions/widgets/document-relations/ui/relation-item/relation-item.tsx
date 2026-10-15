@@ -17,7 +17,7 @@ import styles from "./styles/relation-item.module.css";
  */
 export const RelationItem = (props: RelationItemProps) => {
   const { entry, returnTo, onEdit, onDetach, className, ...rootAttrs } = props;
-  const { relation, isLegacy, isRelocated, title, entityKey, href } = entry;
+  const { relation, isLegacy, isRelocated, title, entityKey, href, owner } = entry;
   const typeLabel = DOCUMENT_RELATION_TYPES[relation.type];
   const hasDescription = relation.description.trim() !== "";
   return (
@@ -31,7 +31,8 @@ export const RelationItem = (props: RelationItemProps) => {
           </Anchor>
         )}
         <div className={styles.facts}>
-          <span className={styles.key}>{entityKey}</span>
+          {entityKey !== null && <span className={styles.key}>{entityKey}</span>}
+          {isRelocated && <span className={styles.readOnly}>Только чтение</span>}
           <span className={styles.type} data-type={relation.type}>
             {typeLabel}
           </span>
@@ -41,6 +42,26 @@ export const RelationItem = (props: RelationItemProps) => {
             </span>
           )}
         </div>
+        {isRelocated && (
+          <p className={styles.note}>
+            Этап перенесён в план; прикрепляйте материал к плану.
+            {owner !== null && (
+              <>
+                {" "}
+                <Anchor
+                  component={Link}
+                  to={owner.href}
+                  state={{ returnTo }}
+                  aria-label={owner.label}
+                  className={styles.ownerLink}
+                >
+                  Открыть план
+                  <ArrowUpRight size={13} aria-hidden="true" className={styles.arrow} />
+                </Anchor>
+              </>
+            )}
+          </p>
+        )}
         {hasDescription && (
           <div className={styles.description}>
             <MarkdownView text={relation.description} compact />

@@ -463,6 +463,37 @@ export const storageErrorDetailsSchema = z
     "Форма details ошибок хранилища: коды, версии, относительные пути, ID и следующее действие без пользовательского текста и конфигурации",
   );
 
+const entityAddressSchema = z.string().min(1).max(256);
+
+/**
+ * Стабильная форма details ошибки ENTITY_RELOCATED: прежний адрес перенесён владельцу.
+ * Единственная запись совместимости сейчас — этап `plan-stage`, перенесённый в план.
+ * Отдельна от storageErrorDetailsSchema: details указывают текущую цель, а не версию или путь.
+ */
+export const entityRelocatedDetailsSchema = z
+  .strictObject({
+    code: z.literal("ENTITY_RELOCATED").describe("Машинная причина ошибки"),
+    from: entityAddressSchema.describe(
+      "Запрошенный прежний адрес вида kind:id, например plan-stage:<id>",
+    ),
+    to: entityAddressSchema.describe(
+      "Текущий адрес владельца вида kind:id, например work-plan:<id>",
+    ),
+    stageId: z
+      .string()
+      .min(1)
+      .max(256)
+      .describe("ID этапа внутри владельца; совпадает с ID прежней записи"),
+    key: z
+      .string()
+      .min(1)
+      .max(256)
+      .nullable()
+      .describe("Прежний ключ записи, например STG-1; null, если ключа не было"),
+    next: nextSchema,
+  })
+  .describe("Details ошибки ENTITY_RELOCATED: прежний адрес и текущая цель");
+
 export type StorageLayout = z.output<typeof storageLayoutSchema>;
 export type StorageStatusKind = z.output<typeof storageStatusKindSchema>;
 export type StorageRegistryIssue = z.output<typeof storageRegistryIssueSchema>;
@@ -475,3 +506,4 @@ export type StorageMigrationPlan = z.output<typeof storageMigrationPlanSchema>;
 export type StorageMigrationResult = z.output<typeof storageMigrationResultSchema>;
 export type StorageMigrateOptions = z.output<typeof storageMigrateOptionsSchema>;
 export type StorageErrorDetails = z.output<typeof storageErrorDetailsSchema>;
+export type EntityRelocatedDetails = z.output<typeof entityRelocatedDetailsSchema>;

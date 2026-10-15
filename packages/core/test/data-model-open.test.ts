@@ -15,7 +15,10 @@ import {
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { z } from "zod";
-import { storageErrorDetailsSchema } from "@relay/contracts/storage-maintenance";
+import {
+  entityRelocatedDetailsSchema,
+  storageErrorDetailsSchema,
+} from "@relay/contracts/storage-maintenance";
 import { EntityStore, withStorageLocks } from "../src/storage/entity-store/store.js";
 import { EntityStorageRegistry } from "../src/storage/entity-store/registry.js";
 import type { EntityCodec, EntityRecord } from "../src/storage/entity-store/registry.js";
@@ -529,6 +532,7 @@ test("relocation: прежний адрес отвечает ENTITY_RELOCATED, �
     assert(error instanceof AppError);
     assert.equal(error.code, "ENTITY_RELOCATED");
     assert.equal(error.exitCode, 3);
+    assert.deepEqual(entityRelocatedDetailsSchema.parse(error.details), error.details);
     assert.deepEqual(error.details, {
       code: "ENTITY_RELOCATED",
       from: "stage:s1",
