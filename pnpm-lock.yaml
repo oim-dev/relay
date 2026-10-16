@@ -378,15 +378,9 @@ importers:
 
   packages/relay-skill:
     devDependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: 1.30.0
-        version: 1.30.0(supports-color@10.2.2)(zod@4.6.2)
       '@oim-dev/relay-cli':
         specifier: workspace:*
         version: link:../../apps/cli
-      '@oim-dev/relay-mcp':
-        specifier: workspace:*
-        version: link:../../apps/mcp
       '@relay/core':
         specifier: workspace:*
         version: link:../core
@@ -402,9 +396,6 @@ importers:
       tsx:
         specifier: ^4.20.5
         version: 4.23.13
-      zod:
-        specifier: ^4.1.0
-        version: 4.6.2
 
   packages/rest-sdk:
     devDependencies:

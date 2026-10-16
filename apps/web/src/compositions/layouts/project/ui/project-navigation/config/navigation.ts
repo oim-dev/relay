@@ -19,7 +19,6 @@ export const PRODUCT_NAVIGATION = [
 
 /** Рабочие разделы проекта после продуктового контекста. */
 export const PROJECT_NAVIGATION = [
-  { path: "work-history", label: "История", Icon: History },
   { path: "plans", label: "Планы", Icon: Flag },
   { path: "releases", label: "Релизы", Icon: Rocket },
 ];
@@ -29,4 +28,5 @@ export const PROJECT_RESOURCES_NAVIGATION = [
   { path: "documents", label: "Библиотека знаний", Icon: Files },
   { path: "infrastructure", label: "Инфраструктура", Icon: Server },
   { path: "relations", label: "Связи проекта", Icon: Network },
+  { path: "work-history", label: "История", Icon: History },
 ];
