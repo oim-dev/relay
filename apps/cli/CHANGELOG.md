@@ -14,8 +14,10 @@
   результат и завершается с кодом 1 при хотя бы одном отказе.
 - `document unlink` снимает связь с прежним адресом этапа плана (`plan-stage:<id>`),
   оставшуюся после `storage migrate`, по сохранённой цели в local и HTTP; `document link`
-  на такой адрес получает `ENTITY_RELOCATED` с новым адресом. Новые поля и операции
-  библиотеки требуют сервер с `relay-document-materials-v1`.
+  на такой адрес получает `ENTITY_RELOCATED` с новым адресом. Новые поля, фильтры и команды
+  `document facets`, `document materials`, `document bulk` по HTTP требуют сервер с
+  `relay-document-materials-v1`; `document links`, `document link/unlink` и `document section` —
+  с `relay-document-library-v1`.
 
 ### Совместимость
 
