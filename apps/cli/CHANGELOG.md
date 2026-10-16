@@ -18,6 +18,10 @@
   `document facets`, `document materials`, `document bulk` по HTTP требуют сервер с
   `relay-document-materials-v1`; `document links`, `document link/unlink` и `document section` —
   с `relay-document-library-v1`.
+- Подсказки команд с аргументами, где есть перевод строки, TAB или другие управляющие
+  символы (например, путь `--config`), экранируются переносимо и работают в системном
+  Bash 3.2 macOS, zsh и ksh93. Раньше Bash 3.2 оставлял `\uXXXX` буквально, и
+  скопированная команда отвечала `CONFIG_NOT_FOUND`.
 
 ### Совместимость
 

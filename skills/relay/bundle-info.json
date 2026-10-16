@@ -10,7 +10,7 @@
     "apps/cli/scripts/lib/documentation.mjs": "f53477c49a59afc9d13501e0b56573d75677919551bdf7ccbb55e9256282d617",
     "apps/cli/src/backend/connect.ts": "434be5f8b96240c6dbee2b7a4277b8690411bd97406b206d2f5261985048dcdf",
     "apps/cli/src/backend/types.ts": "ba18d3b6cbe542dd5c3fe024ba14e1a8ef053305c24a79f3ca12028dc71d0d5a",
-    "apps/cli/src/command-kit.ts": "f04b385e37a29e8815231d25d8b017d7cf055f715a583b1914a04acd6087f96b",
+    "apps/cli/src/command-kit.ts": "27a3931f7899b53e5b051a39faf032fa16c26a4922841e9accee3f2be46e44be",
     "apps/cli/src/command.ts": "f9e4d5d5b16ad7ccf1993a919eec869569085d643c8d69a36fce219a7b11aac1",
     "apps/cli/src/commands/board-tasks.ts": "d797af517ab3cb72f9c3f8b01b1b1970e5b76dbce36aaa8987db268675bf977e",
     "apps/cli/src/commands/entities.ts": "ff75b5837a24fca9163eab93e5cc986712793ba1c4be0cb3a311c9b0351e3149",
