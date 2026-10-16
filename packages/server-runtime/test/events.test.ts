@@ -13,6 +13,70 @@ import { ProductService } from "@relay/core/application/product/service";
 import { saveProjectSettings } from "@relay/core/application/project-settings/service";
 import { EntityEngine } from "@relay/core/application/entities/service";
 
+test(
+  "SSE: адресные изменения библиотеки уведомляют после публикации",
+  { timeout: 10000 },
+  async (t) => {
+    const { app } = await fixture(t);
+    await app.listen(0, "127.0.0.1");
+    const stream = await connect(await app.getUrl());
+    try {
+      await stream.next((event) => event.type === "connected");
+      const sections = (await app.inject("/api/v1/documents/sections")).json().data;
+      const section = await app.inject({
+        method: "POST",
+        url: "/api/v1/documents/sections",
+        payload: {
+          action: "create",
+          id: "sse",
+          name: "События",
+          ifRevision: sections.revision,
+          requestId: "sse-section",
+        },
+      });
+      assert.equal(section.statusCode, 200, section.body);
+      await stream.next((event) => event.type === "changed" && event.data.source === "api");
+      const document = (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/entities",
+          payload: {
+            data: {
+              kind: "document",
+              name: "Документ",
+              summary: "",
+              body: "Текст",
+              documentKind: "rules",
+            },
+            requestId: "sse-document",
+          },
+        })
+      ).json().data;
+      await stream.next((event) => event.type === "changed" && event.data.source === "api");
+      const relation = await app.inject({
+        method: "POST",
+        url: "/api/v1/documents/relations",
+        payload: {
+          ref: document.key,
+          target: "PROJECT",
+          source: "relations",
+          action: "link",
+          ifRevision: document.revision,
+          requestId: "sse-relation",
+        },
+      });
+      assert.equal(relation.statusCode, 200, relation.body);
+      await stream.next((event) => event.type === "changed" && event.data.source === "api");
+      assert.equal(
+        (await app.inject(`/api/v1/documents/links?ref=${document.key}`)).json().data.total,
+        1,
+      );
+    } finally {
+      await stream.close();
+    }
+  },
+);
+
 test("SSE замечает прямую запись имени и slug через Core", { timeout: 10000 }, async (t) => {
   const { app, workspace } = await fixture(t);
   await app.listen(0, "127.0.0.1");

@@ -441,27 +441,31 @@ export async function saveProduct(workspace: Workspace, record: ProductRecord, i
 export async function boards(workspace: Workspace): Promise<Board[]> {
   const output: Board[] = [];
   for (const record of await session(workspace).records("board")) {
-    const { scope, ...data } = record.data;
-    const space = await session(workspace).readFile(`keyspaces/${record.id}.json`);
-    const prefix = space ? z.object({ prefix: z.string() }).parse(space).prefix : data.prefix;
-    output.push(
-      boardSchema.parse({
-        version: 2,
-        ...data,
-        kind: scope,
-        prefix,
-        id: record.id,
-        key: record.key,
-        aliases: record.aliases,
-        revision: record.revision,
-        createdAt: record.createdAt,
-        createdBy: record.createdBy,
-        events: [],
-        requests: {},
-      }),
-    );
+    output.push(await boardRecord(workspace, record));
   }
   return output;
+}
+
+/** Одна и та же полная проекция доски для каталога и адресного чтения. */
+export async function boardRecord(workspace: Workspace, record: EntityRecord): Promise<Board> {
+  invariant(record.kind === "board", "INVALID_DATA", "Ожидается запись доски", 5);
+  const { scope, ...data } = record.data;
+  const space = await session(workspace).readFile(`keyspaces/${record.id}.json`);
+  const prefix = space ? z.object({ prefix: z.string() }).parse(space).prefix : data.prefix;
+  return boardSchema.parse({
+    version: 2,
+    ...data,
+    kind: scope,
+    prefix,
+    id: record.id,
+    key: record.key,
+    aliases: record.aliases,
+    revision: record.revision,
+    createdAt: record.createdAt,
+    createdBy: record.createdBy,
+    events: [],
+    requests: {},
+  });
 }
 
 export async function saveBoard(workspace: Workspace, record: Board, importing = false) {

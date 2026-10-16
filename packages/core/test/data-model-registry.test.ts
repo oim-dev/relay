@@ -87,6 +87,32 @@ const versionsOf = (records: { kind: string; dataVersion: number }[]) => {
   return map;
 };
 
+test("проекция индексов: descriptor меняет digest реестра, generic-реестр не получает Workspace", () => {
+  const input = syntheticInput(13);
+  const indexProjection = { id: "synthetic-cards", version: 1, async apply() {} };
+  const plain = createTransitionRegistry(input);
+  const projected = createTransitionRegistry({ ...input, indexProjection });
+  assert.notEqual(projected.digest, plain.digest);
+  assert.notEqual(
+    projected.digest,
+    createTransitionRegistry({ ...input, indexProjection: { ...indexProjection, version: 2 } })
+      .digest,
+  );
+  assert.equal(projected.digest, createTransitionRegistry({ ...input, indexProjection }).digest);
+  fails(
+    () =>
+      createTransitionRegistry({ ...input, indexProjection: { ...indexProjection, id: "Bad ID" } }),
+    "STORAGE_REGISTRY_INVALID",
+    "invalid-id",
+  );
+  fails(
+    () =>
+      createTransitionRegistry({ ...input, indexProjection: { ...indexProjection, version: 0 } }),
+    "STORAGE_REGISTRY_INVALID",
+    "invalid-version",
+  );
+});
+
 test("A06: цепочка из трёх шагов равна последовательному применению, порядок и ID видны", () => {
   const source = [
     note("n1", 1, { name: "Отчёт: квартал", text: "строка 1\nстрока 2", tags: ["work", "q1"] }),
@@ -612,6 +638,7 @@ test("Contracts: схемы результата обслуживания про
     blockers: [],
     blockersTotal: 0,
     warnings: [],
+    warningsTotal: 0,
   };
   storageStatusSchema.parse(status);
   assert.equal(storageStatusSchema.safeParse({ ...status, extra: true }).success, false);
@@ -630,7 +657,7 @@ test("Contracts: схемы результата обслуживания про
     owners: ["work-plan"],
     records: { checked: 1, changed: 1, removed: 0 },
   };
-  storageMigrationPlanSchema.parse({
+  const plan = storageMigrationPlanSchema.parse({
     ...status,
     steps: [step],
     profiles: { from: 1, to: 2 },
@@ -651,6 +678,24 @@ test("Contracts: схемы результата обслуживания про
     planFingerprint: "a".repeat(64),
     applicable: true,
   });
+  for (const [schema, value] of [
+    [storageStatusSchema, status],
+    [storageMigrationPlanSchema, plan],
+  ] as const) {
+    const { warningsTotal, ...withoutWarningsTotal } = value;
+    assert.equal(warningsTotal, 0);
+    assert.equal(
+      schema.safeParse(withoutWarningsTotal).success,
+      false,
+      "полное число предупреждений обязательно и не подставляется по длине массива",
+    );
+    for (const invalidTotal of [-1, 0.5])
+      assert.equal(
+        schema.safeParse({ ...value, warningsTotal: invalidTotal }).success,
+        false,
+        "число предупреждений должно быть целым и неотрицательным",
+      );
+  }
   const result = {
     migrated: true,
     format: "relay-entities",

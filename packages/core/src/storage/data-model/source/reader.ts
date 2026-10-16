@@ -128,8 +128,8 @@ export type StorageSource = {
   readonly blockers: readonly StorageBlocker[];
   readonly warnings: readonly StorageWarning[];
   /**
-   * Потерянные или повреждённые страницы рабочих индексов (кроме `file-hashes`) при целых
-   * источниках истины. Для базы без шагов — блокеры с действием `storage reindex`; перенос
+   * Отметка внешней правки, расхождение с файлами, потерянные или повреждённые страницы
+   * рабочих индексов (кроме `file-hashes`). Для базы без шагов — блокеры `storage reindex`; перенос
    * перестраивает индексы сам, поэтому для него это предупреждения.
    */
   readonly indexIssues: readonly StorageBlocker[];
@@ -656,6 +656,7 @@ export async function readStorageSource(
   // Полная инвентаризация, включая посторонние каталоги; замки не раскрываются.
   /** Компактные факты записей формата 4 для общей проверки согласованности (без данных). */
   const facts: RecordFacts[] = [];
+  const unreadable = new Set<string>();
   const take = async (area: SourceArea, item: Walked): Promise<void> => {
     const kind: Classified =
       area === "storage-root"
@@ -710,6 +711,8 @@ export async function readStorageSource(
     if (kind.category === "config" || item.path === MANIFEST_PATH) return;
     const decoded = decodeJson(item.bytes);
     if (!decoded.ok) {
+      if (kind.category === "entities" && kind.owner)
+        unreadable.add(`${kind.owner}:${item.path.split("/").at(-1)!.slice(0, -5)}`);
       blockers.push(
         sourceBlocker("STORAGE_DATA_CORRUPT", "Некорректный JSON или UTF-8 в постоянном файле", at),
       );
@@ -729,14 +732,13 @@ export async function readStorageSource(
     if (kind.category === "legacy-transactions")
       pending.push({ kind: "legacy", path: item.path, area });
     if (item.path === INDEX_STALE_PATH)
-      warnings.push({
-        code: "STORAGE_INDEX_STALE",
-        message: "Обнаружена отметка внешних изменений; индексы будут построены заново",
-        path: item.path,
-      });
+      indexIssues.push(indexStale(item.path, "Обнаружена отметка внешних изменений"));
     if (kind.category === "entities" && kind.owner) {
       const record = readRecord(item.path, kind.owner, decoded.value, physical, registry, blockers);
-      if (!record) return;
+      if (!record) {
+        unreadable.add(`${kind.owner}:${item.path.split("/").at(-1)!.slice(0, -5)}`);
+        return;
+      }
       records.push(record);
       // Согласованность проверяется после полного обхода; значения записей не удерживаются.
       if (physical === CURRENT_PHYSICAL_FORMAT)
@@ -859,6 +861,7 @@ export async function readStorageSource(
     for (const blocker of integrityBlockers(
       {
         records: facts,
+        unreadable,
         relations: sets.relations,
         keyspaces: sets.keyspaces,
         config: target.config ? { path: configName, projectId: target.config.projectId } : null,
@@ -1064,10 +1067,14 @@ function checkExpectedFiles(
         lost(path);
         return false;
       }
-      if (segment.data.type === "branch")
-        return Object.entries(segment.data.children as Record<string, string>).every(
-          ([nibble, child]) => visit(child, prefix + nibble),
-        );
+      if (segment.data.type === "branch") {
+        let complete = true;
+        for (const [nibble, child] of Object.entries(
+          segment.data.children as Record<string, string>,
+        ))
+          if (!visit(child, prefix + nibble)) complete = false;
+        return complete;
+      }
       const entries = segment.data.entries as [string, unknown][];
       if (
         strict &&
@@ -1085,18 +1092,40 @@ function checkExpectedFiles(
   // Рабочие индексы (карточки, адреса, рёбра…) производны от записей: их потеря не теряет
   // данные, но и не даёт права объявить индексы проверенными.
   for (const [name, hash] of Object.entries(state.data.roots).sort(([a], [b]) => byName(a, b)))
-    if (name !== "file-hashes" && hash)
-      tree(
-        hash,
-        () => {},
-        (path) =>
-          indexIssues.push(
-            indexStale(
-              path,
-              `Страница индекса ${name.slice(0, 64)} потеряна, повреждена или нарушает структуру дерева; источники записей целы`,
-            ),
+    if (name !== "file-hashes" && hash) {
+      const visited = new Set<string>();
+      const lost = (path: string) =>
+        indexIssues.push(
+          indexStale(
+            path,
+            `Страница индекса ${name.slice(0, 64)} потеряна, повреждена или нарушает структуру дерева; источники записей целы`,
           ),
-      );
+        );
+      const check = (root: string) => {
+        if (visited.has(root)) return;
+        visited.add(root);
+        tree(
+          root,
+          (entries) => {
+            // Длинные posting-списки имеют собственные деревья вне state.roots.
+            for (const [, value] of entries)
+              if (
+                value &&
+                typeof value === "object" &&
+                !Array.isArray(value) &&
+                Object.keys(value).length === 1 &&
+                "root" in value
+              ) {
+                const parsed = hashSchema.safeParse(value.root);
+                if (parsed.success) check(parsed.data);
+                else lost(`.indexes/segments/${root.slice(0, 2)}/${root}.json`);
+              }
+          },
+          lost,
+        );
+      };
+      check(hash);
+    }
   const rootHash = state.data.roots["file-hashes"];
   if (!rootHash) return;
   const expected = new Map<string, string>();
@@ -1118,7 +1147,7 @@ function checkExpectedFiles(
   const files = new Set(
     entries.filter((entry) => entry.type === "file").map((entry) => entry.path),
   );
-  let stale = 0;
+  const stale = new Set<string>();
   for (const [path, hash] of [...expected].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     if (!files.has(path)) {
       blockers.push(
@@ -1131,15 +1160,14 @@ function checkExpectedFiles(
       continue;
     }
     const actual = digests.get(path);
-    if (actual !== undefined && actual !== hash) stale++;
+    if (actual !== undefined && actual !== hash) stale.add(path);
   }
   for (const path of digests.keys())
-    if (/^(entities|relations|keyspaces)\//.test(path) && !expected.has(path)) stale++;
-  if (stale)
-    warnings.push({
-      code: "STORAGE_INDEX_STALE",
-      message: `Индекс расходится с постоянными файлами (${stale}); индексы будут построены заново из записей`,
-    });
+    if (/^(entities|relations|keyspaces)\//.test(path) && !expected.has(path)) stale.add(path);
+  // Адрес причины нужен и doctor: schema-ошибка того же файла первична, независимые
+  // расхождения других файлов не скрываются общей причиной на `.indexes/state.json`.
+  for (const path of [...stale].sort(byName))
+    indexIssues.push(indexStale(path, "Постоянный файл расходится с индексом"));
 }
 
 /** Шаги, нужные источнику: физический перенос раскладки и упорядоченные предметные переходы. */
@@ -1233,7 +1261,7 @@ export function diagnoseStorageSource(
         blockers.push(blockerOf(error));
       }
   }
-  // Потерянные страницы рабочих индексов: базе без шагов нужен явный reindex (не passed),
+  // Устаревшие рабочие индексы: базе без шагов нужен явный reindex (не passed),
   // перенос строит индексы заново из целых источников — для него это предупреждение.
   const rebuilds = steps !== null && (steps.physical || steps.data.length > 0 || steps.marker);
   const indexWarnings: StorageWarning[] = [];
@@ -1241,7 +1269,7 @@ export function diagnoseStorageSource(
     if (rebuilds)
       indexWarnings.push({
         code: "STORAGE_INDEX_STALE",
-        message: "Страница рабочего индекса потеряна; перенос построит индексы заново",
+        message: `${issue.message}; перенос построит индексы заново`,
         ...(issue.path ? { path: issue.path } : {}),
       });
     else blockers.push(issue);
@@ -1303,6 +1331,7 @@ export function diagnoseStorageSource(
     blockers: blockers.slice(0, LIST_LIMIT),
     blockersTotal: blockers.length,
     warnings: [...source.warnings, ...indexWarnings].slice(0, LIST_LIMIT),
+    warningsTotal: source.warnings.length + indexWarnings.length,
   };
   return { status: storageStatusSchema.parse(value), steps, blockers };
 }

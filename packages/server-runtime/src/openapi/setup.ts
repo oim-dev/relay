@@ -25,6 +25,7 @@ export function setupOpenApi(app: INestApplication): void {
     if (
       !path.startsWith("/api/v1/") ||
       ["/api/v1/server", "/api/v1/health"].includes(path) ||
+      path.startsWith("/api/v1/server/") ||
       path.startsWith("/api/v1/projects")
     )
       continue;
@@ -53,6 +54,22 @@ export function setupOpenApi(app: INestApplication): void {
       jsonSchema(
         schema,
         [
+          "ProjectCatalogPageQuery",
+          "PlansCompactQuery",
+          "ReleasesCompactQuery",
+          "ReleaseCompositionCompactQuery",
+          "ReleasePreviewProjectionQuery",
+          "SaveReleaseByRefs",
+          "UpdateReleaseByRefs",
+          "TaskDependenciesQuery",
+          "ProductLintQuery",
+          "ProductOverviewMapQuery",
+          "ProductParticipationQuery",
+          "ProductParticipationReplace",
+          "DocumentLinksQuery",
+          "DocumentSectionsQuery",
+          "DocumentRelationChange",
+          "DocumentSectionChange",
           "PlansQuery",
           "PlanningPageQuery",
           "PlanningCandidatesQuery",
@@ -78,7 +95,7 @@ export function setupOpenApi(app: INestApplication): void {
           "LinkEntityTask",
           "DocumentFacetsQuery",
           "DocumentBulk",
-          "DocumentRelationChange",
+          "EntityDocumentRelationChange",
           "EntityDocumentsQuery",
           "GraphMutation",
           "GraphQuery",

@@ -25,6 +25,7 @@ import {
 import { StorageService } from "../src/application/storage/service.js";
 import { initialize, openWorkspace } from "../src/storage/workspace.js";
 import { EntityEngine } from "../src/application/entities/service.js";
+import { DocumentLibraryService } from "../src/application/documents/library.js";
 import { BoardTasksService } from "../src/application/board-tasks/service.js";
 import { PlanningService } from "../src/application/planning/service.js";
 import { ReleasesService } from "../src/application/releases/service.js";
@@ -890,6 +891,69 @@ test("перенесённая связь документа с прежним �
   await assert.rejects(
     engine.relateDocument(
       { ...change, ifRevision: after.revision, action: "detach", requestId: "stage-again" },
+      "tester",
+    ),
+    code("ENTITY_RELOCATED"),
+  );
+});
+
+test("DocumentLibraryService: прежняя связь этапа снимается unlink по сохранённой цели, link отказывает", async (t) => {
+  const { project, configPath } = await planV1Format4(t);
+  const oracle = await oracleOf("physical2-plan-v1-43d683b");
+  const plan = await planStorageMigration({ configPath });
+  await migrateStorage(
+    { configPath },
+    { backupDir: await tempDir(t), ifPlan: plan.planFingerprint },
+  );
+  const workspace = await openWorkspace(project, configPath);
+  const engine = new EntityEngine(workspace);
+  const library = new DocumentLibraryService(workspace);
+  const d2 = oracle.entities.D2;
+  const stage = d2.relations.find((relation: unknown[]) => relation[0] === "plan-stage");
+  const stageRef = `plan-stage:${stage[1]}`;
+  const before = await engine.get({ ref: d2.key });
+  const relations = (
+    before.data as {
+      relations?: { target: { kind: string; id: string }; type: "documents" | "references" }[];
+    }
+  ).relations!;
+  const stageRelation = relations.find(
+    (relation) => `${relation.target.kind}:${relation.target.id}` === stageRef,
+  )!;
+  const change = {
+    ref: d2.key,
+    ifRevision: before.revision,
+    target: stageRef,
+    source: "relations" as const,
+    relation: stageRelation.type,
+  };
+  await assert.rejects(
+    library.changeRelation({ ...change, action: "link", requestId: "lib-link" }, "tester"),
+    code("ENTITY_RELOCATED"),
+  );
+  const saved = await library.changeRelation(
+    { ...change, action: "unlink", requestId: "lib-unlink" },
+    "tester",
+  );
+  assert.equal(saved.revision, before.revision + 1);
+  const after = await engine.get({ ref: d2.key });
+  const data = after.data as {
+    relations?: { target: { kind: string; id: string } }[];
+    documentFormat?: string;
+    tags?: string[];
+  };
+  assert.deepEqual(
+    data.relations!.map((relation) => `${relation.target.kind}:${relation.target.id}`),
+    relations
+      .map((relation) => `${relation.target.kind}:${relation.target.id}`)
+      .filter((address) => address !== stageRef),
+  );
+  // Запись идёт в формате документа v2: формат и теги сохраняются.
+  assert.equal(data.documentFormat, (before.data as { documentFormat?: string }).documentFormat);
+  assert.deepEqual(data.tags, (before.data as { tags?: string[] }).tags);
+  await assert.rejects(
+    library.changeRelation(
+      { ...change, ifRevision: after.revision, action: "unlink", requestId: "lib-again" },
       "tester",
     ),
     code("ENTITY_RELOCATED"),

@@ -5,6 +5,7 @@ import { outputOptions } from "./context.js";
 import { printError } from "./output.js";
 import { createProgram } from "./program.js";
 import type { Command } from "commander";
+import { commandPath } from "./command.js";
 
 function argumentError(error: CommanderError): string {
   const message = error.message.replace(/^error: /, "");
@@ -31,40 +32,79 @@ function argumentError(error: CommanderError): string {
     .replace(/\(Did you mean (.+)\?\)/g, "Возможно, вы имели в виду: $1?");
 }
 
-/** Префикс проекта разбирается до Commander, значения глобальных опций не считаются именами. */
-function projectArguments(argv: string[], program: Command): string[] {
+/** Ранний конфликт учитывает грамматику выбранной команды, а не совпадения токенов. */
+function projectArguments(argv: string[], program: Command) {
+  let command = program;
+  let prefixIndex: number | undefined;
+  let explicitProject = false;
+  let format: GlobalOptions["format"];
   for (let index = 0; index < argv.length; index++) {
     const token = argv[index]!;
-    if (token === "--") return argv;
+    if (token === "--") break;
     if (token.startsWith("-")) {
-      const option = program.options.find((item) =>
+      const option = [...command.options, ...program.options].find((item) =>
         [item.long, item.short].includes(token.split("=")[0]!),
       );
-      if (option?.required && !token.includes("=")) index++;
+      const equals = token.indexOf("=");
+      const value = equals >= 0 ? token.slice(equals + 1) : argv[index + 1];
+      if (option?.long === "--project") explicitProject = true;
+      if (option?.long === "--format" && (value === "json" || value === "text")) format = value;
+      if (
+        equals < 0 &&
+        (option?.required || (option?.optional && value !== undefined && !value.startsWith("-")))
+      )
+        index++;
       continue;
     }
-    if (
-      program.commands.some((command) => command.name() === token) ||
-      token === "help" ||
-      index === argv.length - 1
+    const child = command.commands.find(
+      (item) => item.name() === token || item.aliases().includes(token),
+    );
+    if (child) command = child;
+    else if (
+      command === program &&
+      prefixIndex === undefined &&
+      token !== "help" &&
+      index < argv.length - 1
     )
-      return argv;
-    if (argv.some((item) => item === "--project" || item.startsWith("--project=")))
-      throw new AppError("INVALID_ARGUMENT", "Укажите проект один раз: префиксом или --project");
-    return [...argv.slice(0, index), "--project", token, ...argv.slice(index + 1)];
+      prefixIndex = index;
   }
-  return argv;
+  return {
+    args:
+      prefixIndex === undefined
+        ? argv
+        : [
+            ...argv.slice(0, prefixIndex),
+            "--project",
+            argv[prefixIndex]!,
+            ...argv.slice(prefixIndex + 1),
+          ],
+    conflict: prefixIndex !== undefined && explicitProject,
+    format,
+    command,
+  };
 }
 
 /** Возвращаем код вместо process.exit, чтобы вывод успел сброситься и CLI был тестируемым. */
 export async function runCli(argv: string[], runtime: Runtime): Promise<number> {
   const program = createProgram(runtime);
+  let earlyOptions: GlobalOptions = {};
   try {
-    await program.parseAsync(projectArguments(argv, program), { from: "user" });
+    const prepared = projectArguments(argv, program);
+    earlyOptions = prepared.format ? { format: prepared.format } : {};
+    if (prepared.conflict)
+      throw new AppError(
+        "INVALID_ARGUMENT",
+        "Укажите проект один раз: префиксом или --project",
+        2,
+        {
+          hint: `Синтаксис и примеры: ${commandPath(prepared.command)} --help`,
+        },
+      );
+    await program.parseAsync(prepared.args, { from: "user" });
     return runtime.exitCode ?? 0;
   } catch (error) {
     if (error instanceof CommanderError && error.exitCode === 0) return 0;
-    const options = program.opts<GlobalOptions>();
+    const options = { ...earlyOptions, ...program.opts<GlobalOptions>() };
     const output = outputOptions(runtime, options);
     const failure =
       error instanceof CommanderError

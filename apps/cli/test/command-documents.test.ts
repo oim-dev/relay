@@ -410,8 +410,7 @@ test("document: восемь листьев, богатый документ и 
         "--if-revision",
         after.revision,
       ]),
-      "RELATION_NOT_FOUND",
-      3,
+      "INVALID_ARGUMENT",
     );
     before = after;
     successful(

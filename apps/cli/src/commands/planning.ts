@@ -9,21 +9,15 @@ import {
   changePlanTasksSchema,
   transferPlanTaskSchema,
   plansQuerySchema,
+  plansCompactQuerySchema,
   planningPageQuerySchema,
   workPlanFieldsSchema,
   stageFieldsSchema,
   planningCandidatesQuerySchema,
   workPlanDataSchema,
 } from "@relay/contracts/planning";
-import {
-  saveReleaseSchema,
-  updateReleaseSchema,
-  releasesQuerySchema,
-  releaseActionSchema,
-  releasePreviewSchema,
-} from "@relay/contracts/releases";
 import { parse } from "@relay/core/domain/validation";
-import { commandGroup, registerCommand } from "../command.js";
+import { commandGroup, registerCommand, type CommandDefinition } from "../command.js";
 import { author } from "../context.js";
 import type { Runtime, CommandContext } from "../context.js";
 import { integer } from "../options.js";
@@ -38,37 +32,36 @@ import {
 } from "../command-kit.js";
 import { registerEntityProgress } from "./progress.js";
 import {
-  planningListText,
   planningSavedText,
   planningStatusLabels,
-  planText,
-  releaseText,
   planningColumnLabel,
   stageText,
 } from "../presentation/planning.js";
+import {
+  planCardText,
+  planListText,
+  planCountFields,
+  planPresentedError,
+} from "../presentation/plans.js";
 
-type Options = Record<string, unknown>;
-const details =
-  "Запись выполняется с автором и прочитанной ревизией. request-id служит только корреляции, результат не сохраняется для повтора. После потери ответа перечитайте состояние; повтор может выполнить новое действие. Старый формат планов и релизов не поддерживается; автоматического переноса нет.";
-const refArgument = { reference: "Ключ или постоянный ID выбранной сущности" };
-const writing = (command: Command) =>
-  command.option(
-    "--request-id <id>",
-    "Идентификатор корреляции, не дедупликации; по умолчанию UUID",
-  );
-const revision = (command: Command) =>
-  writing(command).requiredOption(
-    "--if-revision <n>",
-    "Прочитанная ревизия плана или релиза",
-    integer(1, Number.MAX_SAFE_INTEGER),
-  );
-const filtersOf = ({ limit, cursor, ...filters }: Options) => filters;
-const metadata = (options: Options) => ({
-  requestId: options.requestId ?? randomUUID(),
-  ifRevision: options.ifRevision,
-});
+import { registerReleases } from "./releases.js";
+import {
+  details,
+  refArgument,
+  writing,
+  revision,
+  filtersOf,
+  metadata,
+} from "./planning-release-shared.js";
+import type { Options } from "./planning-release-shared.js";
 
 async function planFields(context: CommandContext, options: Options) {
+  if (options.participants !== undefined && options.clearParticipants)
+    throw new AppError(
+      "CONFLICTING_OPTIONS",
+      "--participants и --clear-participants нельзя использовать вместе",
+      2,
+    );
   if (options.scope !== undefined && options.clearScope)
     throw new AppError("INVALID_ARGUMENT", "--scope и --clear-scope нельзя использовать вместе", 2);
   const texts = await readTextFields(context, options, [
@@ -92,6 +85,7 @@ async function planFields(context: CommandContext, options: Options) {
         .map(async (ref) => (await context.backend.entities.resolve({ ref })).ref),
     );
   if (options.clearScope) fields.scope = [];
+  if (options.clearParticipants) fields.participants = [];
   return fields;
 }
 const contentOptions = (command: Command) => {
@@ -109,8 +103,48 @@ const contentOptions = (command: Command) => {
   return command
     .option("--scope <references...>", "Области воздействия: ключи или kind:ID")
     .option("--clear-scope", "Явно очистить область изменения")
-    .option("--participants <actors...>", "Участники плана");
+    .option("--participants <actors...>", "Участники плана; заменяет весь набор")
+    .option("--clear-participants", "Явно очистить участников; несовместимо с --participants");
 };
+
+function registerPlanCommand<Options extends object = Record<string, never>>(
+  parent: Command,
+  runtime: Runtime,
+  definition: CommandDefinition<Options>,
+): void {
+  registerCommand<Options>(parent, runtime, {
+    ...definition,
+    async run(context, input) {
+      try {
+        return await definition.run(context, input);
+      } catch (error) {
+        const options = input.options as Record<string, unknown>;
+        const action = definition.name.split(" ")[0]!;
+        const taskGroup = parent.name() === "task" && parent.parent?.name() === "plan";
+        const stageGroup = parent.name() === "stage" || parent.parent?.name() === "stage";
+        throw planPresentedError(error, {
+          action,
+          plan: taskGroup
+            ? typeof options.plan === "string"
+              ? options.plan
+              : undefined
+            : input.optionalArgument(),
+          stage: stageGroup && action !== "transfer" ? input.optionalArgument(1) : undefined,
+          task:
+            taskGroup && action === "memberships"
+              ? input.optionalArgument()
+              : action === "transfer"
+                ? input.optionalArgument(1)
+                : Array.isArray(options.tasks)
+                  ? options.tasks[0]
+                  : undefined,
+          targetPlan: typeof options.targetPlan === "string" ? options.targetPlan : undefined,
+          invoke: (args) => commandInvocation(context, args),
+        });
+      }
+    },
+  });
+}
 
 /** Предметные команды планирования; форматирование отделено от Core. */
 export function registerPlanning(program: Command, runtime: Runtime): void {
@@ -120,12 +154,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     details,
     examples: [["npx @oim-dev/relay-cli plan list", "Прочитать планы проекта"]],
   });
-  const release = commandGroup(program, {
-    name: "release",
-    description: "Самостоятельные релизы, актуальный состав и готовность",
-    details,
-    examples: [["npx @oim-dev/relay-cli release list", "Прочитать релизы проекта"]],
-  });
+  registerReleases(program, runtime);
   const stage = commandGroup(plan, {
     name: "stage",
     description: "Этапы плана: содержание, порядок и задачи",
@@ -145,8 +174,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     examples: [["npx @oim-dev/relay-cli plan task candidates", "Найти задачи"]],
   });
   registerEntityProgress(plan, runtime, "work-plan");
-  registerEntityProgress(release, runtime, "release");
-  registerCommand<Options>(planTask, runtime, {
+  registerPlanCommand<Options>(planTask, runtime, {
     name: "candidates",
     description: "Найти задачи для включения в этап",
     details:
@@ -171,132 +199,140 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
       const command = ["plan", "task", "candidates"];
       const filters = filtersOf(input.options);
       const query = offsetQuery(context, input.options, command, filters);
-      const data = await context.backend.plans.candidates(
-        parse(planningCandidatesQuerySchema, { ...filters, ...query }, "выбор задач"),
-      );
+      const request = parse(planningCandidatesQuerySchema, { ...filters, ...query }, "выбор задач");
+      const data = await context.backend.plans.candidates(request);
       return {
         data,
         page: pageResult(context, command, filters, query, data),
         text: (options) =>
-          planningListText(
+          planListText(
             "Задачи для плана",
-            ["Ключ", "Название", "Колонка", "Участие"],
-            data.items.map((item) => [
-              item.key,
-              item.title,
-              planningColumnLabel(item.column),
-              item.assignment?.planKey ?? "Без текущего плана",
-            ]),
-            data,
-            "plan task candidates",
-            filters,
+            data.items.map((item) => ({
+              key: item.key,
+              title: item.title,
+              fields: [
+                ["Колонка", planningColumnLabel(item.column)],
+                ["Выполнена", item.completed ? "Да" : "Нет"],
+                ["Заблокирована", item.blocked ? "Да" : "Нет"],
+                ["Готова к работе", item.ready ? "Да" : "Нет"],
+                ["Текущий план", item.assignment?.planKey ?? "Без текущего плана", "opaque"],
+                ...(item.assignment
+                  ? ([
+                      ["Состояние плана", planningStatusLabels[item.assignment.status]],
+                      ["Этап", item.assignment.stageTitle],
+                      ["ID этапа", item.assignment.stageId, "opaque"],
+                    ] as const)
+                  : []),
+              ],
+            })),
+            { ...filters, availableOnly: request.availableOnly },
             options,
-            context.globals,
+            data.items[0]
+              ? [
+                  {
+                    label: "Задача — пример для первого ключа; подставьте выбранный ключ",
+                    command: commandInvocation(context, ["task", "get", data.items[0].key]),
+                  },
+                  {
+                    label: "Участие выбранной задачи — пример для первого ключа",
+                    command: commandInvocation(context, [
+                      "plan",
+                      "task",
+                      "memberships",
+                      data.items[0].key,
+                    ]),
+                  },
+                ]
+              : [],
           ),
       };
     },
   });
-  for (const [kind, group] of [
-    ["plan", plan],
-    ["release", release],
-  ] as const) {
-    registerCommand<Options>(group, runtime, {
-      name: "list",
-      description:
-        kind === "plan" ? "Каталог планов с прогрессом" : "Каталог релизов с готовностью",
-      details: "Полные итоги независимы от страницы; продолжение сохраняет фильтры и версию.",
-      examples: [[`npx @oim-dev/relay-cli ${kind} list --limit 12`, "Прочитать первую страницу"]],
-      configure: (command) =>
-        paging(command)
-          .option("--q <text>", "Поиск по ключу, названию и описанию")
-          .option("--status <status>", "Предметное состояние плана или релиза"),
-      run: async (context, input) => {
-        const command = [kind, "list"];
-        const filters = filtersOf(input.options);
-        const query = offsetQuery(context, input.options, command, filters);
-        if (kind === "plan") {
-          const data = await context.backend.plans.list(
-            parse(plansQuerySchema, { ...filters, ...query }, "каталог планов"),
-          );
-          return {
-            data,
-            page: pageResult(context, command, filters, query, data),
-            text: (options) =>
-              planningListText(
-                "Планы работ",
-                ["Ключ", "Название", "Состояние", "Задачи"],
-                data.items.map((item) => [
-                  item.key,
-                  item.title,
-                  planningStatusLabels[item.status]!,
-                  `${item.counts.completed}/${item.counts.total}`,
-                ]),
-                data,
-                "plan list",
-                filters,
-                options,
-                context.globals,
-              ),
-          };
-        }
-        const data = await context.backend.releases.list(
-          parse(releasesQuerySchema, { ...filters, ...query }, "каталог релизов"),
-        );
-        return {
-          data,
-          page: pageResult(context, command, filters, query, data),
-          text: (options) =>
-            planningListText(
-              "Релизы",
-              ["Ключ", "Название", "Версия", "Состояние", "Готово сейчас"],
-              data.items.map((item) => [
-                item.key,
-                item.title,
-                item.version,
-                planningStatusLabels[item.status]!,
-                `${item.readiness.ready}/${item.readiness.total}`,
-              ]),
-              data,
-              "release list",
-              filters,
-              options,
-              context.globals,
-            ),
-        };
-      },
-    });
-    registerCommand(group, runtime, {
-      name: "get <reference>",
-      description: "Полные тексты и актуальное состояние",
-      arguments: refArgument,
-      details:
-        "Полное содержание отображается как Markdown; состав имеет отдельные постраничные команды.",
-      examples: [
-        [
-          `npx @oim-dev/relay-cli ${kind} get ${kind === "plan" ? "PLN" : "REL"}-1`,
-          "Прочитать запись",
-        ],
+  registerPlanCommand<Options>(plan, runtime, {
+    name: "list",
+    description: "Каталог планов с прогрессом",
+    details:
+      "Полные итоги независимы от страницы; продолжение сохраняет фильтры, проекцию и версию. Без --projection JSON сохраняет полную прежнюю форму; compact исключает полные Markdown-поля соседних планов. Полное содержание читается через plan get.",
+    examples: [
+      ["npx @oim-dev/relay-cli plan list --limit 12", "Прочитать первую страницу"],
+      [
+        "npx @oim-dev/relay-cli plan list --projection compact --format json",
+        "Получить явный обзор без полных текстов соседних планов",
       ],
-      run: async (context, input) => {
-        if (kind === "plan") {
-          const data = await context.backend.plans.get(input.argument());
-          const commands = {
-            stages: commandInvocation(context, ["plan", "stage", "list", data.key]),
-            progress: commandInvocation(context, ["plan", "progress", data.key]),
-          };
-          return { data, text: (options) => planText(data, options, commands) };
-        }
-        const data = await context.backend.releases.get(input.argument());
-        const commands = {
-          plans: commandInvocation(context, ["release", "plans", data.key]),
-          progress: commandInvocation(context, ["release", "progress", data.key]),
-        };
-        return { data, text: (options) => releaseText(data, options, commands) };
-      },
-    });
-  }
+    ],
+    configure: (command) =>
+      paging(command)
+        .option("--q <text>", "Поиск по ключу, названию и описанию")
+        .option("--status <status>", "Состояние плана: draft, active, completed или cancelled")
+        .option(
+          "--projection <projection>",
+          "compact — явный обзор без полных текстов; по умолчанию прежняя полная форма",
+        ),
+    run: async (context, input) => {
+      const command = ["plan", "list"];
+      const filters = filtersOf(input.options);
+      const query = offsetQuery(context, input.options, command, filters);
+      const data =
+        filters.projection === "compact"
+          ? await context.backend.plans.listCompact(
+              parse(plansCompactQuerySchema, { ...filters, ...query }, "компактный каталог планов"),
+            )
+          : await context.backend.plans.list(
+              parse(plansQuerySchema, { ...filters, ...query }, "каталог планов"),
+            );
+      return {
+        data,
+        page: pageResult(context, command, filters, query, data),
+        text: (options) =>
+          planListText(
+            "Планы работ",
+            data.items.map((item) => ({
+              key: item.key,
+              title: item.title,
+              fields: [
+                ["Состояние", planningStatusLabels[item.status]],
+                ...planCountFields(item.counts),
+              ],
+            })),
+            filters,
+            options,
+            data.items[0]
+              ? [
+                  {
+                    label: "Прочитать план — пример для первого ключа; подставьте выбранный ключ",
+                    command: commandInvocation(context, ["plan", "get", data.items[0].key]),
+                  },
+                ]
+              : [],
+          ),
+      };
+    },
+  });
+  registerPlanCommand(plan, runtime, {
+    name: "get <reference>",
+    description: "Полные тексты и актуальное состояние",
+    arguments: refArgument,
+    details:
+      "Полное содержание отображается как Markdown; состав имеет отдельные постраничные команды.",
+    examples: [["npx @oim-dev/relay-cli plan get PLN-1", "Прочитать запись"]],
+    run: async (context, input) => {
+      const data = await context.backend.plans.get(input.argument());
+      const commands = [
+        {
+          label: "Этапы",
+          command: commandInvocation(context, ["plan", "stage", "list", data.key]),
+        },
+        { label: "Прогресс", command: commandInvocation(context, ["plan", "progress", data.key]) },
+        {
+          label: "Связи и прикреплённые материалы",
+          command: commandInvocation(context, ["inspect", "graph", "list", "--root", data.key]),
+        },
+      ];
+      return { data, text: (options) => planCardText(data, options, commands) };
+    },
+  });
   for (const action of ["create", "update"] as const)
-    registerCommand<Options>(plan, runtime, {
+    registerPlanCommand<Options>(plan, runtime, {
       name: action === "create" ? "create" : "update <reference>",
       description: action === "create" ? "Создать черновик плана" : "Изменить заданные поля плана",
       details,
@@ -345,7 +381,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
       },
     });
   for (const action of ["start", "complete", "cancel"] as const)
-    registerCommand<Options>(plan, runtime, {
+    registerPlanCommand<Options>(plan, runtime, {
       name: `${action} <reference>`,
       description: {
         start: "Начать план",
@@ -389,7 +425,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         };
       },
     });
-  registerCommand<Options>(stage, runtime, {
+  registerPlanCommand<Options>(stage, runtime, {
     name: "list <reference>",
     description: "Этапы плана с полным прогрессом",
     details: "Порядок этапов не определяет запрет исполнения.",
@@ -407,24 +443,34 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         data,
         page: pageResult(context, command, {}, query, data),
         text: (options) =>
-          planningListText(
+          planListText(
             `Этапы · ${input.argument()}`,
-            ["ID этапа", "Название", "Задачи"],
-            data.items.map((item) => [
-              item.id,
-              item.title,
-              `${item.counts.completed}/${item.counts.total}`,
-            ]),
-            data,
-            `plan stage list ${input.argument()}`,
-            input.options,
+            data.items.map((item) => ({
+              key: item.id,
+              title: item.title,
+              fields: planCountFields(item.counts),
+            })),
+            {},
             options,
-            context.globals,
+            data.items[0]
+              ? [
+                  {
+                    label: "Прочитать этап — пример первого ID; замените ID, сохранив адрес плана",
+                    command: commandInvocation(context, [
+                      "plan",
+                      "stage",
+                      "get",
+                      input.argument(),
+                      data.items[0].id,
+                    ]),
+                  },
+                ]
+              : [],
           ),
       };
     },
   });
-  registerCommand<Options>(stageTask, runtime, {
+  registerPlanCommand<Options>(stageTask, runtime, {
     name: "list <reference> <stage>",
     description: "Актуальные задачи этапа",
     details: "Состав не включает подзадачи и зависимости автоматически.",
@@ -448,25 +494,51 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         data,
         page: pageResult(context, command, {}, query, data),
         text: (options) =>
-          planningListText(
+          planListText(
             `Задачи этапа · ${input.argument()} / ${input.argument(1)}`,
-            ["Ключ", "Название", "Колонка", "Выполнена"],
-            data.items.map((item) => [
-              item.key,
-              item.title,
-              planningColumnLabel(item.column),
-              item.completed ? "Да" : "Нет",
-            ]),
-            data,
-            `plan stage task list ${input.argument()} ${input.argument(1)}`,
-            input.options,
+            data.items.map((item) => ({
+              key: item.key,
+              title: item.title,
+              fields: [
+                ["Колонка", planningColumnLabel(item.column)],
+                ["Выполнена", item.completed ? "Да" : "Нет"],
+                ["Заблокирована", item.blocked ? "Да" : "Нет"],
+                ["Готова к работе", item.ready ? "Да" : "Нет"],
+              ],
+            })),
+            {},
             options,
-            context.globals,
+            [
+              ...(data.items[0]
+                ? [
+                    {
+                      label: "Прочитать задачу — пример первого ключа; подставьте выбранный ключ",
+                      command: commandInvocation(context, ["task", "get", data.items[0].key]),
+                    },
+                    {
+                      label: "Прогресс и блокеры — пример первого ключа",
+                      command: commandInvocation(context, ["task", "progress", data.items[0].key]),
+                    },
+                  ]
+                : []),
+              {
+                label: "Найти кандидатов для этого этапа",
+                command: commandInvocation(context, [
+                  "plan",
+                  "task",
+                  "candidates",
+                  "--plan",
+                  input.argument(),
+                  "--stage",
+                  input.argument(1),
+                ]),
+              },
+            ],
           ),
       };
     },
   });
-  registerCommand<Options>(planTask, runtime, {
+  registerPlanCommand<Options>(planTask, runtime, {
     name: "memberships <reference>",
     description: "Текущее участие задачи и включения в закрытые планы",
     details:
@@ -487,25 +559,43 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         data,
         page: pageResult(context, command, {}, query, data),
         text: (options) =>
-          planningListText(
+          planListText(
             `Участие задачи · ${input.argument()}`,
-            ["План", "Этап", "ID этапа", "Участие"],
-            data.items.map((item) => [
-              item.planKey,
-              item.stageTitle,
-              item.stageId,
-              item.current ? "Текущее" : "Закрытый план",
-            ]),
-            data,
-            `plan task memberships ${input.argument()}`,
-            input.options,
+            data.items.map((item) => ({
+              key: item.planKey,
+              title: item.planTitle,
+              fields: [
+                ["Состояние плана", planningStatusLabels[item.status]],
+                ["Этап", item.stageTitle],
+                ["ID этапа", item.stageId, "opaque"],
+                ["Участие", item.current ? "Текущее" : "Закрытый план"],
+              ],
+            })),
+            {},
             options,
-            context.globals,
+            data.items[0]
+              ? [
+                  {
+                    label: "Прочитать план — пример первой строки; подставьте выбранный ключ",
+                    command: commandInvocation(context, ["plan", "get", data.items[0].planKey]),
+                  },
+                  {
+                    label: "Прочитать этап — используйте план и ID из одной строки",
+                    command: commandInvocation(context, [
+                      "plan",
+                      "stage",
+                      "get",
+                      data.items[0].planKey,
+                      data.items[0].stageId,
+                    ]),
+                  },
+                ]
+              : [],
           ),
       };
     },
   });
-  registerCommand(stage, runtime, {
+  registerPlanCommand(stage, runtime, {
     name: "get <reference> <stage>",
     description: "Полное содержание этапа и явные ID задач",
     arguments: { ...refArgument, stage: "Внутренний ID этапа" },
@@ -544,7 +634,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     },
   });
   for (const action of ["create", "update", "remove", "move"] as const)
-    registerCommand<Options>(stage, runtime, {
+    registerPlanCommand<Options>(stage, runtime, {
       name: `${action} <reference>${action === "create" ? "" : " <stage>"}`,
       description: {
         create: "Создать этап",
@@ -633,7 +723,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
       },
     });
   for (const action of ["add", "remove"] as const)
-    registerCommand<Options>(stageTask, runtime, {
+    registerPlanCommand<Options>(stageTask, runtime, {
       name: `${action} <reference> <stage>`,
       description: action === "add" ? "Включить задачи в этап" : "Исключить задачи из этапа",
       details,
@@ -690,7 +780,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         };
       },
     });
-  registerCommand<Options>(stageTask, runtime, {
+  registerPlanCommand<Options>(stageTask, runtime, {
     name: "transfer <reference> <task> <targetStage>",
     description: "Явно перенести задачу между этапами или планами",
     details,
@@ -763,231 +853,6 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
               targetPlan: String(input.options.targetPlan),
               stageId: input.argument(2),
             },
-          ),
-      };
-    },
-  });
-  registerReleases(release, runtime);
-}
-
-/** Релизные команды передают значимые параметры напрямую, без непрозрачного JSON-запроса. */
-function registerReleases(group: Command, runtime: Runtime) {
-  registerCommand<Options>(group, runtime, {
-    name: "preview",
-    description: "Проверить выбранные планы без записи релиза",
-    details:
-      "Состав задаётся явно; готовность вычисляет Core. Пустой выбор не является готовым выпуском.",
-    examples: [
-      [
-        "npx @oim-dev/relay-cli release preview --plans PLN-1 PLN-2",
-        "Узнать готовность будущего состава",
-      ],
-    ],
-    configure: (command) =>
-      paging(command).option(
-        "--plans <references...>",
-        "Ключи или ID выбранных планов, максимум 200",
-      ),
-    run: async (context, input) => {
-      const command = ["release", "preview"];
-      const filters: Record<string, unknown> = {
-        plans:
-          input.options.plans === undefined
-            ? undefined
-            : z
-                .array(z.string())
-                .parse(input.options.plans)
-                .flatMap((value) => value.split(",")),
-      };
-      const query = offsetQuery(context, input.options, command, filters);
-      const data = await context.backend.releases.preview(
-        parse(
-          releasePreviewSchema,
-          { ...query, plans: filters.plans ?? [] },
-          "предпросмотр релиза",
-        ),
-      );
-      return {
-        data,
-        page: pageResult(context, command, filters, query, data),
-        text: (options) =>
-          planningListText(
-            `Предпросмотр без записи · текущая готовность: ${data.readiness.ready}/${data.readiness.total} планов${data.readiness.total ? "" : " · состав не выбран, выпуск не готов"}`,
-            ["Ключ", "Название", "Состояние", "Задачи сейчас"],
-            data.items.map(({ id, plan }) => [
-              plan?.key ?? id,
-              plan?.title ?? "План недоступен",
-              plan ? planningStatusLabels[plan.status]! : "Недоступен",
-              plan ? `${plan.counts.completed}/${plan.counts.total}` : "—",
-            ]),
-            data,
-            "release preview",
-            filters,
-            options,
-            context.globals,
-          ),
-      };
-    },
-  });
-  for (const action of ["create", "update"] as const)
-    registerCommand<Options>(group, runtime, {
-      name: action === "create" ? "create" : "update <reference>",
-      description:
-        action === "create"
-          ? "Создать релиз с выбранными планами"
-          : "Изменить реквизиты, состав и состояние релиза",
-      details,
-      ...(action === "update" ? { arguments: refArgument } : {}),
-      examples: [
-        [
-          `npx @oim-dev/relay-cli release ${action}${action === "update" ? " REL-1 --if-revision 1" : ""} --actor human --title "Первый выпуск" --release-version 0.1 --plans PLN-1`,
-          "Сохранить релиз",
-        ],
-      ],
-      configure: (command) => {
-        if (action === "create")
-          writing(command)
-            .requiredOption("--title <title>", "Название релиза")
-            .requiredOption("--release-version <label>", "Обозначение версии выпуска")
-            .requiredOption("--plans <references...>", "Планы состава по ключам или ID");
-        else
-          revision(command)
-            .option("--title <title>", "Название релиза")
-            .option("--release-version <label>", "Обозначение версии выпуска")
-            .option("--plans <references...>", "Полный новый состав планов");
-        textOption(command, "summary", "Краткое описание");
-        textOption(
-          command,
-          "description",
-          "Полное описание релиза в Markdown: содержание выпуска, значимые изменения, ограничения и основания поставки",
-        );
-        command
-          .option("--planned-for <date>", "Плановая дата YYYY-MM-DD; пустая строка очищает дату")
-          .option(
-            "--status <status>",
-            "planned, cancelled или released; released фиксирует выпуск",
-          );
-      },
-      run: async (context, input) => {
-        const texts = await readTextFields(context, input.options, ["summary", "description"]);
-        const previous =
-          action === "update" ? await context.backend.releases.get(input.argument()) : undefined;
-        const options = { ...input.options, ...texts };
-        const planIds =
-          options.plans === undefined
-            ? previous?.planIds
-            : await Promise.all(
-                z
-                  .array(z.string())
-                  .parse(options.plans)
-                  .map(
-                    async (ref) =>
-                      (await context.backend.entities.resolve({ ref, kind: "work-plan" })).ref.id,
-                  ),
-              );
-        const command = parse(
-          saveReleaseSchema,
-          {
-            ...metadata(options),
-            title: options.title ?? previous?.title,
-            version: options.releaseVersion ?? previous?.version,
-            summary: options.summary ?? previous?.summary,
-            description: options.description ?? previous?.description,
-            plannedFor: options.plannedFor ?? previous?.plannedFor,
-            status: options.status ?? previous?.status,
-            planIds,
-          },
-          "сохранение релиза",
-        );
-        const data =
-          action === "create"
-            ? await context.backend.releases.create(command, author(context))
-            : await context.backend.releases.update(
-                input.argument(),
-                updateReleaseSchema.parse(command),
-                author(context),
-              );
-        return {
-          data,
-          text: (options) =>
-            planningSavedText(data, options, [
-              {
-                label: "Прочитать релиз",
-                command: commandInvocation(context, ["release", "get", data.key]),
-              },
-            ]),
-        };
-      },
-    });
-  for (const action of ["plan", "cancel", "publish"] as const)
-    registerCommand<Options>(group, runtime, {
-      name: `${action} <reference>`,
-      description: {
-        plan: "Перепланировать отменённый релиз",
-        cancel: "Отменить плановый релиз",
-        publish: "Зафиксировать выпуск выбранных планов",
-      }[action],
-      details,
-      arguments: refArgument,
-      examples: [
-        [
-          `npx @oim-dev/relay-cli release ${action} REL-1 --actor human --if-revision 1`,
-          "Изменить состояние выпуска",
-        ],
-      ],
-      configure: revision,
-      run: async (context, input) => {
-        const data = await context.backend.releases.transition(
-          input.argument(),
-          parse(
-            releaseActionSchema,
-            { ...metadata(input.options), action: action === "publish" ? "release" : action },
-            "переход релиза",
-          ),
-          author(context),
-        );
-        return {
-          data,
-          text: (options) =>
-            planningSavedText(data, options, [
-              {
-                label: "Прочитать релиз",
-                command: commandInvocation(context, ["release", "get", data.key]),
-              },
-            ]),
-        };
-      },
-    });
-  registerCommand<Options>(group, runtime, {
-    name: "plans <reference>",
-    description: "Актуальные планы выбранного состава",
-    details:
-      "Страницы имеют версию и явное продолжение. Готовность отражает текущие задачи даже после выпуска.",
-    arguments: refArgument,
-    examples: [["npx @oim-dev/relay-cli release plans REL-1 --limit 12", "Прочитать страницу"]],
-    configure: paging,
-    run: async (context, input) => {
-      const command = ["release", "plans", input.argument()];
-      const query = offsetQuery(context, input.options, command, {});
-      const data = await context.backend.releases.composition(input.argument(), query);
-      return {
-        data,
-        page: pageResult(context, command, {}, query, data),
-        text: (options) =>
-          planningListText(
-            `Планы релиза ${input.argument()} · текущая готовность: ${data.readiness.ready}/${data.readiness.total}`,
-            ["Ключ", "Название", "Состояние", "Задачи сейчас"],
-            data.items.map(({ id, plan }) => [
-              plan?.key ?? id,
-              plan?.title ?? "План недоступен",
-              plan ? planningStatusLabels[plan.status]! : "Недоступен",
-              plan ? `${plan.counts.completed}/${plan.counts.total}` : "—",
-            ]),
-            data,
-            `release plans ${input.argument()}`,
-            input.options,
-            options,
-            context.globals,
           ),
       };
     },

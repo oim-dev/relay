@@ -36,14 +36,11 @@ for (const [label, directory] of [
     const lines = initialized.stdout
       .split("\n")
       .filter((line) => line.trimStart().startsWith("npx @oim-dev/relay-cli"));
-    assert.equal(lines.length, 1, initialized.stdout);
+    assert.equal(lines.length, 2, initialized.stdout);
+    assert.match(lines[1]!, /product create --help$/);
     const hint = lines[0]!;
     assert.doesNotMatch(hint, /[\r\n]/);
-    assert.match(
-      hint,
-      /product create --help\s*$/,
-      "подсказка целиком помещается в одну физическую строку",
-    );
+    assert.match(hint, /config get\s*$/, "подсказка целиком помещается в одну физическую строку");
     // Shell разбирает настоящую подсказку. Подменяем только npx: никакой загрузки npm,
     // аргументы без повторной сериализации передаются исходнику CLI с tsx.
     const launcher = `
@@ -81,21 +78,44 @@ for (const [label, directory] of [
       stdout: string;
       stderr: string;
     };
-    assert.deepEqual(replay.args, [
-      "--local",
-      "--config",
-      configPath,
-      "product",
-      "create",
-      "--help",
-    ]);
+    assert.deepEqual(replay.args, ["--config", configPath, "config", "get"]);
     assert.equal(replay.code, 0, replay.stdout + replay.stderr);
     assert.equal(replay.stderr, "");
-    assert.match(replay.stdout, /product create/);
-    const read = successful(await invoke(root, [...replay.args.slice(0, 3), "config", "get"]));
+    assert.match(replay.stdout, /Конфигурация/);
+    const read = successful(await invoke(root, [...replay.args.slice(0, 2), "config", "get"]));
     assert.equal((read.meta as { configPath: string }).configPath, configPath);
     assert.ok(await readFile(configPath, "utf8"));
   });
+
+test("local: init, карточка, квитанция и обслуживание не добавляют флаги выбора проекта", async (t) => {
+  const root = await tempDirectory(t);
+  for (const [args, expected] of [
+    [["init"], ["config get", "product create --help"]],
+    [
+      ["document", "create", "--name", "Документ", "--body", "Полный текст"],
+      ["document get DOC-1"],
+    ],
+    [
+      ["document", "get", "DOC-1"],
+      ["document links DOC-1", "inspect graph context DOC-1", "document delete-preview DOC-1"],
+    ],
+    [["storage", "status"], ["doctor check"]],
+  ] as const) {
+    const result = await invokeRaw(root, [...args]);
+    assert.equal(result.code, 0, result.stdout);
+    assert.equal(result.stderr, "");
+    const hints = result.stdout.split("\n").filter((line) => line.startsWith("npx "));
+    assert.deepEqual(
+      hints,
+      expected.map((command) => `npx @oim-dev/relay-cli ${command}`),
+    );
+    // Выполняем выданную команду в том же проекте; npx заменён только тестовым входом CLI.
+    for (const command of expected) {
+      const next = await invokeRaw(root, command.split(" "));
+      assert.equal(next.code, 0, next.stdout);
+    }
+  }
+});
 
 test("init / config get / project get/update: сохранность, ревизия, только имя и human", async (t) => {
   const root = await tempDirectory(t);
@@ -170,7 +190,9 @@ test("init / config get / project get/update: сохранность, ревиз
   assert.doesNotMatch(human.stdout, /\u001b/);
   const hint = human.stdout.split("\n").find((line) => line.includes("npx @oim-dev/relay-cli"));
   assert.ok(
-    hint?.includes("--local") && hint.includes(configPath) && hint.includes("project update"),
+    hint?.includes("--local") &&
+      hint.includes(configPath) &&
+      hint.includes("document section list"),
     human.stdout,
   );
 });

@@ -47,7 +47,8 @@ Manifest версии 1 содержит `orchestrator` и массив `agents`
 сборщик не разрешает их пути и не проверяет их загрузку агентом.
 `AGENTS.md` не бывает управляемым выходом.
 Порядок элементов manifest не влияет на байты результата. Модель не фиксируется.
-Для девяти профилей создаётся 29 выходных файлов и `agents-lock.json`.
+Для десяти профилей (одного оркестратора и девяти воркеров) создаётся 32 выходных файла
+и `agents-lock.json`.
 
 Для совместимости с прежним входным контрактом принимается необязательный булевый
 `readOnly`, но он не создаёт ограничений и не меняет полный prompt.
@@ -82,14 +83,20 @@ check сообщает drift, build проверяет прежние хеши �
 
 ## Адаптеры и границы
 
-- **OpenCode:** девять `.opencode/agents/*.md` с `description` и `mode`
-  (`primary`/`subagent`); `opencode.json` со схемой и `default_agent`.
-- **Claude Code:** девять `.claude/agents/*.md` с `name`, `description`, `model: inherit`;
+- **OpenCode:** десять `.opencode/agents/*.md` с `description` и `mode`
+  (`primary`/`subagent`); `opencode.json` со схемой и `default_agent: "build"`.
+  Встроенный `build` выбран по умолчанию; `relay-orchestrator` остаётся доступным
+  `primary` для явного выбора, девять воркеров имеют `mode: subagent`.
+- **Claude Code:** десять `.claude/agents/*.md` с `name`, `description`, `model: inherit`;
   `.claude/settings.json` выбирает главного через `agent`.
 - **Codex:** `.codex/config.toml` содержит полный профиль primary в `developer_instructions`
   и `[agents] enabled = true`;
-  восемь самостоятельных `.codex/agents/*.toml` содержат `name`, `description`
+  девять самостоятельных `.codex/agents/*.toml` содержат `name`, `description`
   и `developer_instructions`.
+
+Выбор `build` относится только к OpenCode: Claude Code и Codex по-прежнему используют
+профиль оркестратора как главный. Изменение `default_agent` не заменяет выбор агента,
+сохранённый в существующей сессии OpenCode; default проверяют в новой сессии без явного выбора.
 
 Permissions, списки инструментов, sandbox, квоты и ограничения вложенного делегирования
 не генерируются. Действующие возможности, системные ограничения и runtime overrides
@@ -105,7 +112,10 @@ Claude 2.1.220 поддерживает `inherit`, но `CLAUDE_CODE_SUBAGENT_MO
 
 Источники форматов:
 
-- [Схема OpenCode](https://opencode.ai/config.json).
+- OpenCode V2: [агенты](https://opencode.ai/v2/docs/agents) и
+  [конфигурация](https://opencode.ai/v2/docs/config); применимый скилл — `opencode`.
+  URL [схемы](https://opencode.ai/config.json) сохраняется для редактора;
+  поля и форматы V2 сверяются с V2-документацией, а не выводятся из схемы V1.
 - [Агенты Claude](https://code.claude.com/docs/en/sub-agents) и
   [настройки](https://code.claude.com/docs/en/settings).
 - [Самостоятельные агенты Codex](https://developers.openai.com/codex/agent-configuration/subagents.md).
@@ -138,6 +148,8 @@ OpenCode через `debug agent`, Claude через SDK `initialize`, Codex ч�
 успешного кода завершения недостаточно, чтобы доказать сканирование каталога.
 
 Проверка рассчитана на OpenCode 1.18.32, Claude 2.1.220 и Codex 0.146.0;
-фактические версии печатаются в диагностике. Реальное выполнение поручений моделью,
+фактические версии печатаются в диагностике. Прежняя CLI-проверка OpenCode не подтверждает
+загрузку в V2: после перезапуска отдельно проверяют default `build`, явный выбор
+`relay-orchestrator` и запуск воркеров как субагентов. Реальное выполнение поручений моделью,
 наличие каждого инструмента в конкретной сессии и пользовательские overrides
 этими проверками не подтверждаются.

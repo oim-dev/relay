@@ -9,7 +9,7 @@ import type {
 } from "../../domain/product.js";
 import { parse } from "../../domain/validation.js";
 import { invariant, AppError } from "../../shared/errors.js";
-import { ProductService } from "./service.js";
+import { ProductParticipation } from "./participation.js";
 import { productAddresses, resolveProductAddress } from "../../domain/product-addresses.js";
 import { assertProductKey } from "../../domain/product-addresses.js";
 import { productCatalog } from "./catalog.js";
@@ -40,9 +40,20 @@ import { actorSchema } from "../../domain/validation.js";
 import { contractBasis } from "./model.js";
 import { readEntityCatalog, resolveEntity, assertEntityKeyAvailable } from "../entities/catalog.js";
 import { syncImplementationRelations } from "../entities/owned-relations.js";
+import { readProductLint, readProductOverviewMap } from "./read-queries.js";
+import { readProductSelection } from "./read-model.js";
+import type { ProductLintQuery, ProductOverviewMapQuery } from "@relay/contracts/product-query";
 
 /** Выборки требований и реализаций; готовность реализации определяется задачами. */
-export class ProductQueries extends ProductService {
+export class ProductQueries extends ProductParticipation {
+  async lint(input: ProductLintQuery = {}) {
+    return readProductLint(this.workspace, input);
+  }
+
+  async overviewMap(input: ProductOverviewMapQuery = {}) {
+    return readProductOverviewMap(this.workspace, input);
+  }
+
   async entities(input: ProductEntitiesQuery = {}) {
     const query = parse(productEntitiesQuerySchema, input, "список продуктовых целей");
     return this.workspace.locked(async (owned) => {
@@ -159,25 +170,14 @@ export class ProductQueries extends ProductService {
     );
     const actor = parse(actorSchema, command.actor ?? defaultActor, "автор");
     return this.workspace.mutate("implementation", command, actor, async (owned) => {
-      const repository = new ProductRepository(this.workspace);
-      const records = await repository.ensureKeys(owned);
-      const reservations = new Map<string, string[]>();
-      for (const scope of records) {
-        if (scope.fields.kind !== "scope") continue;
-        for (const entry of scope.fields.contracts) {
-          const stored = await repository.implementation(
-            scope.fields.applicationId,
-            entry.id,
-            entry.scenarioId !== null,
-          );
-          reservations.set(stored.id, stored.reservedKeys ?? []);
-        }
-      }
-      const selected = resolveProductAddress(
-        productAddresses(records),
-        command.ref,
-        "implementation",
+      const { repository, records, implementations, addresses } = await readProductSelection(
+        this.workspace,
+        owned,
       );
+      const reservations = new Map(
+        [...implementations].map(([id, stored]) => [id, stored.reservedKeys ?? []]),
+      );
+      const selected = resolveProductAddress(addresses, command.ref, "implementation");
       const scope = records.find(
         (entry) =>
           entry.fields.kind === "scope" &&
@@ -185,23 +185,19 @@ export class ProductQueries extends ProductService {
       )!;
       invariant(scope.fields.kind === "scope", "INVALID_DATA", "Не найден состав", 5);
       const contract = scope.fields.contracts.find((entry) => entry.id === selected.id)!;
-      const record = await repository.implementation(
-        scope.fields.applicationId,
-        selected.id,
-        contract.scenarioId !== null,
-      );
+      const record =
+        implementations.get(selected.id) ??
+        (await repository.implementation(
+          scope.fields.applicationId,
+          selected.id,
+          contract.scenarioId !== null,
+        ));
       invariant(
         record.revision === command.ifRevision,
         "REVISION_CONFLICT",
         "Реализация изменилась. Перечитайте запись.",
         4,
         { actual: record.revision },
-      );
-      invariant(
-        record.fields.active || command.key !== undefined,
-        "INVALID_REFERENCE",
-        "Снятая реализация доступна для чтения и исправления ключа",
-        4,
       );
       if (command.key) {
         assertEntityKeyAvailable(await readEntityCatalog(this.workspace, owned), command.key, {

@@ -4,7 +4,8 @@ import { publishTaskCommentSchema } from "@relay/core/domain/board-task";
 import type { TaskCommentsQuery } from "@relay/core/domain/board-task";
 import { parse } from "@relay/core/domain/validation";
 import { AppError } from "@relay/core/shared/errors";
-import { commandGroup, registerCommand } from "../command.js";
+import { commandGroup } from "../command.js";
+import { registerTaskCommand } from "./task-command.js";
 import { author } from "../context.js";
 import type { Runtime } from "../context.js";
 import { integer } from "../options.js";
@@ -25,7 +26,7 @@ export function registerTaskActivity(parent: Command, runtime: Runtime): void {
       "Списки содержат компактные записи, полный Markdown читается адресно. Курсор сохраняет снимок и фильтры.",
     examples: [["npx @oim-dev/relay-cli task comment list PRODUCT-1", "Прочитать обсуждения"]],
   });
-  registerCommand<
+  registerTaskCommand<
     Omit<TaskCommentsQuery, "limit" | "after" | "cursor"> & {
       by?: string;
       limit?: number;
@@ -85,7 +86,7 @@ export function registerTaskActivity(parent: Command, runtime: Runtime): void {
       };
     },
   });
-  registerCommand(group, runtime, {
+  registerTaskCommand(group, runtime, {
     name: "get <reference> <entryId>",
     description: "Прочитать полное содержание записи",
     arguments: { reference: "ID или ключ задачи", entryId: "Номер записи из списка" },
@@ -100,7 +101,7 @@ export function registerTaskActivity(parent: Command, runtime: Runtime): void {
       };
     },
   });
-  registerCommand<{ title: string; description: string; role: string; requestId?: string }>(
+  registerTaskCommand<{ title: string; description: string; role: string; requestId?: string }>(
     group,
     runtime,
     {

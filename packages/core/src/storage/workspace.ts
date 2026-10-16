@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { configSchema, defaultConfig } from "../domain/config.js";
 import type { Config } from "../domain/config.js";
 import { parse } from "../domain/validation.js";
-import { AppError, invariant } from "../shared/errors.js";
+import { AppError, invariant, isErrno } from "../shared/errors.js";
 import { exists, readJson } from "./files.js";
 import { prepareRuntime, runtimeDirectory, withStorageLock } from "./lock.js";
 import { BoardRepository } from "./boards.js";
@@ -33,6 +33,7 @@ import {
 } from "./entity-store/transaction.js";
 import { HashIndex } from "./entity-store/hash-index.js";
 import { stateSchema, STATE_PATH } from "./entity-store/format.js";
+import { assertInitializationTarget } from "./initialization.js";
 
 const lockContext = new AsyncLocalStorage<{
   root: string;
@@ -153,6 +154,7 @@ export class Workspace {
     operation: (store: EntityStore, owned: () => void) => Promise<T>,
     initialize = false,
   ): Promise<T> {
+    if (initialize) await assertInitializationTarget(this.configPath);
     const root = await realpath(dirname(this.configPath));
     const runtime = join(root, "runtime");
     await mkdir(runtime, { recursive: true });
@@ -163,6 +165,8 @@ export class Workspace {
         active?.assertOwned();
         owned();
       };
+      // Инициализация не допубликовывает чужой WAL и не принимает остатки базы за пустой снимок.
+      if (initialize) await assertInitializationTarget(this.configPath);
       const store = await EntityStore.underLock(
         root,
         workspaceStorageRegistry(),
@@ -357,7 +361,27 @@ export async function readWorkspaceConfig(cwd: string, explicit?: string) {
   return { configPath, config };
 }
 
-export async function openWorkspace(cwd: string, explicit?: string): Promise<Workspace> {
+export interface OpenWorkspaceOptions {
+  /** По умолчанию true. false пропускает только создание каталогов legacy при открытии. */
+  createLegacyDirectories?: boolean;
+}
+
+/** Разрешает существующих предков отсутствующего legacy-пути без создания каталогов. */
+async function resolveLegacyRoot(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    const parent = dirname(path);
+    if (!isErrno(error, "ENOENT") || parent === path) throw error;
+    return join(await resolveLegacyRoot(parent), basename(path));
+  }
+}
+
+export async function openWorkspace(
+  cwd: string,
+  explicit?: string,
+  options: OpenWorkspaceOptions = {},
+): Promise<Workspace> {
   const { configPath, config } = await readWorkspaceConfig(cwd, explicit);
   const dataRoot = dirname(configPath);
   const manifest = await readStorageManifest(dataRoot);
@@ -367,15 +391,16 @@ export async function openWorkspace(cwd: string, explicit?: string): Promise<Wor
     return workspace;
   }
   const storage = resolve(dirname(configPath), config.storageDir);
-  await mkdir(dirname(storage), { recursive: true });
-  const root = (await exists(storage))
-    ? await realpath(storage)
-    : join(await realpath(dirname(storage)), basename(storage));
-  await prepareRuntime(root);
-  // Git не хранит пустые каталоги.
-  if (!(await exists(root)))
-    // Несколько запросов и наблюдатель могут впервые открыть один каталог одновременно.
-    await mkdir(root, { recursive: true });
+  const createDirectories = options.createLegacyDirectories !== false;
+  if (createDirectories) await mkdir(dirname(storage), { recursive: true });
+  const root = await resolveLegacyRoot(storage);
+  if (createDirectories) {
+    await prepareRuntime(root);
+    // Git не хранит пустые каталоги.
+    if (!(await exists(root)))
+      // Несколько запросов и наблюдатель могут впервые открыть один каталог одновременно.
+      await mkdir(root, { recursive: true });
+  }
   const workspace = new Workspace(configPath, root, config);
   workspace.storageProductId = (await readStorageManifest(dirname(configPath)))?.productId;
   return workspace;
@@ -387,14 +412,7 @@ export async function initialize(
   explicit?: string,
 ): Promise<Workspace> {
   const configPath = resolve(cwd, explicit ?? CONFIG_NAME);
-  invariant(!(await exists(configPath)), "ALREADY_INITIALIZED", "Конфигурация уже существует", 4);
-  invariant(
-    !(await exists(join(dirname(configPath), "storage.json"))) &&
-      !(await exists(join(dirname(configPath), "transactions/pending.json"))),
-    "ALREADY_INITIALIZED",
-    "В каталоге уже есть хранилище; восстановите его конфигурацию",
-    4,
-  );
+  await assertInitializationTarget(configPath);
   const config = parse(
     configSchema,
     {

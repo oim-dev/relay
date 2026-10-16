@@ -18,6 +18,29 @@ export interface ContentWarning {
   message: string;
 }
 
+/** Одна классификация для совместимой утилиты и адресного серверного lint. */
+export function lintProductText(
+  kind: string,
+  text: string,
+): Pick<ContentWarning, "code" | "message">[] {
+  const warnings: Pick<ContentWarning, "code" | "message">[] = [];
+  if (text.length >= 200 && !/^#{1,6}\s|^\s*(?:[-*+] |\d+[.)] )/m.test(text))
+    warnings.push({
+      code: "UNSTRUCTURED_MARKDOWN",
+      message:
+        "Большое описание без разделов или списков: выделите цель, правила, ошибки и результат.",
+    });
+  if (
+    (kind === "feature" || kind === "scenario") &&
+    !/(критери|при[её]мк|проверк|результат)/iu.test(text)
+  )
+    warnings.push({
+      code: "MISSING_ACCEPTANCE",
+      message: "Не найдены критерии или проверяемый результат. Уточните, как принять требование.",
+    });
+  return warnings;
+}
+
 /** Структурные подсказки: не заменяют содержательную проверку требований человеком. */
 export function lintProduct(state: ProductState, input: ProductContentQuery = {}) {
   const query = productContentQuerySchema.parse(input);
@@ -48,26 +71,12 @@ export function lintProduct(state: ProductState, input: ProductContentQuery = {}
             },
           ];
     for (const entry of texts) {
-      if (entry.text.length >= 200 && !/^#{1,6}\s|^\s*(?:[-*+] |\d+[.)] )/m.test(entry.text))
+      for (const warning of lintProductText(data.kind, entry.text))
         warnings.push({
           id: record.id,
           name: entry.name,
           field: entry.field,
-          code: "UNSTRUCTURED_MARKDOWN",
-          message:
-            "Большое описание без разделов или списков: выделите цель, правила, ошибки и результат.",
-        });
-      if (
-        (data.kind === "feature" || data.kind === "scenario") &&
-        !/(критери|при[её]мк|проверк|результат)/iu.test(entry.text)
-      )
-        warnings.push({
-          id: record.id,
-          name: entry.name,
-          field: entry.field,
-          code: "MISSING_ACCEPTANCE",
-          message:
-            "Не найдены критерии или проверяемый результат. Уточните, как принять требование.",
+          ...warning,
         });
     }
   }

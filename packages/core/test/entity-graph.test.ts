@@ -6,9 +6,14 @@ import { readFile, writeFile } from "node:fs/promises";
 import { GraphService } from "../src/application/graph/service.js";
 import { join } from "node:path";
 import { entityAddress } from "../src/domain/entity-graph.js";
-import type { GraphNode } from "../src/domain/entity-graph.js";
+import type { GraphMutation, GraphNode } from "../src/domain/entity-graph.js";
 import { fixture } from "./helpers/workspace.js";
 import { EntityEngine } from "../src/application/entities/service.js";
+import { readEntityCatalog } from "../src/application/entities/catalog.js";
+import { AppError } from "../src/shared/errors.js";
+import { ProductRepository } from "../src/storage/product.js";
+import { inspectPending } from "../src/storage/entity-store/transaction.js";
+import { persistent, treeHashes } from "./helpers/migration-bases.js";
 
 const nodes: GraphNode[] = [
   "scenario:S",
@@ -306,4 +311,216 @@ test("движок: сценарий документа пишет свои св
   await assert.rejects(fresh.mutate(command, "agent"), { code: "GRAPH_CHANGED" });
   const unchanged = await engine.get({ ref: document.key });
   assert.equal(unchanged.data.kind === "document" && unchanged.data.links.length, 1);
+});
+
+for (const damage of ["endpoint-task", "unrelated-task", "unrelated-document"] as const)
+  test(`INSP-06: строгая мутация графа отвергает schema ${damage} без записи`, async (t) => {
+    const { workspace } = await fixture(t);
+    const engine = new EntityEngine(workspace);
+    const from = await engine.create(
+      { requestId: "from", data: { kind: "task", board: "BOARD-PRODUCT", title: "Начало" } },
+      "qa",
+    );
+    const to = await engine.create(
+      { requestId: "to", data: { kind: "task", board: "BOARD-PRODUCT", title: "Конец" } },
+      "qa",
+    );
+    const unrelated = await engine.create(
+      {
+        requestId: "unrelated",
+        data: { kind: "task", board: "BOARD-INFRA", title: "Другая компонента" },
+      },
+      "qa",
+    );
+    const document = await engine.create(
+      {
+        requestId: "document",
+        data: {
+          kind: "document",
+          name: "Изолированный документ",
+          summary: "",
+          body: "Текст\r\n",
+          documentKind: "description",
+        },
+      },
+      "qa",
+    );
+    const graph = new GraphService(workspace);
+    const add = {
+      action: "add" as const,
+      from: from.ref,
+      to: to.ref,
+      type: "diagnostic",
+      description: "Сохранённое пояснение\r\n",
+    };
+    const seed = await graph.mutate(
+      { requestId: "seed", ifVersion: (await graph.read()).version, operations: [add] },
+      "qa",
+    );
+    const before = await graph.read();
+    const damaged =
+      damage === "endpoint-task" ? from : damage === "unrelated-task" ? unrelated : document;
+    if (damage !== "endpoint-task")
+      assert.ok(
+        !(await graph.context({ root: from.key })).nodes.some(
+          (node) => node.ref.id === damaged.ref.id,
+        ),
+        "Повреждаем запись вне компоненты обоих концов",
+      );
+    const relativePath = `entities/${damaged.ref.kind}s/${damaged.ref.id}.json`;
+    const path = join(workspace.dataRoot, relativePath);
+    const original = await readFile(path);
+    const record = JSON.parse(original.toString());
+    const field = damaged.ref.kind === "document" ? "name" : "title";
+    record.data[field] = 17;
+    const corruptBytes = Buffer.from(JSON.stringify(record));
+    await writeFile(path, corruptBytes);
+    const unchanged = await treeHashes(workspace.dataRoot, persistent);
+    assert.equal((await inspectPending(workspace.dataRoot)).kind, "none");
+
+    // Именно прежний полный каталог задаёт отказ, а не новая проверка выбранной пары.
+    let expectedError: AppError | undefined;
+    await assert.rejects(
+      workspace.locked((owned) => readEntityCatalog(workspace, owned)),
+      (error) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, "INVALID_DATA");
+        assert.equal(error.exitCode, 5);
+        const details = error.details as {
+          path: string;
+          ref: unknown;
+          issues: { path: unknown[] }[];
+        };
+        assert.equal(details.path, relativePath);
+        assert.deepEqual(details.ref, damaged.ref);
+        assert.ok(details.issues.some((issue) => issue.path.includes(field)));
+        expectedError = error;
+        return true;
+      },
+    );
+    assert.deepEqual(
+      await graph.read(),
+      before,
+      "Индексное чтение не становится полной проверкой тел",
+    );
+    const operations: GraphMutation["operations"] = [
+      { ...add, type: "another-diagnostic" },
+      { action: "update", id: seed.ids[0]!, description: "Не сохранять" },
+      { action: "remove", id: seed.ids[0]! },
+    ];
+    for (const operation of operations) {
+      await assert.rejects(
+        graph.mutate(
+          {
+            requestId: `denied-${operation.action}`,
+            ifVersion: before.version,
+            operations: [operation],
+          },
+          "qa",
+        ),
+        (error) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, expectedError!.code);
+          assert.equal(error.exitCode, expectedError!.exitCode);
+          assert.deepEqual(error.details, expectedError!.details);
+          return true;
+        },
+      );
+      assert.deepEqual(
+        await treeHashes(workspace.dataRoot, persistent),
+        unchanged,
+        "Побайтно сохранены данные, отношения, индексы и каталог WAL",
+      );
+      assert.equal((await inspectPending(workspace.dataRoot)).kind, "none");
+      assert.deepEqual(await readFile(path), corruptBytes);
+    }
+    await writeFile(path, original);
+    const saved = await graph.mutate(
+      {
+        requestId: "valid-add",
+        ifVersion: before.version,
+        operations: [{ ...add, type: "another-diagnostic" }],
+      },
+      "qa",
+    );
+    const after = await graph.read();
+    assert.equal(after.version, saved.version);
+    assert.equal(after.totalEdges, before.totalEdges + 1);
+    assert.equal(
+      after.edges.find((edge) => edge.id === saved.ids[0])!.description,
+      add.description,
+    );
+    const edited = await graph.mutate(
+      {
+        requestId: "valid-update",
+        ifVersion: saved.version,
+        operations: [{ action: "update", id: saved.ids[0]!, description: "Новый Markdown\r\n\n" }],
+      },
+      "qa",
+    );
+    assert.equal((await graph.read()).version, edited.version);
+    const removed = await graph.mutate(
+      {
+        requestId: "valid-remove",
+        ifVersion: edited.version,
+        operations: [{ action: "remove", id: saved.ids[0]! }],
+      },
+      "qa",
+    );
+    const final = await graph.read();
+    assert.equal(final.version, removed.version);
+    assert.deepEqual(final.edges, before.edges);
+    assert.equal((await inspectPending(workspace.dataRoot)).kind, "none");
+  });
+
+test("INSP-06: мутация сохраняет custom GraphCatalogProvider и его отказ", async (t) => {
+  const { workspace } = await graphFixture(t, nodes);
+  t.mock.method(ProductRepository.prototype, "snapshot", () =>
+    assert.fail("Custom provider нельзя заменять каталогом проекта"),
+  );
+  const denied = new Error("Отказ пользовательского источника каталога");
+  let reject = false;
+  const provider = t.mock.fn(async () => {
+    assert.ok(workspace.storageSession, "Источник вызывается в общей сессии");
+    if (reject) throw denied;
+    return { nodes, aliases: { [entityAddress(ref(5))]: ["CUSTOM-ALIAS"] } };
+  });
+  const validate = t.mock.fn((catalog: { nodes: GraphNode[] }) => {
+    assert.deepEqual(
+      catalog.nodes,
+      [...nodes].sort((a, b) => entityAddress(a.ref).localeCompare(entityAddress(b.ref))),
+    );
+  });
+  const graph = new GraphService(workspace, provider, validate);
+  assert.equal(graph.catalog, provider);
+  const before = await graph.read();
+  const calls = provider.mock.callCount();
+  const saved = await graph.mutate(
+    {
+      requestId: "custom",
+      ifVersion: before.version,
+      operations: [{ action: "add", from: "CUSTOM-ALIAS", to: ref(0), type: "custom.relation" }],
+    },
+    "qa",
+  );
+  assert.equal(provider.mock.callCount(), calls + 1);
+  assert.equal(validate.mock.callCount(), 1);
+  const after = await graph.read();
+  assert.equal(after.version, saved.version);
+  assert.deepEqual(after.edges[0]!.from, ref(5));
+  const unchanged = await treeHashes(workspace.dataRoot, persistent);
+  reject = true;
+  await assert.rejects(
+    graph.mutate(
+      {
+        requestId: "custom-denied",
+        ifVersion: saved.version,
+        operations: [{ action: "remove", id: saved.ids[0]! }],
+      },
+      "qa",
+    ),
+    (error) => error === denied,
+  );
+  assert.deepEqual(await treeHashes(workspace.dataRoot, persistent), unchanged);
+  assert.equal(validate.mock.callCount(), 1);
 });

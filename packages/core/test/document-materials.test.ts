@@ -9,6 +9,7 @@ import { ProductRepository } from "@relay/core/storage/product";
 import { StorageService } from "@relay/core/application/storage/service";
 import { ProductQueries } from "@relay/core/application/product/queries";
 import { validateWorkspace } from "@relay/core/application/validate";
+import type { AppError } from "../src/shared/errors.js";
 import { matchesTarget } from "@relay/core/application/entities/document-library";
 import { fixture } from "./helpers/workspace.js";
 import { migrationBackupDir } from "./helpers/migration-bases.js";
@@ -814,27 +815,38 @@ test("материалы: индекс карточек прежней верс�
     "agent",
   );
   // Образец прежнего формата: карточка документа без format, url и tags, как писала прежняя версия.
-  await workspace.withEntityStorage((store, owned) =>
-    store.transaction(owned, async (session) => {
-      for (const ref of [markdown.ref, link.ref]) {
-        const address = `${ref.kind}:${ref.id}`;
-        const card = structuredClone((await session.indexGet("cards", address)) as never) as {
-          document: Record<string, unknown>;
-        };
-        assert.equal(typeof card.document.format, "string");
-        delete card.document.format;
-        delete card.document.url;
-        delete card.document.tags;
-        session.indexSet("cards", address, card as never);
-      }
-    }),
-  );
+  const stripCards = (refs: { kind: string; id: string }[]) =>
+    workspace.withEntityStorage((store, owned) =>
+      store.transaction(owned, async (session) => {
+        for (const ref of refs) {
+          const address = `${ref.kind}:${ref.id}`;
+          const card = structuredClone((await session.indexGet("cards", address)) as never) as {
+            document: Record<string, unknown>;
+          };
+          assert.equal(typeof card.document.format, "string");
+          delete card.document.format;
+          delete card.document.url;
+          delete card.document.tags;
+          session.indexSet("cards", address, card as never);
+        }
+      }),
+    );
+  // Чтение принимает прежние карточки со значениями по умолчанию, но строгая проверка
+  // индекса сравнивает его с пересчитанной проекцией: прежняя форма требует reindex.
+  await stripCards([markdown.ref, link.ref]);
+  await assert.rejects(validateWorkspace(workspace), (error: AppError) => {
+    assert.equal(error.code, "VALIDATION_FAILED");
+    assert.deepEqual(
+      (error.details as { code: string }[]).map((issue) => issue.code),
+      ["STORAGE_INDEX_STALE"],
+    );
+    return true;
+  });
   const stored = await workspace.withEntityStorage((store, owned) =>
     store.transaction(owned, (session) => session.indexGet("cards", `document:${link.ref.id}`)),
   );
   assert.equal((stored as { document: Record<string, unknown> }).document.format, undefined);
-  assert.equal((await validateWorkspace(workspace)).valid, true);
-  // Записи разных сущностей проходят, карточки обновляются до текущего формата.
+  // Записи разных сущностей проходят, чтение принимает прежние карточки.
   const current = await engine.get({ ref: feature.key });
   await engine.update(
     {
@@ -856,7 +868,10 @@ test("материалы: индекс карточек прежней верс�
   assert.equal(resolved.document?.format, "link");
   assert.deepEqual(resolved.document?.tags, ["API"]);
   assert.equal((await engine.get({ ref: markdown.key })).document?.format, "markdown");
+  // Несвязанные записи обновляют только свои карточки; прежние восстанавливает reindex.
+  await new StorageService(workspace).reindex();
   assert.equal((await validateWorkspace(workspace)).valid, true);
+  assert.equal((await engine.resolve({ ref: link.key })).document?.format, "link");
 });
 
 test("материалы: сохранение продукта без формата и адреса сохраняет ссылку", async (t) => {

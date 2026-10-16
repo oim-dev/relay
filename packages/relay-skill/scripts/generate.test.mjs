@@ -49,8 +49,15 @@ test("каталог CLI воспроизводим и содержит кажд
     "document bulk status",
     "document bulk pin",
     "storage status",
+    "project rename",
+    "board rename",
+    "product state",
+    "product context",
   ])
     assert(commands.includes(command), `Потеряна команда ${command}`);
+  for (const entity of ["feature", "scenario", "application", "implementation", "document", "task"])
+    for (const action of ["delete-preview", "delete"])
+      assert(commands.includes(`${entity} ${action}`), `Потеряна команда ${entity} ${action}`);
   assert(!commands.some((command) => /^(boards|projects|entities)\b/.test(command)));
   assert(!commands.includes("product save"));
   assert.equal((reference.match(/\*\*Синтаксис:\*\*/g) ?? []).length, commands.length);

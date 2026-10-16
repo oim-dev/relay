@@ -163,7 +163,21 @@ for (const transport of ["local", "http"] as const)
       "REVISION_CONFLICT",
       4,
     );
+    // Смена типа — снятие прежней связи и прикрепление новой; отдельной операции retype нет.
     const attached = await read(link.key);
+    successful(
+      await run([
+        "document",
+        "unlink",
+        link.key,
+        "--target",
+        feature.key,
+        "--relation",
+        "references",
+        "--if-revision",
+        attached.revision,
+      ]),
+    );
     successful(
       await run([
         "document",
@@ -171,19 +185,16 @@ for (const transport of ["local", "http"] as const)
         link.key,
         "--target",
         feature.key,
-        "--relation",
-        "references",
-        "--next-relation",
-        "documents",
+        "--description",
+        "Зачем читать",
         "--if-revision",
-        attached.revision,
+        attached.revision + 1,
       ]),
     );
     const retyped = await read(link.key);
     assert.deepEqual(
       retyped.data.relations?.map((relation) => [relation.type, relation.description]),
       [["documents", "Зачем читать"]],
-      "пропущенное пояснение сохраняется при смене типа",
     );
     assert.equal(retyped.data.body, "Читать **до** правки 🧭");
 
@@ -293,8 +304,7 @@ for (const transport of ["local", "http"] as const)
         "--if-revision",
         archived.revision + 1,
       ]),
-      "RELATION_NOT_FOUND",
-      3,
+      "INVALID_ARGUMENT",
     );
   });
 
@@ -354,7 +364,7 @@ test("document bulk/materials/facets: русская справка без пр�
     [["document", "materials", "--help"], /11 видов/],
     [["document", "facets", "--help"], /по полным данным проекта/],
     [["document", "create", "--help"], /--document-format <format>.*--url <url>.*--tag <tag>/s],
-    [["document", "link", "--help"], /--next-relation <type>/],
+    [["document", "link", "--help"], /--clear-description/],
   ] as const) {
     const result = await invokeRaw(cwd, [...args]);
     assert.equal(result.code, 0, result.stdout + result.stderr);

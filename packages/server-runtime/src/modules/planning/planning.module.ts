@@ -14,6 +14,7 @@ import { success } from "@relay/contracts";
 import { entityReferenceSchema } from "@relay/contracts/primitives";
 import {
   plansQuerySchema,
+  plansCompactQuerySchema,
   planningPageQuerySchema,
   createPlanSchema,
   updatePlanSchema,
@@ -25,6 +26,7 @@ import {
 } from "@relay/contracts/planning";
 import type {
   PlansQuery,
+  PlansCompactQuery,
   PlanningPageQuery,
   CreatePlan,
   UpdatePlan,
@@ -63,6 +65,18 @@ class PlanningController {
   })
   async list(@Query(new ZodValidationPipe(plansQuerySchema)) query: PlansQuery) {
     return success(await new PlanningService(await this.workspace.open()).list(query));
+  }
+  @Get("compact")
+  @ApiEndpoint({
+    id: "getPlansCompact",
+    summary: "Компактный каталог планов без полных Markdown-полей; явная projection=compact",
+    query: "PlansCompactQuery",
+    response: "PlansCompactPage",
+  })
+  async listCompact(
+    @Query(new ZodValidationPipe(plansCompactQuerySchema)) query: PlansCompactQuery,
+  ) {
+    return success(await new PlanningService(await this.workspace.open()).listCompact(query));
   }
   @Get("task-memberships/:reference")
   @ApiParam({ name: "reference", description: "ID или ключ задачи" })

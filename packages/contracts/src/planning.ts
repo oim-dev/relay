@@ -192,6 +192,27 @@ export const plansPageSchema = planningPage(planSummarySchema).extend({
     .record(z.string(), z.number().int().nonnegative())
     .describe("Полные счётчики состояний проекта без поисковых фильтров, включая all"),
 });
+/** Явная обзорная проекция; прежний PlanSummary и ответ без projection не меняются. */
+export const planCompactSchema = planSummarySchema.pick({
+  kind: true,
+  id: true,
+  key: true,
+  revision: true,
+  title: true,
+  summary: true,
+  status: true,
+  updatedAt: true,
+  stageCount: true,
+  counts: true,
+  ready: true,
+  nextStage: true,
+});
+export const plansCompactQuerySchema = plansQuerySchema.extend({
+  projection: z.literal("compact").describe("Обзор без полных Markdown-полей плана"),
+});
+export const plansCompactPageSchema = planningPage(planCompactSchema).extend({
+  statusCounts: plansPageSchema.shape.statusCounts,
+});
 export const stagesPageSchema = planningPage(stageSummarySchema).extend({
   planRevision: planningMetadata.revision.describe(
     "Ревизия плана на момент чтения этой страницы этапов",
@@ -346,6 +367,9 @@ export type PlanningCandidatesQuery = z.input<typeof planningCandidatesQuerySche
 export type WorkPlan = z.infer<typeof workPlanSchema>;
 export type PlanStage = z.infer<typeof planStageSchema>;
 export type PlanSummary = z.infer<typeof planSummarySchema>;
+export type PlanCompact = z.infer<typeof planCompactSchema>;
+export type PlansCompactQuery = z.input<typeof plansCompactQuerySchema>;
+export type PlansCompactPage = z.infer<typeof plansCompactPageSchema>;
 export type PlanningCounts = z.infer<typeof planningCountsSchema>;
 export type PlanningPageQuery = z.input<typeof planningPageQuerySchema>;
 export type PlansQuery = z.input<typeof plansQuerySchema>;

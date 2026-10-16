@@ -13,11 +13,11 @@ import type {
 import type { ApiRequestClient, RequestParams } from "../http-client.js";
 
 /**
- * @description Найти сущности по виду, ключу и предметным фильтрам; до 100 карточек со снимком
+ * @description Найти сущности по ключам, полным текстам и предметным фильтрам, включая FI/SI; до 100 карточек с версией
  *
  * @tags entities
  * @name ListEntities
- * @summary Найти сущности по виду, ключу и предметным фильтрам; до 100 карточек со снимком
+ * @summary Найти сущности по ключам, полным текстам и предметным фильтрам, включая FI/SI; до 100 карточек с версией
  * @request GET:/api/v1/entities
  */
 export const listEntities = (

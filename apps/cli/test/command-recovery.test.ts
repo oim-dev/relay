@@ -125,11 +125,12 @@ test("потерянный ответ записи: ровно один POST, re
   const app = await fixture(t);
   const server = await httpServer(t, app.root);
   const writes: any[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
       headers: { "content-type": "application/json" },
       ...(body.length ? { body } : {}),
@@ -215,11 +216,18 @@ test("missing/corrupt config и повреждение хранения: не п
   const corrupt = await app.run(["doctor", "check"]);
   failed(corrupt, "VALIDATION_FAILED", 5);
   assert.ok(!corrupt.body.ok);
-  const problems = corrupt.body.error.details as { code: string; message: string }[];
-  assert.ok(problems.length > 0);
+  const problems = corrupt.body.error.details as {
+    code: string;
+    message: string;
+    details?: { path?: string };
+  }[];
+  assert.ok(problems.length > 0, corrupt.stdout);
   for (const problem of problems) {
     assert.equal(problem.code, "INVALID_DATA");
-    assert.ok(problem.message.endsWith(taskPath), problem.message);
+    assert.ok(
+      problem.message.endsWith(taskPath) || problem.details?.path?.endsWith(`${task.id}.json`),
+      problem.message,
+    );
   }
   assert.equal(corrupt.stderr, "");
   assert.equal(await readFile(taskPath, "utf8"), "{invalid-record");

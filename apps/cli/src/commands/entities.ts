@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { entityKindSchema } from "@relay/contracts/entities";
 import type { EntitiesQuery, EntityKind } from "@relay/contracts/entities";
+import { entityAddress } from "@relay/contracts/entities/graph";
 import { parse } from "@relay/core/domain/validation";
 import { invariant } from "@relay/core/shared/errors";
 import { commandGroup, registerCommand } from "../command.js";
@@ -21,9 +22,10 @@ type PageOptions = { limit?: number; cursor?: string };
 export function registerEntities(program: Command, runtime: Runtime): void {
   registerCommand<Omit<EntitiesQuery, "limit"> & PageOptions>(program, runtime, {
     name: "search [text]",
-    arguments: { text: "Текст поиска по ключу, ID, названию и описанию" },
+    arguments: { text: "Текст поиска по ключам, алиасам, ID, названию и содержанию" },
     description: "Найти сущности проекта",
-    details: "Фильтры применяются до пагинации. Полное содержание читайте через <вид> get <ключ>.",
+    details:
+      "Поиск без учёта регистра: ключи, алиасы, ID, название, summary и контекст; полное описание продукта, фичи, сценария, приложения, реализации, задачи и релиза, body документа, goal плана и version релиза. Комментарии, критерии и вложенные этапы не входят. Фильтры применяются до пагинации; active и implementation-target без kind оставляют только реализации, section/document-kind/pinned — только документы. Полное содержание читайте адресным get.",
     examples: [["npx @oim-dev/relay-cli search каталог --kind feature", "Найти требования"]],
     configure: (command) =>
       paging(command)
@@ -38,11 +40,15 @@ export function registerEntities(program: Command, runtime: Runtime): void {
         .option("--application <ref>", "Приложение")
         .option("--feature <ref>", "Фича")
         .option("--scenario <ref>", "Сценарий")
+        .option(
+          "--implementation-target <kind>",
+          "Вид цели реализации: feature — FI, scenario — SI",
+        )
         .option("--target <ref>", "Явная цель")
         .option("--parent <ref>", "Родитель задачи")
         .option("--status <status>", "Предметное состояние")
-        .option("--active <value>", "Участие реализации: true/false")
-        .option("--section <id>", "Раздел документов; none — без раздела")
+        .option("--active <value>", "Только реализации с участием true/false")
+        .option("--section <id>", "Только документы раздела; none — документы без раздела")
         .option("--document-kind <kind>", "Тип документа")
         .option("--pinned <value>", "Закрепление: true/false")
         .option("--archived <value>", "Архив: true/false")
@@ -190,7 +196,27 @@ export function registerEntities(program: Command, runtime: Runtime): void {
             listText(
               {
                 title: `Пространства ключей: ${input.argument()}`,
-                items: data.items.map((item) => ({ key: item.pattern, title: item.title })),
+                items: data.items.map((item) => ({
+                  key: item.pattern,
+                  title: item.title,
+                  fields: item.scope ? [["Владелец", entityAddress(item.scope), "opaque"]] : [],
+                  details: item.scope
+                    ? []
+                    : ["Общее пространство вида (scope: null); отдельного владельца нет."],
+                })),
+                commands: data.items.flatMap((item) =>
+                  item.scope
+                    ? [
+                        {
+                          label: `Прочитать владельца ${entityAddress(item.scope)}`,
+                          command: commandInvocation(
+                            context,
+                            entityReadArgs({ ref: item.scope, key: entityAddress(item.scope) }),
+                          ),
+                        },
+                      ]
+                    : [],
+                ),
                 emptyMessage: "На этой странице пространств ключей нет.",
               },
               options,

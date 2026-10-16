@@ -9,6 +9,9 @@ import {
   transferPlanTaskSchema,
   plansQuerySchema,
   planningCandidatesQuerySchema,
+  plansCompactQuerySchema,
+  plansCompactPageSchema,
+  planCompactSchema,
 } from "@relay/contracts/planning";
 import type {
   CreatePlan,
@@ -22,6 +25,8 @@ import type {
   WorkPlan,
   PlanStage,
   PlanningCandidatesQuery,
+  PlansCompactQuery,
+  PlanSummary,
 } from "@relay/contracts/planning";
 import { actorSchema } from "@relay/contracts/primitives";
 import type { Workspace } from "../../storage/workspace.js";
@@ -38,7 +43,8 @@ import {
 } from "../../storage/planning.js";
 import { shortId } from "../../shared/ids.js";
 import { invariant } from "../../shared/errors.js";
-import { BoardTasksService } from "../board-tasks/service.js";
+import { boardTaskSummary, validateBoardTasks } from "../board-tasks/service.js";
+import { BoardRepository } from "../../storage/boards.js";
 import { readPlanningState } from "./model.js";
 import { syncPlanRelations } from "./relations.js";
 
@@ -80,7 +86,19 @@ export class PlanningService {
     for (const ref of plan.scope) await planningSession(this.workspace).get(ref);
   }
   async list(input: PlansQuery = {}) {
-    const query = plansQuerySchema.parse(input);
+    return this.listPage(plansQuerySchema.parse(input), (summary) => summary);
+  }
+  async listCompact(input: PlansCompactQuery) {
+    const { projection: _projection, ...query } = plansCompactQuerySchema.parse(input);
+    return plansCompactPageSchema.parse(
+      await this.listPage(query, (summary) => planCompactSchema.strip().parse(summary), true),
+    );
+  }
+  private async listPage<T>(
+    query: ReturnType<typeof plansQuerySchema.parse>,
+    project: (plan: PlanSummary) => T,
+    compact = false,
+  ) {
     return this.workspace.locked(async () => {
       const state = await readPlanningState(this.workspace);
       const needle = query.q?.trim().toLocaleLowerCase();
@@ -94,18 +112,21 @@ export class PlanningService {
                 .includes(needle)),
         )
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+      const source = [
+        this.workspace.config.projectId,
+        "plans",
+        query.q,
+        query.status,
+        query.limit,
+        planningSession(this.workspace).state.version,
+        state.plans,
+        state.stages,
+        state.tasks,
+      ];
+      const page = planningPage(plans, query, compact ? [...source, "compact"] : source);
       return {
-        ...planningPage(plans.map(state.summary), query, [
-          this.workspace.config.projectId,
-          "plans",
-          query.q,
-          query.status,
-          query.limit,
-          planningSession(this.workspace).state.version,
-          state.plans,
-          state.stages,
-          state.tasks,
-        ]),
+        ...page,
+        items: page.items.map((plan) => project(state.summary(plan))),
         statusCounts: Object.fromEntries(
           ["all", "draft", "active", "completed", "cancelled"].map((status) => [
             status,
@@ -156,35 +177,34 @@ export class PlanningService {
         state.stages,
         state.tasks,
       ]);
-      const service = new BoardTasksService(this.workspace);
+      validateBoardTasks(state.tasks, this.workspace.storageSession !== undefined);
+      const boards = await new BoardRepository(this.workspace).all();
       return {
         ...page,
-        items: await Promise.all(
-          page.items.map(async (task) => {
-            const { description: _description, ...summary } = await service.get(task.id);
-            const membership = state.current.get(task.id);
-            const stage = state.stages.find(
-              (entry) => entry.id === membership?.stageId && entry.planId === membership?.planId,
-            );
-            const plan = stage ? state.plans.find((entry) => entry.id === stage.planId) : undefined;
-            return {
-              ...summary,
-              completed: state.completion.get(task.id)!.completed,
-              assignment:
-                stage && plan
-                  ? {
-                      planId: plan.id,
-                      planKey: plan.key,
-                      planTitle: plan.title,
-                      stageId: stage.id,
-                      stageTitle: stage.title,
-                      status: plan.status,
-                      current: true,
-                    }
-                  : null,
-            };
-          }),
-        ),
+        items: page.items.map((task) => {
+          const summary = boardTaskSummary(task, boards, state.completion);
+          const membership = state.current.get(task.id);
+          const stage = state.stages.find(
+            (entry) => entry.id === membership?.stageId && entry.planId === membership?.planId,
+          );
+          const plan = stage ? state.plans.find((entry) => entry.id === stage.planId) : undefined;
+          return {
+            ...summary,
+            completed: state.completion.get(task.id)!.completed,
+            assignment:
+              stage && plan
+                ? {
+                    planId: plan.id,
+                    planKey: plan.key,
+                    planTitle: plan.title,
+                    stageId: stage.id,
+                    stageTitle: stage.title,
+                    status: plan.status,
+                    current: true,
+                  }
+                : null,
+          };
+        }),
       };
     });
   }
@@ -215,15 +235,14 @@ export class PlanningService {
       const stage = await this.stage(plan, stageReference);
       const state = await readPlanningState(this.workspace);
       const page = planningPage(stage.taskIds, query, [plan, stage, state.tasks, query.limit]);
-      const service = new BoardTasksService(this.workspace);
+      validateBoardTasks(state.tasks, this.workspace.storageSession !== undefined);
+      const boards = await new BoardRepository(this.workspace).all();
       return {
         ...page,
-        items: await Promise.all(
-          page.items.map(async (id) => {
-            const { description: _description, ...task } = await service.get(id);
-            return { ...task, completed: state.completion.get(id)!.completed };
-          }),
-        ),
+        items: page.items.map((id) => {
+          const task = boardTaskSummary(state.byTask.get(id)!, boards, state.completion);
+          return { ...task, completed: state.completion.get(id)!.completed };
+        }),
       };
     });
   }

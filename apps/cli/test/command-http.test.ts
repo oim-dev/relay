@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { fixture, invoke, invokeRaw, successful, failed, tempDirectory } from "./helpers/cli.js";
 import { httpServer, httpProxy } from "./helpers/http.js";
 
-test("workspace remove отсутствующего имени: нейтральная квитанция, каталог и файлы сохранены без pre-read", async (t) => {
+test("workspace remove отсутствующего имени: нейтральная квитанция, каталог и файлы сохранены без pre-read каталога", async (t) => {
   const app = await fixture(t);
   await app.create("Данные зарегистрированного проекта");
   const root = await tempDirectory(t);
@@ -31,9 +31,10 @@ test("workspace remove отсутствующего имени: нейтраль
   };
   const files = await snapshot();
   const requests: string[] = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     requests.push(`${request.method} ${request.url}`);
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
     });
     const body = await upstream.text();
@@ -51,8 +52,8 @@ test("workspace remove отсутствующего имени: нейтраль
   assert.equal(human.stderr, "");
   assert.deepEqual(
     requests,
-    ["DELETE /api/v1/projects/never-registered"],
-    "нейтральная квитанция не требует дополнительного чтения перед DELETE",
+    ["GET /api/v1/server/capabilities", "DELETE /api/v1/projects/never-registered/registration"],
+    "после проверки возможностей выполняется один DELETE без предварительного чтения каталога",
   );
   assert.deepEqual(successful(await invoke(root, ["workspace", "project", "list"])).data, catalog);
   assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")), registry);
@@ -66,7 +67,7 @@ test("workspace remove отсутствующего имени: нейтраль
   );
   assert.match(
     human.stdout,
-    /отсутствует|не зарегистрирован|запрос[^\n]*выполнен|снят[оа]|обработан/i,
+    /отсутств(?:ует|овала)|не зарегистрирован|запрос[^\n]*выполнен|снят[оа]|обработан/i,
     "квитанция сообщает постусловие либо обработку запроса, не выдуманное изменение",
   );
 });
@@ -173,7 +174,10 @@ test("HTTP/local golden: проект, конфиг, задача, граф, doc
     assert.equal(human.stderr, "");
     assert.doesNotMatch(human.stdout, /\u001b|"ok":true/);
     assert.ok(human.stdout.trim().length > 0);
-    const hint = human.stdout.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli"));
+    const hints = human.stdout
+      .split("\n")
+      .filter((line) => line.startsWith("npx @oim-dev/relay-cli"));
+    const hint = hints[0];
     assert.ok(hint?.includes("--server-url") && hint.includes(server.url), human.stdout);
     if (args[0] === "project" || args[0] === "config") {
       assert.match(human.stdout, /HTTP проект/);
@@ -191,7 +195,13 @@ test("HTTP/local golden: проект, конфиг, задача, граф, doc
       assert.match(human.stdout, /Из HTTP/);
       assert.match(human.stdout, /http-example/);
       assert.match(human.stdout, /ревизия:\s*2/i);
-      assert.match(hint!, /inspect graph list/);
+      assert.ok(
+        hints.some((line) => /task get PRODUCT-1(?:\s|$)/.test(line)),
+        human.stdout,
+      );
+      const descriptions = hints.find((line) => line.includes("inspect graph list"));
+      assert.ok(descriptions?.includes(server.url), human.stdout);
+      assert.match(descriptions!, /--depth 1 --direction outgoing/);
     }
   }
   assert.deepEqual(await readdir(empty), [], "remote-only не создаёт локальные данные");
@@ -222,7 +232,7 @@ test("workspace project init/list/add/remove: изоляция, cursor fingerpri
       ]),
     );
   const first = successful(await run(["workspace", "project", "list", "--limit", 1]));
-  assert.equal((first.meta as any).paginationSource, "client-catalog-fingerprint");
+  assert.equal((first.meta as any).paginationSource, "server-catalog-fingerprint");
   assert.equal(first.meta?.page?.consistency, "snapshot");
   assert.equal(first.meta?.page?.total, 2);
   const cursor = first.meta!.page!.nextCursor!;
@@ -268,7 +278,7 @@ test("workspace project init/list/add/remove: изоляция, cursor fingerpri
   failed(await run(["--local", "workspace", "project", "list"]), "WORKSPACE_REQUIRES_SERVER");
   failed(await run(["project", "get"]), "PROJECT_REQUIRED");
   successful(await run(["workspace", "project", "add", "c", "c"]));
-  failed(await run(["workspace", "project", "list", "--cursor", cursor]), "VERSION_CONFLICT");
+  failed(await run(["workspace", "project", "list", "--cursor", cursor]), "VERSION_CONFLICT", 4);
   const created = successful(
     await run(["a", "task", "create", "--board", "product", "--title", "Только A"]),
   );
@@ -354,13 +364,14 @@ test("HTTP повтор одинакового комментария: два PO
   const before = successful(await app.run<any>(["task", "get", "PRODUCT-1"])).data;
   const server = await httpServer(t, app.root);
   const writes: Array<{ path: string; body: unknown }> = [];
-  const proxy = await httpProxy(t, async (request, response) => {
+  const proxy = await httpProxy(t, async (request, response, signal) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks);
     if (request.method === "POST")
       writes.push({ path: request.url!, body: JSON.parse(body.toString()) });
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
       headers: { "content-type": "application/json" },
       ...(body.length ? { body } : {}),
@@ -506,6 +517,7 @@ test("HTTP product overview: cursor по snapshotVersion, отказ серве�
   failed(
     await app.run(["--server-url", server.url, "product", "overview", "--cursor", cursor]),
     "VERSION_CONFLICT",
+    4,
   );
   const denied = await httpProxy(t, async (_request, response) => {
     response.writeHead(503, { "content-type": "application/json" });
@@ -584,9 +596,10 @@ test("HTTP product overview --metric: продолжение, VERSION_CONFLICT �
 
   // Прежний сервер без relay-overview-metrics-v1: детализация диагностируется до запроса.
   const requests: string[] = [];
-  const legacy = await httpProxy(t, async (request, response) => {
+  const legacy = await httpProxy(t, async (request, response, signal) => {
     requests.push(request.url!);
     const upstream = await fetch(`${server.url}${request.url}`, {
+      signal,
       method: request.method ?? "GET",
     });
     const body = await upstream.text();

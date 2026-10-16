@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { InvalidArgumentError } from "commander";
 import type { Command } from "commander";
-import { entityUpdateSchema, defaultDocumentSections } from "@relay/contracts/entities";
-import type { EntityDetail } from "@relay/contracts/entities";
+import { defaultDocumentSections } from "@relay/contracts/entities";
+import type { EntitySaved } from "@relay/contracts/entities";
 import { documentBulkSchema } from "@relay/contracts/entities/document-catalog";
 import { parse } from "@relay/core/domain/validation";
-import { AppError, invariant } from "@relay/core/shared/errors";
+import { invariant } from "@relay/core/shared/errors";
 import { commandGroup, registerCommand } from "../command.js";
 import { author } from "../context.js";
 import type { CommandContext, Runtime } from "../context.js";
@@ -17,8 +17,8 @@ import {
   readTextFields,
   commandInvocation,
 } from "../command-kit.js";
-import { collectTag, revisionOption, subject } from "./product.js";
-import { entitySavedText } from "../presentation/entities.js";
+import { collectTag, revisionOption } from "./product.js";
+import { entitySavedText, entityReadArgs } from "../presentation/entities.js";
 import { renderMarkdown } from "../presentation/markdown.js";
 import { cardText, listText } from "../presentation/common.js";
 import {
@@ -51,36 +51,10 @@ export async function documentSectionNames(
   }
 }
 type WriteOptions = { ifRevision: number; requestId?: string };
-function assertRevision(record: EntityDetail, revision: number) {
-  invariant(
-    record.revision === revision,
-    "REVISION_CONFLICT",
-    "Запись изменилась. Перечитайте её и согласуйте изменение; исходная ревизия не заменяется автоматически.",
-    4,
-    { actual: record.revision },
-  );
-}
-async function update(
-  context: CommandContext,
-  record: EntityDetail,
-  options: WriteOptions,
-  changes: Record<string, unknown>,
-  actionTitle?: string,
-) {
-  const command = parse(
-    entityUpdateSchema,
-    {
-      ref: `${record.ref.kind}:${record.ref.id}`,
-      ifRevision: options.ifRevision,
-      requestId: options.requestId ?? randomUUID(),
-      changes,
-    },
-    "изменение библиотеки",
-  );
-  const data = await context.backend.entities.update(command, author(context));
+function saved(context: CommandContext, data: EntitySaved, actionTitle?: string) {
   const readCommand = commandInvocation(
     context,
-    record.ref.kind === "project" ? ["document", "section", "list"] : ["document", "get", data.key],
+    data.ref.kind === "project" ? ["document", "section", "list"] : ["document", "get", data.key],
   );
   return {
     data,
@@ -94,43 +68,48 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
     name: "links <ref>",
     arguments: { ref: "Ключ или ID документа" },
     description: "Прочитать отношения и прежние продуктовые области",
-    details: "relations и links показаны отдельно; пояснение относится к адресному отношению.",
+    details:
+      "Собственные прикрепления документа: relations и links показаны отдельно, пояснения полностью. Это не все входящие рёбра: связи других записей читайте через inspect graph list --root. Подсказка чтения даётся для первой цели каждого вида на странице; для другой замените ключ или ID.",
     examples: [["npx @oim-dev/relay-cli document links DOC-1", "Прочитать прикрепления"]],
     configure: paging,
     async run(context, input) {
       const command = ["document", "links", input.argument()];
       const query = offsetQuery(context, input.options, command, {});
-      const record = await subject(context, "document", input.argument());
-      invariant(record.data.kind === "document", "INVALID_ARGUMENT", "Нужен документ");
-      const version = `${record.ref.id}:${record.revision}`;
-      invariant(
-        !query.version || query.version === version,
-        "VERSION_CONFLICT",
-        "Документ изменился. Начните чтение links без --cursor.",
-      );
-      const links = [
-        ...(record.data.relations ?? []).map((link) => ({
-          source: "relations",
-          target: link.target,
-          type: link.type,
-          description: link.description ?? "",
-        })),
-        ...record.data.links.map((link) => ({
-          source: "links",
-          target: { kind: link.kind, id: link.kind === "product" ? "passport" : link.id },
-          type: "documents",
-          description: "",
-        })),
-      ];
-      const next = query.offset + query.limit;
+      const record = await context.backend.documents.links({ ref: input.argument(), ...query });
+      // Заголовок и адресный словарь нужны только human; прежний машинный конверт сохраняется.
       const data = {
         ref: record.ref,
         revision: record.revision,
-        items: links.slice(query.offset, next),
-        total: links.length,
-        nextOffset: next < links.length ? next : null,
-        version,
+        items: record.items,
+        total: record.total,
+        nextOffset: record.nextOffset,
+        version: record.version,
       };
+      // Один пример чтения на вид цели, без повтора для двух типов отношения к одной записи.
+      const targets = new Map(
+        data.items.flatMap((link) => {
+          // Этап не имеет самостоятельного get по одному ID; не выдумываем адрес команды.
+          if (link.target.kind === "plan-stage") return [];
+          const target = record.references.find(
+            (item) => item.ref.kind === link.target.kind && item.ref.id === link.target.id,
+          ) ?? { ref: { kind: link.target.kind, id: link.target.id }, key: link.target.id };
+          return [[`${link.target.kind}:${link.target.id}`, target] as const];
+        }),
+      );
+      const seenKinds = new Set<string>();
+      const readCommands = [...targets.values()]
+        .filter((target) => {
+          if (seenKinds.has(target.ref.kind)) return false;
+          seenKinds.add(target.ref.kind);
+          return true;
+        })
+        .map((target) => ({
+          label:
+            target.ref.kind === "product" || target.ref.kind === "project"
+              ? `Прочитать ${target.key}`
+              : `Прочитать ${target.key}; для другой цели этого вида замените ключ/ID`,
+          command: commandInvocation(context, entityReadArgs(target)),
+        }));
       return {
         data,
         page: pageResult(context, command, {}, query, data),
@@ -139,6 +118,19 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
             {
               title: `Прикрепления ${record.key} — ${record.title}`,
               fields: [["Ревизия", record.revision]],
+              commands: [
+                ...readCommands,
+                {
+                  label: "Все направления связей, включая прикрепления других записей",
+                  command: commandInvocation(context, [
+                    "inspect",
+                    "graph",
+                    "list",
+                    "--root",
+                    record.key,
+                  ]),
+                },
+              ],
               sections: data.items.length
                 ? data.items.map((link) => {
                     const target = record.references.find(
@@ -175,7 +167,6 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
           relation?: "references" | "documents";
           legacy?: boolean;
           clearDescription?: boolean;
-          nextRelation?: "references" | "documents";
         }
     >(group, runtime, {
       name: `${action} <ref>`,
@@ -185,23 +176,15 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
           ? "Прикрепить документ или изменить пояснение"
           : "Снять выбранное прикрепление",
       details:
-        (action === "link"
-          ? "Изменяет одну связь документа под его ревизией. Если связи цель+тип ещё нет, она прикрепляется (пояснение по умолчанию пустое; повтор даёт ALREADY_EXISTS). Если она есть — меняются только переданные поля: пояснение (--description/--description-file или --clear-description) и тип (--next-relation); пропущенное пояснение сохраняется. Совместимая область links с тем же адресом при явном изменении становится адресным отношением documents. Целью может быть сущность любого из 11 видов проекта."
-          : "Снимает одну связь цель+тип (по умолчанию documents), включая совместимую область links; документ и цель сохраняются. Отсутствующая связь даёт RELATION_NOT_FOUND. Связь с прежним адресом этапа (plan-stage:<id>) снимается по сохранённой цели, хотя сам адрес отвечает ENTITY_RELOCATED; link и изменение такой связи получают ENTITY_RELOCATED.") +
-        " Остальные отношения и области сохраняются; Core проверяет ревизию и пишет рёбра графа в той же транзакции, при конфликте (REVISION_CONFLICT) запись не повторяется. --legacy изменяет прежние продуктовые области links/targets без пояснений через изменение документа.",
+        "Одно изменение документа с исходной ревизией; цель разрешает Core. Остальные отношения и области сохраняются. --legacy выбирает прежние продуктовые области без пояснений; по умолчанию адресное отношение documents." +
+        (action === "unlink"
+          ? " Связь с прежним адресом этапа (plan-stage:<id>) снимается по сохранённой цели."
+          : " Прежний адрес этапа (plan-stage:<id>) получает ENTITY_RELOCATED с новым адресом."),
       examples: [
         [
           `npx @oim-dev/relay-cli document ${action} DOC-1 --target FEATURE-1 --if-revision 1 --actor agent`,
           "Изменить прикрепление по прочитанной ревизии",
         ],
-        ...(action === "link"
-          ? ([
-              [
-                "npx @oim-dev/relay-cli document link DOC-1 --target TASK-7 --relation references --next-relation documents --description 'Описывает итог задачи' --if-revision 2 --actor agent",
-                "Сменить тип и пояснение существующей связи",
-              ],
-            ] as const)
-          : []),
       ],
       configure(command) {
         revisionOption(command)
@@ -210,36 +193,25 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
           .option("--legacy", "Прежняя продуктовая область links/targets");
         if (action === "link") {
           textOption(command, "description", "Markdown-пояснение прикрепления");
-          command
-            .option("--clear-description", "Очистить пояснение отношения")
-            .option(
-              "--next-relation <type>",
-              "Сменить тип существующего прикрепления на references/documents",
-            );
+          command.option("--clear-description", "Очистить пояснение отношения");
         }
       },
       async run(context, input) {
         const options = input.options;
-        const text = await readTextFields(
-          context,
-          options,
-          action === "link" ? ["description"] : [],
-        );
+        const hasDescription =
+          options.description !== undefined || options.descriptionFile !== undefined;
         invariant(
-          !(options.clearDescription && text.description !== undefined),
+          !(options.clearDescription && hasDescription),
           "INVALID_ARGUMENT",
           "Выберите пояснение или --clear-description",
         );
         invariant(
           !(
             options.legacy &&
-            (options.relation !== undefined ||
-              text.description !== undefined ||
-              options.clearDescription ||
-              options.nextRelation !== undefined)
+            (options.relation !== undefined || hasDescription || options.clearDescription)
           ),
           "INVALID_ARGUMENT",
-          "Прежние области не принимают --relation, --next-relation и пояснение; используйте адресное отношение без --legacy",
+          "Прежние области не принимают --relation и пояснение; используйте адресное отношение без --legacy",
         );
         const relation = options.relation ?? "documents";
         invariant(
@@ -247,129 +219,42 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
           "INVALID_ARGUMENT",
           "Отношение: documents или references",
         );
-        const record = await subject(context, "document", input.argument());
-        invariant(record.data.kind === "document", "INVALID_ARGUMENT", "Нужен документ");
-        assertRevision(record, options.ifRevision);
-        const target = await resolveRelationTarget(context, options.target, action);
-        if (options.legacy) {
-          const targets = record.data.links.map(
-            (link) => `${link.kind}:${link.kind === "product" ? "passport" : link.id}`,
-          );
-          const ref = `${target.ref.kind}:${target.ref.id}`;
-          const exists = targets.includes(ref);
-          invariant(
-            action === "link" || exists,
-            "INVALID_ARGUMENT",
-            "Прежняя область не найдена; проверьте document links",
-          );
-          return update(
-            context,
-            record,
-            options,
-            {
-              kind: "document",
-              targets:
-                action === "unlink"
-                  ? targets.filter((value) => value !== ref)
-                  : exists
-                    ? targets
-                    : [...targets, ref],
-            },
-            action === "link"
-              ? `Прежняя область ${target.key} сохранена для документа`
-              : `Прежняя область ${target.key} снята с документа`,
-          );
-        }
-        const relations = record.data.relations ?? [];
-        const legacyArea =
-          relation === "documents" &&
-          record.data.links.some(
-            (link) =>
-              link.kind === target.ref.kind &&
-              (link.kind === "product" ? "passport" : link.id) === target.ref.id,
-          );
-        const existing =
-          relations.some(
-            (link) =>
-              link.target.kind === target.ref.kind &&
-              link.target.id === target.ref.id &&
-              link.type === relation,
-          ) || legacyArea;
-        invariant(
-          options.nextRelation === undefined || action === "link",
-          "INVALID_ARGUMENT",
-          "--next-relation применяется только в document link",
+        const text = await readTextFields(
+          context,
+          options,
+          action === "link" ? ["description"] : [],
         );
-        invariant(
-          options.nextRelation === undefined ||
-            options.nextRelation === "documents" ||
-            options.nextRelation === "references",
-          "INVALID_ARGUMENT",
-          "Новое отношение: documents или references",
-        );
-        invariant(
-          options.nextRelation === undefined || existing,
-          "RELATION_NOT_FOUND",
-          "--next-relation меняет тип существующего прикрепления; сначала прикрепите документ без него или проверьте document links",
-          3,
-        );
-        // Одна связь меняется в Core под ревизией документа; остальные relations и links сохраняются.
+        const base = {
+          ref: input.argument(),
+          target: options.target,
+          ifRevision: options.ifRevision,
+          requestId: options.requestId ?? randomUUID(),
+        };
         const description = options.clearDescription ? "" : text.description;
-        const data = await context.backend.entities.relateDocument(
-          {
-            ref: `document:${record.ref.id}`,
-            ifRevision: options.ifRevision,
-            action: action === "unlink" ? "detach" : existing ? "update" : "attach",
-            target: `${target.ref.kind}:${target.ref.id}`,
-            type: relation,
-            ...(action === "link" && description !== undefined ? { description } : {}),
-            ...(options.nextRelation === undefined ? {} : { nextType: options.nextRelation }),
-            requestId: options.requestId ?? randomUUID(),
-          },
+        const data = await context.backend.documents.changeRelation(
+          options.legacy
+            ? { ...base, source: "links", action }
+            : action === "unlink"
+              ? { ...base, source: "relations", action, relation }
+              : {
+                  ...base,
+                  source: "relations",
+                  action,
+                  relation,
+                  ...(description === undefined ? {} : { description }),
+                },
           author(context),
         );
-        const readCommand = commandInvocation(context, ["document", "links", data.key]);
-        const finalRelation = options.nextRelation ?? relation;
-        return {
+        return saved(
+          context,
           data,
-          text: (textOptions: import("../presentation/theme.js").TextOptions) =>
-            entitySavedText(
-              data,
-              readCommand,
-              textOptions,
-              action === "unlink"
-                ? `Отношение снято (${relation}, ${target.key}) для документа`
-                : `${existing ? "Отношение изменено" : "Отношение прикреплено"} (${finalRelation}, ${target.key}) для документа`,
-            ),
-        };
+          options.legacy
+            ? `Прежняя область ${options.target} ${action === "link" ? "сохранена для документа" : "снята с документа"}`
+            : `${action === "link" ? "Отношение сохранено" : "Отношение снято"} (${relation}, ${options.target}) для документа`,
+        );
       },
     });
 }
-
-/**
- * Цель связи документа. Прежний адрес (например, `plan-stage:<id>`) разрешается в
- * ENTITY_RELOCATED; снять связь с ним можно только по сохранённой цели, поэтому unlink
- * передаёт в Core исходный адрес из details. Link и update сохраняют отказ.
- */
-async function resolveRelationTarget(
-  context: CommandContext,
-  ref: string,
-  action: "link" | "unlink",
-): Promise<{ ref: { kind: string; id: string }; key: string }> {
-  try {
-    return await context.backend.entities.resolve({ ref });
-  } catch (error) {
-    if (action !== "unlink" || !(error instanceof AppError) || error.code !== "ENTITY_RELOCATED")
-      throw error;
-    const details = error.details as { from?: unknown } | undefined;
-    const from = typeof details?.from === "string" ? details.from : undefined;
-    const match = from === undefined ? null : /^([a-z][a-z-]*):(.+)$/.exec(from);
-    if (!match) throw error;
-    // Прежний ключ (STG-1) теперь ведёт к новому владельцу; квитанция называет точный адрес.
-    return { ref: { kind: match[1]!, id: match[2]! }, key: from! };
-  }
-}
-
 export function registerDocumentSections(parent: Command, runtime: Runtime) {
   const group = commandGroup(parent, {
     name: "section",
@@ -388,23 +273,14 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
     async run(context, input) {
       const command = ["document", "section", "list"];
       const query = offsetQuery(context, input.options, command, {});
-      const project = await context.backend.entities.get({ ref: "PROJECT", kind: "project" });
-      invariant(project.data.kind === "project", "INVALID_ARGUMENT", "Нужен проект");
-      const version = `${project.ref.id}:${project.revision}`;
-      invariant(
-        !query.version || query.version === version,
-        "VERSION_CONFLICT",
-        "Разделы изменились. Начните list без --cursor.",
-      );
-      const sections = project.data.documentSections ?? defaultDocumentSections;
-      const next = query.offset + query.limit;
+      const project = await context.backend.documents.sections(query);
       const data = {
-        project: project.ref,
+        project: project.project,
         revision: project.revision,
-        items: sections.slice(query.offset, next),
-        total: sections.length,
-        nextOffset: next < sections.length ? next : null,
-        version,
+        items: project.items,
+        total: project.total,
+        nextOffset: project.nextOffset,
+        version: project.version,
       };
       return {
         data,
@@ -414,10 +290,23 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
             {
               title: "Разделы библиотеки",
               filters: [
-                ["Проект", project.key],
+                ["Проект", project.projectKey],
                 ["Ревизия проекта", project.revision],
               ],
               items: data.items.map((section) => ({ key: section.id, title: section.name })),
+              commands: [
+                {
+                  label: data.items[0]
+                    ? `Документы раздела ${data.items[0].id}; для другого замените ID (none — без раздела)`
+                    : "Документы без раздела",
+                  command: commandInvocation(context, [
+                    "document",
+                    "list",
+                    "--section",
+                    data.items[0]?.id ?? "none",
+                  ]),
+                },
+              ],
               emptyMessage:
                 data.total === 0
                   ? "Разделов нет. Документы без раздела читаются отдельно."
@@ -429,79 +318,71 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
     },
   });
   for (const action of ["create", "update", "move", "remove"] as const)
-    registerCommand<WriteOptions & { name?: string; before?: string; last?: boolean }>(
-      group,
-      runtime,
-      {
-        name: `${action} <id>`,
-        arguments: { id: "Постоянный ID раздела" },
-        description: {
-          create: "Создать раздел",
-          update: "Переименовать раздел",
-          move: "Переместить раздел",
-          remove: "Удалить раздел, сохранив документы",
-        }[action],
-        details:
-          "Передайте прочитанную ревизию проекта из document section list. Остальные разделы сохраняются; при конфликте операция не повторяется.",
-        examples: [
-          [`npx @oim-dev/relay-cli document section ${action} --help`, "Параметры изменения"],
-        ],
-        configure(command) {
-          revisionOption(command);
-          if (action === "create" || action === "update")
-            command.requiredOption("--name <text>", "Название раздела");
-          if (action === "move")
-            command
-              .option("--before <id>", "Поставить перед разделом")
-              .option("--last", "Поставить в конец");
-        },
-        async run(context, input) {
-          const options = input.options;
-          if (action === "move")
-            invariant(
-              (options.before !== undefined) !== Boolean(options.last),
-              "INVALID_ARGUMENT",
-              "Укажите ровно один параметр: --before или --last",
-            );
-          const project = await context.backend.entities.get({ ref: "PROJECT", kind: "project" });
-          invariant(project.data.kind === "project", "INVALID_ARGUMENT", "Нужен проект");
-          assertRevision(project, options.ifRevision);
-          const sections = [...(project.data.documentSections ?? defaultDocumentSections)];
-          const id = input.argument();
-          const index = sections.findIndex((section) => section.id === id);
-          invariant(
-            action === "create" ? index === -1 : index !== -1,
-            "INVALID_ARGUMENT",
-            action === "create"
-              ? "ID раздела уже существует"
-              : "Раздел не найден; прочитайте document section list",
-          );
-          if (action === "create") sections.push({ id, name: options.name! });
-          if (action === "update") sections[index] = { ...sections[index]!, name: options.name! };
-          if (action === "remove") sections.splice(index, 1);
-          if (action === "move") {
-            invariant(
-              options.before !== id,
-              "INVALID_ARGUMENT",
-              "Нельзя переместить раздел перед самим собой",
-            );
-            const [selected] = sections.splice(index, 1);
-            const before = options.last
-              ? sections.length
-              : sections.findIndex((section) => section.id === options.before);
-            invariant(before >= 0, "INVALID_ARGUMENT", "Целевой раздел не найден");
-            sections.splice(before, 0, selected!);
-          }
-          return update(
-            context,
-            project,
-            options,
-            { kind: "project", documentSections: sections },
-            `${{ create: "Создан раздел", update: "Переименован раздел", move: "Перемещён раздел", remove: "Удалён раздел" }[action]} ${id}; изменён проект`,
-          );
-        },
+    registerCommand<
+      WriteOptions & { name?: string; nameFile?: string; before?: string; last?: boolean }
+    >(group, runtime, {
+      name: `${action} <id>`,
+      arguments: { id: "Постоянный ID раздела" },
+      description: {
+        create: "Создать раздел",
+        update: "Переименовать раздел",
+        move: "Переместить раздел",
+        remove: "Удалить раздел, сохранив документы",
+      }[action],
+      details:
+        "Передайте прочитанную ревизию проекта из document section list. Остальные разделы сохраняются; при конфликте операция не повторяется. Для create/update обязателен --name либо --name-file (UTF-8 файл; - означает stdin). Источники несовместимы; ввод читается до записи.",
+      examples: [
+        [`npx @oim-dev/relay-cli document section ${action} --help`, "Параметры изменения"],
+      ],
+      configure(command) {
+        revisionOption(command);
+        if (action === "create" || action === "update")
+          textOption(command, "name", "Название раздела");
+        if (action === "move")
+          command
+            .option("--before <id>", "Поставить перед разделом")
+            .option("--last", "Поставить в конец");
       },
-    );
+      async run(context, input) {
+        const options = input.options;
+        if (action === "move")
+          invariant(
+            (options.before !== undefined) !== Boolean(options.last),
+            "INVALID_ARGUMENT",
+            "Укажите ровно один параметр: --before или --last",
+          );
+        const text = await readTextFields(
+          context,
+          options,
+          action === "create" || action === "update" ? ["name"] : [],
+        );
+        if (action === "create" || action === "update")
+          invariant(
+            text.name !== undefined,
+            "INVALID_ARGUMENT",
+            "Укажите название раздела через --name или --name-file",
+          );
+        const id = input.argument();
+        const base = {
+          id,
+          ifRevision: options.ifRevision,
+          requestId: options.requestId ?? randomUUID(),
+        };
+        const data = await context.backend.documents.changeSection(
+          action === "create" || action === "update"
+            ? { ...base, action, name: text.name! }
+            : action === "move"
+              ? { ...base, action, before: options.last ? null : options.before! }
+              : { ...base, action },
+          author(context),
+        );
+        return saved(
+          context,
+          data,
+          `${{ create: "Создан раздел", update: "Переименован раздел", move: "Перемещён раздел", remove: "Удалён раздел" }[action]} ${id}; изменён проект`,
+        );
+      },
+    });
 }
 
 type CatalogFilters = {

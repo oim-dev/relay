@@ -119,6 +119,53 @@ export const entityDataSchema = z.discriminatedUnion("kind", [
   document,
 ]);
 export type EntityData = z.infer<typeof entityDataSchema>;
+const entityAddressCardSchema = z.strictObject({
+  ref: entityRefSchema.describe("Постоянный адрес связанной записи"),
+  key: z.string().describe("Текущий читаемый ключ связанной записи"),
+  title: z.string().describe("Актуальное название связанной записи"),
+});
+export const entityImplementationSummarySchema = z.strictObject({
+  type: z.enum(["FI", "SI"]).describe("FI — реализация фичи; SI — реализация сценария"),
+  application: entityAddressCardSchema.describe("Приложение, которому принадлежит реализация"),
+  target: entityAddressCardSchema.describe("Непосредственное общее требование: фича или сценарий"),
+});
+export const entityMatchSchema = z.strictObject({
+  field: z
+    .enum([
+      "key",
+      "alias",
+      "address",
+      "id",
+      "title",
+      "summary",
+      "context",
+      "description",
+      "body",
+      "url",
+      "tags",
+      "goal",
+      "version",
+      "application.key",
+      "application.title",
+      "target.key",
+      "target.title",
+    ])
+    .describe(
+      "Поле с реальным совпадением q: key — текущий ключ, alias — прежний ключ, address — kind:ID, id — постоянный ID, title — название, summary — краткое описание, context — контекст, description — полное описание, body — тело документа, url — внешний адрес материала-ссылки, tags — теги документа, goal — цель плана, version — версия релиза; application/target — ключ или название приложения/цели реализации",
+    ),
+  text: z
+    .string()
+    .max(240)
+    .describe(
+      "Исходное значение либо фрагмент вокруг первого совпадения, не более 240 единиц UTF-16; регистр и содержание сохранены, многоточия и разметка выделения не добавляются. Длинное совпадение также может быть сокращено",
+    ),
+  truncated: z
+    .boolean()
+    .describe(
+      "true — text содержит только фрагмент значения и должен быть помечен как фрагмент; false — значение поля помещается целиком. Не относится к полноте сущности или summary",
+    ),
+});
+export type EntityMatch = z.infer<typeof entityMatchSchema>;
 export const entitySummarySchema = z.strictObject({
   ref: entityRefSchema.describe("Постоянный адрес в выбранном проекте"),
   key: z.string().describe("Текущий читаемый ключ для человека и агента"),
@@ -127,6 +174,19 @@ export const entitySummarySchema = z.strictObject({
   revision: z.number().int().nonnegative().describe("Ревизия записи для следующего изменения"),
   status: z.string().nullable().describe("Текущее предметное состояние; null, когда неприменимо"),
   active: z.boolean().describe("Активная запись; снятая реализация сохраняет адрес"),
+  updatedAt: timestampSchema
+    .optional()
+    .describe(
+      "Сохранённая дата изменения собственной записи; отсутствие не заменяется датой scope или файла",
+    ),
+  implementation: entityImplementationSummarySchema
+    .optional()
+    .describe("Явный вид и адреса реализации, независимо от формата её ключа"),
+  match: entityMatchSchema
+    .optional()
+    .describe(
+      "Одно подтверждённое основание поиска при непустом q; предпочтение текущему ключу и названию. Не подменяет summary и отсутствует без совпадения в отдельном поле",
+    ),
   context: z
     .string()
     .optional()
@@ -165,7 +225,24 @@ export const entitySummarySchema = z.strictObject({
     .optional()
     .describe("Компактные свойства документа без полного Markdown"),
 });
+export const entityMetadataSchema = z.strictObject({
+  createdAt: timestampSchema.describe("Сохранённое время создания текущей записи"),
+  createdBy: actorSchema.describe("Сохранённый автор создания записи"),
+  updatedAt: timestampSchema.describe("Сохранённое время последнего изменения записи"),
+  updatedBy: actorSchema.describe("Сохранённый автор последнего изменения записи"),
+});
+export type EntityMetadata = z.infer<typeof entityMetadataSchema>;
 export const entityDetailSchema = entitySummarySchema.extend({
+  savedStatus: productStatusSchema
+    .optional()
+    .describe(
+      "Сохранённая совместимая отметка реализации FI/SI; не переопределяет вычисляемую готовность data.status. У других видов отсутствует",
+    ),
+  metadata: entityMetadataSchema
+    .optional()
+    .describe(
+      "Метаданные той же записи и ревизии; отсутствие не заменяется выдуманными значениями",
+    ),
   data: entityDataSchema.describe("Полные типизированные данные; Markdown передаётся строками"),
   references: z
     .array(entitySummarySchema)
@@ -250,7 +327,7 @@ export const entitiesQuerySchema = entityPageQuerySchema.extend({
     .max(4096)
     .optional()
     .describe(
-      "Поиск по ключам, ID, названию и краткому описанию; у документов также по Markdown-содержанию, url и тегам",
+      "Поиск без учёта регистра по ключам и алиасам, ID, названию, краткому описанию и контексту; также по полному description продукта, фичи, сценария, приложения, реализации, задачи и релиза, body, url и тегам документа, goal плана, version релиза, ключу и названию приложения и цели реализации. Не ищет комментарии, критерии и вложенные этапы",
     ),
   refs: z
     .array(entityReferenceSchema)
@@ -263,6 +340,12 @@ export const entitiesQuerySchema = entityPageQuerySchema.extend({
     .describe("Приложение доски, реализации или задачи: ключ или ID"),
   feature: entityReferenceSchema.optional().describe("Фича сценария или реализации: ключ или ID"),
   scenario: entityReferenceSchema.optional().describe("Сценарий реализации: ключ или ID"),
+  implementationTarget: z
+    .enum(["feature", "scenario"])
+    .optional()
+    .describe(
+      "Вид непосредственной цели реализации: feature — только FI, scenario — только SI; без kind исключает остальные виды",
+    ),
   target: entityReferenceSchema
     .optional()
     .describe("Явная цель задачи, реализации или документа: ключ или ID"),
@@ -271,24 +354,32 @@ export const entitiesQuerySchema = entityPageQuerySchema.extend({
   active: z
     .enum(["true", "false"])
     .optional()
-    .describe("Активность реализации; прежние ссылки доступны без фильтра"),
-  section: z.string().max(64).optional().describe("Раздел документов; none — без раздела"),
+    .describe(
+      "Активность реализации; без kind исключает остальные виды, прежние ссылки доступны без фильтра",
+    ),
+  section: z
+    .string()
+    .max(64)
+    .optional()
+    .describe("Раздел документов; none — документы без раздела, без kind исключает остальные виды"),
   documentKind: documentKindSchema.optional(),
   documentFormat: documentFormatSchema
     .optional()
-    .describe("Формат документа; прежние записи без поля относятся к markdown"),
+    .describe(
+      "Формат документа; прежние записи без поля относятся к markdown, без kind исключает остальные виды",
+    ),
   tags: z
     .array(documentTagSchema)
     .max(20)
     .optional()
     .describe(
-      "Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются",
+      "Теги документа: выбираются материалы со всеми указанными тегами без учёта регистра; пустые значения игнорируются, непустой список без kind исключает остальные виды",
     ),
   unattached: z
     .enum(["true", "false"])
     .optional()
     .describe(
-      "true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые",
+      "true — документы без прикреплений (нет relations и совместимых links); false — только прикреплённые; без kind исключает остальные виды",
     ),
   pinned: z
     .enum(["true", "false"])
@@ -302,7 +393,7 @@ export const entitiesQuerySchema = entityPageQuerySchema.extend({
     .enum(["key", "title", "updated"])
     .default("key")
     .describe(
-      "Сортировка по ключу, названию или последнему обновлению (сначала новые, без ограничения давности)",
+      "Сортировка по ключу, названию или сохранённой дате изменения собственной записи (новые первыми, без ограничения давности); без даты — в конце, при равенстве — по постоянному адресу",
     ),
 });
 export type EntitiesQuery = z.input<typeof entitiesQuerySchema>;
@@ -593,7 +684,15 @@ export const entityDefinitions: readonly EntityType[] = [
     title: "Реализация",
     description: "Вклад приложения в фичу или сценарий с собственным содержанием и состоянием",
     keyPolicy: "<префикс приложения>-FI/SI-<номер>",
-    filters: ["application", "feature", "scenario", "target", "status", "active"],
+    filters: [
+      "application",
+      "feature",
+      "scenario",
+      "target",
+      "implementationTarget",
+      "status",
+      "active",
+    ],
     actions: ["create", "update", "rename"],
   },
   {

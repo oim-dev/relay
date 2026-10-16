@@ -49,11 +49,8 @@ import { entityHandlers, entitySaved } from "./handlers.js";
 import {
   changeDocumentRelation,
   storedDocumentTarget,
-  documentAxes,
   documentFacets,
   entityDocuments,
-  matchesTarget,
-  matchesText,
 } from "./document-library.js";
 import {
   documentBulkSchema,
@@ -75,6 +72,13 @@ import { ProductQueries } from "../product/queries.js";
 import { AppError } from "../../shared/errors.js";
 import { documentTagKey, normalizeDocumentTags } from "../../domain/document-library.js";
 import type { EntityOperationContext } from "./handlers.js";
+import { readProjectDetail } from "./project.js";
+import { entityKeySpacePrefix, readEntityCards, resolveEntityCard } from "./indexed-catalog.js";
+import { readBoardDetail } from "../boards/read.js";
+import { readDocumentDetail } from "../documents/read.js";
+import { documentListVersion, readDocumentList } from "../documents/list.js";
+import { readIndexedEntityList, withDocumentSearchMatches } from "./indexed-list.js";
+import { compareEntitySummaries, matchesEntry, searchEntitySummary } from "./query.js";
 
 /** Общий движок адресации, чтения и исполнения зарегистрированных предметных операций. */
 export class EntityEngine {
@@ -150,6 +154,7 @@ export class EntityEngine {
       application,
       feature,
       scenario,
+      implementationTarget,
       target,
       parent,
       status,
@@ -169,6 +174,7 @@ export class EntityEngine {
       application,
       feature,
       scenario,
+      implementationTarget,
       target,
       parent,
       status,
@@ -191,7 +197,25 @@ export class EntityEngine {
           2,
         );
     }
-    return this.read(async (catalog) => {
+    return this.workspace.locked(async (owned) => {
+      if (kind === "document") {
+        const documents = await readDocumentList(this.workspace, query);
+        if (documents) {
+          const page = this.page(
+            documents.items.map((item) => ({ ...item, updatedAt: item.document!.updatedAt })),
+            pagination,
+            documents.version,
+          );
+          return {
+            ...page,
+            items: await withDocumentSearchMatches(this.workspace, page.items, query),
+            libraryCounts: documents.libraryCounts,
+          };
+        }
+      }
+      const indexed = await readIndexedEntityList(this.workspace, query);
+      if (indexed) return this.page(indexed.items, pagination, indexed.version);
+      const catalog = await readEntityCatalog(this.workspace, owned);
       // Полный адрес прежнего этапа плана (запись совместимости) не входит в публичный
       // каталог и не роняет адресное чтение: такой ref пропускается, остальные читаются.
       // Узнать план-владельца можно чтением графа/контекста от этого адреса.
@@ -228,44 +252,16 @@ export class EntityEngine {
                 .filter((ref) => !relocated.has(ref))
                 .map((ref) => entityAddress(resolveEntity(catalog, ref, kind).ref)),
             );
-      const needle = q?.trim().toLocaleLowerCase() || undefined;
-      const axes = documentAxes(query, undefined);
       const items = catalog.entries
         .filter(
           (entry) =>
-            (!kind || entry.ref.kind === kind) &&
             (!selected || selected.has(entityAddress(entry.ref))) &&
-            matchesText(entry, needle) &&
-            (status === undefined || entry.status === status) &&
-            (active === undefined || entry.active === (active === "true")) &&
-            axes.section(entry) &&
-            axes.documentKind(entry) &&
-            axes.documentFormat(entry) &&
-            axes.tags(entry) &&
-            axes.unattached(entry) &&
-            axes.pinned(entry) &&
-            axes.archived(entry) &&
-            Object.entries(resolved).every(([name, ref]) => matchesTarget(entry, name, ref)),
+            matchesEntry(entry, query, resolved),
         )
-        .sort(
-          (a, b) =>
-            (sort === "updated"
-              ? (b.document?.updatedAt ?? "").localeCompare(a.document?.updatedAt ?? "")
-              : a[sort].localeCompare(b[sort], "ru", { numeric: true })) ||
-            entityAddress(a.ref).localeCompare(entityAddress(b.ref)),
+        .map((entry) =>
+          searchEntitySummary(entry, query, catalog.metadata?.get(entityAddress(entry.ref))),
         )
-        .map((entry) => {
-          const summary = entitySummary(entry);
-          if (needle && entry.data.kind === "document" && summary.document) {
-            const match = entry.data.body.toLocaleLowerCase().indexOf(needle);
-            if (match >= 0)
-              summary.document.excerpt = entry.data.body.slice(
-                Math.max(0, match - 50),
-                match + needle.length + 100,
-              );
-          }
-          return summary;
-        });
+        .sort((a, b) => compareEntitySummaries(a, b, sort));
       const page = this.page(items, pagination, catalog.version);
       if (kind !== "document") return page;
       const counts: Record<string, number> = { all: 0, draft: 0, pinned: 0, archived: 0, none: 0 };
@@ -287,7 +283,14 @@ export class EntityEngine {
   }
   async get(input: EntityGetQuery): Promise<EntityDetail> {
     const query = parse(entityGetQuerySchema, input, "адрес сущности");
-    return this.read((catalog) => {
+    return this.workspace.locked(async (owned) => {
+      const project = await readProjectDetail(this.workspace, query);
+      if (project) return project;
+      const board = await readBoardDetail(this.workspace, query);
+      if (board) return board;
+      const document = await readDocumentDetail(this.workspace, query);
+      if (document) return document;
+      const catalog = await readEntityCatalog(this.workspace, owned);
       const entry = resolveEntity(catalog, query.ref, query.kind);
       const refs: { kind: string; id: string }[] = [];
       const data = entry.data;
@@ -337,7 +340,18 @@ export class EntityEngine {
         .map(entitySummary);
       return parse(
         entityDetailSchema,
-        { ...entitySummary(entry), data: entry.data, references },
+        {
+          ...entitySummary(entry),
+          ...(entry.implementation === undefined ? {} : { implementation: entry.implementation }),
+          ...(entry.savedStatus === undefined ? {} : { savedStatus: entry.savedStatus }),
+          data: entry.data,
+          references,
+          ...(entry.ref.kind !== "board" &&
+          entry.ref.kind !== "project" &&
+          catalog.metadata?.has(entityAddress(entry.ref))
+            ? { metadata: catalog.metadata.get(entityAddress(entry.ref)) }
+            : {}),
+        },
         "данные сущности",
         true,
       );
@@ -361,8 +375,13 @@ export class EntityEngine {
   }
   async keys(input: z.input<typeof entityKeysQuerySchema>) {
     const { ref, kind, ...page } = parse(entityKeysQuerySchema, input, "ключи сущности");
-    return this.read((catalog) => {
-      const entry = resolveEntity(catalog, ref, kind);
+    return this.workspace.locked(async (owned) => {
+      const session = this.workspace.storageSession;
+      // До завершения общей мутации карточки ещё могут содержать базовую проекцию кодека.
+      const entry =
+        session && !session.changed
+          ? await resolveEntityCard(session, ref, kind)
+          : resolveEntity(await readEntityCatalog(this.workspace, owned), ref, kind);
       const items = [...new Set([entry.key, ...entry.aliases])].map((key) => ({
         ref: entry.ref,
         key,
@@ -373,34 +392,51 @@ export class EntityEngine {
   }
   async keySpaces(input: z.input<typeof entityKeySpacesQuerySchema>) {
     const { kind, ...page } = parse(entityKeySpacesQuerySchema, input, "пространства ключей");
-    return this.read((catalog) => {
+    return this.workspace.locked(async (owned) => {
       const dynamic =
         kind === "task" || kind === "board" || kind === "implementation" || kind === "application";
       const scopeKind =
         kind === "implementation" || kind === "application" ? "application" : "board";
-      const items: { scope: EntityRef | null; title: string; prefix: string; pattern: string }[] =
-        dynamic
-          ? catalog.entries
-              .filter((entry) => entry.ref.kind === scopeKind)
-              .map((entry) => {
-                const prefix =
+      const session = this.workspace.storageSession;
+      const owners: { ref: EntityRef; title: string; prefix: string }[] = [];
+      if (dynamic) {
+        if (session && !session.changed)
+          for (const entry of await readEntityCards(session, scopeKind))
+            owners.push({
+              ref: entry.ref,
+              title: entry.title,
+              prefix: await entityKeySpacePrefix(session, entry),
+            });
+        else
+          for (const entry of (await readEntityCatalog(this.workspace, owned)).entries)
+            if (entry.ref.kind === scopeKind)
+              owners.push({
+                ref: entry.ref,
+                title: entry.title,
+                prefix:
                   entry.data.kind === "board" || entry.data.kind === "application"
                     ? (entry.data.prefix ?? entry.key)
-                    : "";
-                return {
-                  scope: entry.ref,
-                  title: entry.title,
-                  prefix: kind === "board" ? `BOARD-${prefix}` : prefix,
-                  pattern:
-                    kind === "implementation"
-                      ? `${prefix}-FI/SI-<номер>`
-                      : kind === "application"
-                        ? prefix
-                        : kind === "board"
-                          ? `BOARD-${prefix}`
-                          : `${prefix}-<номер>`,
-                };
-              })
+                    : "",
+              });
+      }
+      const items: { scope: EntityRef | null; title: string; prefix: string; pattern: string }[] =
+        dynamic
+          ? owners.map((entry) => {
+              const prefix = entry.prefix;
+              return {
+                scope: entry.ref,
+                title: entry.title,
+                prefix: kind === "board" ? `BOARD-${prefix}` : prefix,
+                pattern:
+                  kind === "implementation"
+                    ? `${prefix}-FI/SI-<номер>`
+                    : kind === "application"
+                      ? prefix
+                      : kind === "board"
+                        ? `BOARD-${prefix}`
+                        : `${prefix}-<номер>`,
+              };
+            })
           : [
               {
                 scope: null,
@@ -552,7 +588,14 @@ export class EntityEngine {
   /** Счётчики библиотеки по полным данным; область каждой оси описана в контракте. */
   async documentFacets(input: DocumentFacetsQuery = {}): Promise<DocumentFacets> {
     const query = parse(documentFacetsQuerySchema, input, "счётчики библиотеки");
-    return this.read((catalog) => documentFacets(catalog, query));
+    return this.read(async (catalog) => {
+      const facets = documentFacets(catalog, query);
+      // Версия совпадает с guard-ом страницы list({kind: "document"}) того же состояния.
+      const session = this.workspace.storageSession;
+      return session && !session.changed
+        ? { ...facets, version: await documentListVersion(session) }
+        : facets;
+    });
   }
   /** Материалы, прикреплённые непосредственно к сущности, с признаком архива. */
   async entityDocuments(input: EntityDocumentsQuery): Promise<EntityDocumentsPage> {

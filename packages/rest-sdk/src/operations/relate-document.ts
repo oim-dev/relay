@@ -6,7 +6,7 @@
 
 import type {
   ApiFailure,
-  DocumentRelationChange,
+  EntityDocumentRelationChange,
   EntitySaved,
   RelateDocumentOkEnum,
 } from "../data-contracts.js";
@@ -23,7 +23,7 @@ import { ContentType } from "../http-client.js";
  */
 export const relateDocument = (
   http: ApiRequestClient,
-  data: DocumentRelationChange,
+  data: EntityDocumentRelationChange,
   params: RequestParams = {},
 ) =>
   http.request<

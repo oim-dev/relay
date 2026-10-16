@@ -1,7 +1,13 @@
 #!/usr/bin/env node
-import { runtime } from "./context.js";
-import { runCli } from "./run.js";
-import { isErrno } from "@relay/core/shared/errors";
+
+// CLI всегда без цвета. Нормализуем env до загрузки зависимостей:
+// proper-lockfile → signal-exit → node:assert проверяет цвет уже при импорте.
+delete process.env.FORCE_COLOR;
+process.env.NO_COLOR = "1";
+
+const { runtime } = await import("./context.js");
+const { runCli } = await import("./run.js");
+const { isErrno } = await import("@relay/core/shared/errors");
 
 // Закрытый потребителем pipe — штатное завершение, а не ошибка трекера.
 process.stdout.on("error", (error: Error) => {

@@ -5,6 +5,7 @@ import type { JsonValue, StoredRecord } from "@relay/contracts/storage";
 import type { StorageLayout } from "@relay/contracts/storage-maintenance";
 import { AppError } from "../../shared/errors.js";
 import type { EntityStorageRegistry } from "../entity-store/registry.js";
+import type { StorageSession } from "../entity-store/store.js";
 import { canonical, jsonHash } from "../entity-store/format.js";
 import { registryError, storageError } from "./errors.js";
 import type { HistoricalKindCatalog } from "./history/catalog.js";
@@ -18,6 +19,22 @@ import type {
   VersionValidator,
 } from "./types.js";
 
+export type MigrationIndexProjectionInput = {
+  /** Подготовленный итог миграции; допустимы только изменения производных индексов в памяти. */
+  readonly session: StorageSession;
+  readonly configPath: string;
+  readonly config: unknown;
+  readonly productId: string | null;
+  readonly owned: () => void;
+};
+
+export type MigrationIndexProjection = {
+  readonly id: string;
+  /** Версия проектора входит в отпечаток плана, но не меняет формат предметных данных. */
+  readonly version: number;
+  apply(input: MigrationIndexProjectionInput): Promise<void>;
+};
+
 export type TransitionRegistryInput = {
   readonly profiles: readonly DataModelProfile[];
   readonly transitions: readonly DataTransition[];
@@ -29,6 +46,8 @@ export type TransitionRegistryInput = {
    * `Workspace`. Без схемы конфигурация не проверяется (синтетические реестры тестов).
    */
   readonly config?: z.ZodType;
+  /** Предметное завершение индексов; generic-реестр не знает каталога Workspace. */
+  readonly indexProjection?: MigrationIndexProjection;
 };
 
 /** Фактический набор версий по видам: вид → версии данных, найденные в записях. */
@@ -160,6 +179,12 @@ export class TransitionRegistry {
   private readonly physicalByLayout = new Map<string, PhysicalTransition>();
 
   constructor(private readonly input: TransitionRegistryInput) {
+    if (input.indexProjection) {
+      if (!ID_PATTERN.test(input.indexProjection.id))
+        throw registryError("invalid-id", "Недопустимый ID проекции индексов");
+      if (!Number.isSafeInteger(input.indexProjection.version) || input.indexProjection.version < 1)
+        throw registryError("invalid-version", "Недопустимая версия проекции индексов");
+    }
     const { profiles, transitions, storage, historical } = input;
     const physical = input.physical ?? [];
     this.checkProfiles(profiles);
@@ -507,6 +532,14 @@ export class TransitionRegistry {
           };
     const value = {
       algorithm: 1,
+      ...(this.input.indexProjection
+        ? {
+            indexProjection: {
+              id: this.input.indexProjection.id,
+              version: this.input.indexProjection.version,
+            },
+          }
+        : {}),
       profiles: this.input.profiles.map((profile) => ({
         ...profile,
         owners: { ...profile.owners },
@@ -539,6 +572,11 @@ export class TransitionRegistry {
   /** Конфигурация соответствует схеме целевого профиля (true без объявленной схемы). */
   validConfig(value: unknown): boolean {
     return this.input.config ? this.input.config.safeParse(value).success : true;
+  }
+
+  /** Выполняется после подготовки записей и конфигурации, до prepare/WAL; recovery его не повторяет. */
+  async projectIndexes(input: MigrationIndexProjectionInput): Promise<void> {
+    await this.input.indexProjection?.apply(input);
   }
 
   get storage(): EntityStorageRegistry {

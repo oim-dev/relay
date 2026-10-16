@@ -39,7 +39,7 @@ for (const scoped of [false, true])
           );
       }
     }
-    assert.equal(operations.size, 159);
+    assert.equal(operations.size, 197);
     for (const path of [
       "/api/v1/tasks",
       "/api/v1/board",
@@ -406,6 +406,63 @@ for (const scoped of [false, true])
       ),
       missing,
     );
+    const documentRecord = await request("POST", "/api/v1/entities", undefined, {
+      data: {
+        kind: "document",
+        name: "Документ",
+        summary: "",
+        body: "## Содержание",
+        documentKind: "rules",
+      },
+      requestId: "document-library",
+    });
+    const documentLinks = await request(
+      "GET",
+      "/api/v1/documents/links",
+      `/api/v1/documents/links?ref=${documentRecord.data.key}&limit=1`,
+    );
+    assert.equal(documentLinks.data.total, 0);
+    await request("POST", "/api/v1/documents/relations", undefined, {
+      ref: documentRecord.data.key,
+      target: "PRODUCT",
+      source: "relations",
+      action: "link",
+      ifRevision: documentRecord.data.revision,
+      requestId: "document-relation",
+    });
+    const sections = await request("GET", "/api/v1/documents/sections");
+    await request("POST", "/api/v1/documents/sections", undefined, {
+      action: "create",
+      id: "api",
+      name: "API",
+      ifRevision: sections.data.revision,
+      requestId: "document-section",
+    });
+    for (const [path, method, id] of [
+      ["links", "get", "getDocumentLinks"],
+      ["sections", "get", "getDocumentSections"],
+      ["relations", "post", "changeDocumentRelation"],
+      ["sections", "post", "changeDocumentSection"],
+    ] as const) {
+      const operation = document.paths[`/api/v1/documents/${path}`]![method]!;
+      const projectOperation =
+        document.paths[`/api/v1/projects/{project}/documents/${path}`]![method]!;
+      assert.equal(operation.operationId, id);
+      assert.equal(projectOperation.operationId, `${id}ForProject`);
+      assert.deepEqual(operation.tags, ["documents"]);
+      for (const parameter of operation.parameters ?? [])
+        if (!("$ref" in parameter)) {
+          const schema = parameter.schema as SchemaObject;
+          assert(parameter.description || schema.description, `${id}: ${parameter.name}`);
+        }
+    }
+    const entityDetailSchema = document.components!.schemas!.EntityDetail as SchemaObject;
+    assert(!entityDetailSchema.required!.includes("metadata"));
+    const metadata = entityDetailSchema.properties!.metadata as SchemaObject;
+    assert.deepEqual(
+      new Set(metadata.required),
+      new Set(["createdAt", "createdBy", "updatedAt", "updatedBy"]),
+    );
     const plan = await request("POST", "/api/v1/plans", undefined, {
       title: "План схемы обзора",
       requestId: "overview-plan",
@@ -465,7 +522,7 @@ for (const scoped of [false, true])
     });
     const metricSchema = document.components!.schemas!.ProductOverviewMetricPage as SchemaObject;
     assert.equal(metricSchema.oneOf?.length, 9);
-    assert.equal(visited.size, 59);
+    assert.equal(visited.size, 63);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
     assert(!("$ref" in sse) && sse.content?.["text/event-stream"]);
     const updateSchema = document.components!.schemas!.UpdateBoardTask as SchemaObject;

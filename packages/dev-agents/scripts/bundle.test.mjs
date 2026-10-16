@@ -121,6 +121,50 @@ test("изменение профиля оркестратора обновля�
   assert.deepEqual(await snapshot(app.root), after);
 });
 
+test("смена OpenCode default на build обновляет только конфиг и lock, сохраняя ручную правку при ошибке", async (t) => {
+  const app = await fixture(t);
+  await buildBundle({ root: app.root });
+  const path = "opencode.json";
+  const current = await readFile(join(app.root, path), "utf8");
+  const previous = current.replace('"build"', '"relay-orchestrator"');
+  const lock = JSON.parse(await readFile(join(app.root, lockPath), "utf8"));
+  lock.outputs.find((entry) => entry.path === path).sha256 = createHash("sha256")
+    .update(previous)
+    .digest("hex");
+  await app.put(lockPath, JSON.stringify(lock));
+
+  // Удалённый пользователем default нельзя молча восстановить при обновлении адаптера.
+  const manual = JSON.parse(previous);
+  delete manual.default_agent;
+  await app.put(path, JSON.stringify(manual));
+  let before = await snapshot(app.root);
+  await assert.rejects(buildBundle({ root: app.root }), /изменён вручную: opencode\.json/);
+  assert.deepEqual(await snapshot(app.root), before);
+
+  await app.put(path, previous);
+  before = await snapshot(app.root);
+  const checked = await checkBundle({ root: app.root });
+  assert.equal(checked.ok, false);
+  const changedPaths = [path, lockPath];
+  assert.deepEqual(
+    checked.issues.map(({ kind, path }) => ({ kind, path })),
+    changedPaths.map((path) => ({ kind: "outdated", path })),
+  );
+  assert.deepEqual(await snapshot(app.root), before);
+  const built = await buildBundle({ root: app.root });
+  assert.deepEqual(built.written, changedPaths);
+  assert.deepEqual(built.removed, []);
+  assert.equal(await readFile(join(app.root, path), "utf8"), current);
+  const after = await snapshot(app.root);
+  assert.deepEqual(Object.keys(after), Object.keys(before));
+  for (const path of Object.keys(before)) {
+    if (!changedPaths.includes(path)) assert.deepEqual(after[path], before[path], path);
+  }
+  assert.equal((await checkBundle({ root: app.root })).ok, true);
+  assert.deepEqual((await buildBundle({ root: app.root })).written, []);
+  assert.deepEqual(await snapshot(app.root), after);
+});
+
 test("старая сгенерированная CLAUDE.md удаляется только при подтверждённом владении в lock", async (t) => {
   const app = await fixture(t);
   await buildBundle({ root: app.root });
@@ -471,7 +515,7 @@ test("адаптеры сохраняют полный Markdown и описан�
   const { output, agents } = await prepareBundle(app.root);
   const opencode = JSON.parse(output.get("opencode.json"));
   assert.equal(opencode.$schema, "https://opencode.ai/config.json");
-  assert.equal(opencode.default_agent, "relay-orchestrator");
+  assert.equal(opencode.default_agent, "build");
   assert.equal(opencode.model, undefined);
   assert.equal(opencode.agent, undefined);
   assert.equal(opencode.permission, undefined);
