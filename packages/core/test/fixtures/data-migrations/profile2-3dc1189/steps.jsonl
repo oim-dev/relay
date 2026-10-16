@@ -1,0 +1,3 @@
+{"operation":"initialize","prefix":"tasks"}
+{"operation":"BoardTasksService.create","id":"dAvx4Xnw","key":"PRODUCT-1","descriptionBytes":103}
+{"operation":"StorageService.reindex"}

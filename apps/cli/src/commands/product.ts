@@ -348,7 +348,10 @@ export function registerProduct(program: Command, runtime: Runtime): void {
               command
                 .option("--target <ref>", "Прикрепление к сущности")
                 .option("--section <id>", "Раздел; none — без раздела")
-                .option("--document-kind <kind>", "Тип документа")
+                .option(
+                  "--document-kind <kind>",
+                  "Тип: specification/description/rules/instruction/proposal/decision/research",
+                )
                 .option("--pinned <value>", "Закрепление: true/false")
                 .option("--archived <value>", "Архив: true/false");
           },
@@ -376,7 +379,27 @@ export function registerProduct(program: Command, runtime: Runtime): void {
       name: singleton ? "get" : "get <ref>",
       ...(singleton ? {} : { arguments: { ref: "Ключ или ID записи" } }),
       description: "Прочитать полное содержание и ревизию",
-      details: "Сохраните ревизию для следующего изменения. Незаполненный паспорт имеет ревизию 0.",
+      details:
+        "Сохраните ревизию для следующего изменения. " +
+        {
+          product:
+            "Незаполненный паспорт имеет ревизию 0. overview — сводка проекта, product progress — готовность и причины.",
+          feature:
+            "Сценарии: scenario list --feature <ref>. Реализации: implementation list --feature <ref>. Задачи: task list --product-target <ref>. Готовность: feature progress <ref>.",
+          scenario:
+            "Общие требования: feature get <ключ фичи из карточки>. Реализации: implementation list --scenario <ref>. Задачи: task list --product-target <ref>. Готовность: scenario progress <ref>.",
+          application:
+            "Состав: application participation list <ref>. Задачи: task list --board <slug из карточки>. Предметная подборка: product context --id <ref>. Готовность: application progress <ref>.",
+          implementation:
+            "Карточка называет приложение и цель: application get, feature get или scenario get читают их полное содержание. Состав приложения: application participation list <приложение>. Задачи: task list --product-target <ref>. Готовность: implementation progress <ref>.",
+          document:
+            "Полные summary и body. Карточка показывает число прикреплений и уникальных целей; адреса и полные пояснения страницами — document links <ref>. Разделы — document section list, документы раздела — document list --section <id>.",
+        }[kind] +
+        (kind === "document"
+          ? ""
+          : " Прикреплённые документы: document list --target <ключ записи>.") +
+        " Граф связей: inspect graph context <ключ записи>." +
+        (singleton ? "" : ` Предпросмотр удаления без записи: ${kind} delete-preview <ref>.`),
       examples: [
         [
           `npx @oim-dev/relay-cli ${kind} get${singleton ? "" : ` ${examples[kind]}`}`,
@@ -471,7 +494,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
             : {}),
           ...(kind === "product"
             ? {
-                overview: commandInvocation(context, ["product", "overview"]),
+                overview: commandInvocation(context, ["overview"]),
                 documents: commandInvocation(context, ["document", "list", "--target", data.key]),
               }
             : {}),
@@ -489,7 +512,10 @@ export function registerProduct(program: Command, runtime: Runtime): void {
         ...(action === "update" && !singleton ? { arguments: { ref: "Ключ или ID записи" } } : {}),
         description: action === "create" ? "Создать запись" : "Изменить только указанные поля",
         details:
-          `Полное описание оформляйте разделами и списками в Markdown, достаточно подробно для исполнения и проверки без чата. ${contentHints[kind]}. Правила берите из требований; неизвестное уточняйте, не выдумывайте. Markdown принимается текстом, из файла или stdin. Источники одного поля несовместимы. После потери ответа сначала прочитайте запись; автоматического повтора нет.` +
+          `Полное описание оформляйте разделами и списками в Markdown, достаточно подробно для исполнения и проверки без чата. ${contentHints[kind]}. Правила берите из требований; неизвестное уточняйте, не выдумывайте. Markdown принимается текстом, из файла или stdin. Источники одного поля несовместимы; во всём вызове допустим один stdin. Автор обязателен: --actor или RELAY_ACTOR. После потери ответа сначала прочитайте запись; автоматического повтора нет.` +
+          (action === "update"
+            ? ` Передайте хотя бы одно изменяемое поле и ревизию из ${kind} get. Непереданные поля сохраняются.`
+            : "") +
           (kind === "implementation" && action === "create"
             ? " Для снятого участия той же пары приложение/цель Core возвращает прежний ID, но заменяет название, описание и совместимую отметку переданными значениями; без --status применяется none. Для возврата участия с сохранением содержания используйте application participation list/replace с прочитанными ревизией состава и версией продукта."
             : "") +
@@ -557,8 +583,13 @@ export function registerProduct(program: Command, runtime: Runtime): void {
         ? { key: "Новый читаемый ключ, не название" }
         : { ref: "Ключ или ID", key: "Новый читаемый ключ, не название" },
       description: "Изменить ключ с сохранением ID и алиасов",
-      details: "Название меняется через update --name (у реализации --title).",
-      examples: [[`npx @oim-dev/relay-cli ${kind} rename --help`, "Правила переименования"]],
+      details: `Передайте автора и прочитанную ревизию из ${kind} get. Меняется только публичный ключ, постоянный ID сохраняется; прежний ключ остаётся алиасом. Коллизии и устаревшая ревизия отклоняются. Название меняется через update ${kind === "implementation" ? "--title" : "--name"}.`,
+      examples: [
+        [
+          `npx @oim-dev/relay-cli ${kind} rename${singleton ? "" : ` ${examples[kind]}`} ${singleton ? "PRODUCT-MAIN" : `${examples[kind]}-MAIN`} --actor agent --if-revision 1`,
+          "Сменить ключ; замените адреса и ревизию данными прочитанной записи",
+        ],
+      ],
       configure: revisionOption,
       async run(context, input) {
         const record = await subject(

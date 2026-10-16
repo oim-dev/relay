@@ -1,0 +1,22 @@
+.root {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 76px;
+  display: block;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--tasks-muted);
+  font-size: 0.65rem;
+  line-height: 1.35;
+
+  & strong {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 4px);
+    color: var(--tasks-ink);
+    white-space: pre-line;
+    font-size: 0.7rem;
+  }
+}

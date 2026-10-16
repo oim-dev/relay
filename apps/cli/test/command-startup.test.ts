@@ -62,7 +62,7 @@ for (const entry of entries) {
       assert.equal(text.status, 0, text.stdout + text.stderr);
       assert.equal(text.stderr, "");
       assert.match(text.stdout, /PROJECT — Запуск без цвета 🧪 東京/);
-      assert.match(text.stdout, /document section list/);
+      assert.doesNotMatch(text.stdout, /^npx @oim-dev\/relay-cli /m);
       const json = launch(
         outside,
         [...entry.nodeArgs, entry.path, "project", "get", "--format", "json"],

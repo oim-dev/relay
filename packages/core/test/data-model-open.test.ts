@@ -27,6 +27,7 @@ import type {
   TransactionStage,
 } from "../src/storage/entity-store/transaction.js";
 import { currentManifest } from "../src/storage/data-model/manifest.js";
+import { CURRENT_DATA_MODEL } from "../src/storage/data-model/profiles.js";
 import { jsonValue } from "../src/storage/entity-store/format.js";
 import { initialize, openWorkspace, readWorkspaceConfig } from "../src/storage/workspace.js";
 import { BoardTasksService } from "../src/application/board-tasks/service.js";
@@ -145,7 +146,7 @@ function migrationIntent(backup: string): MigrationIntent {
     registryDigest: "a".repeat(64),
     planFingerprint: "b".repeat(64),
     source: { layout: "unified-4", physical: 4, profile: 1 },
-    target: { profile: 2 },
+    target: { profile: CURRENT_DATA_MODEL },
     transitions: ["profile-marker@1"],
     backup: { path: backup, manifestSha256: "c".repeat(64) },
     // Итог плана пишет каждый выпущенный исполнитель; WAL без него — предварительная сборка.
@@ -157,7 +158,7 @@ function migrationIntent(backup: string): MigrationIntent {
   };
 }
 
-/** Профиль 1 → 2 с изменением записи: подготовка вне публикации, публикация WAL v2. */
+/** Профиль 1 → текущий с изменением записи: подготовка вне публикации, публикация WAL v2. */
 async function prepareMigration(root: string) {
   const { productId: _productId, dataModelVersion: _profile, ...legacy } = await manifestOf(root);
   await setManifest(root, legacy);
@@ -190,12 +191,15 @@ test("новая база: manifest текущего профиля; EntityStore
   assert.deepEqual(await manifestOf(root), {
     format: "relay-entities",
     schemaVersion: 4,
-    dataModelVersion: 2,
+    dataModelVersion: CURRENT_DATA_MODEL,
   });
   const directory = await realpath(await mkdtemp(join(tmpdir(), "relay-data-model-init-")));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const workspace = await initialize(directory, "tasks");
-  assert.equal((await manifestOf(dirname(workspace.configPath))).dataModelVersion, 2);
+  assert.equal(
+    (await manifestOf(dirname(workspace.configPath))).dataModelVersion,
+    CURRENT_DATA_MODEL,
+  );
 });
 
 test("профиль 1 и устаревший формат: предметная работа отказывает без изменения файлов", async (t) => {
@@ -206,7 +210,7 @@ test("профиль 1 и устаревший формат: предметна�
   const required = storageFailure("STORAGE_MIGRATION_REQUIRED", 4, {
     reason: "profile",
     current: 1,
-    expected: 2,
+    expected: CURRENT_DATA_MODEL,
     path: "storage.json",
   });
   await assert.rejects(store.get({ kind: "note", id: "a" }), required);
@@ -236,12 +240,15 @@ test("профиль новее поддерживаемого: отказ пр�
   t.after(() => rm(directory, { recursive: true, force: true }));
   const workspace = await initialize(directory, "tasks");
   const root = dirname(workspace.configPath);
-  await setManifest(root, { ...(await manifestOf(root)), dataModelVersion: 3 });
+  await setManifest(root, {
+    ...(await manifestOf(root)),
+    dataModelVersion: CURRENT_DATA_MODEL + 1,
+  });
   const before = await files(root);
   const unsupported = storageFailure("STORAGE_VERSION_UNSUPPORTED", 4, {
     reason: "profile",
-    current: 3,
-    expected: 2,
+    current: CURRENT_DATA_MODEL + 1,
+    expected: CURRENT_DATA_MODEL,
   });
   await assert.rejects(readWorkspaceConfig(directory), unsupported);
   await assert.rejects(openWorkspace(directory), unsupported);
@@ -327,7 +334,7 @@ test("WAL v2: обычный recovery не допубликовывает миг
   assert.equal(result.kind, "migration");
   assert.deepEqual(seen, [pending.kind === "migration" ? pending.intent.migration.id : ""]);
   assert.equal((await inspectPending(root)).kind, "none");
-  assert.equal((await manifestOf(root)).dataModelVersion, 2);
+  assert.equal((await manifestOf(root)).dataModelVersion, CURRENT_DATA_MODEL);
   assert.equal((await store.get({ kind: "note", id: "a" })).data.title, "Перенесённая заметка");
 });
 

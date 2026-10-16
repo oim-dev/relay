@@ -548,7 +548,7 @@ test("Manifest: профиль, различимые отказы и отказ 
     format: "relay-entities",
     schemaVersion: 4,
     productId: "P1",
-    dataModelVersion: 2,
+    dataModelVersion: CURRENT_DATA_MODEL,
   });
   requireCurrentProfile(parseStorageManifest(manifest));
   assert.equal(
@@ -585,7 +585,12 @@ test("Manifest: профиль, различимые отказы и отказ 
     "physical",
   );
   fails(
-    () => parseStorageManifest({ format: "relay-entities", schemaVersion: 4, dataModelVersion: 3 }),
+    () =>
+      parseStorageManifest({
+        format: "relay-entities",
+        schemaVersion: 4,
+        dataModelVersion: CURRENT_DATA_MODEL + 1,
+      }),
     "STORAGE_VERSION_UNSUPPORTED",
   );
   fails(

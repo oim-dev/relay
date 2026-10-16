@@ -88,7 +88,7 @@ test(
     assert.equal(receipt.code, 0, receipt.stdout + receipt.stderr);
     assert.equal(receipt.stderr, "");
     assert.match(receipt.stdout, /Комментарий опубликован/);
-    assert.match(receipt.stdout, /npx @oim-dev\/relay-cli .*task comment get/);
+    assert.doesNotMatch(receipt.stdout, /^npx @oim-dev\/relay-cli /m);
     assert.doesNotMatch(receipt.stdout, /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9-]{23}/i);
     const list = successful(await app.run<Page>(["task", "comment", "list", task]));
     assert.equal(list.data.items.length, 4);

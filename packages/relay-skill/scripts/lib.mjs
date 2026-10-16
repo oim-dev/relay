@@ -116,10 +116,10 @@ export async function prepareBundle(root, name) {
   }
   for (const [source, target] of Object.entries(manifest.documents ?? {}))
     add(source, target, await sourceText(source));
-  for (const [target, generator] of Object.entries(manifest.generated ?? {})) {
-    const { generateReference } = await import("./generate.mjs");
-    add(`${sourceRoot}/${target}`, target, generateReference(generator));
-  }
+  assert(
+    manifest.generated === undefined,
+    "Генерируемые справочники не входят в скилл; синтаксис команд раскрывается через CLI --help",
+  );
   assert(files.has("SKILL.md"), "Сборка не содержит SKILL.md");
   for (const [source, target] of Object.entries(manifest.aliases ?? {})) {
     safePath(source);
@@ -179,10 +179,6 @@ export async function prepareBundle(root, name) {
     );
   }
   const entry = output.get("SKILL.md");
-  if (manifest.documents?.["docs/CAPABILITIES.md"]) {
-    for (const target of ["references/README.md", "references/CAPABILITIES.md"])
-      assert(entry.includes(`(${target})`), `Справочник отсутствует в карте SKILL.md: ${target}`);
-  }
   const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(entry);
   assert(frontmatter, "SKILL.md должен начинаться с YAML frontmatter");
   assert(

@@ -16,6 +16,7 @@ import {
   tempDirectory,
 } from "./helpers/cli.js";
 import { httpProxy, httpServer } from "./helpers/http.js";
+import { shellCommand } from "../src/command-kit.js";
 
 const configPath = (root: string) => join(root, ".relay/config.json");
 const connection = (result: ReturnType<typeof successful<any>>) => (result.meta as any).connection;
@@ -241,13 +242,22 @@ test("config: HTTP URL flag/env/config выбирает один удалённ�
   assert.match(human.stdout, /Конфиг проекта на сервере/);
   assert.ok(human.stdout.includes(configPath(other.root)));
   assert.ok(human.stdout.includes(configPath(app.root)));
-  const hint = human.stdout.split("\n").find((line) => line.startsWith("npx "))!;
-  assert.match(hint, /--server-url .* --project .* project get$/);
+  assert.doesNotMatch(human.stdout, /^npx /m);
+  const hint = shellCommand([
+    "npx",
+    "@oim-dev/relay-cli",
+    "--server-url",
+    proxy.url,
+    "--project",
+    projectId,
+    "project",
+    "get",
+  ]);
   const start = requests.length;
   const read = await runHint(other.root, hint);
   assert.equal(read.stderr, "");
   assert.match(read.stdout, /PROJECT/);
-  assert.equal(requests.length - start, 2, "подсказка project get: bootstrap + адресное чтение");
+  assert.equal(requests.length - start, 2, "project get: bootstrap + адресное чтение");
   const empty = await tempDirectory(t);
   const remote = successful(
     await invoke<any>(empty, ["config", "get"], {
@@ -338,14 +348,22 @@ test("config: workspace из URL/порта сохраняет клиентск�
   assert.match(human.stdout, /Реестр клиента/);
   assert.match(human.stdout, /RELAY_CONFIG/);
   assert.ok(human.stdout.includes(registryPath));
-  const hint = human.stdout.split("\n").find((line) => line.startsWith("npx "))!;
-  assert.ok(hint.includes(registryPath));
+  assert.doesNotMatch(human.stdout, /^npx /m);
+  const hint = shellCommand([
+    "npx",
+    "@oim-dev/relay-cli",
+    "--config",
+    registryPath,
+    "alpha",
+    "project",
+    "get",
+  ]);
   assert.equal((await runHint(empty, hint)).stderr, "");
   await writeFile(registryPath, JSON.stringify(registry));
   failed(await invoke(root, ["alpha", "config", "get"]), "SERVER_URL_REQUIRED");
 });
 
-test("config: источник разрешается один раз, смена файла после bootstrap не меняет URL/hint", async (t) => {
+test("config: источник разрешается один раз, смена файла после bootstrap не меняет URL результата", async (t) => {
   const app = await fixture(t);
   const client = await fixture(t);
   const server = await httpServer(t, app.root);
@@ -407,15 +425,24 @@ test("config: источник разрешается один раз, смен�
   const human = await invokeRaw(client.root, ["--project", projectId, "config", "get"], options);
   assert.equal(human.code, 0, human.stdout);
   assert.equal(human.stderr, "");
-  const hint = human.stdout.split("\n").find((line) => line.startsWith("npx "))!;
-  assert.ok(hint.includes(proxy.url));
-  assert.ok(!hint.includes("http://127.0.0.1:1 "));
+  assert.doesNotMatch(human.stdout, /^npx /m);
+  assert.ok(human.stdout.includes(proxy.url));
+  const hint = shellCommand([
+    "npx",
+    "@oim-dev/relay-cli",
+    "--server-url",
+    proxy.url,
+    "--project",
+    projectId,
+    "project",
+    "get",
+  ]);
   assert.equal(JSON.parse(await readFile(log, "utf8")).count, 2);
   assert.equal(requests.length, 3, "один HTTP bootstrap на config get");
   const read = await runHint(client.root, hint);
   assert.equal(read.stderr, "");
   t.diagnostic(
-    "readFile config: local=3; HTTP config=2 (baseline 4), env=2; HTTP config get=1, project hint=2",
+    "readFile config: local=3; HTTP config=2 (baseline 4), env=2; HTTP config get=1, отдельный project get=2",
   );
 });
 
@@ -485,7 +512,7 @@ test("config: 503 не переключает HTTP на local; полные 45 �
     assert.equal((result.stdout.match(/satisfiesDependencies=false/g) ?? []).length, 45);
     assert.doesNotMatch(result.stdout, /\u001b/);
     assert.ok(result.stdout.includes(configPath(app.root)));
-    assert.equal(result.stdout.split("\n").filter((line) => line.startsWith("npx ")).length, 1);
+    assert.equal(result.stdout.split("\n").filter((line) => line.startsWith("npx ")).length, 0);
     t.diagnostic(
       `45 статусов, pipe ${width}: ${Buffer.byteLength(result.stdout)} UTF-8 байт, ${result.stdout.split("\n").length - 1} строк`,
     );

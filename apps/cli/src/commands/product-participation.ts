@@ -41,7 +41,7 @@ export function registerParticipation(parent: Command, runtime: Runtime) {
     arguments: { ref: "Ключ или ID приложения" },
     description: "Прочитать участие и ревизию состава",
     details:
-      "Включает снятые реализации. Для replace нужны ревизия состава и версия из этого ответа. --projection compact читает серверную страницу без полных описаний; version — для записи, snapshotVersion — guard страниц. По умолчанию сохранён прежний полный JSON contracts; полное содержание отдельного вклада — implementation get.",
+      "Включает снятые реализации. Для replace нужны ревизия состава и версия из этого ответа. --projection compact читает серверную страницу без полных описаний; version — для записи, snapshotVersion — guard страниц. Без проекции читается полный состав; полное содержание отдельного вклада — implementation get.",
     examples: [
       [
         "npx @oim-dev/relay-cli application participation list WEB --projection compact",
@@ -186,7 +186,7 @@ export function registerParticipation(parent: Command, runtime: Runtime) {
     arguments: { ref: "Ключ или ID приложения" },
     description: "Заменить выбранный активный состав",
     details:
-      'Выберите один источник полного активного состава: --implementations, --clear либо --composition/--composition-file. JSON composition: [{"kind":"existing","ref":"WEB-FI-1"},{"kind":"target","target":"SCENARIO-1","title":"Вклад Web","description":"Markdown","status":"none"}]. existing сохраняет адрес, тексты и ручную отметку; target создаёт только новую пару приложение/цель. [] снимает всё участие. Новый FI и SI сохраняются одной операцией, SI требует FI. Непереданные в наборе реализации снимаются, не удаляются. Ревизия состава и version — из participation list; snapshotVersion не используйте для записи. Скрытого повтора нет. Новый composition-ввод возвращает отдельную расширенную квитанцию; прежние варианты сохраняют прежний JSON.',
+      'Выберите один источник полного активного состава: --implementations, --clear либо --composition/--composition-file. JSON composition: [{"kind":"existing","ref":"WEB-FI-1"},{"kind":"target","target":"SCENARIO-1","title":"Вклад Web","description":"Markdown","status":"none"}]. existing сохраняет адрес, тексты и ручную отметку; target создаёт только новую пару приложение/цель. [] снимает всё участие. Новый FI и SI сохраняются одной операцией, SI требует FI. Непереданные в наборе реализации снимаются, не удаляются. Ревизия состава и version — из participation list; snapshotVersion не используйте для записи. Скрытого повтора нет. Квитанция composition также перечисляет созданные реализации.',
     examples: [
       [
         "npx @oim-dev/relay-cli application participation replace WEB --implementations WEB-FI-1 WEB-SI-1 --if-revision 2 --if-version VERSION --actor agent",

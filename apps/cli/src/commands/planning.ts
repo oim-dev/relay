@@ -151,7 +151,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
   const plan = commandGroup(program, {
     name: "plan",
     description: "Планы работ, этапы и состав задач",
-    details,
+    details: `Создайте draft через create, добавьте этапы и существующие задачи через stage. start начинает план; complete/cancel закрывают его с итогом или причиной. Закрытый план доступен только для чтения. Готовность и причины — progress. ${details}`,
     examples: [["npx @oim-dev/relay-cli plan list", "Прочитать планы проекта"]],
   });
   registerReleases(program, runtime);
@@ -252,11 +252,11 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     name: "list",
     description: "Каталог планов с прогрессом",
     details:
-      "Полные итоги независимы от страницы; продолжение сохраняет фильтры, проекцию и версию. Без --projection JSON сохраняет полную прежнюю форму; compact исключает полные Markdown-поля соседних планов. Полное содержание читается через plan get.",
+      "Полные итоги независимы от страницы; продолжение сохраняет фильтры, проекцию и версию. --projection compact получает обзор без полных Markdown-полей соседних планов. Полное содержание читается через plan get.",
     examples: [
       ["npx @oim-dev/relay-cli plan list --limit 12", "Прочитать первую страницу"],
       [
-        "npx @oim-dev/relay-cli plan list --projection compact --format json",
+        "npx @oim-dev/relay-cli plan list --projection compact",
         "Получить явный обзор без полных текстов соседних планов",
       ],
     ],
@@ -313,7 +313,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     description: "Полные тексты и актуальное состояние",
     arguments: refArgument,
     details:
-      "Полное содержание отображается как Markdown; состав имеет отдельные постраничные команды.",
+      "Полное содержание отображается как Markdown. Этапы страницами — plan stage list <reference>; задачи этапа — plan stage task list <reference> <stage>; готовность и причины — plan progress <reference>. Связи и материалы — inspect graph list --root <reference>. Сохранённое завершение не равно текущей готовности состава.",
     examples: [["npx @oim-dev/relay-cli plan get PLN-1", "Прочитать запись"]],
     run: async (context, input) => {
       const data = await context.backend.plans.get(input.argument());
@@ -335,7 +335,11 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     registerPlanCommand<Options>(plan, runtime, {
       name: action === "create" ? "create" : "update <reference>",
       description: action === "create" ? "Создать черновик плана" : "Изменить заданные поля плана",
-      details,
+      details:
+        (action === "create"
+          ? "Создаёт draft. Заполните цель (--goal или --goal-file), затем добавьте этапы и задачи через plan stage."
+          : "Меняются только переданные поля; --scope и --participants заменяют соответствующие наборы целиком. Закрытый план неизменяем. Статус меняется только через start/complete/cancel.") +
+        ` ${details}`,
       ...(action === "update" ? { arguments: refArgument } : {}),
       examples: [
         [
@@ -388,7 +392,15 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         complete: "Завершить план с итогом",
         cancel: "Отменить план с причиной",
       }[action],
-      details,
+      details:
+        {
+          start:
+            "Переводит draft в active. Нужны заполненная цель и непустой состав задач; условия проверьте через plan progress. start не обязателен для работы над задачами или последующего complete. --result для start необязателен.",
+          complete:
+            "Завершает draft/active. Обязателен непустой итог: --result или --result-file. Core проверяет непустой состав и выполнение всех задач; причины — plan progress. Закрытый план неизменяем.",
+          cancel:
+            "Отменяет открытый план. Обязательна непустая причина: --result или --result-file. Задачи не отменяются автоматически; закрытый план неизменяем.",
+        }[action] + ` ${details}`,
       arguments: refArgument,
       examples: [
         [
@@ -599,7 +611,8 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     name: "get <reference> <stage>",
     description: "Полное содержание этапа и явные ID задач",
     arguments: { ...refArgument, stage: "Внутренний ID этапа" },
-    details: "Этап читается из полной сущности плана; ревизия принадлежит плану.",
+    details:
+      "Этап читается из полной сущности плана; ревизия принадлежит плану. Карточка содержит полные тексты и число задач. Актуальный состав страницами — plan stage task list <reference> <stage>; общий прогресс — plan progress <reference>.",
     examples: [["npx @oim-dev/relay-cli plan stage get PLN-1 Ab12Cd34", "Прочитать этап"]],
     run: async (context, input) => {
       const entity = await context.backend.entities.get({
@@ -643,9 +656,15 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
         move: "Изменить порядок этапа",
       }[action],
       details:
-        action === "update"
-          ? `${details} Укажите хотя бы одно поле. Неуказанные поля сохраняются; пустая строка очищает краткое описание, результат или условия завершения.`
-          : details,
+        {
+          create:
+            "Создаёт этап; его ID вернётся в квитанции и plan stage list. Задачи включаются отдельно через plan stage task add.",
+          update:
+            "Укажите хотя бы одно поле. Неуказанные поля сохраняются; пустая строка очищает краткое описание, результат или условия завершения.",
+          remove:
+            "Удаляет только пустой этап. Сначала явно исключите его задачи через plan stage task remove; сами задачи сохраняются.",
+          move: "Перемещает этап перед --before <ID этапа> или в конец без этого флага. Порядок этапов не создаёт зависимостей и не сортирует задачи внутри этапа.",
+        }[action] + ` ID этапов возьмите из plan stage list. ${details}`,
       arguments: {
         ...refArgument,
         ...(action === "create" ? {} : { stage: "Внутренний ID этапа плана" }),
@@ -726,7 +745,11 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     registerPlanCommand<Options>(stageTask, runtime, {
       name: `${action} <reference> <stage>`,
       description: action === "add" ? "Включить задачи в этап" : "Исключить задачи из этапа",
-      details,
+      details:
+        (action === "add"
+          ? "Включает существующие задачи, не копии. Кандидаты и текущее участие — plan task candidates; ID этапа — plan stage list. Дети и зависимости автоматически не включаются."
+          : "Снимает только перечисленные включения, сохраняя сами задачи. Текущий состав — plan stage task list.") +
+        ` ${details}`,
       arguments: { ...refArgument, stage: "Внутренний ID этапа плана" },
       examples: [
         [
@@ -783,9 +806,9 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
   registerPlanCommand<Options>(stageTask, runtime, {
     name: "transfer <reference> <task> <targetStage>",
     description: "Явно перенести задачу между этапами или планами",
-    details,
+    details: `Аргументы по порядку: исходный план, задача, ID целевого этапа. Нужны --target-plan, исходная ревизия первого плана (--if-revision), ревизия целевого (--target-revision) и непустая причина (--reason либо --reason-file). Для переноса внутри плана укажите его же как целевой и одинаковые ревизии. ID этапов — plan stage list; участие задачи — plan task memberships. ${details}`,
     arguments: {
-      ...refArgument,
+      reference: "Ключ или ID исходного плана; его ревизия — --if-revision",
       task: "Ключ или ID задачи",
       targetStage: "Внутренний ID целевого этапа",
     },

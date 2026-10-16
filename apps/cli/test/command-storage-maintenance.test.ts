@@ -107,9 +107,9 @@ test("storage status: текущая база — current, exit 0, JSON по с�
   assert.doesNotMatch(text.stdout, /\u001b|"ok":/);
   assert.match(text.stdout, /^Хранилище актуально — перенос не требуется/);
   assert.match(text.stdout, /Статус:\s+current/);
-  assert.match(text.stdout, /Профиль данных:\s+2 → 2/);
+  assert.match(text.stdout, /Профиль данных:\s+3 → 3/);
   const hint = text.stdout.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli"));
-  assert.equal(hint, "npx @oim-dev/relay-cli --local doctor check");
+  assert.equal(hint, undefined);
   assert.deepEqual(await treeHashes(app.root), before, "status не меняет ни одного байта");
 });
 
@@ -126,10 +126,7 @@ test("storage status: формат 4 прежней версии Relay — migra
   assert.equal(text.code, 0, text.stdout);
   assert.match(text.stdout, /^Требуется перенос хранилища/);
   const commands = text.stdout.split("\n").filter((line) => line.startsWith("npx "));
-  assert.deepEqual(commands, [
-    "npx @oim-dev/relay-cli --local storage migrate --dry-run",
-    "npx @oim-dev/relay-cli --local storage migrate --backup-dir DIR --if-plan PLAN_FINGERPRINT",
-  ]);
+  assert.deepEqual(commands, ["npx @oim-dev/relay-cli --local storage migrate --dry-run"]);
   assert.deepEqual(await treeHashes(project), before);
 });
 
@@ -361,17 +358,17 @@ test("A02/A13: dry-run не меняет базу и даёт отпечаток
   assert.deepEqual(await treeHashes(app.root), current, "no-op не меняет файлы");
 });
 
-test("профиль 1 → 2: шаг profile в dry-run и результате, короткая подсказка Core, счётчики", async (t) => {
+test("профиль 1 → 3: шаг profile в dry-run и результате, короткая подсказка Core, счётчики", async (t) => {
   const project = await frozenBase(t, "physical4-v0.7.0-52c4609");
   const plan = storageMigrationPlanSchema.parse(
     successful(await invoke(project, ["--local", "storage", "migrate", "--dry-run"])).data,
   );
   assert.deepEqual(
     plan.steps.map(({ id, type }) => ({ id, type })),
-    [{ id: "profile.1-to-2", type: "profile" }],
+    [{ id: "profile.1-to-3", type: "profile" }],
   );
   const dry = await invokeRaw(project, ["--local", "storage", "migrate", "--dry-run"], human);
-  assert.match(dry.stdout, /1\. Метка профиля данных 1 → 2 \(profile\.1-to-2, версия 1\)/);
+  assert.match(dry.stdout, /1\. Метка профиля данных 1 → 3 \(profile\.1-to-3, версия 1\)/);
 
   // JSON сохраняет плейсхолдер Core, text оставляет только явно выбранный режим.
   const before = await treeHashes(project);
@@ -411,7 +408,7 @@ test("профиль 1 → 2: шаг profile в dry-run и результате,
     ).data,
   );
   assert.equal(result.migrated, true);
-  assert.deepEqual(result.profiles, { from: 1, to: 2 });
+  assert.deepEqual(result.profiles, { from: 1, to: 3 });
   assert.equal(result.steps[0]?.type, "profile");
   assert.ok(result.backup?.path.startsWith(`${backups}/`));
   const owners = Object.values(result.counts.owners);

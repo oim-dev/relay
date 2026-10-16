@@ -97,7 +97,7 @@ async function rejectedEverywhere(
 test("ТЗ 5.2: база будущего профиля с обычным WAL не восстанавливается ни одним входом", async (t) => {
   const { project, root, configPath } = await currentBase(t);
   const manifest = await readJsonFile(join(root, "storage.json"));
-  await writeJsonFile(join(root, "storage.json"), { ...manifest, dataModelVersion: 3 });
+  await writeJsonFile(join(root, "storage.json"), { ...manifest, dataModelVersion: 4 });
   const name = (await readdir(join(root, "entities/tasks"))).find((file) =>
     file.endsWith(".json"),
   )!;

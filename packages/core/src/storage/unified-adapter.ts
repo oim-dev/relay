@@ -21,6 +21,7 @@ import type { Config } from "../domain/config.js";
 import { productIdSchema } from "../domain/product.js";
 import { planningIdSchema } from "@relay/contracts/planning";
 import { releaseSnapshotEntryV1, releaseSnapshotV1 } from "./data-model/history/planning-v1.js";
+import { workHistoryCodecs } from "./work-history-codecs.js";
 
 /**
  * Инварианты снимка выпуска внутри записи: состав без повторов, записи плана — часть общего
@@ -80,6 +81,7 @@ export function workspaceStorageRegistry() {
     );
   return new EntityStorageRegistry([
     ...definitions,
+    ...workHistoryCodecs(),
     {
       // Прежний адрес этапа плана v1: ключ STG-N, ревизия, авторство и надгробия сохраняются,
       // содержание принадлежит только work-plan.stages[]. Публичной записи нет.

@@ -1,4 +1,4 @@
-import { cardText, listText, receiptText, commandText } from "./common.js";
+import { cardText, listText, receiptText } from "./common.js";
 import type { OutputField } from "./common.js";
 import { defaultTextOptions } from "./theme.js";
 import { entityDefinitions, entityKindSchema } from "@relay/contracts/entities";
@@ -161,8 +161,8 @@ export function entitiesText(
   page: EntitiesPage,
   query: object,
   options: TextOptions,
-  readCommands: string[] = [],
-  mode: "catalog" | "search" = "search",
+  _readCommands: string[] = [],
+  _mode: "catalog" | "search" = "search",
 ): string {
   const kind = "kind" in query && typeof query.kind === "string" ? query.kind : undefined;
   const titles: Record<string, string> = {
@@ -172,7 +172,6 @@ export function entitiesText(
     implementation: "Реализации требований",
     document: "Документы",
   };
-  const oneExample = mode === "catalog" || kind === "document";
   const fixedParent = kind === "scenario" && "feature" in query && !!query.feature;
   const title = (kind && titles[kind]) || "Каталог сущностей";
   const items = page.items.map((item) => ({
@@ -212,17 +211,6 @@ export function entitiesText(
         : []),
     ],
   }));
-  if (!oneExample && readCommands.length && items.length) {
-    return [
-      cardText({ title, fields: filterFields(query) }, options),
-      ...items.map((item, index) =>
-        [
-          listText({ title: "", items: [item] }, options),
-          ...(readCommands[index] ? [commandText(readCommands[index]!, options)] : []),
-        ].join("\n"),
-      ),
-    ].join("\n\n");
-  }
   return listText(
     {
       title,
@@ -232,16 +220,6 @@ export function entitiesText(
         page.total === 0
           ? `Сущностей по этим условиям нет.${"q" in query && query.q ? " Комментарии, критерии и вложенные этапы в поиск не входят." : ""}`
           : "На этой странице сущностей нет.",
-      ...(oneExample && readCommands[0] && page.items[0]
-        ? {
-            commands: [
-              {
-                label: `Прочитать ${page.items[0].key}; для другой записи замените ключ`,
-                command: readCommands[0],
-              },
-            ],
-          }
-        : {}),
     },
     options,
   );
@@ -251,7 +229,7 @@ export function entityTypesText(
   page: Page & { items: EntityType[] },
   _query: object,
   options: TextOptions,
-  commands: string[] = [],
+  _commands: string[] = [],
 ): string {
   return [
     listText(
@@ -265,10 +243,6 @@ export function entityTypesText(
         emptyMessage: "На этой странице видов нет.",
       },
       options,
-    ),
-    ...commands.map(
-      (command, index) =>
-        `Изучить ${safeText(page.items[index]!.kind)}:\n${commandText(command, options)}`,
     ),
   ].join("\n\n");
 }

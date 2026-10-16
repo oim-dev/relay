@@ -25,8 +25,8 @@ export function initializedText(
     {
       title: "✓ Проект инициализирован",
       fields: [
-        ["Конфигурация", configPath],
-        ["Хранилище", storageDir],
+        ["Конфигурация", configPath, "opaque"],
+        ["Хранилище", storageDir, "opaque"],
       ],
       commands: [
         {
@@ -118,7 +118,7 @@ export function configText(
         {
           title: "Вывод CLI",
           body: wrap(
-            `По умолчанию текст; JSON только через --format json. Лимит страницы по умолчанию: ${config.output.defaultLimit}.\noutput.format и output.maxBytes не управляют выводом CLI. Цветного ANSI нет.`,
+            `Лимит страницы по умолчанию: ${config.output.defaultLimit}.\noutput.format и output.maxBytes не управляют выводом CLI. Обычный вывод — читаемый текст без цветного ANSI.`,
             options.width,
           ),
         },
@@ -192,6 +192,7 @@ export function initializationBlockedText(
         : [],
       commands: [
         {
+          purpose: "recovery",
           label: diagnostic
             ? "Проверить хранилище без восстановления и записи"
             : "Прочитать существующий проект и пути; повторный init не нужен",
@@ -338,10 +339,6 @@ export function registrySavedText(
         fields: [
           ["Конфигурация", receipt.data.configPath],
           ["Регистраций", 0],
-          [
-            "Следующий шаг",
-            "Запустите Relay Server с этим реестром, затем подключите существующий проект через workspace project add.",
-          ],
         ],
         commands: [
           {

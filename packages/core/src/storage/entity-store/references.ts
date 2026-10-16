@@ -16,6 +16,8 @@ export type EntityReference = {
    * части целому); проверяется, если цель действующая.
    */
   readonly inverse?: string;
+  /** false требует действующую цель; по умолчанию сохранённый адрес надгробия допустим. */
+  readonly allowDeleted?: boolean;
 };
 export type EntityReferences = (data: Record<string, JsonValue>) => readonly EntityReference[];
 

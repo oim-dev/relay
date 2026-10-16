@@ -69,7 +69,7 @@ test("A02: текущая база — status current, dry-run без шагов
   const root = join(project, ".relay");
   const configPath = join(root, "config.json");
   // Новая база создаётся сразу с маркером текущего профиля.
-  assert.equal((await readJsonFile(join(root, "storage.json"))).dataModelVersion, 2);
+  assert.equal((await readJsonFile(join(root, "storage.json"))).dataModelVersion, 3);
   const before = await treeHashes(project);
   assert.equal((await inspectStorage({ configPath })).status, "current");
   const plan = await planStorageMigration({ configPath });
@@ -110,9 +110,9 @@ test("A05/A13/A17/A23: формат 4 с планированием v1 — dry-r
   assert.equal(plan.applicable, true, JSON.stringify(plan.blockers));
   assert.deepEqual(
     plan.steps.map((step) => `${step.id}@${step.version}`),
-    ["planning-v1-to-v2@1", "profile.1-to-2@1"],
+    ["planning-v1-to-v2@1", "profile.1-to-3@1"],
   );
-  assert.deepEqual(plan.profiles, { from: 1, to: 2 });
+  assert.deepEqual(plan.profiles, { from: 1, to: 3 });
   assert.ok(plan.changes.relations.revoked > 0 && plan.changes.relations.created > 0);
   assert.ok(plan.changes.addresses.relocated > 0);
   assert.ok(plan.budgets.walBytes > 0 && plan.space.backupRequired > plan.budgets.backupBytes);
@@ -185,7 +185,7 @@ test("A05/A13/A17/A23: формат 4 с планированием v1 — dry-r
   assert.ok(!manifest.files.some((file) => file.path.startsWith("runtime/write.lock")));
   assert.equal(
     (await readJsonFile(join(root, "storage.json"))).dataModelVersion,
-    2,
+    3,
     "последним опубликован маркер целевого профиля",
   );
   assert.equal((await inspectPending(root)).kind, "none", "WAL удалён после публикации");
@@ -262,7 +262,7 @@ test("A25 (Core): после миграции работают CAS-обновл�
   // Переход только маркера — явный шаг плана и результата.
   assert.deepEqual(
     markerPlan.steps.map((step) => [step.id, step.type]),
-    [["profile.1-to-2", "profile"]],
+    [["profile.1-to-3", "profile"]],
   );
   assert.deepEqual(result.steps, markerPlan.steps);
   // План и результат совпадают с фактическими изменениями файлов по хешам дерева.

@@ -507,6 +507,11 @@ export class EntityStore {
           { path },
         );
       const snapshot = new StorageSession(this, structuredClone(EMPTY_STATE), true);
+      const referenceOwners = new Map<
+        string,
+        { live: boolean; path: string; refs: readonly import("./references.js").EntityReference[] }
+      >();
+      const ownIndexKeys = new Map<string, string>();
       let entities = 0,
         tombstones = 0,
         operations = 0;
@@ -539,11 +544,57 @@ export class EntityStore {
             "Запись находится на чужом ID-пути",
             5,
           );
+          const address = entityAddress(refOf(record));
+          const live = !("deleted" in record);
+          const refs = live
+            ? (definition.references?.(record.data) ?? []).filter(
+                (ref) => ref.id !== null && ref.id !== undefined,
+              )
+            : [];
+          referenceOwners.set(address, { live, path, refs });
+          if (live)
+            for (const item of definition.indexes?.(this.registry.decode(record)) ?? []) {
+              const indexKey = `${item.index}\0${item.key}`;
+              const holder = ownIndexKeys.get(indexKey);
+              invariant(
+                holder === undefined || holder === address,
+                "STORAGE_ADDRESS_COLLISION",
+                "Собственный индексный ключ принадлежит двум записям",
+                5,
+                { path },
+              );
+              ownIndexKeys.set(indexKey, address);
+            }
           await snapshot.indexRecord(record);
           if ("deleted" in record) tombstones++;
           else entities++;
         }
       }
+      // Предметные ссылки проверяются до публикации индексов; reindex не исправляет
+      // потерянного владельца и не превращает внутреннюю ссылку истории в надгробие.
+      const linked = new Set<string>();
+      for (const [address, owner] of referenceOwners)
+        for (const ref of owner.refs)
+          linked.add(`${address}\0${ref.field}\0${ref.kind}:${String(ref.id)}`);
+      for (const [address, owner] of referenceOwners)
+        for (const ref of owner.refs) {
+          const target = referenceOwners.get(`${ref.kind}:${String(ref.id)}`);
+          invariant(
+            target && (ref.allowDeleted !== false || target.live),
+            "STORAGE_REFERENCE_BROKEN",
+            "Предметная ссылка указывает на отсутствующую или недопустимую удалённую запись",
+            5,
+            { path: owner.path, field: ref.field },
+          );
+          if (ref.inverse !== undefined && target.live)
+            invariant(
+              linked.has(`${ref.kind}:${String(ref.id)}\0${ref.inverse}\0${address}`),
+              "STORAGE_REFERENCE_BROKEN",
+              "Предметная ссылка не подтверждена обратной ссылкой",
+              5,
+              { path: owner.path, field: ref.field },
+            );
+        }
       this.metrics.directoryReads++;
       for (const filename of await jsonFiles(join(this.root, "keyspaces"))) {
         const path = `keyspaces/${filename}`;

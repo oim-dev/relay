@@ -1,0 +1,102 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: var(--tasks-surface);
+  color: var(--tasks-ink);
+  overflow-wrap: anywhere;
+
+  @media (--md) {
+    height: min(52rem, calc(100dvh - 3rem));
+    max-height: calc(100dvh - 3rem);
+  }
+}
+
+.header {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.25rem var(--mantine-spacing-xs);
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--tasks-border);
+  background: var(--tasks-surface);
+}
+
+.windowTitle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.agentIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--tasks-accent-subtle);
+  color: var(--tasks-accent-ink);
+}
+
+.workTitle {
+  flex-basis: 100%;
+  min-width: 0;
+  min-height: 1.125rem;
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.navigationButton {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
+.closeButton {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.navigation {
+  flex-shrink: 0;
+  max-height: 45%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--tasks-border);
+  background: var(--tasks-surface-quiet);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 1.25rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+
+  @media (--md) {
+    padding: 1.75rem 2rem 2rem;
+  }
+}
+
+.pending {
+  display: grid;
+  gap: var(--mantine-spacing-lg);
+  color: var(--tasks-muted);
+}
+
+.error {
+  margin-bottom: var(--mantine-spacing-lg);
+  color: var(--tasks-danger);
+}

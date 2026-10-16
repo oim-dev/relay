@@ -158,6 +158,16 @@
   --tasks-blocked: var(--tasks-danger);
   --tasks-chart-track: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
   --tasks-chart-grid: var(--tasks-border);
+  /* Линии истории: стабильные цвета веток, различимые на обеих поверхностях графа. */
+  --tasks-history-axis: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+  --tasks-history-lane-1: var(--tasks-accent);
+  --tasks-history-lane-2: light-dark(var(--mantine-color-teal-8), var(--mantine-color-teal-4));
+  --tasks-history-lane-3: light-dark(var(--mantine-color-grape-8), var(--mantine-color-grape-4));
+  --tasks-history-lane-4: light-dark(var(--mantine-color-orange-8), var(--mantine-color-orange-4));
+  --tasks-history-lane-5: light-dark(var(--mantine-color-cyan-8), var(--mantine-color-cyan-4));
+  --tasks-history-lane-6: light-dark(var(--mantine-color-pink-8), var(--mantine-color-pink-4));
+  --tasks-history-lane-7: light-dark(var(--mantine-color-lime-9), var(--mantine-color-lime-4));
+  --tasks-history-lane-8: light-dark(var(--mantine-color-blue-8), var(--mantine-color-blue-4));
   /*
    * Акцентные полосы прогресса и величин (Progress variant="accent"): заливка ≥3:1
    * с дорожкой и с поверхностью, дорожка — сплошной спокойный тон акцента.

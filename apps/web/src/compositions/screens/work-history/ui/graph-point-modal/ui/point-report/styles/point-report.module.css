@@ -1,0 +1,98 @@
+.root {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.header {
+  margin-bottom: 1.5rem;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1rem;
+  margin: 0 0 0.75rem;
+  color: var(--tasks-muted);
+  font-size: 0.8125rem;
+}
+
+.kind {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--tasks-accent-subtle);
+  color: var(--tasks-accent-ink);
+  font-weight: 600;
+}
+
+.explanation {
+  margin: 0 0 1rem;
+  color: var(--tasks-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.375rem;
+  line-height: 1.4;
+  text-wrap: pretty;
+
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 4px;
+  }
+
+  @media (--md) {
+    font-size: 1.625rem;
+  }
+}
+
+.summary {
+  margin: 0 0 1.5rem;
+  padding: 1rem;
+  border-left: 3px solid var(--tasks-accent);
+  border-radius: 0 var(--mantine-radius-sm) var(--mantine-radius-sm) 0;
+  background: var(--tasks-accent-subtle);
+  white-space: pre-wrap;
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.material {
+  margin-top: 1.5rem;
+}
+
+.materialTitle {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.markdown {
+  font-size: 1rem;
+  line-height: 1.75;
+
+  & :where(table) {
+    overflow-wrap: normal;
+  }
+
+  & :where(th, td) {
+    min-width: 7rem;
+  }
+
+  & :where(pre) {
+    white-space: pre;
+    overflow-wrap: normal;
+  }
+
+  & :where(pre, table):focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 3px;
+  }
+}
+
+.empty {
+  color: var(--tasks-muted);
+  font-size: 0.875rem;
+}

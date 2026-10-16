@@ -35,6 +35,8 @@ export type RecordFacts = {
   readonly refs: readonly RecordReference[];
   /** Комментарии задачи без повторов ID/номеров и без разрыва последовательности. */
   readonly commentsConsistent: boolean;
+  /** Собственные уникальные индексные ключи технических владельцев, без содержания значений. */
+  readonly indexKeys?: readonly { readonly index: string; readonly key: string }[];
 };
 
 export type IntegrityInput = {
@@ -76,6 +78,14 @@ export function recordFacts(
       : [],
     refs: recordReferences(record, registry.storage),
     commentsConsistent,
+    indexKeys:
+      live && registry.catalog.entry(record.kind)?.codec?.dataVersion === record.dataVersion
+        ? (
+            registry.catalog
+              .entry(record.kind)
+              ?.codec?.indexes?.(registry.storage.decode(record)) ?? []
+          ).map(({ index, key }) => ({ index, key }))
+        : [],
   };
 }
 
@@ -116,6 +126,19 @@ export function integrityBlockers(
         );
       else owners.set(value, address);
     }
+    for (const { index, key } of record.indexKeys ?? []) {
+      const value = `index:${index}\0${key}`;
+      const other = owners.get(value);
+      if (other !== undefined && other !== address)
+        blockers.push(
+          sourceBlocker(
+            "STORAGE_ADDRESS_COLLISION",
+            "Собственный индексный ключ принадлежит двум записям",
+            { path: record.path, owner: record.kind, id: short(record.id) },
+          ),
+        );
+      else owners.set(value, address);
+    }
     if (!record.commentsConsistent)
       blockers.push(
         sourceBlocker(
@@ -136,11 +159,11 @@ export function integrityBlockers(
     for (const ref of record.refs) {
       if (input.unreadable?.has(`${ref.kind}:${ref.id}`)) continue;
       const target = byAddress.get(`${ref.kind}:${ref.id}`);
-      if (!target) {
+      if (!target || (ref.allowDeleted === false && !target.live)) {
         blockers.push(
           sourceBlocker(
             "STORAGE_REFERENCE_BROKEN",
-            `Поле ${ref.field} ссылается на отсутствующую запись вида ${ref.kind}`,
+            `Поле ${ref.field} ссылается на отсутствующую или недопустимую удалённую запись вида ${ref.kind}`,
             { path: record.path, owner: record.kind, id: short(record.id) },
           ),
         );

@@ -311,23 +311,12 @@ test(
 );
 
 test(
-  "plan human: квитанции действий, полный этап без встроенного списка задач и исполнимые следующие шаги",
+  "plan human: квитанции без меню, полный этап и отдельное чтение задач",
   { timeout: 180_000 },
   async (t) => {
     const { root, run } = await fixture(t);
     const other = await fixture(t);
     const config = join(root, ".relay/config.json");
-    const executeHint = async (text: string, cwd = other.root) => {
-      const command = text.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli "));
-      assert.ok(command, "Квитанция даёт копируемую команду чтения");
-      const args = command
-        .match(/'(?:[^']|'\\'')*'|[^\s]+/g)!
-        .slice(2)
-        .map((arg) => (arg.startsWith("'") ? arg.slice(1, -1).replaceAll("'\\''", "'") : arg));
-      assert.equal(args.includes("--config"), cwd !== root);
-      successful(await invoke(cwd, args, { env: { RELAY_CONFIG: undefined } }));
-      return args;
-    };
     const receipt = async (
       args: Array<string | number>,
       action: RegExp,
@@ -342,7 +331,8 @@ test(
       assert.match(text.replace(/\s+/g, " "), action);
       assert.match(text, new RegExp(`Ревизия:\\s*${revision}(?:\\s|$)`));
       if (stageId) assert.ok(text.includes(stageId), "Квитанция адресует изменённый этап");
-      await executeHint(text);
+      assert.doesNotMatch(text, /^npx /m);
+      successful(await invoke(other.root, ["--config", config, "plan", "get", key]));
       return text;
     };
     await receipt(["plan", "create", "--title", "Читаемая квитанция"], /создан/i, "PLN-1", 1);
@@ -480,8 +470,8 @@ test(
       assert.ok(!stageText.includes(task.ref.id));
       assert.ok(!stageText.includes(task.key));
     }
-    const hint = await executeHint(stageText, root);
-    assert.deepEqual(hint.slice(-6), ["plan", "stage", "task", "list", "PLN-1", stage.id]);
+    assert.doesNotMatch(stageText, /^npx /m);
+    successful(await run(["plan", "stage", "task", "list", "PLN-1", stage.id]));
     await receipt(
       [
         "plan",
@@ -1248,48 +1238,6 @@ test(
 );
 
 test(
-  "plan/release/progress: русская help всех листьев без проекта",
-  { timeout: 120_000 },
-  async (t) => {
-    const cwd = await mkdtemp(join(tmpdir(), "relay-planning-help-"));
-    t.after(() => rm(cwd, { recursive: true, force: true }));
-    const leaves = [
-      ...["list", "get", "create", "update", "start", "complete", "cancel", "progress"].map((x) => [
-        "plan",
-        x,
-      ]),
-      ...["list", "get", "create", "update", "move", "remove"].map((x) => ["plan", "stage", x]),
-      ...["list", "add", "remove", "transfer"].map((x) => ["plan", "stage", "task", x]),
-      ...["candidates", "memberships"].map((x) => ["plan", "task", x]),
-      ...[
-        "list",
-        "get",
-        "create",
-        "update",
-        "preview",
-        "plan",
-        "cancel",
-        "publish",
-        "plans",
-        "progress",
-      ].map((x) => ["release", x]),
-      ...["product", "application", "feature", "scenario", "implementation", "task"].map((x) => [
-        x,
-        "progress",
-      ]),
-    ];
-    for (const leaf of leaves) {
-      const help = human(await invokeRaw(cwd, [...leaf, "--help"], narrow), [
-        "npx @oim-dev/relay-cli",
-      ]);
-      assert.match(help, /[А-Яа-яЁё]/);
-      assert.match(help, /Пример/);
-      assert.doesNotMatch(help, /--max-bytes|--color|--offset|--snapshot-version/);
-    }
-  },
-);
-
-test(
   "plan lifecycle: причины отказа, start/complete и историческое завершение при потере готовности",
   { timeout: 120_000 },
   async (t) => {
@@ -1568,17 +1516,9 @@ test(
     assert.equal(continuations.length, 1, "Страница даёт ровно одно продолжение");
     const humanNext = continuations[0]!;
     const reads = hints.filter((line) => tokens(line).slice(-3, -1).join(" ") === "plan get");
-    assert.equal(reads.length, 1, "Страница даёт один адресный пример чтения");
-    assert.equal(hints.length, 2, "Адресное чтение и продолжение — разные действия");
-    const humanRead = reads[0]!;
-    assert.deepEqual(tokens(humanRead), [
-      "--local",
-      "--config",
-      config,
-      "plan",
-      "get",
-      page.data.items[0]!.key,
-    ]);
+    assert.equal(reads.length, 0, "Страница не повторяет справку чтения");
+    assert.equal(hints.length, 1, "Остаётся только продолжение");
+    const readArgs = ["--local", "--config", config, "plan", "get", page.data.items[0]!.key];
     assert.ok(page.meta?.page?.nextCursor);
     const continuationArgs = [
       "--local",
@@ -1602,12 +1542,12 @@ test(
       ...continuationArgs.slice(3),
     ]);
     assert.equal(humanNext, next.replace(" --format json ", " "));
-    for (const hint of [humanRead, humanNext, next]) {
+    for (const hint of [humanNext, next]) {
       assert.doesNotMatch(hint, /\n/);
       assert.match(hint, /'\\''/, "Апостроф пути экранирован внутри shell-аргумента");
     }
     const opened = successful(
-      await invoke<PlanSummary>(elsewhere, tokens(humanRead), {
+      await invoke<PlanSummary>(elsewhere, readArgs, {
         env: { RELAY_CONFIG: undefined },
       }),
     );

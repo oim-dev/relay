@@ -1,0 +1,14 @@
+.root {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+
+  &[data-worker="true"] {
+    stroke-dasharray: 5 5;
+  }
+}
+
+.arrow {
+  stroke-linecap: butt;
+  fill: none;
+}

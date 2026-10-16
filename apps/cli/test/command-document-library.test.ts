@@ -143,7 +143,8 @@ for (const transport of ["local", "HTTP"] as const)
       checkWire("GET");
       assert.match(human.stdout, /Прикрепления DOC-/);
       assert.match(human.stdout, /## Пояснение/);
-      assert.ok(hints(human.stdout).some((line) => line.endsWith(`feature get ${feature.key}`)));
+      assert.equal(hints(human.stdout).length, 1);
+      assert.match(hints(human.stdout)[0]!, /--cursor /);
       assert.doesNotMatch(human.stdout, /BODY-НЕ-СТРАНИЦА|\u001b/);
     }
     const description = "\n## Новое пояснение\n\n  Отступ 雪\n\n";
@@ -530,8 +531,7 @@ test("document library HTTP: прежняя цель plan-stage и отсутс�
   assert.equal(oldTarget.code, 0, oldTarget.stdout);
   assert.match(oldTarget.stdout, /plan-stage:legacy-stage/);
   assert.match(oldTarget.stdout, /Историческое прикрепление/);
-  assert.equal(hints(oldTarget.stdout).length, 1);
-  assert.match(hints(oldTarget.stdout)[0]!, /inspect graph list/);
+  assert.deepEqual(hints(oldTarget.stdout), []);
   mode = "capability";
   for (const args of [
     ["document", "links", document.key],

@@ -15,6 +15,7 @@
 - [Продукт и документы](#продукт-реализации-и-документы)
 - [Доски и задачи](#доски-задачи-критерии-и-комментарии)
 - [Планы](#планы-и-этапы) и [релизы](#релизы)
+- [История работы агентов](#история-работы-агентов)
 - [Прогресс](#прогресс)
 - [Граф и контекст](#граф-и-контекст)
 - [Страницы и полнота](#страницы-и-полнота)
@@ -119,7 +120,7 @@ API отдаётся с `Cache-Control: no-store`. Listener — loopback; раз
 до выбора проекта. Это перечень возможностей **серверного каталога**, не замена
 проектного `/context`. Последний также объявляет capability каталога и предметные
 `relay-product-queries-v1`, `relay-work-read-models-v1`, `relay-release-refs-v1`,
-`relay-entity-search-v2`.
+`relay-entity-search-v2`, `relay-work-history-v1`, `relay-work-history-graph-v2`.
 
 `GET /projects/page` (`getProjectCatalogPage`) принимает offset (default 0), limit
 (1–100, default 20) и optional version. Ответ: `catalog`, `total`, `nextOffset`,
@@ -307,9 +308,17 @@ query-параметров. Смысл показателей, подборок 
 - `generatedAt` — время формирования ответа;
 - `snapshot` — `project`, `passport` (`state`: `missing`, `filled` или `no-summary`
   с `excerpt`), `knowledge`, `boards`, `tasks`, `attention`, `documents`, `plans`,
-  `releases`, `operator`. Подборки имеют форму `{total, shown, hasMore, items}`,
+  `releases`, `operator`, `sessions`. Подборки имеют форму `{total, shown, hasMore, items}`,
   `items` — не более 5. `operator` — метрики оператора M-01…M-06 (очередь проверки,
   влияние блокеров, работа вне планов, доски, планы и подготовка выпуска).
+
+`snapshot.sessions` содержит `total`, `latest` (карточка либо null) и `unfinished`
+с полным числом `pending/open/paused` и подборкой до пяти веток. Карточка —
+`id`, `key`, `title`, `status`, `parent: {id,key} | null`, `lastEvent: {kind,at,sequence}`.
+Последняя сессия выбирается по последнему событию; незавершённые учитываются независимо
+от давности и состояния последней сессии. Порядок — время события, затем ID по убыванию.
+Большие материалы, оператор и Git не передаются. Полный список — `/work-history/sessions`
+с `unfinished=true`; это самостоятельное чтение текущих данных.
 
 Все части ответа читаются одним согласованным чтением Core без записи. Ошибка любого
 источника возвращается ошибкой запроса, а не нулевыми счётчиками. Ответ не версионирует
@@ -317,11 +326,11 @@ query-параметров. Смысл показателей, подборок 
 первого и повторного чтения. Local и scoped-путь возвращают одинаковый результат.
 
 `ProductOverview` дополнен обязательными полями `snapshotVersion`, `generatedAt`, `snapshot`
-и `snapshot.operator`. Для клиентов со строгой проверкой ответа это согласованное
+и `snapshot.operator`, `snapshot.sessions`. Для клиентов со строгой проверкой ответа это согласованное
 несовместимое изменение: Server, CLI, MCP и Web выпускаются и обновляются одной версией
 монорепозитория. Прежний клиент на новом сервере получает `INVALID_SERVER_RESPONSE`.
 Если HTTP Backend CLI/MCP получает обзор прежнего сервера без `snapshot` или без
-`snapshot.operator`, он возвращает `SERVER_INCOMPATIBLE` (exit 5) с просьбой обновить
+`snapshot.operator` или `snapshot.sessions`, он возвращает `SERVER_INCOMPATIBLE` (exit 5) с просьбой обновить
 и перезапустить Relay Server той же версии.
 
 ### Детализация метрик оператора
@@ -353,7 +362,7 @@ query-параметров. Смысл показателей, подборок 
 
 Продолжение защищено версией полного среза, а не продуктовой `version`. Курсор связан
 с проектом, метрикой и блокером. Если между страницами изменились задачи, этапы, планы,
-релизы, доски, документы или продукт либо `version` не совпадает с текущим срезом,
+релизы, доски, документы, продукт или история сессий либо `version` не совпадает с текущим срезом,
 ответ — `VERSION_CONFLICT` (409, exit 4): перечитайте обзор и начните детализацию
 с первой страницы. Ошибки: `UNKNOWN_METRIC` и `INVALID_ARGUMENT` (неуместный или
 отсутствующий `blocker`) — 400, `VALIDATION_ERROR` для неверного query, `INVALID_CURSOR`
@@ -448,6 +457,139 @@ exitCode 2, совместимый с прежними командами биб
 автора/роль и не меняет ревизию содержания задачи. Редактирования/удаления опубликованного
 комментария нет. После потери ответа повтор публикации может создать новое сообщение.
 Для целей, зависимостей и родительства используйте предметные операции, не POST графа.
+
+## История работы агентов
+
+Переносимые поля и предметные операции определены в
+[Contracts](../../contracts/docs/API.md#история-работы-агентов). Это явные ветки работы,
+участия агентов и неизменяемые материалы checkpoints, не автоматический аудит команд.
+Существующие CRUD-операции не добавляют записи истории. Активное участие не означает online.
+
+Все адреса ниже имеют также префикс `/projects/:project`, а operationId — суффикс
+`ForProject`. `/context` объявляет `relay-work-history-v1`. HTTP Backend проверяет
+его перед **каждым методом** `workHistory`: без capability — `UNSUPPORTED` (exit 5),
+без запроса к отсутствующему маршруту и без local/full-read fallback.
+
+| Метод и путь                              | OperationId; вход → данные ответа                                           |
+| ----------------------------------------- | --------------------------------------------------------------------------- |
+| `GET /work-history/sessions`              | `listWorkSessions`; `WorkSessionsQuery` → `WorkSessionsPage`                |
+| `GET /work-history/sessions/:ref`         | `getWorkSession` → `WorkSessionDetail`                                      |
+| `GET /work-history/sessions/:ref/tree`    | `getWorkSessionTree`; `WorkHistoryPageQuery` → `WorkTreePage`               |
+| `GET /work-history/sessions/:ref/history` | `getWorkSessionHistory`; `WorkHistoryQuery` → `WorkHistoryPage`             |
+| `GET /work-history/history`               | `getWorkHistory`; `WorkHistoryQuery` → `WorkHistoryPage` всего проекта      |
+| `GET /work-history/sessions/:ref/context` | `getWorkSessionContext`; `WorkHistoryPageQuery` → `WorkContext`             |
+| `GET /work-history/checkpoints/:ref`      | `getWorkCheckpoint` → полный `WorkCheckpoint`                               |
+| `GET /work-history/sessions/:ref/intents` | `getWorkSessionOpenIntents`; `WorkOpenIntentsQuery` → `WorkOpenIntentsPage` |
+| `POST /work-history/sessions/start`       | `startWorkSession`; `WorkSessionStart`                                      |
+| `POST /work-history/sessions/fork`        | `forkWorkSession`; `WorkSessionFork`                                        |
+| `POST /work-history/sessions/attach`      | `attachWorkSession`; `WorkSessionAttach`                                    |
+| `POST /work-history/sessions/pause`       | `pauseWorkSession`; `WorkSessionPause`                                      |
+| `POST /work-history/sessions/resume`      | `resumeWorkSession`; `WorkSessionResume`                                    |
+| `POST /work-history/sessions/takeover`    | `takeoverWorkSession`; `WorkSessionTakeover`                                |
+| `POST /work-history/sessions/complete`    | `completeWorkSession`; `WorkSessionComplete`                                |
+| `POST /work-history/sessions/cancel`      | `cancelWorkSession`; `WorkSessionCancel`                                    |
+| `POST /work-history/checkpoints/open`     | `openWorkCheckpoint`; `WorkCheckpointOpen`                                  |
+| `POST /work-history/checkpoints/save`     | `saveWorkCheckpoint`; `WorkCheckpointSave`                                  |
+| `POST /work-history/checkpoints/complete` | `completeWorkCheckpoint`; `WorkCheckpointComplete`                          |
+| `POST /work-history/checkpoints/cancel`   | `cancelWorkCheckpoint`; `WorkCheckpointCancel`                              |
+
+Каждый POST принимает **весь объект ввода в JSON-теле** и возвращает `WorkHistoryMutation`
+с HTTP 200. При fork поле `ref` адресует исходный **intent**, а `ifRevision` — его
+родительскую ветку; ответ содержит обновлённого родителя и pending-ребёнка без run.
+Остальные значения ref, CAS и runId определены соответствующей схемой. `actor` тела
+приоритетнее автора вызова; это атрибуция, не авторизация. Мутации автоматически не
+повторяются даже при потере ответа: сначала перечитайте ветку и историю.
+
+Ключи `S-…`, `RUN-…`, `CP-…` содержат случайный token, не порядковый номер;
+адреса в URL кодируются как обычные сегменты. Поля подключения `operator` и `git`
+передаются клиентом и сохраняются в run. Сервер не читает собственный Git для определения
+человека или рабочей ветки клиента. Отсутствующие сведения возвращаются как null;
+наследование operator при attach без явного значения выполняет Core.
+
+Query страниц: `offset=0`, `limit=20` по умолчанию, максимум 100, optional `version`.
+Продолжение использует исходную version и те же фильтры; `VERSION_CONFLICT` (409)
+требует начать заново. Это guard текущего состояния, не исторический снимок.
+`total`, `nextOffset` и счётчики дерева относятся к полному выбранному составу.
+Карточка, checkpoint и материалы выбранной страницы сохраняют полный Markdown.
+
+Список и узлы дерева содержат `WorkSessionOverview`: собственные `counts`, компактное
+последнее участие `latestRun` с operator/git (также у закрытой ветки), `acceptance`
+с адресом первого явного принятия родителем либо null. Detail тоже возвращает
+`latestRun` и `acceptance`. Поле списка `projectTotals` относится ко **всему проекту**,
+независимо от фильтра; `total` — только к выбранным веткам.
+Открытые намерения читаются отдельным `/sessions/:ref/intents`, без загрузки всей
+истории. Query принимает `includeChildren` (default false) и обычные страницы;
+items содержит только открытые intent с полным материалом. После result/cancel
+намерение исчезает из этой выборки; progress не закрывает его.
+
+В списке доступны `unfinished`, `status`, `parent`, `actor`, `q`. `parent=null`
+в URL — буквальная строка для выбора только корней; отсутствие parent выбирает все
+ветки. В Backend это `parent: null`. `unfinished=false` выбирает закрытые ветки,
+`unfinished=true` — незакрытые. У истории `includeChildren=false` сохраняет только
+выбранную ветку; `true` добавляет всех потомков. Boolean query принимают только
+`true`/`false`, не `0`, `1` или truthy-строки. `order=asc|desc` и `kind` управляют
+хронологией. Проектный `/history` не принимает ref: ветка выбирается путём.
+Context содержит полную карточку и ограниченную страницу собственной истории;
+продолжение выполняется тем же `/context` с исходной version.
+
+Обычный [SSE](#sse) уведомляет об изменениях всех трёх коллекций, включая публикации
+через local Backend/CLI. Событие не содержит результата записи и не заменяет повторное
+чтение после переподключения.
+
+### Граф истории и адресная точка
+
+Отдельные read-only операции не меняют прежний Backend `workHistory` и его фильтры.
+Схемы принадлежат `@relay/contracts/work-history-graph`; сервер проверяет весь ответ,
+включая согласованность концов связей и таблиц авторских участий.
+
+| Метод и путь                          | OperationId; вход → данные ответа                                                        |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET /work-history/graph`             | `getWorkHistoryGraph`; `WorkHistoryGraphQuery` → `WorkHistoryGraphPage`                  |
+| `GET /work-history/graph/points/:ref` | `getWorkHistoryGraphPoint`; `WorkHistoryGraphPointQuery` → `WorkHistoryGraphPointDetail` |
+
+Обе операции имеют scoped-копии `/projects/:project/...` с суффиксом `ForProject`.
+Выбранный `/context` объявляет отдельную capability `relay-work-history-graph-v2`.
+Потребитель проверяет её до чтения графа: отсутствие не разрешает заменять граф
+старой историей или автоматически переходить к local. SDK сам не выполняет discovery.
+Прежняя `relay-work-history-graph-v1` не объявляется: адресация линий через
+`fromSessionId`/`toSessionId` и замыкание cancelled несовместимы с прежними рёбрами.
+Версии страниц имеют префикс `work-graph-v2:`; старый guard требует начать чтение заново.
+
+Без ref читается timeline всего проекта. Query допускает только optional `ref`
+ветки, `includeChildren` (default true), `order` (default desc), `offset` (default 0),
+`limit` (default 50, максимум 100) и optional `version`. Boolean — только буквальные
+`true`/`false`. Фильтров q/status/actor здесь нет. При продолжении передайте исходную
+version; `VERSION_CONFLICT` требует нового чтения, а не склейки разных состояний.
+
+`items` содержит компактные точки без полных Markdown. `sequence` связывает узлы
+`from`/`to` из items либо `boundaryNodes` и может пересекать окно страницы между
+двумя границами before/after без видимого endpoint. Остальные связи используют видимую
+точку создания/закрытия и линию родителя либо ось проекта:
+
+- `fork: {fromSessionId, to}` — линия настоящего родителя → создание ребёнка на
+  сохранённом времени **ребёнка**. `originCheckpointId` остаётся контекстом поручения,
+  но давний intent не задаёт временную координату линии fork;
+- `branch-end: {from, toSessionId}` — закрытие completed **или cancelled** ребёнка →
+  линия настоящего родителя на времени закрытия, без ожидания explicit acceptance;
+- `root-start: {from: null, to}` и `root-end: {from, to: null}` связывают настоящий
+  корень с осью проекта; root-end возвращает как completed-, так и cancelled-корень.
+
+`fromSessionId`/`toSessionId` разрешаются через `branches`, а не таблицу узлов.
+Дочерний scope не становится корнем. Explicit acceptance сохраняет прежние предметные
+правила и checkpoint, но **не является графовым ребром**. Замыкание линии не означает
+принятия результата или успешного выполнения отменённой работы. Проекция производна:
+никаких дополнительных событий, фиктивных точек родителя и записей при чтении нет.
+`openEnds` содержит последние реальные точки всех незавершённых веток выбранной области,
+включая ветки вне страницы, без выдуманных событий «сейчас» и без прибавки к total.
+Компактные `branches`/`runs` обеспечивают контекст points, границ, линий родителей и открытых окончаний;
+полные поручения, результаты, причины, checkpoint.body и остальные большие поля не передаются.
+
+`:ref` точки — URL-кодированный производный node ID (`ID:created`, `ID:closed`,
+`ID:started`, `ID:ended`, `ID:checkpoint`); для прежних ссылок принимаются CP-key,
+сырой checkpoint ID и `work-checkpoint:ID`. Ответ содержит полные материалы **одной**
+точки: session, авторский run, компактный previousRun и checkpoint либо null для lifecycle.
+Авторство, operator/git относятся к сохранённому run этой точки, не к current/latest
+ветки. Server не вычисляет атрибуцию из собственной Git-конфигурации.
 
 ## Планы и этапы
 

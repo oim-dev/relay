@@ -1,0 +1,90 @@
+{
+  "sha": "3dc1189479e7c479f4bf8a973d8ccd685a0953b5",
+  "tag": null,
+  "generator": "generators/generate-profile2.mts",
+  "bundle": {
+    "sha256": "43fda4cf835d09f6bd75fb827ff83bdbb14f741abb85c45f72321383abbd4a56",
+    "bytes": 4858
+  },
+  "files": 27,
+  "directories": 29,
+  "emptyDirectories": [
+    ".relay/.indexes/segments/2d",
+    ".relay/.indexes/segments/34",
+    ".relay/.indexes/segments/67",
+    ".relay/.indexes/segments/6d",
+    ".relay/.indexes/segments/c3",
+    ".relay/.indexes/segments/ce"
+  ],
+  "totalBytes": 16068,
+  "filesByTopLevel": {
+    ".relay/.indexes": 11,
+    ".relay/config.json": 1,
+    ".relay/entities": 5,
+    ".relay/keyspaces": 5,
+    ".relay/relations": 2,
+    ".relay/runtime": 1,
+    ".relay/storage.json": 1,
+    ".relay/transactions": 1
+  },
+  "entityCollections": {
+    "boards": {
+      "records": 2,
+      "tombstones": 0,
+      "kinds": {
+        "board": 2
+      },
+      "schemaVersions": {
+        "3": 2
+      },
+      "dataVersions": {
+        "1": 2
+      }
+    },
+    "products": {
+      "records": 1,
+      "tombstones": 0,
+      "kinds": {
+        "product": 1
+      },
+      "schemaVersions": {
+        "3": 1
+      },
+      "dataVersions": {
+        "1": 1
+      }
+    },
+    "projects": {
+      "records": 1,
+      "tombstones": 0,
+      "kinds": {
+        "project": 1
+      },
+      "schemaVersions": {
+        "3": 1
+      },
+      "dataVersions": {
+        "1": 1
+      }
+    },
+    "tasks": {
+      "records": 1,
+      "tombstones": 0,
+      "kinds": {
+        "task": 1
+      },
+      "schemaVersions": {
+        "3": 1
+      },
+      "dataVersions": {
+        "1": 1
+      }
+    }
+  },
+  "manifest": {
+    "format": "relay-entities",
+    "schemaVersion": 4,
+    "productId": "weA3C2or",
+    "dataModelVersion": 2
+  }
+}

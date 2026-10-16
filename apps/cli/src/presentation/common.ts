@@ -16,12 +16,26 @@ export interface OutputSection {
 export interface OutputCommand {
   label: string;
   command: string;
+  /** Навигационные команды без назначения остаются метаданными, а не подсказками text. */
+  purpose?: "continuation" | "recovery" | "confirmation";
 }
 
 function outputWidth(options: TextOptions): number {
   return Number.isFinite(options.width)
     ? Math.max(24, Math.min(160, Math.floor(options.width)))
     : 100;
+}
+
+/** Опциональный адрес заголовка копируется целиком; название переносится независимо. */
+function headingText(title: string, options: TextOptions, opaqueKey?: string): string {
+  return [
+    opaqueKey === undefined
+      ? ""
+      : safeText(opaqueKey).replaceAll("\n", "\\n").replaceAll("\r", "\\r"),
+    wrap(safeText(title), outputWidth(options)),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function metadata(fields: readonly OutputField[], options: TextOptions): string {
@@ -60,7 +74,7 @@ function metadata(fields: readonly OutputField[], options: TextOptions): string 
 
 function commandsText(commands: readonly OutputCommand[], options: TextOptions): string {
   return commands
-    .filter(({ command }) => command.trim())
+    .filter(({ command, purpose }) => purpose !== undefined && command.trim())
     .map(
       ({ label, command }) =>
         `${wrap(safeText(label), outputWidth(options))}\n${commandText(command, options)}`,
@@ -80,6 +94,7 @@ export function actionsText(commands: readonly OutputCommand[], options: TextOpt
 export function cardText(
   input: {
     title: string;
+    opaqueKey?: string;
     fields?: readonly OutputField[];
     sections?: readonly OutputSection[];
     commands?: readonly OutputCommand[];
@@ -87,7 +102,7 @@ export function cardText(
   options: TextOptions,
 ): string {
   return [
-    wrap(safeText(input.title), outputWidth(options)),
+    headingText(input.title, options, input.opaqueKey),
     metadata(input.fields ?? [], options),
     ...(input.sections ?? [])
       .filter(({ body }) => body.trim())
@@ -106,6 +121,7 @@ export function listText(
     filters?: readonly OutputField[];
     items: readonly {
       key: string;
+      keyMode?: "opaque";
       title: string;
       details?: readonly string[];
       fields?: readonly OutputField[];
@@ -121,9 +137,11 @@ export function listText(
     metadata(input.filters ?? [], options),
     input.items.length
       ? input.items
-          .map(({ key, title, details, fields }) =>
+          .map(({ key, keyMode, title, details, fields }) =>
             [
-              wrap(safeText([key, title].filter(Boolean).join(" — ")), width),
+              keyMode === "opaque"
+                ? headingText(title, options, key)
+                : wrap(safeText([key, title].filter(Boolean).join(" — ")), width),
               ...(details ?? [])
                 .filter((detail) => detail.trim())
                 .map((detail) =>
@@ -157,10 +175,6 @@ export function receiptText(
 /** Команда копируется целиком: физические переносы по ширине здесь запрещены. */
 export function commandText(command: string, options: TextOptions = defaultTextOptions): string {
   return palette(options).cyan(safeText(command));
-}
-
-export function nextStepText(command: string, options: TextOptions = defaultTextOptions): string {
-  return `Следующий шаг:\n${commandText(command, options)}`;
 }
 
 export function emptyText(

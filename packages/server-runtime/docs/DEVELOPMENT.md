@@ -34,7 +34,7 @@ Project runtime предоставляет конфигурацию и реес�
   разрешает один контекст на запрос; проект/автор не хранятся как общий активный выбор.
 - `modules/workspace/routing.ts`: scoped-префикс переиспользует те же контроллеры
   через rewrite URL, сохраняя поток SSE.
-- `modules/{entities,documents,product,boards,board-tasks,planning,releases,progress,graph}`:
+- `modules/{entities,documents,product,boards,board-tasks,planning,releases,progress,graph,work-history}`:
   транспортные адаптеры соответствующих сервисов Core.
 - `modules/context`, `workspace/server.module.ts`, `health`, `project`:
   подключение/settings, реестр, доступность и validation.
@@ -74,6 +74,8 @@ local-проекта по slug, где каталог предварительн
 контекста, не между базами. Для текущего формата сигнал публикации — `.indexes/state.json`;
 проверка изменённых постоянных файлов выполняется через Core. `fs.watch` дополняется
 refresh для пропущенных событий и замены каталога, не полным чтением всех Markdown по таймеру.
+Технические владельцы истории работы находятся внутри `entities/` и входят в этот
+рекурсивный watcher; local-публикация уведомляет через общий storage signal.
 
 Собственная публикация Core отличается от внешней правки: последняя может дать
 `STORAGE_INDEX_STALE` до явного обслуживания. Не превращайте ошибку в пустую базу.
@@ -99,6 +101,13 @@ Typescript не доказывает соответствие фактическ
 сохраняться прежние описания: не переносите из них обещания истории/дедупликации,
 которые противоречат текущему [контракту хранения](../../../docs/domain/STORAGE.md).
 
+`modules/work-history/graph.controller.ts` подключает отдельный `WorkHistoryGraphService`:
+только два чтения, без уведомления EventsService и без автоматической записи истории.
+Transport map переиспользует полные схемы Contracts, включая проверки таблиц и endpoints;
+query/point input экспортируются с `io: input`. Capability графа отдельная от lifecycle.
+Generated SDK используется напрямую в transport-тесте через devDependency, не входит
+в runtime-граф Server. Существующая граница `apps/server/tsconfig.dev.json` сохраняется.
+
 ## Проверки из корня репозитория
 
 ```bash
@@ -117,6 +126,8 @@ typecheck и build SDK по его руководству; затронутые 
 - `test/contract-types.ts` включён в typecheck и проверяет часть DTO/схем.
 - `test/openapi.test.ts` проверяет реальные local/scoped запросы и ответы через AJV,
   operationId и отсутствие удалённых маршрутов.
+- `test/work-history-graph.test.ts` проверяет local/scoped граф, границы страниц,
+  открытые окончания, адресный Markdown и авторский run, изоляцию и реальные SDK-вызовы.
 - `test/project-selection.test.ts` проверяет идентичность при замене регистрации.
 - `test/events.test.ts` — SSE после прямой записи Core и ошибки/восстановление.
 - `test/swagger-project.test.ts` — выбор проекта в Swagger.

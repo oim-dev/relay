@@ -123,7 +123,7 @@ test(
       assert.equal(human.code, 0, human.stdout + human.stderr);
       assert.equal(human.stderr, "");
       assert.match(human.stdout, /Ревизия:/);
-      assert.match(human.stdout, /npx @oim-dev\/relay-cli .*task get/);
+      assert.doesNotMatch(human.stdout, /^npx @oim-dev\/relay-cli /m);
       assert.doesNotMatch(human.stdout, /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9-]{23}/i);
       return get();
     };
@@ -293,7 +293,7 @@ test(
     assert.equal(added.code, 0, added.stdout + added.stderr);
     assert.equal(added.stderr, "");
     assert.match(added.stdout, /Ревизия:\s+2/);
-    assert.match(added.stdout, /npx @oim-dev\/relay-cli .*task get/);
+    assert.doesNotMatch(added.stdout, /^npx @oim-dev\/relay-cli /m);
     assert.equal(
       successful(await app.run<{ items: Criterion[] }>(["task", "criterion", "list", task])).data
         .items[2]!.title,

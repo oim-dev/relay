@@ -117,7 +117,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     name: "board",
     description: "Доски проекта",
     details:
-      "Системные доски создаются проектом, прикладные — через application create. Имя прикладной доски меняется через application update --name, удаление с полным каскадом — через application delete-preview/delete. Самостоятельных board create/delete нет. board rename меняет только ключ. Поиск по имени/ключу — search --kind board; показатели работы — product overview --metric board-work.",
+      "Системные доски создаются проектом, прикладные — через application create. Имя прикладной доски меняется через application update --name, удаление с полным каскадом — через application delete-preview/delete. Самостоятельных board create/delete нет. board rename меняет только ключ. Поиск по имени/ключу — search --kind board; показатели работы — overview --metric board-work.",
     examples: [
       ["npx @oim-dev/relay-cli board list", "Выбрать доску"],
       ["npx @oim-dev/relay-cli search --kind board --q Web", "Найти доску по имени или ключу"],
@@ -132,7 +132,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     description: "Прочитать каталог досок",
     configure: paging,
     details:
-      "Каталог свойств, не состав задач и не счётчики работы. Продолжение проверяет неизменность каталога; исторического снимка нет. Свойства выбранной записи — board get, показатели — product overview --metric board-work.",
+      "Каталог свойств, не состав задач и не счётчики работы. Продолжение проверяет неизменность каталога; исторического снимка нет. Свойства выбранной записи — board get, показатели — overview --metric board-work.",
     examples: [["npx @oim-dev/relay-cli board list --limit 20", "Прочитать страницу"]],
     async run(context, input) {
       const command = ["board", "list"];
@@ -253,8 +253,13 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     name: "get <task>",
     description: "Прочитать полную задачу",
     arguments: { task: "Текущий/прежний ключ или ID задачи" },
-    details: "Перед изменением прочитайте содержание и используйте показанную ревизию.",
-    examples: [["npx @oim-dev/relay-cli task get PRODUCT-1", "Прочитать содержание и ревизию"]],
+    details:
+      "Полное описание и ревизия задачи. Перед изменением используйте эту ревизию. Вложенные коллекции читаются отдельно: task criterion list — критерии, task comment list — обсуждение, task children — подзадачи, task links — связи. task progress показывает готовность и причины; plan task memberships — участие в планах. Материалы и прямое окружение: inspect graph list --root <task> --depth 1. Полный каскад удаления: task delete-preview <task>.",
+    examples: [
+      ["npx @oim-dev/relay-cli task get PRODUCT-1", "Прочитать содержание и ревизию"],
+      ["npx @oim-dev/relay-cli task criterion list PRODUCT-1", "Прочитать критерии страницами"],
+      ["npx @oim-dev/relay-cli task progress PRODUCT-1", "Проверить причины неготовности"],
+    ],
     async run(context, input) {
       const data = await context.backend.boardTasks.get(input.argument());
       return { data, text: (options) => boardTaskText(data, options, taskInvocation(context)) };
@@ -569,7 +574,7 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     description: "Прочитать прямые обязательные зависимости",
     arguments: { task: "Ключ или ID задачи" },
     details:
-      "По умолчанию full сохраняет прежний полный ответ прогресса, включая JSON; meta.page описывает только dependencies. --projection compact использует отдельную страницу зависимостей без criteria/children/reasons; по HTTP нужен Server с relay-work-read-models-v1, без скрытого fallback. Это не фильтрация страницы links. Выполнение вычисляется Core; ревизии соседей не предоставлены. Курсор и продолжение сохраняют проекцию независимо от формата; курсоры full и compact не взаимозаменяемы.",
+      "Показывает задачи, от которых зависит выбранная задача, и их выполнение. По умолчанию full получает полный прогресс, но выводит страницу зависимостей. --projection compact получает только зависимости без критериев, детей и причин; по HTTP нужен Server с relay-work-read-models-v1, без скрытого fallback. Это не фильтрация страницы links. Выполнение вычисляется Core; ревизии соседей не предоставлены. Курсор сохраняет проекцию; курсоры full и compact не взаимозаменяемы.",
     examples: [
       ["npx @oim-dev/relay-cli task dependency list PRODUCT-1 --limit 20", "Прочитать зависимости"],
       [
@@ -641,11 +646,25 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
       name: `${name} <task>${clear ? "" : ` <${targetName}>`}`,
       description: `${remove ? "Снять" : "Установить"} ${relation === "parent" ? "родителя" : relation === "related" ? "обычную связь" : "зависимость"} задачи`,
       arguments: {
-        task: "Ключ или ID задачи",
-        ...(clear ? {} : { [targetName]: "Ключ или ID второй задачи (для parent — родитель)" }),
+        task: "Ключ или ID изменяемой задачи; её ревизия нужна в --if-revision",
+        ...(clear
+          ? {}
+          : {
+              [targetName]:
+                relation === "parent"
+                  ? "Ключ или ID родительской задачи"
+                  : relation === "depends-on"
+                    ? "Ключ или ID задачи, от выполнения которой зависит первая"
+                    : "Ключ или ID связанной задачи; не обязательная зависимость",
+            }),
       },
       details:
-        "Проверка ревизии обязательна. Снятие родительства сохраняет обе задачи. Автоматической подстановки новой ревизии нет.",
+        (relation === "parent"
+          ? "Первый аргумент — ребёнок, второй — родитель (у clear только ребёнок). Родительство означает декомпозицию: для выполнения родителя требуется выполнение ребёнка."
+          : relation === "depends-on"
+            ? "Первая задача зависит от второй: PRODUCT-1 ожидает выполнения PRODUCT-2. add устанавливает эту зависимость, remove снимает её."
+            : "Обычная связь related не создаёт обязательной зависимости и не блокирует выполнение.") +
+        " Передайте автора и ревизию первой задачи из task get. Снятие связи сохраняет обе задачи. Автоматической подстановки новой ревизии нет.",
       examples: [
         [
           `npx @oim-dev/relay-cli task ${owner === group ? "" : relation === "parent" ? "parent " : "dependency "}${name} PRODUCT-1${clear ? "" : " PRODUCT-2"} --actor agent --if-revision 1`,
@@ -772,10 +791,19 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
         ...(action === "add" ? {} : { criterion: "Постоянный ID критерия" }),
       },
       details:
-        "Изменение текста сбрасывает выполнение. Ревизия относится к задаче. После потери ответа перечитайте состояние, не повторяйте запись вслепую.",
+        {
+          add: "Добавляет новый невыполненный критерий; заголовок обязателен.",
+          update:
+            "Передайте хотя бы одно поле: title, summary или description (текст либо файл/stdin). Непереданные поля сохраняются; изменение текста сбрасывает выполнение.",
+          complete:
+            "Отмечает критерий выполненным с автором и временем. Сначала выполните фактическую проверку; команда не запускает тесты.",
+          reopen: "Снимает отметку выполнения критерия, сохраняя его содержание.",
+          remove: "Удаляет только выбранный критерий, сохраняя задачу и остальные критерии.",
+        }[action] +
+        " Нужны автор и ревизия задачи из task get/criterion list, не ревизия критерия. Для задачи в done сначала измените колонку. После потери ответа перечитайте состояние, не повторяйте запись вслепую.",
       examples: [
         [
-          `npx @oim-dev/relay-cli task criterion ${action} PRODUCT-1${action === "add" ? " --title 'Результат проверен'" : " Abc12345"} --actor agent --if-revision 1`,
+          `npx @oim-dev/relay-cli task criterion ${action} PRODUCT-1${action === "add" ? "" : " Abc12345"}${action === "add" || action === "update" ? " --title 'Результат проверен'" : ""} --actor agent --if-revision 1`,
           "Изменить критерий",
         ],
       ],

@@ -16,6 +16,4863 @@ export type ProductOverviewMetric =
   | "ready-releases"
   | "plans-outside-releases";
 
+/** Отдельное чтение графа выбранной ветки/дерева или проекта, без новых q/status и иных фильтров каталога */
+export interface WorkHistoryGraphQuery {
+  /**
+   * Ключ S-token, ID или work-session:ID выбранной ветки; отсутствие — весь проект, не фильтр левого каталога
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref?: string;
+  /**
+   * Включить всех потомков ref; по умолчанию true, без ref область уже охватывает проект
+   * @default true
+   */
+  includeChildren?: boolean;
+  /**
+   * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
+   * @default "desc"
+   */
+  order?: WorkHistoryGraphQueryOrderEnum;
+  /**
+   * Смещение страницы графовых точек; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Количество точек items: по умолчанию 50, максимум 100; boundaryNodes и openEnds не входят в этот лимит
+   * @min 1
+   * @max 100
+   * @default 50
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение требует нового чтения с VERSION_CONFLICT; не исторический снимок
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+}
+
+/** Открыть полные материалы только выбранной точки графа */
+export interface WorkHistoryGraphPointQuery {
+  /** Производный node ID либо существующий CP-key, raw checkpoint ID или work-checkpoint:ID для прежних deep links; адрес ветки сам по себе не выбирает точку */
+  ref: string;
+}
+
+/** Страница графа с явными границами, пересекающими окно связями и полным набором незавершённых концов; пагинация относится только к items, полные Markdown читаются отдельно через point */
+export interface WorkHistoryGraphPage {
+  /** Разрешённый постоянный ID ref; null у всего проекта; дочерний scope сохраняет настоящего родителя */
+  scopeRootId: string | null;
+  /**
+   * Компактные точки только выбранной страницы в запрошенном порядке
+   * @maxItems 100
+   */
+  items: (
+    | {
+        /**
+         * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        id: string;
+        /**
+         * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Сохранённый номер точки в хронологии её ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время точки; положение на timeline проекта, не время запроса
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Короткая подпись точки; полное название без тела Markdown */
+        title: string;
+        /** Сохранённая краткая аннотация checkpoint либо краткая подпись жизненного цикла; не excerpt из description/result/reason/endSummary */
+        summary: string;
+        /** ID непосредственного предшественника авторского run; null, если его нет; смена run не создаёт новую ветку */
+        predecessorRunId: string | null;
+        /** Содержательная точка намерения или исполнения */
+        kind: "checkpoint";
+        /**
+         * Постоянный ID checkpoint для адресного открытия полного материала
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        checkpointId: string;
+        /** Открытие намерения, промежуточный материал, результат или отмена намерения */
+        checkpointKind: WorkHistoryGraphPageCheckpointKindEnum;
+        /**
+         * Авторский run из сохранённого checkpoint.runId, не текущий run ветки
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        runId: string;
+        /** Состояние только для checkpointKind=intent; у progress/result/cancel — null */
+        intentState: WorkHistoryGraphPageIntentStateEnum | null;
+      }
+    | {
+        /**
+         * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        id: string;
+        /**
+         * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Сохранённый номер точки в хронологии её ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время точки; положение на timeline проекта, не время запроса
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Короткая подпись точки; полное название без тела Markdown */
+        title: string;
+        /** Сохранённая краткая аннотация checkpoint либо краткая подпись жизненного цикла; не excerpt из description/result/reason/endSummary */
+        summary: string;
+        /** ID непосредственного предшественника авторского run; null, если его нет; смена run не создаёт новую ветку */
+        predecessorRunId: string | null;
+        /** Сохранённое создание/закрытие ветки или начало/окончание участия */
+        kind: WorkHistoryGraphPageKindEnum;
+        /** У точки жизненного цикла нет checkpoint */
+        checkpointId: null;
+        /** Жизненный цикл не подменяется видом checkpoint */
+        checkpointKind: null;
+        /** Авторский run: при создании корня FIRST run, ребёнка — createdByRunId родителя; у run-маркера его run; при закрытии связанное участие либо null, если его нет */
+        runId: string | null;
+        /** Состояние намерения неприменимо к жизненному циклу */
+        intentState: null;
+      }
+  )[];
+  /** Последняя отображаемая реальная точка по sequence каждой pending/open/paused ветки выбранной области, даже вне страницы; по sessionId уникальны, могут совпадать с items. Это компактные заголовки без Markdown, не новые события и не фиктивный now; at сохраняет время исходной точки. Не входят в limit/total и не требуют искусственного ребра; чрезмерный объём — ошибка Core, не успешное усечение */
+  openEnds: (
+    | {
+        /**
+         * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        id: string;
+        /**
+         * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Сохранённый номер точки в хронологии её ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время точки; положение на timeline проекта, не время запроса
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Короткая подпись точки; полное название без тела Markdown */
+        title: string;
+        /** Сохранённая краткая аннотация checkpoint либо краткая подпись жизненного цикла; не excerpt из description/result/reason/endSummary */
+        summary: string;
+        /** ID непосредственного предшественника авторского run; null, если его нет; смена run не создаёт новую ветку */
+        predecessorRunId: string | null;
+        /** Содержательная точка намерения или исполнения */
+        kind: "checkpoint";
+        /**
+         * Постоянный ID checkpoint для адресного открытия полного материала
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        checkpointId: string;
+        /** Открытие намерения, промежуточный материал, результат или отмена намерения */
+        checkpointKind: WorkHistoryGraphPageCheckpointKindEnum1;
+        /**
+         * Авторский run из сохранённого checkpoint.runId, не текущий run ветки
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        runId: string;
+        /** Состояние только для checkpointKind=intent; у progress/result/cancel — null */
+        intentState: WorkHistoryGraphPageIntentStateEnum1 | null;
+      }
+    | {
+        /**
+         * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        id: string;
+        /**
+         * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Сохранённый номер точки в хронологии её ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время точки; положение на timeline проекта, не время запроса
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Короткая подпись точки; полное название без тела Markdown */
+        title: string;
+        /** Сохранённая краткая аннотация checkpoint либо краткая подпись жизненного цикла; не excerpt из description/result/reason/endSummary */
+        summary: string;
+        /** ID непосредственного предшественника авторского run; null, если его нет; смена run не создаёт новую ветку */
+        predecessorRunId: string | null;
+        /** Сохранённое создание/закрытие ветки или начало/окончание участия */
+        kind: WorkHistoryGraphPageKindEnum1;
+        /** У точки жизненного цикла нет checkpoint */
+        checkpointId: null;
+        /** Жизненный цикл не подменяется видом checkpoint */
+        checkpointKind: null;
+        /** Авторский run: при создании корня FIRST run, ребёнка — createdByRunId родителя; у run-маркера его run; при закрытии связанное участие либо null, если его нет */
+        runId: string | null;
+        /** Состояние намерения неприменимо к жизненному циклу */
+        intentState: null;
+      }
+  )[];
+  /** Sequence касается items или пересекает окно между boundaryNodes before/after. Fork/branch-end соединяют видимую точку создания/закрытия ребёнка с линией настоящего родителя на времени этой точки; root-start/root-end — с осью. Acceptance не является графовым ребром; связи вычисляет Core */
+  edges: (
+    | {
+        /** Соседние отображаемые реальные точки хронологии одной ветки */
+        kind: "sequence";
+        /**
+         * Исходная точка связи; всегда items или boundaryNodes
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        from: string;
+        /**
+         * Целевая точка связи; всегда items или boundaryNodes
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        to: string;
+      }
+    | {
+        /** Ответвление от линии родителя в момент создания ребёнка, не от прежней точки intent */
+        kind: "fork";
+        /**
+         * ID настоящего родителя из parentSessionId ребёнка; его линия обязана присутствовать в branches
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        fromSessionId: string;
+        /**
+         * Видимая точка session-created ребёнка; её сохранённое at задаёт время присоединения к линии родителя
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        to: string;
+      }
+    | {
+        /** Визуальный возврат completed/cancelled ребёнка в линию родителя при закрытии, независимо от explicit acceptance */
+        kind: "branch-end";
+        /**
+         * Видимая точка session-closed ребёнка; её сохранённое at задаёт время возврата
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        from: string;
+        /**
+         * ID настоящего родителя из parentSessionId ребёнка; его линия обязана присутствовать в branches
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        toSessionId: string;
+      }
+    | {
+        /** Выход настоящего корня из оси timeline проекта; выбранный дочерний scope не становится корнем */
+        kind: "root-start";
+        /** Ось проекта на времени целевой точки; null не означает потерянную точку */
+        from: null;
+        /**
+         * Точка session-created настоящего корня
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        to: string;
+      }
+    | {
+        /** Визуальный возврат completed/cancelled корня к оси проекта при закрытии; не принятие результата и не признак успешного выполнения отменённой работы */
+        kind: "root-end";
+        /**
+         * Видимая точка session-closed completed/cancelled корня; её at задаёт время возврата к оси
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        from: string;
+        /** Ось проекта на времени исходной точки; null не означает конец вне страницы */
+        to: null;
+      }
+  )[];
+  /** Все ненулевые концы edges вне items, без дублей; отсутствие страницы не скрывает родство или реальное продолжение */
+  boundaryNodes: {
+    /**
+     * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+     */
+    id: string;
+    /**
+     * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый номер точки в хронологии её ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /**
+     * Сохранённое время точки; положение на timeline проекта, не время запроса
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    at: string;
+    /** Вид графовой точки; fork представлен связью, а не дублирующей точкой session-forked */
+    kind: WorkHistoryGraphPageKindEnum2;
+    /** before/after — до/после страницы в запрошенном order; outside-scope — за областью ref/includeChildren, независимо от времени */
+    side: WorkHistoryGraphPageSideEnum;
+  }[];
+  /** Только владельцы items/openEnds/boundaryNodes, родительские линии fromSessionId/toSessionId, авторские run и необходимые предки; не полный dump веток проекта */
+  branches: {
+    /**
+     * Постоянный ID логической ветки
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /** Название поручения */
+    title: string;
+    /** Неизменяемый ID родителя; null у корня */
+    parentSessionId: string | null;
+    /** ID исходного intent родителя; null у корня */
+    originCheckpointId: string | null;
+    /** ID участия, создавшего дочернюю ветку; null у корня */
+    createdByRunId: string | null;
+    /** Сохранённый номер fork в хронологии родителя; null у корня */
+    parentSequence: number | null;
+    /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+    status: WorkHistoryGraphPageStatusEnum;
+    /** ID единственного текущего участия; null вне open; не признак online */
+    currentRunId: string | null;
+    /**
+     * Последний выделенный номер точки хронологии этой ветки; только возрастает
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /**
+     * Время создания ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Время последнего изменения ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    updatedAt: string;
+    /** Время завершения или отмены; null у незакрытой ветки */
+    closedAt: string | null;
+    /**
+     * Ревизия логической ветки работы
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    revision: number;
+    /** true, если в items нет точек этой ветки: она нужна openEnds, границам пересекающих окно связей, авторству или цепочке предков; false у ветки с видимой точкой */
+    contextOnly: boolean;
+  }[];
+  /** Только авторские runId точек items и openEnds и их непосредственные predecessorRunId; сохранённые operator/git для avatar и подсказки, без reason/endSummary */
+  runs: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkHistoryGraphPageSourceEnum;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkHistoryGraphPageEndReasonEnum | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+  }[];
+  /**
+   * Полное число графовых точек выбранной области до пагинации; boundaryNodes/openEnds не добавляют точек, дублирующие исключённые маркеры не считаются
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Смещение следующей страницы items либо null, если область прочитана полностью */
+  nextOffset: number | null;
+  /**
+   * Версия согласованной проекции, включая связи, openEnds, состояния intent и авторские снимки; не исторический снимок
+   * @minLength 1
+   * @maxLength 256
+   */
+  version: string;
+}
+
+/** Полные материалы одной выбранной точки для Modal; lifecycle не подменяется checkpoint */
+export interface WorkHistoryGraphPointDetail {
+  /** Та же компактная адресная точка, не новая запись события */
+  point:
+    | {
+        /**
+         * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        id: string;
+        /**
+         * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Сохранённый номер точки в хронологии её ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время точки; положение на timeline проекта, не время запроса
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Короткая подпись точки; полное название без тела Markdown */
+        title: string;
+        /** Сохранённая краткая аннотация checkpoint либо краткая подпись жизненного цикла; не excerpt из description/result/reason/endSummary */
+        summary: string;
+        /** ID непосредственного предшественника авторского run; null, если его нет; смена run не создаёт новую ветку */
+        predecessorRunId: string | null;
+        /** Содержательная точка намерения или исполнения */
+        kind: "checkpoint";
+        /**
+         * Постоянный ID checkpoint для адресного открытия полного материала
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        checkpointId: string;
+        /** Открытие намерения, промежуточный материал, результат или отмена намерения */
+        checkpointKind: WorkHistoryGraphPointDetailCheckpointKindEnum;
+        /**
+         * Авторский run из сохранённого checkpoint.runId, не текущий run ветки
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        runId: string;
+        /** Состояние только для checkpointKind=intent; у progress/result/cancel — null */
+        intentState: WorkHistoryGraphPointDetailIntentStateEnum | null;
+      }
+    | {
+        /**
+         * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+         */
+        id: string;
+        /**
+         * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Сохранённый номер точки в хронологии её ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время точки; положение на timeline проекта, не время запроса
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Короткая подпись точки; полное название без тела Markdown */
+        title: string;
+        /** Сохранённая краткая аннотация checkpoint либо краткая подпись жизненного цикла; не excerpt из description/result/reason/endSummary */
+        summary: string;
+        /** ID непосредственного предшественника авторского run; null, если его нет; смена run не создаёт новую ветку */
+        predecessorRunId: string | null;
+        /** Сохранённое создание/закрытие ветки или начало/окончание участия */
+        kind: WorkHistoryGraphPointDetailKindEnum;
+        /** У точки жизненного цикла нет checkpoint */
+        checkpointId: null;
+        /** Жизненный цикл не подменяется видом checkpoint */
+        checkpointKind: null;
+        /** Авторский run: при создании корня FIRST run, ребёнка — createdByRunId родителя; у run-маркера его run; при закрытии связанное участие либо null, если его нет */
+        runId: string | null;
+        /** Состояние намерения неприменимо к жизненному циклу */
+        intentState: null;
+      };
+  /** Полная ветка выбранной точки с description/result; текущая сохранённая карточка, не историческая ревизия */
+  session: {
+    /**
+     * Постоянный ID логической ветки
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /** Название поручения */
+    title: string;
+    /** Полный текст поручения в Markdown */
+    description: string;
+    /** Неизменяемый ID родителя; null у корня */
+    parentSessionId: string | null;
+    /** ID исходного intent родителя; null у корня */
+    originCheckpointId: string | null;
+    /** ID участия, создавшего дочернюю ветку; null у корня */
+    createdByRunId: string | null;
+    /** Сохранённый номер fork в хронологии родителя; null у корня */
+    parentSequence: number | null;
+    /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+    status: WorkHistoryGraphPointDetailStatusEnum;
+    /** ID единственного текущего участия; null вне open; не признак online */
+    currentRunId: string | null;
+    /**
+     * Последний выделенный номер точки хронологии этой ветки; только возрастает
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /** Итог завершения или причина отмены; пустая строка до закрытия */
+    result: string;
+    /**
+     * Время создания ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Время последнего изменения ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    updatedAt: string;
+    /** Время завершения или отмены; null у незакрытой ветки */
+    closedAt: string | null;
+    /**
+     * Ревизия логической ветки работы
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    revision: number;
+  };
+  /** Полный авторский run выбранной точки с reason/endSummary, а не current/latest; null, если у точки нет связанного участия */
+  run: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkHistoryGraphPointDetailSourceEnum;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkHistoryGraphPointDetailEndReasonEnum | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+    /** Объяснение подключения или передачи, сохранённое при создании участия */
+    reason: string;
+    /** Сохранённое объяснение окончания участия; null до окончания; исходная reason не перезаписывается */
+    endSummary: string | null;
+  } | null;
+  /** Непосредственный предшественник авторского run без больших Markdown либо null */
+  previousRun: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkHistoryGraphPointDetailSourceEnum1;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkHistoryGraphPointDetailEndReasonEnum1 | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+  } | null;
+  /** Полный неизменяемый checkpoint только у kind=checkpoint; у lifecycle null, описание берётся из session/run без мнимого checkpoint */
+  checkpoint:
+    | (
+        | {
+            /**
+             * Постоянный ID неизменяемой точки
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            id: string;
+            /**
+             * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+             * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            key: string;
+            /**
+             * ID ветки, в которой сохранена точка
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            sessionId: string;
+            /**
+             * ID участия, создавшего точку
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            runId: string;
+            /**
+             * Номер точки хронологии ветки
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            sequence: number;
+            /** Название точки работы */
+            title: string;
+            /** Полное краткое описание обычным текстом */
+            summary: string;
+            /** Основной материал точки в Markdown */
+            body: string;
+            /** Что сделано, в Markdown; пустая строка при отсутствии */
+            done: string;
+            /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+            remaining: string;
+            /** Следующее действие в Markdown; пустая строка при отсутствии */
+            nextStep: string;
+            /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+            checks: string;
+            /**
+             * Подписи ссылок, сохранённые вместе с этой точкой
+             * @maxItems 100
+             */
+            references: {
+              /** Постоянный адрес упомянутой предметной сущности */
+              ref: {
+                /** Вид основной сущности */
+                kind: WorkHistoryGraphPointDetailKindEnum1;
+                /**
+                 * Постоянный ID; внутренние отношения сохраняют только этот адрес
+                 * @minLength 1
+                 * @maxLength 128
+                 */
+                id: string;
+              };
+              /** Ключ цели на момент сохранения; null при отсутствии ключа */
+              key: string | null;
+              /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+              title: string;
+            }[];
+            /**
+             * Время сохранения точки
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            createdAt: string;
+            /**
+             * Автор сохранения точки
+             * @minLength 1
+             * @maxLength 128
+             */
+            createdBy: string;
+            /** Открытие нового намерения */
+            kind: "intent";
+            /** У самого намерения нет исходного intent */
+            intentId: null;
+            /**
+             * У открытия намерения список принятия всегда пуст
+             * @maxItems 0
+             */
+            acceptedSessionIds: string[];
+          }
+        | {
+            /**
+             * Постоянный ID неизменяемой точки
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            id: string;
+            /**
+             * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+             * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            key: string;
+            /**
+             * ID ветки, в которой сохранена точка
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            sessionId: string;
+            /**
+             * ID участия, создавшего точку
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            runId: string;
+            /**
+             * Номер точки хронологии ветки
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            sequence: number;
+            /** Название точки работы */
+            title: string;
+            /** Полное краткое описание обычным текстом */
+            summary: string;
+            /** Основной материал точки в Markdown */
+            body: string;
+            /** Что сделано, в Markdown; пустая строка при отсутствии */
+            done: string;
+            /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+            remaining: string;
+            /** Следующее действие в Markdown; пустая строка при отсутствии */
+            nextStep: string;
+            /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+            checks: string;
+            /**
+             * Подписи ссылок, сохранённые вместе с этой точкой
+             * @maxItems 100
+             */
+            references: {
+              /** Постоянный адрес упомянутой предметной сущности */
+              ref: {
+                /** Вид основной сущности */
+                kind: WorkHistoryGraphPointDetailKindEnum2;
+                /**
+                 * Постоянный ID; внутренние отношения сохраняют только этот адрес
+                 * @minLength 1
+                 * @maxLength 128
+                 */
+                id: string;
+              };
+              /** Ключ цели на момент сохранения; null при отсутствии ключа */
+              key: string | null;
+              /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+              title: string;
+            }[];
+            /**
+             * Время сохранения точки
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            createdAt: string;
+            /**
+             * Автор сохранения точки
+             * @minLength 1
+             * @maxLength 128
+             */
+            createdBy: string;
+            /** Промежуточный материал либо отдельная закрывающая запись */
+            kind: WorkHistoryGraphPointDetailKindEnum3;
+            /**
+             * ID исходного открытого намерения этой же ветки
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            intentId: string;
+            /**
+             * Явно принятые результаты завершённых прямых детей, привязанных к этому intent; не выводятся из статуса ребёнка
+             * @maxItems 100
+             */
+            acceptedSessionIds: string[];
+          }
+      )
+    | null;
+}
+
+/** Производная компактная точка графа с сохранённым авторством, без полнотекстовых Markdown-полей */
+export type WorkHistoryGraphPoint =
+  | {
+      /**
+       * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+       */
+      id: string;
+      /**
+       * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      sessionId: string;
+      /**
+       * Сохранённый номер точки в хронологии её ветки
+       * @exclusiveMin 0
+       * @max 9007199254740991
+       */
+      sequence: number;
+      /**
+       * Сохранённое время точки; положение на timeline проекта, не время запроса
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      at: string;
+      /** Короткая подпись точки; полное название без тела Markdown */
+      title: string;
+      /** Сохранённая краткая аннотация checkpoint либо краткая подпись жизненного цикла; не excerpt из description/result/reason/endSummary */
+      summary: string;
+      /** ID непосредственного предшественника авторского run; null, если его нет; смена run не создаёт новую ветку */
+      predecessorRunId: string | null;
+      /** Содержательная точка намерения или исполнения */
+      kind: "checkpoint";
+      /**
+       * Постоянный ID checkpoint для адресного открытия полного материала
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      checkpointId: string;
+      /** Открытие намерения, промежуточный материал, результат или отмена намерения */
+      checkpointKind: WorkHistoryGraphPointCheckpointKindEnum;
+      /**
+       * Авторский run из сохранённого checkpoint.runId, не текущий run ветки
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      runId: string;
+      /** Состояние только для checkpointKind=intent; у progress/result/cancel — null */
+      intentState: WorkHistoryGraphPointIntentStateEnum | null;
+    }
+  | {
+      /**
+       * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+       */
+      id: string;
+      /**
+       * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      sessionId: string;
+      /**
+       * Сохранённый номер точки в хронологии её ветки
+       * @exclusiveMin 0
+       * @max 9007199254740991
+       */
+      sequence: number;
+      /**
+       * Сохранённое время точки; положение на timeline проекта, не время запроса
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      at: string;
+      /** Короткая подпись точки; полное название без тела Markdown */
+      title: string;
+      /** Сохранённая краткая аннотация checkpoint либо краткая подпись жизненного цикла; не excerpt из description/result/reason/endSummary */
+      summary: string;
+      /** ID непосредственного предшественника авторского run; null, если его нет; смена run не создаёт новую ветку */
+      predecessorRunId: string | null;
+      /** Сохранённое создание/закрытие ветки или начало/окончание участия */
+      kind: WorkHistoryGraphPointKindEnum;
+      /** У точки жизненного цикла нет checkpoint */
+      checkpointId: null;
+      /** Жизненный цикл не подменяется видом checkpoint */
+      checkpointKind: null;
+      /** Авторский run: при создании корня FIRST run, ребёнка — createdByRunId родителя; у run-маркера его run; при закрытии связанное участие либо null, если его нет */
+      runId: string | null;
+      /** Состояние намерения неприменимо к жизненному циклу */
+      intentState: null;
+    };
+
+/** Sequence касается items либо пересекает окно между boundaryNodes before/after; fork/branch-end и связи с осью требуют видимой точки создания/закрытия. Узлы разрешаются через items/boundaryNodes, линии — через branches; direction не зависит от order */
+export type WorkHistoryGraphEdge =
+  | {
+      /** Соседние отображаемые реальные точки хронологии одной ветки */
+      kind: "sequence";
+      /**
+       * Исходная точка связи; всегда items или boundaryNodes
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+       */
+      from: string;
+      /**
+       * Целевая точка связи; всегда items или boundaryNodes
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+       */
+      to: string;
+    }
+  | {
+      /** Ответвление от линии родителя в момент создания ребёнка, не от прежней точки intent */
+      kind: "fork";
+      /**
+       * ID настоящего родителя из parentSessionId ребёнка; его линия обязана присутствовать в branches
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      fromSessionId: string;
+      /**
+       * Видимая точка session-created ребёнка; её сохранённое at задаёт время присоединения к линии родителя
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+       */
+      to: string;
+    }
+  | {
+      /** Визуальный возврат completed/cancelled ребёнка в линию родителя при закрытии, независимо от explicit acceptance */
+      kind: "branch-end";
+      /**
+       * Видимая точка session-closed ребёнка; её сохранённое at задаёт время возврата
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+       */
+      from: string;
+      /**
+       * ID настоящего родителя из parentSessionId ребёнка; его линия обязана присутствовать в branches
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      toSessionId: string;
+    }
+  | {
+      /** Выход настоящего корня из оси timeline проекта; выбранный дочерний scope не становится корнем */
+      kind: "root-start";
+      /** Ось проекта на времени целевой точки; null не означает потерянную точку */
+      from: null;
+      /**
+       * Точка session-created настоящего корня
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+       */
+      to: string;
+    }
+  | {
+      /** Визуальный возврат completed/cancelled корня к оси проекта при закрытии; не принятие результата и не признак успешного выполнения отменённой работы */
+      kind: "root-end";
+      /**
+       * Видимая точка session-closed completed/cancelled корня; её at задаёт время возврата к оси
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+       */
+      from: string;
+      /** Ось проекта на времени исходной точки; null не означает конец вне страницы */
+      to: null;
+    };
+
+/** Отсутствующий на странице конец связи; не самостоятельный корень или конец ветки и не полная точка */
+export interface WorkHistoryGraphBoundaryNode {
+  /**
+   * Производный ID точки: ID ветки:created/closed, ID участия:started/ended или ID checkpoint:checkpoint; отдельной записи события нет
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}:(?:created|closed|started|ended|checkpoint)$
+   */
+  id: string;
+  /**
+   * ID ветки, на линии которой находится точка; автор может принадлежать родительской ветке
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  sessionId: string;
+  /**
+   * Сохранённый номер точки в хронологии её ветки
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  sequence: number;
+  /**
+   * Сохранённое время точки; положение на timeline проекта, не время запроса
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  at: string;
+  /** Вид графовой точки; fork представлен связью, а не дублирующей точкой session-forked */
+  kind: WorkHistoryGraphBoundaryNodeKindEnum;
+  /** before/after — до/после страницы в запрошенном order; outside-scope — за областью ref/includeChildren, независимо от времени */
+  side: WorkHistoryGraphBoundaryNodeSideEnum;
+}
+
+/** Компактная ветка и контекст владельца без description/result; не полный каталог проекта */
+export interface WorkHistoryGraphBranch {
+  /**
+   * Постоянный ID логической ветки
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  id: string;
+  /**
+   * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+   * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  key: string;
+  /** Название поручения */
+  title: string;
+  /** Неизменяемый ID родителя; null у корня */
+  parentSessionId: string | null;
+  /** ID исходного intent родителя; null у корня */
+  originCheckpointId: string | null;
+  /** ID участия, создавшего дочернюю ветку; null у корня */
+  createdByRunId: string | null;
+  /** Сохранённый номер fork в хронологии родителя; null у корня */
+  parentSequence: number | null;
+  /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+  status: WorkHistoryGraphBranchStatusEnum;
+  /** ID единственного текущего участия; null вне open; не признак online */
+  currentRunId: string | null;
+  /**
+   * Последний выделенный номер точки хронологии этой ветки; только возрастает
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  sequence: number;
+  /**
+   * Время создания ветки
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  createdAt: string;
+  /**
+   * Время последнего изменения ветки
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  updatedAt: string;
+  /** Время завершения или отмены; null у незакрытой ветки */
+  closedAt: string | null;
+  /**
+   * Ревизия логической ветки работы
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  revision: number;
+  /** true, если в items нет точек этой ветки: она нужна openEnds, границам пересекающих окно связей, авторству или цепочке предков; false у ветки с видимой точкой */
+  contextOnly: boolean;
+}
+
+export interface WorkSessionsQuery {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /** true — только pending/open/paused; false — только completed/cancelled; отсутствие — все */
+  unfinished?: boolean;
+  /** Дополнительный фильтр состояния ветки */
+  status?: WorkSessionsQueryStatusEnum;
+  /**
+   * Прямые дети выбранного родителя; строка "null" — только корни; отсутствие — все ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  parent?: string;
+  /** Автор хотя бы одного сохранённого участия ветки */
+  actor?: string;
+  /** Поиск по ключу, названию и поручению ветки */
+  q?: string;
+}
+
+export interface WorkHistoryQuery {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /**
+   * Включить всех потомков выбранной ветки; без ref история уже включает весь проект
+   * @default false
+   */
+  includeChildren?: boolean;
+  /**
+   * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+   * @default "desc"
+   */
+  order?: WorkHistoryQueryOrderEnum;
+  /** Ограничить страницу типом точки хронологии */
+  kind?: WorkHistoryQueryKindEnum;
+}
+
+export interface WorkOpenIntentsQuery {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /**
+   * Включить открытые intent всех потомков выбранной ветки; по умолчанию только сама ветка
+   * @default false
+   */
+  includeChildren?: boolean;
+}
+
+/** Страница открытых намерений; result/cancel исключают intent из выборки, progress не закрывает его */
+export interface WorkOpenIntentsPage {
+  /** Только незакрытые intent выбранной страницы с полным Markdown; порядок createdAt, sessionId, sequence, id по возрастанию */
+  items: {
+    /**
+     * Постоянный ID неизменяемой точки
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки, в которой сохранена точка
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * ID участия, создавшего точку
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    runId: string;
+    /**
+     * Номер точки хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /** Название точки работы */
+    title: string;
+    /** Полное краткое описание обычным текстом */
+    summary: string;
+    /** Основной материал точки в Markdown */
+    body: string;
+    /** Что сделано, в Markdown; пустая строка при отсутствии */
+    done: string;
+    /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+    remaining: string;
+    /** Следующее действие в Markdown; пустая строка при отсутствии */
+    nextStep: string;
+    /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+    checks: string;
+    /**
+     * Подписи ссылок, сохранённые вместе с этой точкой
+     * @maxItems 100
+     */
+    references: {
+      /** Постоянный адрес упомянутой предметной сущности */
+      ref: {
+        /** Вид основной сущности */
+        kind: WorkOpenIntentsPageKindEnum;
+        /**
+         * Постоянный ID; внутренние отношения сохраняют только этот адрес
+         * @minLength 1
+         * @maxLength 128
+         */
+        id: string;
+      };
+      /** Ключ цели на момент сохранения; null при отсутствии ключа */
+      key: string | null;
+      /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+      title: string;
+    }[];
+    /**
+     * Время сохранения точки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Автор сохранения точки
+     * @minLength 1
+     * @maxLength 128
+     */
+    createdBy: string;
+    /** Открытие нового намерения */
+    kind: "intent";
+    /** У самого намерения нет исходного intent */
+    intentId: null;
+    /**
+     * У открытия намерения список принятия всегда пуст
+     * @maxItems 0
+     */
+    acceptedSessionIds: string[];
+  }[];
+  /**
+   * Полное число элементов выбранной области до пагинации
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Смещение продолжения либо null, если прочитано всё */
+  nextOffset: number | null;
+  /**
+   * Непрозрачная версия состава и фильтров чтения; не исторический снимок
+   * @minLength 1
+   * @maxLength 256
+   */
+  version: string;
+}
+
+/** Обзор для list/tree: компактная ветка, полные собственные счётчики, последнее участие и принятие */
+export interface WorkSessionOverview {
+  /**
+   * Постоянный ID логической ветки
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  id: string;
+  /**
+   * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+   * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  key: string;
+  /** Название поручения */
+  title: string;
+  /** Неизменяемый ID родителя; null у корня */
+  parentSessionId: string | null;
+  /** ID исходного intent родителя; null у корня */
+  originCheckpointId: string | null;
+  /** ID участия, создавшего дочернюю ветку; null у корня */
+  createdByRunId: string | null;
+  /** Сохранённый номер fork в хронологии родителя; null у корня */
+  parentSequence: number | null;
+  /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+  status: WorkSessionOverviewStatusEnum;
+  /** ID единственного текущего участия; null вне open; не признак online */
+  currentRunId: string | null;
+  /**
+   * Последний выделенный номер точки хронологии этой ветки; только возрастает
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  sequence: number;
+  /**
+   * Время создания ветки
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  createdAt: string;
+  /**
+   * Время последнего изменения ветки
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  updatedAt: string;
+  /** Время завершения или отмены; null у незакрытой ветки */
+  closedAt: string | null;
+  /**
+   * Ревизия логической ветки работы
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  revision: number;
+  /** Полные счётчики, а не число элементов страницы */
+  counts: {
+    /**
+     * Все участия самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    runs: number;
+    /**
+     * Все точки самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    checkpoints: number;
+    /**
+     * Все незакрытые intent самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    openIntents: number;
+    /**
+     * Все прямые дочерние ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    children: number;
+    /**
+     * Прямые дети в pending, open или paused
+     * @min 0
+     * @max 9007199254740991
+     */
+    unfinishedChildren: number;
+  };
+  /** Последнее участие ветки без больших Markdown; null, если участия ещё не было */
+  latestRun: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkSessionOverviewSourceEnum;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkSessionOverviewEndReasonEnum | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+  } | null;
+  /** Первое явное принятие результата родителем; null у непринятого или неприменимого */
+  acceptance: {
+    /**
+     * ID первой точки родителя, явно принявшей результат завершённого ребёнка
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    checkpointId: string;
+    /**
+     * Сохранённый ключ первой принимающей точки родителя
+     * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    checkpointKey: string;
+    /**
+     * ID родительской ветки, принявшей результат
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * ID участия родителя, впервые принявшего результат ребёнка
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    runId: string;
+    /**
+     * Время сохранения первой принимающей точки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    at: string;
+  } | null;
+}
+
+/** Участие без больших Markdown; автор, атрибуция, Git-контекст и состояние сохраняются */
+export interface AgentRunSummary {
+  /**
+   * Постоянный ID участия агента
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  id: string;
+  /**
+   * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+   * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  key: string;
+  /**
+   * ID ветки участия
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  sessionId: string;
+  /**
+   * Сохранённый автор; не признак подключения к сети
+   * @minLength 1
+   * @maxLength 128
+   */
+  actor: string;
+  /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+  operator: {
+    /** Имя человека от имени которого работает агент; null, если неизвестно */
+    name: string | null;
+    /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+    email: string | null;
+    /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+    source: AgentRunSummarySourceEnum;
+  } | null;
+  /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+  git: {
+    /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+    branch: string | null;
+    /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+    commit: string | null;
+  } | null;
+  /** Название клиента; null, если не передано */
+  client: string | null;
+  /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+  sourceSessionId: string | null;
+  /**
+   * Время сохранённого подключения агента
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  startedAt: string;
+  /** Время окончания участия; null у текущего участия */
+  endedAt: string | null;
+  /**
+   * Номер подключения в хронологии ветки
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  startedSequence: number;
+  /** Номер окончания участия в ветке; null до окончания */
+  endedSequence: number | null;
+  /** Способ окончания участия; null до окончания */
+  endReason: AgentRunSummaryEndReasonEnum | null;
+  /** ID предыдущего участия той же ветки; null у первого */
+  predecessorRunId: string | null;
+}
+
+/** Страница текущего состояния; version не открывает исторический снимок */
+export interface WorkHistoryPageQuery {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+}
+
+/** Логическая ветка работы, живущая дольше отдельного участия агента */
+export interface WorkSession {
+  /**
+   * Постоянный ID логической ветки
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  id: string;
+  /**
+   * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+   * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  key: string;
+  /** Название поручения */
+  title: string;
+  /** Полный текст поручения в Markdown */
+  description: string;
+  /** Неизменяемый ID родителя; null у корня */
+  parentSessionId: string | null;
+  /** ID исходного intent родителя; null у корня */
+  originCheckpointId: string | null;
+  /** ID участия, создавшего дочернюю ветку; null у корня */
+  createdByRunId: string | null;
+  /** Сохранённый номер fork в хронологии родителя; null у корня */
+  parentSequence: number | null;
+  /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+  status: WorkSessionStatusEnum;
+  /** ID единственного текущего участия; null вне open; не признак online */
+  currentRunId: string | null;
+  /**
+   * Последний выделенный номер точки хронологии этой ветки; только возрастает
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  sequence: number;
+  /** Итог завершения или причина отмены; пустая строка до закрытия */
+  result: string;
+  /**
+   * Время создания ветки
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  createdAt: string;
+  /**
+   * Время последнего изменения ветки
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  updatedAt: string;
+  /** Время завершения или отмены; null у незакрытой ветки */
+  closedAt: string | null;
+  /**
+   * Ревизия логической ветки работы
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  revision: number;
+}
+
+/** Отдельное участие агента; активность не подтверждает online и не использует heartbeat */
+export interface AgentRun {
+  /**
+   * Постоянный ID участия агента
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  id: string;
+  /**
+   * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+   * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  key: string;
+  /**
+   * ID ветки участия
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  sessionId: string;
+  /**
+   * Сохранённый автор; не признак подключения к сети
+   * @minLength 1
+   * @maxLength 128
+   */
+  actor: string;
+  /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+  operator: {
+    /** Имя человека от имени которого работает агент; null, если неизвестно */
+    name: string | null;
+    /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+    email: string | null;
+    /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+    source: AgentRunSourceEnum;
+  } | null;
+  /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+  git: {
+    /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+    branch: string | null;
+    /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+    commit: string | null;
+  } | null;
+  /** Название клиента; null, если не передано */
+  client: string | null;
+  /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+  sourceSessionId: string | null;
+  /**
+   * Время сохранённого подключения агента
+   * @format date-time
+   * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+   */
+  startedAt: string;
+  /** Время окончания участия; null у текущего участия */
+  endedAt: string | null;
+  /**
+   * Номер подключения в хронологии ветки
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  startedSequence: number;
+  /** Номер окончания участия в ветке; null до окончания */
+  endedSequence: number | null;
+  /** Способ окончания участия; null до окончания */
+  endReason: AgentRunEndReasonEnum | null;
+  /** ID предыдущего участия той же ветки; null у первого */
+  predecessorRunId: string | null;
+  /** Объяснение подключения или передачи, сохранённое при создании участия */
+  reason: string;
+  /** Сохранённое объяснение окончания участия; null до окончания; исходная reason не перезаписывается */
+  endSummary: string | null;
+}
+
+/** Точка истории работы; не журнал вызовов и не история содержимого других сущностей */
+export type WorkCheckpoint =
+  | {
+      /**
+       * Постоянный ID неизменяемой точки
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      id: string;
+      /**
+       * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+       * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      key: string;
+      /**
+       * ID ветки, в которой сохранена точка
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      sessionId: string;
+      /**
+       * ID участия, создавшего точку
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      runId: string;
+      /**
+       * Номер точки хронологии ветки
+       * @exclusiveMin 0
+       * @max 9007199254740991
+       */
+      sequence: number;
+      /** Название точки работы */
+      title: string;
+      /** Полное краткое описание обычным текстом */
+      summary: string;
+      /** Основной материал точки в Markdown */
+      body: string;
+      /** Что сделано, в Markdown; пустая строка при отсутствии */
+      done: string;
+      /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+      remaining: string;
+      /** Следующее действие в Markdown; пустая строка при отсутствии */
+      nextStep: string;
+      /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+      checks: string;
+      /**
+       * Подписи ссылок, сохранённые вместе с этой точкой
+       * @maxItems 100
+       */
+      references: {
+        /** Постоянный адрес упомянутой предметной сущности */
+        ref: {
+          /** Вид основной сущности */
+          kind: WorkCheckpointKindEnum;
+          /**
+           * Постоянный ID; внутренние отношения сохраняют только этот адрес
+           * @minLength 1
+           * @maxLength 128
+           */
+          id: string;
+        };
+        /** Ключ цели на момент сохранения; null при отсутствии ключа */
+        key: string | null;
+        /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+        title: string;
+      }[];
+      /**
+       * Время сохранения точки
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      createdAt: string;
+      /**
+       * Автор сохранения точки
+       * @minLength 1
+       * @maxLength 128
+       */
+      createdBy: string;
+      /** Открытие нового намерения */
+      kind: "intent";
+      /** У самого намерения нет исходного intent */
+      intentId: null;
+      /**
+       * У открытия намерения список принятия всегда пуст
+       * @maxItems 0
+       */
+      acceptedSessionIds: string[];
+    }
+  | {
+      /**
+       * Постоянный ID неизменяемой точки
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      id: string;
+      /**
+       * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+       * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      key: string;
+      /**
+       * ID ветки, в которой сохранена точка
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      sessionId: string;
+      /**
+       * ID участия, создавшего точку
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      runId: string;
+      /**
+       * Номер точки хронологии ветки
+       * @exclusiveMin 0
+       * @max 9007199254740991
+       */
+      sequence: number;
+      /** Название точки работы */
+      title: string;
+      /** Полное краткое описание обычным текстом */
+      summary: string;
+      /** Основной материал точки в Markdown */
+      body: string;
+      /** Что сделано, в Markdown; пустая строка при отсутствии */
+      done: string;
+      /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+      remaining: string;
+      /** Следующее действие в Markdown; пустая строка при отсутствии */
+      nextStep: string;
+      /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+      checks: string;
+      /**
+       * Подписи ссылок, сохранённые вместе с этой точкой
+       * @maxItems 100
+       */
+      references: {
+        /** Постоянный адрес упомянутой предметной сущности */
+        ref: {
+          /** Вид основной сущности */
+          kind: WorkCheckpointKindEnum1;
+          /**
+           * Постоянный ID; внутренние отношения сохраняют только этот адрес
+           * @minLength 1
+           * @maxLength 128
+           */
+          id: string;
+        };
+        /** Ключ цели на момент сохранения; null при отсутствии ключа */
+        key: string | null;
+        /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+        title: string;
+      }[];
+      /**
+       * Время сохранения точки
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      createdAt: string;
+      /**
+       * Автор сохранения точки
+       * @minLength 1
+       * @maxLength 128
+       */
+      createdBy: string;
+      /** Промежуточный материал либо отдельная закрывающая запись */
+      kind: WorkCheckpointKindEnum2;
+      /**
+       * ID исходного открытого намерения этой же ветки
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      intentId: string;
+      /**
+       * Явно принятые результаты завершённых прямых детей, привязанных к этому intent; не выводятся из статуса ребёнка
+       * @maxItems 100
+       */
+      acceptedSessionIds: string[];
+    };
+
+/** Страница найденных веток с обзором каждого элемента и полными счётчиками проекта */
+export interface WorkSessionsPage {
+  /** Обзоры веток страницы; порядок updatedAt по убыванию, затем ID */
+  items: {
+    /**
+     * Постоянный ID логической ветки
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /** Название поручения */
+    title: string;
+    /** Неизменяемый ID родителя; null у корня */
+    parentSessionId: string | null;
+    /** ID исходного intent родителя; null у корня */
+    originCheckpointId: string | null;
+    /** ID участия, создавшего дочернюю ветку; null у корня */
+    createdByRunId: string | null;
+    /** Сохранённый номер fork в хронологии родителя; null у корня */
+    parentSequence: number | null;
+    /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+    status: WorkSessionsPageStatusEnum;
+    /** ID единственного текущего участия; null вне open; не признак online */
+    currentRunId: string | null;
+    /**
+     * Последний выделенный номер точки хронологии этой ветки; только возрастает
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /**
+     * Время создания ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Время последнего изменения ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    updatedAt: string;
+    /** Время завершения или отмены; null у незакрытой ветки */
+    closedAt: string | null;
+    /**
+     * Ревизия логической ветки работы
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    revision: number;
+    /** Полные счётчики, а не число элементов страницы */
+    counts: {
+      /**
+       * Все участия самой ветки
+       * @min 0
+       * @max 9007199254740991
+       */
+      runs: number;
+      /**
+       * Все точки самой ветки
+       * @min 0
+       * @max 9007199254740991
+       */
+      checkpoints: number;
+      /**
+       * Все незакрытые intent самой ветки
+       * @min 0
+       * @max 9007199254740991
+       */
+      openIntents: number;
+      /**
+       * Все прямые дочерние ветки
+       * @min 0
+       * @max 9007199254740991
+       */
+      children: number;
+      /**
+       * Прямые дети в pending, open или paused
+       * @min 0
+       * @max 9007199254740991
+       */
+      unfinishedChildren: number;
+    };
+    /** Последнее участие ветки без больших Markdown; null, если участия ещё не было */
+    latestRun: {
+      /**
+       * Постоянный ID участия агента
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      id: string;
+      /**
+       * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+       * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      key: string;
+      /**
+       * ID ветки участия
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      sessionId: string;
+      /**
+       * Сохранённый автор; не признак подключения к сети
+       * @minLength 1
+       * @maxLength 128
+       */
+      actor: string;
+      /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+      operator: {
+        /** Имя человека от имени которого работает агент; null, если неизвестно */
+        name: string | null;
+        /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+        email: string | null;
+        /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+        source: WorkSessionsPageSourceEnum;
+      } | null;
+      /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+      git: {
+        /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+        branch: string | null;
+        /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+        commit: string | null;
+      } | null;
+      /** Название клиента; null, если не передано */
+      client: string | null;
+      /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+      sourceSessionId: string | null;
+      /**
+       * Время сохранённого подключения агента
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      startedAt: string;
+      /** Время окончания участия; null у текущего участия */
+      endedAt: string | null;
+      /**
+       * Номер подключения в хронологии ветки
+       * @exclusiveMin 0
+       * @max 9007199254740991
+       */
+      startedSequence: number;
+      /** Номер окончания участия в ветке; null до окончания */
+      endedSequence: number | null;
+      /** Способ окончания участия; null до окончания */
+      endReason: WorkSessionsPageEndReasonEnum | null;
+      /** ID предыдущего участия той же ветки; null у первого */
+      predecessorRunId: string | null;
+    } | null;
+    /** Первое явное принятие результата родителем; null у непринятого или неприменимого */
+    acceptance: {
+      /**
+       * ID первой точки родителя, явно принявшей результат завершённого ребёнка
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      checkpointId: string;
+      /**
+       * Сохранённый ключ первой принимающей точки родителя
+       * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      checkpointKey: string;
+      /**
+       * ID родительской ветки, принявшей результат
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      sessionId: string;
+      /**
+       * ID участия родителя, впервые принявшего результат ребёнка
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      runId: string;
+      /**
+       * Время сохранения первой принимающей точки
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      at: string;
+    } | null;
+  }[];
+  /** Счётчики ВСЕГО проекта независимо от фильтров и страницы; total отдельно считает отфильтрованные ветки */
+  projectTotals: {
+    /**
+     * Все ветки поддерева, включая выбранный корень
+     * @min 0
+     * @max 9007199254740991
+     */
+    sessions: number;
+    /**
+     * Все незакрытые ветки поддерева
+     * @min 0
+     * @max 9007199254740991
+     */
+    unfinished: number;
+    /**
+     * Все участия всех веток поддерева
+     * @min 0
+     * @max 9007199254740991
+     */
+    runs: number;
+    /**
+     * Все точки всех веток поддерева
+     * @min 0
+     * @max 9007199254740991
+     */
+    checkpoints: number;
+    /**
+     * Все открытые намерения всех веток поддерева
+     * @min 0
+     * @max 9007199254740991
+     */
+    openIntents: number;
+  };
+  /**
+   * Полное число элементов выбранной области до пагинации
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Смещение продолжения либо null, если прочитано всё */
+  nextOffset: number | null;
+  /**
+   * Непрозрачная версия состава и фильтров чтения; не исторический снимок
+   * @minLength 1
+   * @maxLength 256
+   */
+  version: string;
+}
+
+/** Полная карточка ветки и счётчики без скрыто усечённых списков */
+export interface WorkSessionDetail {
+  /** Полная карточка ветки с поручением и итогом */
+  session: {
+    /**
+     * Постоянный ID логической ветки
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /** Название поручения */
+    title: string;
+    /** Полный текст поручения в Markdown */
+    description: string;
+    /** Неизменяемый ID родителя; null у корня */
+    parentSessionId: string | null;
+    /** ID исходного intent родителя; null у корня */
+    originCheckpointId: string | null;
+    /** ID участия, создавшего дочернюю ветку; null у корня */
+    createdByRunId: string | null;
+    /** Сохранённый номер fork в хронологии родителя; null у корня */
+    parentSequence: number | null;
+    /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+    status: WorkSessionDetailStatusEnum;
+    /** ID единственного текущего участия; null вне open; не признак online */
+    currentRunId: string | null;
+    /**
+     * Последний выделенный номер точки хронологии этой ветки; только возрастает
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /** Итог завершения или причина отмены; пустая строка до закрытия */
+    result: string;
+    /**
+     * Время создания ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Время последнего изменения ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    updatedAt: string;
+    /** Время завершения или отмены; null у незакрытой ветки */
+    closedAt: string | null;
+    /**
+     * Ревизия логической ветки работы
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    revision: number;
+  };
+  /** Текущее участие либо null; не проверка присутствия агента */
+  currentRun: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkSessionDetailSourceEnum;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkSessionDetailEndReasonEnum | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+    /** Объяснение подключения или передачи, сохранённое при создании участия */
+    reason: string;
+    /** Сохранённое объяснение окончания участия; null до окончания; исходная reason не перезаписывается */
+    endSummary: string | null;
+  } | null;
+  /** Полные счётчики, а не число элементов страницы */
+  counts: {
+    /**
+     * Все участия самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    runs: number;
+    /**
+     * Все точки самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    checkpoints: number;
+    /**
+     * Все незакрытые intent самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    openIntents: number;
+    /**
+     * Все прямые дочерние ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    children: number;
+    /**
+     * Прямые дети в pending, open или paused
+     * @min 0
+     * @max 9007199254740991
+     */
+    unfinishedChildren: number;
+  };
+  /** Последнее участие даже у paused/completed/cancelled; null, если участия ещё не было */
+  latestRun: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkSessionDetailSourceEnum1;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkSessionDetailEndReasonEnum1 | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+  } | null;
+  /** Первое принятие результата родителем; null у непринятого или неприменимого, различайте по parentSessionId/status */
+  acceptance: {
+    /**
+     * ID первой точки родителя, явно принявшей результат завершённого ребёнка
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    checkpointId: string;
+    /**
+     * Сохранённый ключ первой принимающей точки родителя
+     * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    checkpointKey: string;
+    /**
+     * ID родительской ветки, принявшей результат
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * ID участия родителя, впервые принявшего результат ребёнка
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    runId: string;
+    /**
+     * Время сохранения первой принимающей точки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    at: string;
+  } | null;
+}
+
+/** Страница дерева с полными счётчиками поддерева */
+export interface WorkTreePage {
+  /**
+   * Постоянный ID выбранного корня
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  rootSessionId: string;
+  /** Узлы страницы в порядке прямого обхода дерева */
+  items: {
+    /** Обзор для list/tree: компактная ветка, полные собственные счётчики, последнее участие и принятие */
+    session: {
+      /**
+       * Постоянный ID логической ветки
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      id: string;
+      /**
+       * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+       * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+       */
+      key: string;
+      /** Название поручения */
+      title: string;
+      /** Неизменяемый ID родителя; null у корня */
+      parentSessionId: string | null;
+      /** ID исходного intent родителя; null у корня */
+      originCheckpointId: string | null;
+      /** ID участия, создавшего дочернюю ветку; null у корня */
+      createdByRunId: string | null;
+      /** Сохранённый номер fork в хронологии родителя; null у корня */
+      parentSequence: number | null;
+      /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+      status: WorkTreePageStatusEnum;
+      /** ID единственного текущего участия; null вне open; не признак online */
+      currentRunId: string | null;
+      /**
+       * Последний выделенный номер точки хронологии этой ветки; только возрастает
+       * @exclusiveMin 0
+       * @max 9007199254740991
+       */
+      sequence: number;
+      /**
+       * Время создания ветки
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      createdAt: string;
+      /**
+       * Время последнего изменения ветки
+       * @format date-time
+       * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+       */
+      updatedAt: string;
+      /** Время завершения или отмены; null у незакрытой ветки */
+      closedAt: string | null;
+      /**
+       * Ревизия логической ветки работы
+       * @exclusiveMin 0
+       * @max 9007199254740991
+       */
+      revision: number;
+      /** Полные счётчики, а не число элементов страницы */
+      counts: {
+        /**
+         * Все участия самой ветки
+         * @min 0
+         * @max 9007199254740991
+         */
+        runs: number;
+        /**
+         * Все точки самой ветки
+         * @min 0
+         * @max 9007199254740991
+         */
+        checkpoints: number;
+        /**
+         * Все незакрытые intent самой ветки
+         * @min 0
+         * @max 9007199254740991
+         */
+        openIntents: number;
+        /**
+         * Все прямые дочерние ветки
+         * @min 0
+         * @max 9007199254740991
+         */
+        children: number;
+        /**
+         * Прямые дети в pending, open или paused
+         * @min 0
+         * @max 9007199254740991
+         */
+        unfinishedChildren: number;
+      };
+      /** Последнее участие ветки без больших Markdown; null, если участия ещё не было */
+      latestRun: {
+        /**
+         * Постоянный ID участия агента
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        id: string;
+        /**
+         * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+         * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        key: string;
+        /**
+         * ID ветки участия
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Сохранённый автор; не признак подключения к сети
+         * @minLength 1
+         * @maxLength 128
+         */
+        actor: string;
+        /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+        operator: {
+          /** Имя человека от имени которого работает агент; null, если неизвестно */
+          name: string | null;
+          /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+          email: string | null;
+          /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+          source: WorkTreePageSourceEnum;
+        } | null;
+        /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+        git: {
+          /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+          branch: string | null;
+          /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+          commit: string | null;
+        } | null;
+        /** Название клиента; null, если не передано */
+        client: string | null;
+        /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+        sourceSessionId: string | null;
+        /**
+         * Время сохранённого подключения агента
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        startedAt: string;
+        /** Время окончания участия; null у текущего участия */
+        endedAt: string | null;
+        /**
+         * Номер подключения в хронологии ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        startedSequence: number;
+        /** Номер окончания участия в ветке; null до окончания */
+        endedSequence: number | null;
+        /** Способ окончания участия; null до окончания */
+        endReason: WorkTreePageEndReasonEnum | null;
+        /** ID предыдущего участия той же ветки; null у первого */
+        predecessorRunId: string | null;
+      } | null;
+      /** Первое явное принятие результата родителем; null у непринятого или неприменимого */
+      acceptance: {
+        /**
+         * ID первой точки родителя, явно принявшей результат завершённого ребёнка
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        checkpointId: string;
+        /**
+         * Сохранённый ключ первой принимающей точки родителя
+         * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        checkpointKey: string;
+        /**
+         * ID родительской ветки, принявшей результат
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * ID участия родителя, впервые принявшего результат ребёнка
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        runId: string;
+        /**
+         * Время сохранения первой принимающей точки
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+      } | null;
+    };
+    /** Фактический родитель ветки, в том числе вне страницы или выбранного поддерева */
+    parentSessionId: string | null;
+    /**
+     * Глубина относительно выбранного корня; корень имеет глубину 0
+     * @min 0
+     * @max 9007199254740991
+     */
+    depth: number;
+  }[];
+  /** Счётчики полного поддерева, не страницы */
+  totals: {
+    /**
+     * Все ветки поддерева, включая выбранный корень
+     * @min 0
+     * @max 9007199254740991
+     */
+    sessions: number;
+    /**
+     * Все незакрытые ветки поддерева
+     * @min 0
+     * @max 9007199254740991
+     */
+    unfinished: number;
+    /**
+     * Все участия всех веток поддерева
+     * @min 0
+     * @max 9007199254740991
+     */
+    runs: number;
+    /**
+     * Все точки всех веток поддерева
+     * @min 0
+     * @max 9007199254740991
+     */
+    checkpoints: number;
+    /**
+     * Все открытые намерения всех веток поддерева
+     * @min 0
+     * @max 9007199254740991
+     */
+    openIntents: number;
+  };
+  /**
+   * Полное число элементов выбранной области до пагинации
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Смещение продолжения либо null, если прочитано всё */
+  nextOffset: number | null;
+  /**
+   * Непрозрачная версия состава и фильтров чтения; не исторический снимок
+   * @minLength 1
+   * @maxLength 256
+   */
+  version: string;
+}
+
+/** Страница производной истории с явным продолжением */
+export interface WorkHistoryPage {
+  /** Полные материалы только выбранной страницы истории */
+  items: (
+    | {
+        /**
+         * Стабильный производный ID точки хронологии; не ID отдельной записи event-store
+         * @minLength 1
+         */
+        id: string;
+        /**
+         * Ветка, чья хронология содержит точку
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Номер точки хронологии ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время события, а не время чтения
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Создание или закрытие ветки */
+        kind: WorkHistoryPageKindEnum;
+        /** Полная текущая ветка — не историческая ревизия её карточки */
+        session: {
+          /**
+           * Постоянный ID логической ветки
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          id: string;
+          /**
+           * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+           * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          key: string;
+          /** Название поручения */
+          title: string;
+          /** Полный текст поручения в Markdown */
+          description: string;
+          /** Неизменяемый ID родителя; null у корня */
+          parentSessionId: string | null;
+          /** ID исходного intent родителя; null у корня */
+          originCheckpointId: string | null;
+          /** ID участия, создавшего дочернюю ветку; null у корня */
+          createdByRunId: string | null;
+          /** Сохранённый номер fork в хронологии родителя; null у корня */
+          parentSequence: number | null;
+          /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+          status: WorkHistoryPageStatusEnum;
+          /** ID единственного текущего участия; null вне open; не признак online */
+          currentRunId: string | null;
+          /**
+           * Последний выделенный номер точки хронологии этой ветки; только возрастает
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          sequence: number;
+          /** Итог завершения или причина отмены; пустая строка до закрытия */
+          result: string;
+          /**
+           * Время создания ветки
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          createdAt: string;
+          /**
+           * Время последнего изменения ветки
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          updatedAt: string;
+          /** Время завершения или отмены; null у незакрытой ветки */
+          closedAt: string | null;
+          /**
+           * Ревизия логической ветки работы
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          revision: number;
+        };
+      }
+    | {
+        /**
+         * Стабильный производный ID точки хронологии; не ID отдельной записи event-store
+         * @minLength 1
+         */
+        id: string;
+        /**
+         * Ветка, чья хронология содержит точку
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Номер точки хронологии ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время события, а не время чтения
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Создание дочерней ветки в хронологии родителя */
+        kind: "session-forked";
+        /** Полная текущая дочерняя ветка — не историческая ревизия */
+        childSession: {
+          /**
+           * Постоянный ID логической ветки
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          id: string;
+          /**
+           * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+           * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          key: string;
+          /** Название поручения */
+          title: string;
+          /** Полный текст поручения в Markdown */
+          description: string;
+          /** Неизменяемый ID родителя; null у корня */
+          parentSessionId: string | null;
+          /** ID исходного intent родителя; null у корня */
+          originCheckpointId: string | null;
+          /** ID участия, создавшего дочернюю ветку; null у корня */
+          createdByRunId: string | null;
+          /** Сохранённый номер fork в хронологии родителя; null у корня */
+          parentSequence: number | null;
+          /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+          status: WorkHistoryPageStatusEnum1;
+          /** ID единственного текущего участия; null вне open; не признак online */
+          currentRunId: string | null;
+          /**
+           * Последний выделенный номер точки хронологии этой ветки; только возрастает
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          sequence: number;
+          /** Итог завершения или причина отмены; пустая строка до закрытия */
+          result: string;
+          /**
+           * Время создания ветки
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          createdAt: string;
+          /**
+           * Время последнего изменения ветки
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          updatedAt: string;
+          /** Время завершения или отмены; null у незакрытой ветки */
+          closedAt: string | null;
+          /**
+           * Ревизия логической ветки работы
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          revision: number;
+        };
+      }
+    | {
+        /**
+         * Стабильный производный ID точки хронологии; не ID отдельной записи event-store
+         * @minLength 1
+         */
+        id: string;
+        /**
+         * Ветка, чья хронология содержит точку
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Номер точки хронологии ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время события, а не время чтения
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Начало или окончание сохранённого участия */
+        kind: WorkHistoryPageKindEnum1;
+        /** Сохранённое участие; окончание может быть заполнено уже после начала */
+        run: {
+          /**
+           * Постоянный ID участия агента
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          id: string;
+          /**
+           * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+           * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          key: string;
+          /**
+           * ID ветки участия
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          sessionId: string;
+          /**
+           * Сохранённый автор; не признак подключения к сети
+           * @minLength 1
+           * @maxLength 128
+           */
+          actor: string;
+          /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+          operator: {
+            /** Имя человека от имени которого работает агент; null, если неизвестно */
+            name: string | null;
+            /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+            email: string | null;
+            /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+            source: WorkHistoryPageSourceEnum;
+          } | null;
+          /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+          git: {
+            /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+            branch: string | null;
+            /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+            commit: string | null;
+          } | null;
+          /** Название клиента; null, если не передано */
+          client: string | null;
+          /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+          sourceSessionId: string | null;
+          /**
+           * Время сохранённого подключения агента
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          startedAt: string;
+          /** Время окончания участия; null у текущего участия */
+          endedAt: string | null;
+          /**
+           * Номер подключения в хронологии ветки
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          startedSequence: number;
+          /** Номер окончания участия в ветке; null до окончания */
+          endedSequence: number | null;
+          /** Способ окончания участия; null до окончания */
+          endReason: WorkHistoryPageEndReasonEnum | null;
+          /** ID предыдущего участия той же ветки; null у первого */
+          predecessorRunId: string | null;
+          /** Объяснение подключения или передачи, сохранённое при создании участия */
+          reason: string;
+          /** Сохранённое объяснение окончания участия; null до окончания; исходная reason не перезаписывается */
+          endSummary: string | null;
+        };
+      }
+    | {
+        /**
+         * Стабильный производный ID точки хронологии; не ID отдельной записи event-store
+         * @minLength 1
+         */
+        id: string;
+        /**
+         * Ветка, чья хронология содержит точку
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        sessionId: string;
+        /**
+         * Номер точки хронологии ветки
+         * @exclusiveMin 0
+         * @max 9007199254740991
+         */
+        sequence: number;
+        /**
+         * Сохранённое время события, а не время чтения
+         * @format date-time
+         * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+         */
+        at: string;
+        /** Сохранённая точка работы */
+        kind: "checkpoint";
+        /** Полное неизменяемое содержание точки */
+        checkpoint:
+          | {
+              /**
+               * Постоянный ID неизменяемой точки
+               * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              id: string;
+              /**
+               * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+               * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              key: string;
+              /**
+               * ID ветки, в которой сохранена точка
+               * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              sessionId: string;
+              /**
+               * ID участия, создавшего точку
+               * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              runId: string;
+              /**
+               * Номер точки хронологии ветки
+               * @exclusiveMin 0
+               * @max 9007199254740991
+               */
+              sequence: number;
+              /** Название точки работы */
+              title: string;
+              /** Полное краткое описание обычным текстом */
+              summary: string;
+              /** Основной материал точки в Markdown */
+              body: string;
+              /** Что сделано, в Markdown; пустая строка при отсутствии */
+              done: string;
+              /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+              remaining: string;
+              /** Следующее действие в Markdown; пустая строка при отсутствии */
+              nextStep: string;
+              /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+              checks: string;
+              /**
+               * Подписи ссылок, сохранённые вместе с этой точкой
+               * @maxItems 100
+               */
+              references: {
+                /** Постоянный адрес упомянутой предметной сущности */
+                ref: {
+                  /** Вид основной сущности */
+                  kind: WorkHistoryPageKindEnum2;
+                  /**
+                   * Постоянный ID; внутренние отношения сохраняют только этот адрес
+                   * @minLength 1
+                   * @maxLength 128
+                   */
+                  id: string;
+                };
+                /** Ключ цели на момент сохранения; null при отсутствии ключа */
+                key: string | null;
+                /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+                title: string;
+              }[];
+              /**
+               * Время сохранения точки
+               * @format date-time
+               * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+               */
+              createdAt: string;
+              /**
+               * Автор сохранения точки
+               * @minLength 1
+               * @maxLength 128
+               */
+              createdBy: string;
+              /** Открытие нового намерения */
+              kind: "intent";
+              /** У самого намерения нет исходного intent */
+              intentId: null;
+              /**
+               * У открытия намерения список принятия всегда пуст
+               * @maxItems 0
+               */
+              acceptedSessionIds: string[];
+            }
+          | {
+              /**
+               * Постоянный ID неизменяемой точки
+               * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              id: string;
+              /**
+               * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+               * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              key: string;
+              /**
+               * ID ветки, в которой сохранена точка
+               * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              sessionId: string;
+              /**
+               * ID участия, создавшего точку
+               * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              runId: string;
+              /**
+               * Номер точки хронологии ветки
+               * @exclusiveMin 0
+               * @max 9007199254740991
+               */
+              sequence: number;
+              /** Название точки работы */
+              title: string;
+              /** Полное краткое описание обычным текстом */
+              summary: string;
+              /** Основной материал точки в Markdown */
+              body: string;
+              /** Что сделано, в Markdown; пустая строка при отсутствии */
+              done: string;
+              /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+              remaining: string;
+              /** Следующее действие в Markdown; пустая строка при отсутствии */
+              nextStep: string;
+              /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+              checks: string;
+              /**
+               * Подписи ссылок, сохранённые вместе с этой точкой
+               * @maxItems 100
+               */
+              references: {
+                /** Постоянный адрес упомянутой предметной сущности */
+                ref: {
+                  /** Вид основной сущности */
+                  kind: WorkHistoryPageKindEnum3;
+                  /**
+                   * Постоянный ID; внутренние отношения сохраняют только этот адрес
+                   * @minLength 1
+                   * @maxLength 128
+                   */
+                  id: string;
+                };
+                /** Ключ цели на момент сохранения; null при отсутствии ключа */
+                key: string | null;
+                /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+                title: string;
+              }[];
+              /**
+               * Время сохранения точки
+               * @format date-time
+               * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+               */
+              createdAt: string;
+              /**
+               * Автор сохранения точки
+               * @minLength 1
+               * @maxLength 128
+               */
+              createdBy: string;
+              /** Промежуточный материал либо отдельная закрывающая запись */
+              kind: WorkHistoryPageKindEnum4;
+              /**
+               * ID исходного открытого намерения этой же ветки
+               * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+               */
+              intentId: string;
+              /**
+               * Явно принятые результаты завершённых прямых детей, привязанных к этому intent; не выводятся из статуса ребёнка
+               * @maxItems 100
+               */
+              acceptedSessionIds: string[];
+            };
+      }
+  )[];
+  /**
+   * Полное число элементов выбранной области до пагинации
+   * @min 0
+   * @max 9007199254740991
+   */
+  total: number;
+  /** Смещение продолжения либо null, если прочитано всё */
+  nextOffset: number | null;
+  /**
+   * Непрозрачная версия состава и фильтров чтения; не исторический снимок
+   * @minLength 1
+   * @maxLength 256
+   */
+  version: string;
+}
+
+/** Контекст ветки; поручение и результат полные, история не выдаётся за исчерпывающую */
+export interface WorkContext {
+  /** Полная карточка ветки с поручением и итогом */
+  session: {
+    /**
+     * Постоянный ID логической ветки
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /** Название поручения */
+    title: string;
+    /** Полный текст поручения в Markdown */
+    description: string;
+    /** Неизменяемый ID родителя; null у корня */
+    parentSessionId: string | null;
+    /** ID исходного intent родителя; null у корня */
+    originCheckpointId: string | null;
+    /** ID участия, создавшего дочернюю ветку; null у корня */
+    createdByRunId: string | null;
+    /** Сохранённый номер fork в хронологии родителя; null у корня */
+    parentSequence: number | null;
+    /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+    status: WorkContextStatusEnum;
+    /** ID единственного текущего участия; null вне open; не признак online */
+    currentRunId: string | null;
+    /**
+     * Последний выделенный номер точки хронологии этой ветки; только возрастает
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /** Итог завершения или причина отмены; пустая строка до закрытия */
+    result: string;
+    /**
+     * Время создания ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Время последнего изменения ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    updatedAt: string;
+    /** Время завершения или отмены; null у незакрытой ветки */
+    closedAt: string | null;
+    /**
+     * Ревизия логической ветки работы
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    revision: number;
+  };
+  /** Текущее участие либо null; не проверка присутствия агента */
+  currentRun: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkContextSourceEnum;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkContextEndReasonEnum | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+    /** Объяснение подключения или передачи, сохранённое при создании участия */
+    reason: string;
+    /** Сохранённое объяснение окончания участия; null до окончания; исходная reason не перезаписывается */
+    endSummary: string | null;
+  } | null;
+  /** Полные счётчики, а не число элементов страницы */
+  counts: {
+    /**
+     * Все участия самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    runs: number;
+    /**
+     * Все точки самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    checkpoints: number;
+    /**
+     * Все незакрытые intent самой ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    openIntents: number;
+    /**
+     * Все прямые дочерние ветки
+     * @min 0
+     * @max 9007199254740991
+     */
+    children: number;
+    /**
+     * Прямые дети в pending, open или paused
+     * @min 0
+     * @max 9007199254740991
+     */
+    unfinishedChildren: number;
+  };
+  /** Последнее участие даже у paused/completed/cancelled; null, если участия ещё не было */
+  latestRun: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkContextSourceEnum1;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkContextEndReasonEnum1 | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+  } | null;
+  /** Первое принятие результата родителем; null у непринятого или неприменимого, различайте по parentSessionId/status */
+  acceptance: {
+    /**
+     * ID первой точки родителя, явно принявшей результат завершённого ребёнка
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    checkpointId: string;
+    /**
+     * Сохранённый ключ первой принимающей точки родителя
+     * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    checkpointKey: string;
+    /**
+     * ID родительской ветки, принявшей результат
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * ID участия родителя, впервые принявшего результат ребёнка
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    runId: string;
+    /**
+     * Время сохранения первой принимающей точки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    at: string;
+  } | null;
+  /** Ограниченная страница истории; total и nextOffset явно показывают непрочитанное; продолжение через context с теми же параметрами */
+  history: {
+    /** Полные материалы только выбранной страницы истории */
+    items: (
+      | {
+          /**
+           * Стабильный производный ID точки хронологии; не ID отдельной записи event-store
+           * @minLength 1
+           */
+          id: string;
+          /**
+           * Ветка, чья хронология содержит точку
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          sessionId: string;
+          /**
+           * Номер точки хронологии ветки
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          sequence: number;
+          /**
+           * Сохранённое время события, а не время чтения
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          at: string;
+          /** Создание или закрытие ветки */
+          kind: WorkContextKindEnum;
+          /** Полная текущая ветка — не историческая ревизия её карточки */
+          session: {
+            /**
+             * Постоянный ID логической ветки
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            id: string;
+            /**
+             * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+             * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            key: string;
+            /** Название поручения */
+            title: string;
+            /** Полный текст поручения в Markdown */
+            description: string;
+            /** Неизменяемый ID родителя; null у корня */
+            parentSessionId: string | null;
+            /** ID исходного intent родителя; null у корня */
+            originCheckpointId: string | null;
+            /** ID участия, создавшего дочернюю ветку; null у корня */
+            createdByRunId: string | null;
+            /** Сохранённый номер fork в хронологии родителя; null у корня */
+            parentSequence: number | null;
+            /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+            status: WorkContextStatusEnum1;
+            /** ID единственного текущего участия; null вне open; не признак online */
+            currentRunId: string | null;
+            /**
+             * Последний выделенный номер точки хронологии этой ветки; только возрастает
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            sequence: number;
+            /** Итог завершения или причина отмены; пустая строка до закрытия */
+            result: string;
+            /**
+             * Время создания ветки
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            createdAt: string;
+            /**
+             * Время последнего изменения ветки
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            updatedAt: string;
+            /** Время завершения или отмены; null у незакрытой ветки */
+            closedAt: string | null;
+            /**
+             * Ревизия логической ветки работы
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            revision: number;
+          };
+        }
+      | {
+          /**
+           * Стабильный производный ID точки хронологии; не ID отдельной записи event-store
+           * @minLength 1
+           */
+          id: string;
+          /**
+           * Ветка, чья хронология содержит точку
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          sessionId: string;
+          /**
+           * Номер точки хронологии ветки
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          sequence: number;
+          /**
+           * Сохранённое время события, а не время чтения
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          at: string;
+          /** Создание дочерней ветки в хронологии родителя */
+          kind: "session-forked";
+          /** Полная текущая дочерняя ветка — не историческая ревизия */
+          childSession: {
+            /**
+             * Постоянный ID логической ветки
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            id: string;
+            /**
+             * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+             * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            key: string;
+            /** Название поручения */
+            title: string;
+            /** Полный текст поручения в Markdown */
+            description: string;
+            /** Неизменяемый ID родителя; null у корня */
+            parentSessionId: string | null;
+            /** ID исходного intent родителя; null у корня */
+            originCheckpointId: string | null;
+            /** ID участия, создавшего дочернюю ветку; null у корня */
+            createdByRunId: string | null;
+            /** Сохранённый номер fork в хронологии родителя; null у корня */
+            parentSequence: number | null;
+            /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+            status: WorkContextStatusEnum2;
+            /** ID единственного текущего участия; null вне open; не признак online */
+            currentRunId: string | null;
+            /**
+             * Последний выделенный номер точки хронологии этой ветки; только возрастает
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            sequence: number;
+            /** Итог завершения или причина отмены; пустая строка до закрытия */
+            result: string;
+            /**
+             * Время создания ветки
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            createdAt: string;
+            /**
+             * Время последнего изменения ветки
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            updatedAt: string;
+            /** Время завершения или отмены; null у незакрытой ветки */
+            closedAt: string | null;
+            /**
+             * Ревизия логической ветки работы
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            revision: number;
+          };
+        }
+      | {
+          /**
+           * Стабильный производный ID точки хронологии; не ID отдельной записи event-store
+           * @minLength 1
+           */
+          id: string;
+          /**
+           * Ветка, чья хронология содержит точку
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          sessionId: string;
+          /**
+           * Номер точки хронологии ветки
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          sequence: number;
+          /**
+           * Сохранённое время события, а не время чтения
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          at: string;
+          /** Начало или окончание сохранённого участия */
+          kind: WorkContextKindEnum1;
+          /** Сохранённое участие; окончание может быть заполнено уже после начала */
+          run: {
+            /**
+             * Постоянный ID участия агента
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            id: string;
+            /**
+             * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+             * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            key: string;
+            /**
+             * ID ветки участия
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            sessionId: string;
+            /**
+             * Сохранённый автор; не признак подключения к сети
+             * @minLength 1
+             * @maxLength 128
+             */
+            actor: string;
+            /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+            operator: {
+              /** Имя человека от имени которого работает агент; null, если неизвестно */
+              name: string | null;
+              /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+              email: string | null;
+              /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+              source: WorkContextSourceEnum2;
+            } | null;
+            /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+            git: {
+              /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+              branch: string | null;
+              /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+              commit: string | null;
+            } | null;
+            /** Название клиента; null, если не передано */
+            client: string | null;
+            /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+            sourceSessionId: string | null;
+            /**
+             * Время сохранённого подключения агента
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            startedAt: string;
+            /** Время окончания участия; null у текущего участия */
+            endedAt: string | null;
+            /**
+             * Номер подключения в хронологии ветки
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            startedSequence: number;
+            /** Номер окончания участия в ветке; null до окончания */
+            endedSequence: number | null;
+            /** Способ окончания участия; null до окончания */
+            endReason: WorkContextEndReasonEnum2 | null;
+            /** ID предыдущего участия той же ветки; null у первого */
+            predecessorRunId: string | null;
+            /** Объяснение подключения или передачи, сохранённое при создании участия */
+            reason: string;
+            /** Сохранённое объяснение окончания участия; null до окончания; исходная reason не перезаписывается */
+            endSummary: string | null;
+          };
+        }
+      | {
+          /**
+           * Стабильный производный ID точки хронологии; не ID отдельной записи event-store
+           * @minLength 1
+           */
+          id: string;
+          /**
+           * Ветка, чья хронология содержит точку
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          sessionId: string;
+          /**
+           * Номер точки хронологии ветки
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          sequence: number;
+          /**
+           * Сохранённое время события, а не время чтения
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          at: string;
+          /** Сохранённая точка работы */
+          kind: "checkpoint";
+          /** Полное неизменяемое содержание точки */
+          checkpoint:
+            | {
+                /**
+                 * Постоянный ID неизменяемой точки
+                 * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                id: string;
+                /**
+                 * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+                 * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                key: string;
+                /**
+                 * ID ветки, в которой сохранена точка
+                 * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                sessionId: string;
+                /**
+                 * ID участия, создавшего точку
+                 * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                runId: string;
+                /**
+                 * Номер точки хронологии ветки
+                 * @exclusiveMin 0
+                 * @max 9007199254740991
+                 */
+                sequence: number;
+                /** Название точки работы */
+                title: string;
+                /** Полное краткое описание обычным текстом */
+                summary: string;
+                /** Основной материал точки в Markdown */
+                body: string;
+                /** Что сделано, в Markdown; пустая строка при отсутствии */
+                done: string;
+                /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+                remaining: string;
+                /** Следующее действие в Markdown; пустая строка при отсутствии */
+                nextStep: string;
+                /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+                checks: string;
+                /**
+                 * Подписи ссылок, сохранённые вместе с этой точкой
+                 * @maxItems 100
+                 */
+                references: {
+                  /** Постоянный адрес упомянутой предметной сущности */
+                  ref: {
+                    /** Вид основной сущности */
+                    kind: WorkContextKindEnum2;
+                    /**
+                     * Постоянный ID; внутренние отношения сохраняют только этот адрес
+                     * @minLength 1
+                     * @maxLength 128
+                     */
+                    id: string;
+                  };
+                  /** Ключ цели на момент сохранения; null при отсутствии ключа */
+                  key: string | null;
+                  /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+                  title: string;
+                }[];
+                /**
+                 * Время сохранения точки
+                 * @format date-time
+                 * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+                 */
+                createdAt: string;
+                /**
+                 * Автор сохранения точки
+                 * @minLength 1
+                 * @maxLength 128
+                 */
+                createdBy: string;
+                /** Открытие нового намерения */
+                kind: "intent";
+                /** У самого намерения нет исходного intent */
+                intentId: null;
+                /**
+                 * У открытия намерения список принятия всегда пуст
+                 * @maxItems 0
+                 */
+                acceptedSessionIds: string[];
+              }
+            | {
+                /**
+                 * Постоянный ID неизменяемой точки
+                 * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                id: string;
+                /**
+                 * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+                 * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                key: string;
+                /**
+                 * ID ветки, в которой сохранена точка
+                 * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                sessionId: string;
+                /**
+                 * ID участия, создавшего точку
+                 * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                runId: string;
+                /**
+                 * Номер точки хронологии ветки
+                 * @exclusiveMin 0
+                 * @max 9007199254740991
+                 */
+                sequence: number;
+                /** Название точки работы */
+                title: string;
+                /** Полное краткое описание обычным текстом */
+                summary: string;
+                /** Основной материал точки в Markdown */
+                body: string;
+                /** Что сделано, в Markdown; пустая строка при отсутствии */
+                done: string;
+                /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+                remaining: string;
+                /** Следующее действие в Markdown; пустая строка при отсутствии */
+                nextStep: string;
+                /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+                checks: string;
+                /**
+                 * Подписи ссылок, сохранённые вместе с этой точкой
+                 * @maxItems 100
+                 */
+                references: {
+                  /** Постоянный адрес упомянутой предметной сущности */
+                  ref: {
+                    /** Вид основной сущности */
+                    kind: WorkContextKindEnum3;
+                    /**
+                     * Постоянный ID; внутренние отношения сохраняют только этот адрес
+                     * @minLength 1
+                     * @maxLength 128
+                     */
+                    id: string;
+                  };
+                  /** Ключ цели на момент сохранения; null при отсутствии ключа */
+                  key: string | null;
+                  /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+                  title: string;
+                }[];
+                /**
+                 * Время сохранения точки
+                 * @format date-time
+                 * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+                 */
+                createdAt: string;
+                /**
+                 * Автор сохранения точки
+                 * @minLength 1
+                 * @maxLength 128
+                 */
+                createdBy: string;
+                /** Промежуточный материал либо отдельная закрывающая запись */
+                kind: WorkContextKindEnum4;
+                /**
+                 * ID исходного открытого намерения этой же ветки
+                 * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+                 */
+                intentId: string;
+                /**
+                 * Явно принятые результаты завершённых прямых детей, привязанных к этому intent; не выводятся из статуса ребёнка
+                 * @maxItems 100
+                 */
+                acceptedSessionIds: string[];
+              };
+        }
+    )[];
+    /**
+     * Полное число элементов выбранной области до пагинации
+     * @min 0
+     * @max 9007199254740991
+     */
+    total: number;
+    /** Смещение продолжения либо null, если прочитано всё */
+    nextOffset: number | null;
+    /**
+     * Непрозрачная версия состава и фильтров чтения; не исторический снимок
+     * @minLength 1
+     * @maxLength 256
+     */
+    version: string;
+  };
+}
+
+/** Результат одной атомарной мутации; не постоянная квитанция и не гарантия дедупликации */
+export interface WorkHistoryMutation {
+  /** Полная ветка после операции; при fork — родитель с новой ревизией */
+  session: {
+    /**
+     * Постоянный ID логической ветки
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /** Название поручения */
+    title: string;
+    /** Полный текст поручения в Markdown */
+    description: string;
+    /** Неизменяемый ID родителя; null у корня */
+    parentSessionId: string | null;
+    /** ID исходного intent родителя; null у корня */
+    originCheckpointId: string | null;
+    /** ID участия, создавшего дочернюю ветку; null у корня */
+    createdByRunId: string | null;
+    /** Сохранённый номер fork в хронологии родителя; null у корня */
+    parentSequence: number | null;
+    /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+    status: WorkHistoryMutationStatusEnum;
+    /** ID единственного текущего участия; null вне open; не признак online */
+    currentRunId: string | null;
+    /**
+     * Последний выделенный номер точки хронологии этой ветки; только возрастает
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /** Итог завершения или причина отмены; пустая строка до закрытия */
+    result: string;
+    /**
+     * Время создания ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Время последнего изменения ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    updatedAt: string;
+    /** Время завершения или отмены; null у незакрытой ветки */
+    closedAt: string | null;
+    /**
+     * Ревизия логической ветки работы
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    revision: number;
+  };
+  /** Созданное или завершённое участие; для checkpoint/fork — текущее; null, если участия нет */
+  run: {
+    /**
+     * Постоянный ID участия агента
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес участия: RUN- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /**
+     * ID ветки участия
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    sessionId: string;
+    /**
+     * Сохранённый автор; не признак подключения к сети
+     * @minLength 1
+     * @maxLength 128
+     */
+    actor: string;
+    /** Сохранённая атрибуция человека; null при отсутствии данных; не авторизация */
+    operator: {
+      /** Имя человека от имени которого работает агент; null, если неизвестно */
+      name: string | null;
+      /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+      email: string | null;
+      /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+      source: WorkHistoryMutationSourceEnum;
+    } | null;
+    /** Git-контекст рабочей копии клиента; null при отсутствии данных */
+    git: {
+      /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+      branch: string | null;
+      /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+      commit: string | null;
+    } | null;
+    /** Название клиента; null, если не передано */
+    client: string | null;
+    /** Внешний ID сессии клиента; null, если не передан; не ID ветки Relay */
+    sourceSessionId: string | null;
+    /**
+     * Время сохранённого подключения агента
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    startedAt: string;
+    /** Время окончания участия; null у текущего участия */
+    endedAt: string | null;
+    /**
+     * Номер подключения в хронологии ветки
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    startedSequence: number;
+    /** Номер окончания участия в ветке; null до окончания */
+    endedSequence: number | null;
+    /** Способ окончания участия; null до окончания */
+    endReason: WorkHistoryMutationEndReasonEnum | null;
+    /** ID предыдущего участия той же ветки; null у первого */
+    predecessorRunId: string | null;
+    /** Объяснение подключения или передачи, сохранённое при создании участия */
+    reason: string;
+    /** Сохранённое объяснение окончания участия; null до окончания; исходная reason не перезаписывается */
+    endSummary: string | null;
+  } | null;
+  /** Созданная точка либо null, если операция её не создаёт */
+  checkpoint:
+    | (
+        | {
+            /**
+             * Постоянный ID неизменяемой точки
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            id: string;
+            /**
+             * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+             * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            key: string;
+            /**
+             * ID ветки, в которой сохранена точка
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            sessionId: string;
+            /**
+             * ID участия, создавшего точку
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            runId: string;
+            /**
+             * Номер точки хронологии ветки
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            sequence: number;
+            /** Название точки работы */
+            title: string;
+            /** Полное краткое описание обычным текстом */
+            summary: string;
+            /** Основной материал точки в Markdown */
+            body: string;
+            /** Что сделано, в Markdown; пустая строка при отсутствии */
+            done: string;
+            /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+            remaining: string;
+            /** Следующее действие в Markdown; пустая строка при отсутствии */
+            nextStep: string;
+            /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+            checks: string;
+            /**
+             * Подписи ссылок, сохранённые вместе с этой точкой
+             * @maxItems 100
+             */
+            references: {
+              /** Постоянный адрес упомянутой предметной сущности */
+              ref: {
+                /** Вид основной сущности */
+                kind: WorkHistoryMutationKindEnum;
+                /**
+                 * Постоянный ID; внутренние отношения сохраняют только этот адрес
+                 * @minLength 1
+                 * @maxLength 128
+                 */
+                id: string;
+              };
+              /** Ключ цели на момент сохранения; null при отсутствии ключа */
+              key: string | null;
+              /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+              title: string;
+            }[];
+            /**
+             * Время сохранения точки
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            createdAt: string;
+            /**
+             * Автор сохранения точки
+             * @minLength 1
+             * @maxLength 128
+             */
+            createdBy: string;
+            /** Открытие нового намерения */
+            kind: "intent";
+            /** У самого намерения нет исходного intent */
+            intentId: null;
+            /**
+             * У открытия намерения список принятия всегда пуст
+             * @maxItems 0
+             */
+            acceptedSessionIds: string[];
+          }
+        | {
+            /**
+             * Постоянный ID неизменяемой точки
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            id: string;
+            /**
+             * Собственный адрес точки: CP- и безопасный случайный token; прежние числовые ключи допустимы
+             * @pattern ^CP-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            key: string;
+            /**
+             * ID ветки, в которой сохранена точка
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            sessionId: string;
+            /**
+             * ID участия, создавшего точку
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            runId: string;
+            /**
+             * Номер точки хронологии ветки
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            sequence: number;
+            /** Название точки работы */
+            title: string;
+            /** Полное краткое описание обычным текстом */
+            summary: string;
+            /** Основной материал точки в Markdown */
+            body: string;
+            /** Что сделано, в Markdown; пустая строка при отсутствии */
+            done: string;
+            /** Что осталось и что блокирует, в Markdown; пустая строка при отсутствии */
+            remaining: string;
+            /** Следующее действие в Markdown; пустая строка при отсутствии */
+            nextStep: string;
+            /** Проверки и их фактические результаты в Markdown; пустая строка при отсутствии */
+            checks: string;
+            /**
+             * Подписи ссылок, сохранённые вместе с этой точкой
+             * @maxItems 100
+             */
+            references: {
+              /** Постоянный адрес упомянутой предметной сущности */
+              ref: {
+                /** Вид основной сущности */
+                kind: WorkHistoryMutationKindEnum1;
+                /**
+                 * Постоянный ID; внутренние отношения сохраняют только этот адрес
+                 * @minLength 1
+                 * @maxLength 128
+                 */
+                id: string;
+              };
+              /** Ключ цели на момент сохранения; null при отсутствии ключа */
+              key: string | null;
+              /** Название цели на момент сохранения; не перечитывается из текущей сущности */
+              title: string;
+            }[];
+            /**
+             * Время сохранения точки
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            createdAt: string;
+            /**
+             * Автор сохранения точки
+             * @minLength 1
+             * @maxLength 128
+             */
+            createdBy: string;
+            /** Промежуточный материал либо отдельная закрывающая запись */
+            kind: WorkHistoryMutationKindEnum2;
+            /**
+             * ID исходного открытого намерения этой же ветки
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            intentId: string;
+            /**
+             * Явно принятые результаты завершённых прямых детей, привязанных к этому intent; не выводятся из статуса ребёнка
+             * @maxItems 100
+             */
+            acceptedSessionIds: string[];
+          }
+      )
+    | null;
+  /** Созданная pending-ветка только при fork, иначе null */
+  childSession: {
+    /**
+     * Постоянный ID логической ветки
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    id: string;
+    /**
+     * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+     * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+     */
+    key: string;
+    /** Название поручения */
+    title: string;
+    /** Полный текст поручения в Markdown */
+    description: string;
+    /** Неизменяемый ID родителя; null у корня */
+    parentSessionId: string | null;
+    /** ID исходного intent родителя; null у корня */
+    originCheckpointId: string | null;
+    /** ID участия, создавшего дочернюю ветку; null у корня */
+    createdByRunId: string | null;
+    /** Сохранённый номер fork в хронологии родителя; null у корня */
+    parentSequence: number | null;
+    /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+    status: WorkHistoryMutationStatusEnum1;
+    /** ID единственного текущего участия; null вне open; не признак online */
+    currentRunId: string | null;
+    /**
+     * Последний выделенный номер точки хронологии этой ветки; только возрастает
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    sequence: number;
+    /** Итог завершения или причина отмены; пустая строка до закрытия */
+    result: string;
+    /**
+     * Время создания ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    createdAt: string;
+    /**
+     * Время последнего изменения ветки
+     * @format date-time
+     * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+     */
+    updatedAt: string;
+    /** Время завершения или отмены; null у незакрытой ветки */
+    closedAt: string | null;
+    /**
+     * Ревизия логической ветки работы
+     * @exclusiveMin 0
+     * @max 9007199254740991
+     */
+    revision: number;
+  } | null;
+}
+
+/** Создать корневую open-ветку и первое участие атомарно; CAS отсутствует */
+export interface WorkSessionStart {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /** Непустое однострочное название поручения */
+  title: string;
+  /**
+   * Полное поручение в Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  description?: string;
+  /** Атрибуция от клиента; отсутствие при attach допускает наследование из createdByRun родителя, null явно оставляет атрибуцию неизвестной */
+  operator?: {
+    /** Имя человека от имени которого работает агент; null, если неизвестно */
+    name: string | null;
+    /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+    email: string | null;
+    /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+    source: WorkSessionStartSourceEnum;
+  } | null;
+  /** Git-контекст от клиента; отсутствие или null означает неизвестный контекст, сервер его не вычисляет */
+  git?: {
+    /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+    branch: string | null;
+    /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+    commit: string | null;
+  } | null;
+  /** Название клиента; отсутствие сохраняется как null в новом run */
+  client?: string;
+  /** Внешний ID сессии клиента; отсутствие сохраняется как null в новом run */
+  sourceSessionId?: string;
+  /**
+   * Причина подключения в Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  reason?: string;
+}
+
+/** Создать pending-ребёнка из открытого intent до запуска субагента; run ребёнка не создаётся */
+export interface WorkSessionFork {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Открытый intent родительской ветки: CP-N, ID или work-checkpoint:ID; ifRevision относится к родительской ветке, runId — к её текущему участию
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /**
+   * Постоянный ID текущего участия-владельца ветки, не ключ RUN-N
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  runId: string;
+  /** Непустое однострочное название поручения */
+  title: string;
+  /**
+   * Полное поручение в Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  description?: string;
+}
+
+/** Подключиться к pending-ветке под её CAS и создать первое участие */
+export interface WorkSessionAttach {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Ключ S-token, ID или адрес work-session:ID ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /** Атрибуция от клиента; отсутствие при attach допускает наследование из createdByRun родителя, null явно оставляет атрибуцию неизвестной */
+  operator?: {
+    /** Имя человека от имени которого работает агент; null, если неизвестно */
+    name: string | null;
+    /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+    email: string | null;
+    /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+    source: WorkSessionAttachSourceEnum;
+  } | null;
+  /** Git-контекст от клиента; отсутствие или null означает неизвестный контекст, сервер его не вычисляет */
+  git?: {
+    /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+    branch: string | null;
+    /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+    commit: string | null;
+  } | null;
+  /** Название клиента; отсутствие сохраняется как null в новом run */
+  client?: string;
+  /** Внешний ID сессии клиента; отсутствие сохраняется как null в новом run */
+  sourceSessionId?: string;
+  /**
+   * Причина подключения в Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  reason?: string;
+}
+
+/** Завершить текущее участие с причиной paused и приостановить ветку; intent остаются открытыми */
+export interface WorkSessionPause {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Ключ S-token, ID или адрес work-session:ID ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /**
+   * Постоянный ID текущего участия-владельца ветки, не ключ RUN-N
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  runId: string;
+  /** Непустое объяснение паузы; сохраняется как материал окончания участия */
+  reason: string;
+}
+
+/** Возобновить paused-ветку под её CAS; создать новый run с predecessorRunId */
+export interface WorkSessionResume {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Ключ S-token, ID или адрес work-session:ID ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /** Атрибуция от клиента; отсутствие при attach допускает наследование из createdByRun родителя, null явно оставляет атрибуцию неизвестной */
+  operator?: {
+    /** Имя человека от имени которого работает агент; null, если неизвестно */
+    name: string | null;
+    /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+    email: string | null;
+    /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+    source: WorkSessionResumeSourceEnum;
+  } | null;
+  /** Git-контекст от клиента; отсутствие или null означает неизвестный контекст, сервер его не вычисляет */
+  git?: {
+    /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+    branch: string | null;
+    /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+    commit: string | null;
+  } | null;
+  /** Название клиента; отсутствие сохраняется как null в новом run */
+  client?: string;
+  /** Внешний ID сессии клиента; отсутствие сохраняется как null в новом run */
+  sourceSessionId?: string;
+  /**
+   * Причина подключения в Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  reason?: string;
+}
+
+/** Явно заменить текущий run open-ветки под её CAS; прежний заканчивается с transferred */
+export interface WorkSessionTakeover {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Ключ S-token, ID или адрес work-session:ID ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /** Атрибуция от клиента; отсутствие при attach допускает наследование из createdByRun родителя, null явно оставляет атрибуцию неизвестной */
+  operator?: {
+    /** Имя человека от имени которого работает агент; null, если неизвестно */
+    name: string | null;
+    /** Email из источника атрибуции; null, если неизвестен; не глобальный ID и не подтверждённая личность */
+    email: string | null;
+    /** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+    source: WorkSessionTakeoverSourceEnum;
+  } | null;
+  /** Git-контекст от клиента; отсутствие или null означает неизвестный контекст, сервер его не вычисляет */
+  git?: {
+    /** Git-ветка рабочей копии клиента; null, если неизвестна или HEAD отсоединён */
+    branch: string | null;
+    /** Git commit рабочей копии клиента на момент подключения; null, если неизвестен */
+    commit: string | null;
+  } | null;
+  /** Название клиента; отсутствие сохраняется как null в новом run */
+  client?: string;
+  /** Внешний ID сессии клиента; отсутствие сохраняется как null в новом run */
+  sourceSessionId?: string;
+  /** Непустая причина явной передачи участия; сохраняется в новом run */
+  reason: string;
+}
+
+/** Завершить ветку и run; Core проверяет незакрытые intent и непринятые результаты детей */
+export interface WorkSessionComplete {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Ключ S-token, ID или адрес work-session:ID ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /**
+   * Постоянный ID текущего участия-владельца ветки, не ключ RUN-N
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  runId: string;
+  /** Непустой итог всей ветки в Markdown */
+  result: string;
+}
+
+/** Отменить ветку без неявного принятия детей; Core проверяет открытые intent и незакрытых детей */
+export interface WorkSessionCancel {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Ключ S-token, ID или адрес work-session:ID ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /**
+   * ID текущего run обязателен для open-ветки; у pending/paused текущего run нет
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  runId?: string;
+  /** Непустая причина отмены всей ветки в Markdown */
+  result: string;
+}
+
+/** Открыть intent новой неизменяемой точкой в текущей ветке */
+export interface WorkCheckpointOpen {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Ключ S-token, ID или адрес work-session:ID ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /**
+   * Постоянный ID текущего участия-владельца ветки, не ключ RUN-N
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  runId: string;
+  /** Название новой неизменяемой точки */
+  title: string;
+  /**
+   * Краткое описание; по умолчанию пустая строка
+   * @default ""
+   */
+  summary?: string;
+  /** Обязательный непустой полный Markdown намерения или результата; переводы строк и пробелы сохраняются без преобразований */
+  body: string;
+  /**
+   * Сделано, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  done?: string;
+  /**
+   * Остаток и блокеры, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  remaining?: string;
+  /**
+   * Следующее действие, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  nextStep?: string;
+  /**
+   * Проверки и фактические результаты, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  checks?: string;
+  /**
+   * Адреса целей для сохранённых подписей; не снимки содержания и не отношения общего графа
+   * @maxItems 100
+   * @default []
+   */
+  references?: string[];
+}
+
+/** Добавить progress к открытому intent; можно явно принять результаты детей, не закрывая intent */
+export interface WorkCheckpointSave {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Адрес исходного открытого intent; ifRevision относится к его ВЕТКЕ, runId — к её текущему участию
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /**
+   * Постоянный ID текущего участия-владельца ветки, не ключ RUN-N
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  runId: string;
+  /** Название новой неизменяемой точки */
+  title: string;
+  /**
+   * Краткое описание; по умолчанию пустая строка
+   * @default ""
+   */
+  summary?: string;
+  /** Обязательный непустой полный Markdown намерения или результата; переводы строк и пробелы сохраняются без преобразований */
+  body: string;
+  /**
+   * Сделано, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  done?: string;
+  /**
+   * Остаток и блокеры, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  remaining?: string;
+  /**
+   * Следующее действие, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  nextStep?: string;
+  /**
+   * Проверки и фактические результаты, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  checks?: string;
+  /**
+   * Адреса целей для сохранённых подписей; не снимки содержания и не отношения общего графа
+   * @maxItems 100
+   * @default []
+   */
+  references?: string[];
+  /**
+   * Явно принять указанные результаты детей; пустой список ничего не принимает
+   * @maxItems 100
+   * @default []
+   */
+  acceptedSessionIds?: string[];
+}
+
+/** Закрыть intent новой точкой result; исходная точка не изменяется */
+export interface WorkCheckpointComplete {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Адрес исходного открытого intent; ifRevision относится к его ВЕТКЕ, runId — к её текущему участию
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /**
+   * Постоянный ID текущего участия-владельца ветки, не ключ RUN-N
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  runId: string;
+  /** Название новой неизменяемой точки */
+  title: string;
+  /**
+   * Краткое описание; по умолчанию пустая строка
+   * @default ""
+   */
+  summary?: string;
+  /** Обязательный непустой полный Markdown намерения или результата; переводы строк и пробелы сохраняются без преобразований */
+  body: string;
+  /**
+   * Сделано, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  done?: string;
+  /**
+   * Остаток и блокеры, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  remaining?: string;
+  /**
+   * Следующее действие, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  nextStep?: string;
+  /**
+   * Проверки и фактические результаты, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  checks?: string;
+  /**
+   * Адреса целей для сохранённых подписей; не снимки содержания и не отношения общего графа
+   * @maxItems 100
+   * @default []
+   */
+  references?: string[];
+  /**
+   * Явно принять указанные результаты детей; пустой список ничего не принимает
+   * @maxItems 100
+   * @default []
+   */
+  acceptedSessionIds?: string[];
+}
+
+/** Закрыть intent новой точкой cancel; исходная точка не изменяется, принятие детей только явное */
+export interface WorkCheckpointCancel {
+  /**
+   * Идентификатор корреляции запроса и ответа; повтор исполняется заново. После потери ответа прочитайте текущее состояние
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  requestId: string;
+  /** Автор операции; при отсутствии используется defaultActor вызова; не механизм авторизации */
+  actor?: string;
+  /**
+   * Адрес исходного открытого intent; ifRevision относится к его ВЕТКЕ, runId — к её текущему участию
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref: string;
+  /**
+   * Исходная ревизия ВЕТКИ, а не run или checkpoint; конфликт отменяет всю мутацию
+   * @exclusiveMin 0
+   * @max 9007199254740991
+   */
+  ifRevision: number;
+  /**
+   * Постоянный ID текущего участия-владельца ветки, не ключ RUN-N
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+   */
+  runId: string;
+  /** Название новой неизменяемой точки */
+  title: string;
+  /**
+   * Краткое описание; по умолчанию пустая строка
+   * @default ""
+   */
+  summary?: string;
+  /** Обязательный непустой полный Markdown намерения или результата; переводы строк и пробелы сохраняются без преобразований */
+  body: string;
+  /**
+   * Сделано, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  done?: string;
+  /**
+   * Остаток и блокеры, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  remaining?: string;
+  /**
+   * Следующее действие, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  nextStep?: string;
+  /**
+   * Проверки и фактические результаты, Markdown; по умолчанию пустая строка
+   * @default ""
+   */
+  checks?: string;
+  /**
+   * Адреса целей для сохранённых подписей; не снимки содержания и не отношения общего графа
+   * @maxItems 100
+   * @default []
+   */
+  references?: string[];
+  /**
+   * Явно принять указанные результаты детей; пустой список ничего не принимает
+   * @maxItems 100
+   * @default []
+   */
+  acceptedSessionIds?: string[];
+}
+
 export interface ServerCapabilities {
   /** Поддержанные серверные операции; чтение не открывает каталоги проектов */
   capabilities: string[];
@@ -9652,7 +14509,7 @@ export interface ProductOverview {
     stale: number;
   }[];
   /**
-   * Отпечаток всех данных среза: проект, паспорт, продукт, доски, задачи и критерии, документы, планы, релизы; не зависит от generatedAt
+   * Отпечаток всех данных среза: проект, паспорт, продукт, доски, задачи и критерии, документы, планы, релизы, сессии и история работы; не зависит от generatedAt
    * @pattern ^[a-f0-9]{64}$
    */
   snapshotVersion: string;
@@ -10842,7 +15699,7 @@ export interface ProductOverview {
            * @max 9007199254740991
            */
           shown: number;
-          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики product overview */
+          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики обзора проекта */
           hasMore: boolean;
           /**
            * Первые задач review, чьи критерии и прямые обязательства выполнены, новые изменения первыми по порядку подборки; пустой массив — таких нет
@@ -10940,7 +15797,7 @@ export interface ProductOverview {
            * @max 9007199254740991
            */
           shown: number;
-          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики product overview */
+          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики обзора проекта */
           hasMore: boolean;
           /**
            * Первые задач review с невыполненными критериями или прямыми обязательствами, новые изменения первыми по порядку подборки; пустой массив — таких нет
@@ -11039,7 +15896,7 @@ export interface ProductOverview {
          * @max 9007199254740991
          */
         shown: number;
-        /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики product overview */
+        /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики обзора проекта */
         hasMore: boolean;
         /**
          * Первые прямых блокеров незавершённой работы: больше затронутых задач первыми, затем ID по порядку подборки; пустой массив — таких нет
@@ -11139,7 +15996,7 @@ export interface ProductOverview {
          * @max 9007199254740991
          */
         shown: number;
-        /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики product overview */
+        /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики обзора проекта */
         hasMore: boolean;
         /**
          * Первые задач in-progress и review вне открытых планов, новые изменения первыми по порядку подборки; пустой массив — таких нет
@@ -11266,7 +16123,7 @@ export interface ProductOverview {
            * @max 9007199254740991
            */
           shown: number;
-          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики product overview */
+          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики обзора проекта */
           hasMore: boolean;
           /**
            * Первые досок: больше незавершённых задач первыми, затем ID; включая пустые по порядку подборки; пустой массив — таких нет
@@ -11377,7 +16234,7 @@ export interface ProductOverview {
          * @max 9007199254740991
          */
         shown: number;
-        /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики product overview */
+        /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики обзора проекта */
         hasMore: boolean;
         /**
          * Первые планов draft и active с выполненным непустым составом, новые изменения первыми по порядку подборки; пустой массив — таких нет
@@ -11470,7 +16327,7 @@ export interface ProductOverview {
            * @max 9007199254740991
            */
           shown: number;
-          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики product overview */
+          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики обзора проекта */
           hasMore: boolean;
           /**
            * Первые запланированных релизов с готовым составом: ближайшая дата, без даты в конце, затем ID по порядку подборки; пустой массив — таких нет
@@ -11542,7 +16399,7 @@ export interface ProductOverview {
            * @max 9007199254740991
            */
           shown: number;
-          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики product overview */
+          /** true, если есть элементы сверх показанных; полный список читайте детализацией метрики обзора проекта */
           hasMore: boolean;
           /**
            * Первые завершённых готовых планов вне релизов planned и released, новые изменения первыми по порядку подборки; пустой массив — таких нет
@@ -11619,6 +16476,129 @@ export interface ProductOverview {
             };
           }[];
         };
+      };
+    };
+    /** Последняя сессия и независимая от неё выборка незавершённых сессий проекта */
+    sessions: {
+      /**
+       * Все сессии проекта, включая завершённые и отменённые
+       * @min 0
+       * @max 9007199254740991
+       */
+      total: number;
+      /** Сессия последнего события проекта; null, если история пуста */
+      latest: {
+        /**
+         * Постоянный ID сессии
+         * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        id: string;
+        /**
+         * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+         * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+         */
+        key: string;
+        /** Сохранённое название поручения без сокращения */
+        title: string;
+        /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+        status: ProductOverviewStatusEnum7;
+        /** Адрес родительской сессии; null у корня */
+        parent: {
+          /**
+           * Постоянный ID сессии
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          id: string;
+          /**
+           * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+           * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          key: string;
+        } | null;
+        /** Последнее событие сессии; не признак присутствия агента online */
+        lastEvent: {
+          /** Производная точка хронологии из сохранённых веток, участий и checkpoints; отдельного event-store нет */
+          kind: ProductOverviewKindEnum2;
+          /**
+           * Время последнего сохранённого события самой сессии
+           * @format date-time
+           * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+           */
+          at: string;
+          /**
+           * Номер последнего события внутри сессии
+           * @exclusiveMin 0
+           * @max 9007199254740991
+           */
+          sequence: number;
+        };
+      } | null;
+      /** Подборка всех незавершённых веток; дети учитываются отдельно и сохраняют родителя */
+      unfinished: {
+        /**
+         * Все сессии pending/open/paused независимо от давности
+         * @min 0
+         * @max 9007199254740991
+         */
+        total: number;
+        /**
+         * Число сессий в подборке
+         * @min 0
+         * @max 5
+         */
+        shown: number;
+        /** Есть незавершённые сессии вне подборки */
+        hasMore: boolean;
+        /**
+         * До пяти незавершённых сессий: время последнего события, затем ID по убыванию
+         * @maxItems 5
+         */
+        items: {
+          /**
+           * Постоянный ID сессии
+           * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          id: string;
+          /**
+           * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+           * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+           */
+          key: string;
+          /** Сохранённое название поручения без сокращения */
+          title: string;
+          /** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+          status: ProductOverviewStatusEnum8;
+          /** Адрес родительской сессии; null у корня */
+          parent: {
+            /**
+             * Постоянный ID сессии
+             * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            id: string;
+            /**
+             * Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы
+             * @pattern ^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+             */
+            key: string;
+          } | null;
+          /** Последнее событие сессии; не признак присутствия агента online */
+          lastEvent: {
+            /** Производная точка хронологии из сохранённых веток, участий и checkpoints; отдельного event-store нет */
+            kind: ProductOverviewKindEnum3;
+            /**
+             * Время последнего сохранённого события самой сессии
+             * @format date-time
+             * @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$
+             */
+            at: string;
+            /**
+             * Номер последнего события внутри сессии
+             * @exclusiveMin 0
+             * @max 9007199254740991
+             */
+            sequence: number;
+          };
+        }[];
       };
     };
   };
@@ -13165,6 +18145,682 @@ export interface ApiFailure {
     exitCode?: number;
   };
 }
+
+/**
+ * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
+ * @default "desc"
+ */
+export type WorkHistoryGraphQueryOrderEnum = "asc" | "desc";
+
+/** Открытие намерения, промежуточный материал, результат или отмена намерения */
+export type WorkHistoryGraphPageCheckpointKindEnum =
+  | "intent"
+  | "progress"
+  | "result"
+  | "cancel";
+
+/** Вычисленное состояние intent по всему сохранённому набору: без terminal, с result или с cancel; не по видимой странице */
+export type WorkHistoryGraphPageIntentStateEnum =
+  | "open"
+  | "completed"
+  | "cancelled";
+
+/** Сохранённое создание/закрытие ветки или начало/окончание участия */
+export type WorkHistoryGraphPageKindEnum =
+  | "session-created"
+  | "session-closed"
+  | "run-started"
+  | "run-ended";
+
+/** Открытие намерения, промежуточный материал, результат или отмена намерения */
+export type WorkHistoryGraphPageCheckpointKindEnum1 =
+  | "intent"
+  | "progress"
+  | "result"
+  | "cancel";
+
+/** Вычисленное состояние intent по всему сохранённому набору: без terminal, с result или с cancel; не по видимой странице */
+export type WorkHistoryGraphPageIntentStateEnum1 =
+  | "open"
+  | "completed"
+  | "cancelled";
+
+/** Сохранённое создание/закрытие ветки или начало/окончание участия */
+export type WorkHistoryGraphPageKindEnum1 =
+  | "session-created"
+  | "session-closed"
+  | "run-started"
+  | "run-ended";
+
+/** Вид графовой точки; fork представлен связью, а не дублирующей точкой session-forked */
+export type WorkHistoryGraphPageKindEnum2 =
+  | "session-created"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+/** before/after — до/после страницы в запрошенном order; outside-scope — за областью ref/includeChildren, независимо от времени */
+export type WorkHistoryGraphPageSideEnum = "before" | "after" | "outside-scope";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkHistoryGraphPageStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkHistoryGraphPageSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkHistoryGraphPageEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Открытие намерения, промежуточный материал, результат или отмена намерения */
+export type WorkHistoryGraphPointDetailCheckpointKindEnum =
+  | "intent"
+  | "progress"
+  | "result"
+  | "cancel";
+
+/** Вычисленное состояние intent по всему сохранённому набору: без terminal, с result или с cancel; не по видимой странице */
+export type WorkHistoryGraphPointDetailIntentStateEnum =
+  | "open"
+  | "completed"
+  | "cancelled";
+
+/** Сохранённое создание/закрытие ветки или начало/окончание участия */
+export type WorkHistoryGraphPointDetailKindEnum =
+  | "session-created"
+  | "session-closed"
+  | "run-started"
+  | "run-ended";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkHistoryGraphPointDetailStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkHistoryGraphPointDetailSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkHistoryGraphPointDetailEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkHistoryGraphPointDetailSourceEnum1 =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkHistoryGraphPointDetailEndReasonEnum1 =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Вид основной сущности */
+export type WorkHistoryGraphPointDetailKindEnum1 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Вид основной сущности */
+export type WorkHistoryGraphPointDetailKindEnum2 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Промежуточный материал либо отдельная закрывающая запись */
+export type WorkHistoryGraphPointDetailKindEnum3 =
+  | "progress"
+  | "result"
+  | "cancel";
+
+/** Открытие намерения, промежуточный материал, результат или отмена намерения */
+export type WorkHistoryGraphPointCheckpointKindEnum =
+  | "intent"
+  | "progress"
+  | "result"
+  | "cancel";
+
+/** Вычисленное состояние intent по всему сохранённому набору: без terminal, с result или с cancel; не по видимой странице */
+export type WorkHistoryGraphPointIntentStateEnum =
+  | "open"
+  | "completed"
+  | "cancelled";
+
+/** Сохранённое создание/закрытие ветки или начало/окончание участия */
+export type WorkHistoryGraphPointKindEnum =
+  | "session-created"
+  | "session-closed"
+  | "run-started"
+  | "run-ended";
+
+/** Вид графовой точки; fork представлен связью, а не дублирующей точкой session-forked */
+export type WorkHistoryGraphBoundaryNodeKindEnum =
+  | "session-created"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+/** before/after — до/после страницы в запрошенном order; outside-scope — за областью ref/includeChildren, независимо от времени */
+export type WorkHistoryGraphBoundaryNodeSideEnum =
+  | "before"
+  | "after"
+  | "outside-scope";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkHistoryGraphBranchStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Дополнительный фильтр состояния ветки */
+export type WorkSessionsQueryStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type WorkHistoryQueryOrderEnum = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type WorkHistoryQueryKindEnum =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+/** Вид основной сущности */
+export type WorkOpenIntentsPageKindEnum =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkSessionOverviewStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkSessionOverviewSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkSessionOverviewEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type AgentRunSummarySourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type AgentRunSummaryEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkSessionStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type AgentRunSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type AgentRunEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Вид основной сущности */
+export type WorkCheckpointKindEnum =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Вид основной сущности */
+export type WorkCheckpointKindEnum1 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Промежуточный материал либо отдельная закрывающая запись */
+export type WorkCheckpointKindEnum2 = "progress" | "result" | "cancel";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkSessionsPageStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkSessionsPageSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkSessionsPageEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkSessionDetailStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkSessionDetailSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkSessionDetailEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkSessionDetailSourceEnum1 =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkSessionDetailEndReasonEnum1 =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkTreePageStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkTreePageSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkTreePageEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Создание или закрытие ветки */
+export type WorkHistoryPageKindEnum = "session-created" | "session-closed";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkHistoryPageStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkHistoryPageStatusEnum1 =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Начало или окончание сохранённого участия */
+export type WorkHistoryPageKindEnum1 = "run-started" | "run-ended";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkHistoryPageSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkHistoryPageEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Вид основной сущности */
+export type WorkHistoryPageKindEnum2 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Вид основной сущности */
+export type WorkHistoryPageKindEnum3 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Промежуточный материал либо отдельная закрывающая запись */
+export type WorkHistoryPageKindEnum4 = "progress" | "result" | "cancel";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkContextStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkContextSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkContextEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkContextSourceEnum1 =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkContextEndReasonEnum1 =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Создание или закрытие ветки */
+export type WorkContextKindEnum = "session-created" | "session-closed";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkContextStatusEnum1 =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkContextStatusEnum2 =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Начало или окончание сохранённого участия */
+export type WorkContextKindEnum1 = "run-started" | "run-ended";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkContextSourceEnum2 =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkContextEndReasonEnum2 =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Вид основной сущности */
+export type WorkContextKindEnum2 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Вид основной сущности */
+export type WorkContextKindEnum3 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Промежуточный материал либо отдельная закрывающая запись */
+export type WorkContextKindEnum4 = "progress" | "result" | "cancel";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkHistoryMutationStatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkHistoryMutationSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Причина окончания участия: завершение, пауза, передача или отмена */
+export type WorkHistoryMutationEndReasonEnum =
+  | "completed"
+  | "paused"
+  | "transferred"
+  | "cancelled";
+
+/** Вид основной сущности */
+export type WorkHistoryMutationKindEnum =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Вид основной сущности */
+export type WorkHistoryMutationKindEnum1 =
+  | "project"
+  | "product"
+  | "feature"
+  | "scenario"
+  | "application"
+  | "implementation"
+  | "board"
+  | "task"
+  | "document"
+  | "work-plan"
+  | "release";
+
+/** Промежуточный материал либо отдельная закрывающая запись */
+export type WorkHistoryMutationKindEnum2 = "progress" | "result" | "cancel";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type WorkHistoryMutationStatusEnum1 =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkSessionStartSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkSessionAttachSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkSessionResumeSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
+
+/** Источник сохранённой атрибуции: явный ввод, окружение клиента, Git клиента или наследование от родительского участия */
+export type WorkSessionTakeoverSourceEnum =
+  | "explicit"
+  | "environment"
+  | "git"
+  | "inherited";
 
 /** Фактический режим Server */
 export type ProjectCatalogPageModeEnum = "local" | "workspace";
@@ -15594,6 +21250,40 @@ export type ProductOverviewStatusEnum6 =
   | "completed"
   | "cancelled";
 
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type ProductOverviewStatusEnum7 =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Производная точка хронологии из сохранённых веток, участий и checkpoints; отдельного event-store нет */
+export type ProductOverviewKindEnum2 =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+/** Ветка ожидает агента, открыта, приостановлена, завершена или отменена */
+export type ProductOverviewStatusEnum8 =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Производная точка хронологии из сохранённых веток, участий и checkpoints; отдельного event-store нет */
+export type ProductOverviewKindEnum3 =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
 /** Колонка: inbox, ready, in-progress, review, done; cancelled — отмена */
 export type ProductOverviewMetricPageColumnEnum =
   | "inbox"
@@ -16859,6 +22549,383 @@ export interface TransitionReleaseParams {
   reference: any;
 }
 
+export type ListWorkSessionsOkEnum = true;
+
+export interface ListWorkSessionsParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /** true — только pending/open/paused; false — только completed/cancelled; отсутствие — все */
+  unfinished?: boolean;
+  /** Дополнительный фильтр состояния ветки */
+  status?: StatusEnum4;
+  /**
+   * Прямые дети выбранного родителя; строка "null" — только корни; отсутствие — все ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  parent?: string;
+  /** Автор хотя бы одного сохранённого участия ветки */
+  actor?: string;
+  /** Поиск по ключу, названию и поручению ветки */
+  q?: string;
+}
+
+/** Дополнительный фильтр состояния ветки */
+export type StatusEnum4 =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Дополнительный фильтр состояния ветки */
+export type ListWorkSessionsParams1StatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+export type GetWorkSessionOkEnum = true;
+
+export interface GetWorkSessionParams {
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+}
+
+export type GetWorkSessionTreeOkEnum = true;
+
+export interface GetWorkSessionTreeParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+}
+
+export type GetWorkSessionHistoryOkEnum = true;
+
+export interface GetWorkSessionHistoryParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /**
+   * Включить всех потомков выбранной ветки; без ref история уже включает весь проект
+   * @default false
+   */
+  includeChildren?: boolean;
+  /**
+   * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+   * @default "desc"
+   */
+  order?: OrderEnum;
+  /** Ограничить страницу типом точки хронологии */
+  kind?: KindEnum2;
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+}
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type OrderEnum = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type KindEnum2 =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type GetWorkSessionHistoryParams1OrderEnum = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type GetWorkSessionHistoryParams1KindEnum =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+export type GetWorkHistoryOkEnum = true;
+
+export interface GetWorkHistoryParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /**
+   * Включить всех потомков выбранной ветки; без ref история уже включает весь проект
+   * @default false
+   */
+  includeChildren?: boolean;
+  /**
+   * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+   * @default "desc"
+   */
+  order?: OrderEnum1;
+  /** Ограничить страницу типом точки хронологии */
+  kind?: KindEnum3;
+}
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type OrderEnum1 = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type KindEnum3 =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type GetWorkHistoryParams1OrderEnum = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type GetWorkHistoryParams1KindEnum =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+export type GetWorkSessionContextOkEnum = true;
+
+export interface GetWorkSessionContextParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+}
+
+export type GetWorkSessionOpenIntentsOkEnum = true;
+
+export interface GetWorkSessionOpenIntentsParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /**
+   * Включить открытые intent всех потомков выбранной ветки; по умолчанию только сама ветка
+   * @default false
+   */
+  includeChildren?: boolean;
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+}
+
+export type GetWorkCheckpointOkEnum = true;
+
+export interface GetWorkCheckpointParams {
+  /** Ключ CP-token, ID или адрес work-checkpoint:ID точки */
+  ref: string;
+}
+
+export type StartWorkSessionOkEnum = true;
+
+export type ForkWorkSessionOkEnum = true;
+
+export type AttachWorkSessionOkEnum = true;
+
+export type PauseWorkSessionOkEnum = true;
+
+export type ResumeWorkSessionOkEnum = true;
+
+export type TakeoverWorkSessionOkEnum = true;
+
+export type CompleteWorkSessionOkEnum = true;
+
+export type CancelWorkSessionOkEnum = true;
+
+export type OpenWorkCheckpointOkEnum = true;
+
+export type SaveWorkCheckpointOkEnum = true;
+
+export type CompleteWorkCheckpointOkEnum = true;
+
+export type CancelWorkCheckpointOkEnum = true;
+
+export type GetWorkHistoryGraphOkEnum = true;
+
+export interface GetWorkHistoryGraphParams {
+  /**
+   * Ключ S-token, ID или work-session:ID выбранной ветки; отсутствие — весь проект, не фильтр левого каталога
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref?: string;
+  /**
+   * Включить всех потомков ref; по умолчанию true, без ref область уже охватывает проект
+   * @default true
+   */
+  includeChildren?: boolean;
+  /**
+   * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
+   * @default "desc"
+   */
+  order?: OrderEnum2;
+  /**
+   * Смещение страницы графовых точек; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Количество точек items: по умолчанию 50, максимум 100; boundaryNodes и openEnds не входят в этот лимит
+   * @min 1
+   * @max 100
+   * @default 50
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение требует нового чтения с VERSION_CONFLICT; не исторический снимок
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+}
+
+/**
+ * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
+ * @default "desc"
+ */
+export type OrderEnum2 = "asc" | "desc";
+
+/**
+ * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
+ * @default "desc"
+ */
+export type GetWorkHistoryGraphParams1OrderEnum = "asc" | "desc";
+
+export type GetWorkHistoryGraphPointOkEnum = true;
+
+export interface GetWorkHistoryGraphPointParams {
+  /** Производный node ID либо существующий CP-key, raw checkpoint ID или work-checkpoint:ID для прежних deep links; адрес ветки сам по себе не выбирает точку */
+  ref: string;
+}
+
 export type GetBoardsOkEnum = true;
 
 export interface GetBoardsParams {
@@ -17314,11 +23381,11 @@ export interface PreviewEntityDeletionParams {
    */
   ref: string;
   /** Вид удаляемой сущности; проект, паспорт и системные доски не удаляются */
-  kind: KindEnum2;
+  kind: KindEnum4;
 }
 
 /** Вид удаляемой сущности; проект, паспорт и системные доски не удаляются */
-export type KindEnum2 =
+export type KindEnum4 =
   | "feature"
   | "scenario"
   | "application"
@@ -17341,11 +23408,11 @@ export type DescribeEntityTypeOkEnum = true;
 
 export interface DescribeEntityTypeParams {
   /** Вид основной сущности */
-  kind: KindEnum3;
+  kind: KindEnum5;
 }
 
 /** Вид основной сущности */
-export type KindEnum3 =
+export type KindEnum5 =
   | "project"
   | "product"
   | "feature"
@@ -17395,7 +23462,7 @@ export interface ListEntitiesParams {
    */
   version?: string;
   /** Вид основной сущности */
-  kind?: KindEnum4;
+  kind?: KindEnum6;
   /**
    * Поиск без учёта регистра по ключам и алиасам, ID, названию, краткому описанию и контексту; также по полному description продукта, фичи, сценария, приложения, реализации, задачи и релиза, body документа, goal плана, version релиза, ключу и названию приложения и цели реализации. Не ищет комментарии, критерии и вложенные этапы
    * @maxLength 4096
@@ -17476,7 +23543,7 @@ export interface ListEntitiesParams {
 }
 
 /** Вид основной сущности */
-export type KindEnum4 =
+export type KindEnum6 =
   | "project"
   | "product"
   | "feature"
@@ -17574,11 +23641,11 @@ export interface GetEntityParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum5;
+  kind?: KindEnum7;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum5 =
+export type KindEnum7 =
   | "project"
   | "product"
   | "feature"
@@ -17616,11 +23683,11 @@ export interface ResolveEntityParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum6;
+  kind?: KindEnum8;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum6 =
+export type KindEnum8 =
   | "project"
   | "product"
   | "feature"
@@ -17677,11 +23744,11 @@ export interface GetEntityKeysParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum7;
+  kind?: KindEnum9;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum7 =
+export type KindEnum9 =
   | "project"
   | "product"
   | "feature"
@@ -17731,11 +23798,11 @@ export interface GetEntityKeySpacesParams {
    */
   version?: string;
   /** Вид основной сущности */
-  kind: KindEnum8;
+  kind: KindEnum10;
 }
 
 /** Вид основной сущности */
-export type KindEnum8 =
+export type KindEnum10 =
   | "project"
   | "product"
   | "feature"
@@ -17986,7 +24053,7 @@ export interface GetProductEntitiesForProjectParams {
    */
   q?: string;
   /** Тип цели */
-  kind?: KindEnum9;
+  kind?: KindEnum11;
   /**
    * ID или ключ приложения
    * @minLength 1
@@ -18022,7 +24089,7 @@ export interface GetProductEntitiesForProjectParams {
 }
 
 /** Тип цели */
-export type KindEnum9 =
+export type KindEnum11 =
   | "passport"
   | "feature"
   | "scenario"
@@ -18125,7 +24192,7 @@ export interface GetProductOverviewMetricForProjectParams {
 export type GetProductRecordsForProjectOkEnum = true;
 
 export interface GetProductRecordsForProjectParams {
-  kind?: KindEnum10;
+  kind?: KindEnum12;
   /** @maxLength 4096 */
   q?: string;
   /**
@@ -18151,7 +24218,7 @@ export interface GetProductRecordsForProjectParams {
   project: string;
 }
 
-export type KindEnum10 =
+export type KindEnum12 =
   | "passport"
   | "feature"
   | "scenario"
@@ -18486,13 +24553,13 @@ export interface GetPlansForProjectParams {
    */
   q?: string;
   /** Фильтр состояния плана */
-  status?: StatusEnum4;
+  status?: StatusEnum5;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Фильтр состояния плана */
-export type StatusEnum4 = "draft" | "active" | "completed" | "cancelled";
+export type StatusEnum5 = "draft" | "active" | "completed" | "cancelled";
 
 /** Фильтр состояния плана */
 export type GetPlansForProjectParams1StatusEnum =
@@ -18536,7 +24603,7 @@ export interface GetPlansCompactForProjectParams {
    */
   q?: string;
   /** Фильтр состояния плана */
-  status?: StatusEnum5;
+  status?: StatusEnum6;
   /** Обзор без полных Markdown-полей плана */
   projection: "compact";
   /** Slug, имя из реестра или постоянный идентификатор проекта */
@@ -18544,7 +24611,7 @@ export interface GetPlansCompactForProjectParams {
 }
 
 /** Фильтр состояния плана */
-export type StatusEnum5 = "draft" | "active" | "completed" | "cancelled";
+export type StatusEnum6 = "draft" | "active" | "completed" | "cancelled";
 
 /** Фильтр состояния плана */
 export type GetPlansCompactForProjectParams1StatusEnum =
@@ -18790,13 +24857,13 @@ export interface GetReleasesForProjectParams {
    */
   q?: string;
   /** Собственное состояние: запланирован, выпущен или отменён */
-  status?: StatusEnum6;
+  status?: StatusEnum7;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Собственное состояние: запланирован, выпущен или отменён */
-export type StatusEnum6 = "planned" | "released" | "cancelled";
+export type StatusEnum7 = "planned" | "released" | "cancelled";
 
 /** Собственное состояние: запланирован, выпущен или отменён */
 export type GetReleasesForProjectParams1StatusEnum =
@@ -18839,7 +24906,7 @@ export interface GetReleasesCompactForProjectParams {
    */
   q?: string;
   /** Собственное состояние: запланирован, выпущен или отменён */
-  status?: StatusEnum7;
+  status?: StatusEnum8;
   /** Обзор без полного Markdown-описания и массива planIds */
   projection: "compact";
   /** Slug, имя из реестра или постоянный идентификатор проекта */
@@ -18847,7 +24914,7 @@ export interface GetReleasesCompactForProjectParams {
 }
 
 /** Собственное состояние: запланирован, выпущен или отменён */
-export type StatusEnum7 = "planned" | "released" | "cancelled";
+export type StatusEnum8 = "planned" | "released" | "cancelled";
 
 /** Собственное состояние: запланирован, выпущен или отменён */
 export type GetReleasesCompactForProjectParams1StatusEnum =
@@ -18968,6 +25035,463 @@ export type TransitionReleaseForProjectOkEnum = true;
 export interface TransitionReleaseForProjectParams {
   /** ID или ключ релиза */
   reference: any;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type ListWorkSessionsForProjectOkEnum = true;
+
+export interface ListWorkSessionsForProjectParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /** true — только pending/open/paused; false — только completed/cancelled; отсутствие — все */
+  unfinished?: boolean;
+  /** Дополнительный фильтр состояния ветки */
+  status?: StatusEnum9;
+  /**
+   * Прямые дети выбранного родителя; строка "null" — только корни; отсутствие — все ветки
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  parent?: string;
+  /** Автор хотя бы одного сохранённого участия ветки */
+  actor?: string;
+  /** Поиск по ключу, названию и поручению ветки */
+  q?: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+/** Дополнительный фильтр состояния ветки */
+export type StatusEnum9 =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+/** Дополнительный фильтр состояния ветки */
+export type ListWorkSessionsForProjectParams1StatusEnum =
+  | "pending"
+  | "open"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+export type GetWorkSessionForProjectOkEnum = true;
+
+export interface GetWorkSessionForProjectParams {
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetWorkSessionTreeForProjectOkEnum = true;
+
+export interface GetWorkSessionTreeForProjectParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetWorkSessionHistoryForProjectOkEnum = true;
+
+export interface GetWorkSessionHistoryForProjectParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /**
+   * Включить всех потомков выбранной ветки; без ref история уже включает весь проект
+   * @default false
+   */
+  includeChildren?: boolean;
+  /**
+   * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+   * @default "desc"
+   */
+  order?: OrderEnum3;
+  /** Ограничить страницу типом точки хронологии */
+  kind?: KindEnum13;
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type OrderEnum3 = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type KindEnum13 =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type GetWorkSessionHistoryForProjectParams1OrderEnum = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type GetWorkSessionHistoryForProjectParams1KindEnum =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+export type GetWorkHistoryForProjectOkEnum = true;
+
+export interface GetWorkHistoryForProjectParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /**
+   * Включить всех потомков выбранной ветки; без ref история уже включает весь проект
+   * @default false
+   */
+  includeChildren?: boolean;
+  /**
+   * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+   * @default "desc"
+   */
+  order?: OrderEnum4;
+  /** Ограничить страницу типом точки хронологии */
+  kind?: KindEnum14;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type OrderEnum4 = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type KindEnum14 =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+/**
+ * Направление устойчивой хронологии: asc — сначала старые, desc — сначала новые
+ * @default "desc"
+ */
+export type GetWorkHistoryForProjectParams1OrderEnum = "asc" | "desc";
+
+/** Ограничить страницу типом точки хронологии */
+export type GetWorkHistoryForProjectParams1KindEnum =
+  | "session-created"
+  | "session-forked"
+  | "session-closed"
+  | "run-started"
+  | "run-ended"
+  | "checkpoint";
+
+export type GetWorkSessionContextForProjectOkEnum = true;
+
+export interface GetWorkSessionContextForProjectParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetWorkSessionOpenIntentsForProjectOkEnum = true;
+
+export interface GetWorkSessionOpenIntentsForProjectParams {
+  /**
+   * Смещение страницы; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Размер страницы: по умолчанию 20, максимум 100
+   * @min 1
+   * @max 100
+   * @default 20
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение даёт VERSION_CONFLICT
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /**
+   * Включить открытые intent всех потомков выбранной ветки; по умолчанию только сама ветка
+   * @default false
+   */
+  includeChildren?: boolean;
+  /** Ключ S-token, ID или адрес work-session:ID ветки */
+  ref: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetWorkCheckpointForProjectOkEnum = true;
+
+export interface GetWorkCheckpointForProjectParams {
+  /** Ключ CP-token, ID или адрес work-checkpoint:ID точки */
+  ref: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type StartWorkSessionForProjectOkEnum = true;
+
+export interface StartWorkSessionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type ForkWorkSessionForProjectOkEnum = true;
+
+export interface ForkWorkSessionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type AttachWorkSessionForProjectOkEnum = true;
+
+export interface AttachWorkSessionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type PauseWorkSessionForProjectOkEnum = true;
+
+export interface PauseWorkSessionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type ResumeWorkSessionForProjectOkEnum = true;
+
+export interface ResumeWorkSessionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type TakeoverWorkSessionForProjectOkEnum = true;
+
+export interface TakeoverWorkSessionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type CompleteWorkSessionForProjectOkEnum = true;
+
+export interface CompleteWorkSessionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type CancelWorkSessionForProjectOkEnum = true;
+
+export interface CancelWorkSessionForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type OpenWorkCheckpointForProjectOkEnum = true;
+
+export interface OpenWorkCheckpointForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type SaveWorkCheckpointForProjectOkEnum = true;
+
+export interface SaveWorkCheckpointForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type CompleteWorkCheckpointForProjectOkEnum = true;
+
+export interface CompleteWorkCheckpointForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type CancelWorkCheckpointForProjectOkEnum = true;
+
+export interface CancelWorkCheckpointForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetWorkHistoryGraphForProjectOkEnum = true;
+
+export interface GetWorkHistoryGraphForProjectParams {
+  /**
+   * Ключ S-token, ID или work-session:ID выбранной ветки; отсутствие — весь проект, не фильтр левого каталога
+   * @minLength 1
+   * @maxLength 257
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  ref?: string;
+  /**
+   * Включить всех потомков ref; по умолчанию true, без ref область уже охватывает проект
+   * @default true
+   */
+  includeChildren?: boolean;
+  /**
+   * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
+   * @default "desc"
+   */
+  order?: OrderEnum5;
+  /**
+   * Смещение страницы графовых точек; по умолчанию 0
+   * @min 0
+   * @max 9007199254740991
+   * @default 0
+   */
+  offset?: number;
+  /**
+   * Количество точек items: по умолчанию 50, максимум 100; boundaryNodes и openEnds не входят в этот лимит
+   * @min 1
+   * @max 100
+   * @default 50
+   */
+  limit?: number;
+  /**
+   * Непрозрачная версия первой страницы; передавайте при продолжении, изменение требует нового чтения с VERSION_CONFLICT; не исторический снимок
+   * @minLength 1
+   * @maxLength 256
+   */
+  version?: string;
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+/**
+ * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
+ * @default "desc"
+ */
+export type OrderEnum5 = "asc" | "desc";
+
+/**
+ * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
+ * @default "desc"
+ */
+export type GetWorkHistoryGraphForProjectParams1OrderEnum = "asc" | "desc";
+
+export type GetWorkHistoryGraphPointForProjectOkEnum = true;
+
+export interface GetWorkHistoryGraphPointForProjectParams {
+  /** Производный node ID либо существующий CP-key, raw checkpoint ID или work-checkpoint:ID для прежних deep links; адрес ветки сам по себе не выбирает точку */
+  ref: string;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
@@ -19480,13 +26004,13 @@ export interface PreviewEntityDeletionForProjectParams {
    */
   ref: string;
   /** Вид удаляемой сущности; проект, паспорт и системные доски не удаляются */
-  kind: KindEnum11;
+  kind: KindEnum15;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Вид удаляемой сущности; проект, паспорт и системные доски не удаляются */
-export type KindEnum11 =
+export type KindEnum15 =
   | "feature"
   | "scenario"
   | "application"
@@ -19514,13 +26038,13 @@ export type DescribeEntityTypeForProjectOkEnum = true;
 
 export interface DescribeEntityTypeForProjectParams {
   /** Вид основной сущности */
-  kind: KindEnum12;
+  kind: KindEnum16;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Вид основной сущности */
-export type KindEnum12 =
+export type KindEnum16 =
   | "project"
   | "product"
   | "feature"
@@ -19570,7 +26094,7 @@ export interface ListEntitiesForProjectParams {
    */
   version?: string;
   /** Вид основной сущности */
-  kind?: KindEnum13;
+  kind?: KindEnum17;
   /**
    * Поиск без учёта регистра по ключам и алиасам, ID, названию, краткому описанию и контексту; также по полному description продукта, фичи, сценария, приложения, реализации, задачи и релиза, body документа, goal плана, version релиза, ключу и названию приложения и цели реализации. Не ищет комментарии, критерии и вложенные этапы
    * @maxLength 4096
@@ -19653,7 +26177,7 @@ export interface ListEntitiesForProjectParams {
 }
 
 /** Вид основной сущности */
-export type KindEnum13 =
+export type KindEnum17 =
   | "project"
   | "product"
   | "feature"
@@ -19756,13 +26280,13 @@ export interface GetEntityForProjectParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum14;
+  kind?: KindEnum18;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum14 =
+export type KindEnum18 =
   | "project"
   | "product"
   | "feature"
@@ -19800,13 +26324,13 @@ export interface ResolveEntityForProjectParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum15;
+  kind?: KindEnum19;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum15 =
+export type KindEnum19 =
   | "project"
   | "product"
   | "feature"
@@ -19863,13 +26387,13 @@ export interface GetEntityKeysForProjectParams {
    */
   ref: string;
   /** Уточнение ожидаемого вида при разрешении адреса */
-  kind?: KindEnum16;
+  kind?: KindEnum20;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Уточнение ожидаемого вида при разрешении адреса */
-export type KindEnum16 =
+export type KindEnum20 =
   | "project"
   | "product"
   | "feature"
@@ -19919,13 +26443,13 @@ export interface GetEntityKeySpacesForProjectParams {
    */
   version?: string;
   /** Вид основной сущности */
-  kind: KindEnum17;
+  kind: KindEnum21;
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }
 
 /** Вид основной сущности */
-export type KindEnum17 =
+export type KindEnum21 =
   | "project"
   | "product"
   | "feature"

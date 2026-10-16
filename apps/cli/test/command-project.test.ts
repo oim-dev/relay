@@ -21,6 +21,7 @@ import {
   tempDirectory,
 } from "./helpers/cli.js";
 import { httpProxy, httpServer } from "./helpers/http.js";
+import { shellCommand } from "../src/command-kit.js";
 
 const hints = (text: string) =>
   text.split("\n").filter((line) => line.startsWith("npx @oim-dev/relay-cli"));
@@ -187,7 +188,11 @@ test("project: нормализованная квитанция inline/file/std
       projectData(successful(await app.run<EntityDetail>(["project", "get"])).data).name,
       "Имя Ω",
     );
-    assert.match((await replay(app.root, hints(result.stdout)[0]!)).stdout, /PROJECT — Имя Ω/);
+    assert.deepEqual(hints(result.stdout), []);
+    assert.match(
+      (await replay(app.root, "npx @oim-dev/relay-cli project get")).stdout,
+      /PROJECT — Имя Ω/,
+    );
   }
   const before = successful(await app.run<EntityDetail>(["project", "get"])).data;
   for (const args of [
@@ -348,11 +353,17 @@ test("project: 0/5/25/100 разделов, Unicode 24/40/100, JSON полный
       assert.doesNotMatch(human.stdout, /\u001b|sec-\d/);
       assert.match(human.stdout, new RegExp(`Разделов документов:\\s+${count}\\b`));
       assert.ok(human.stdout.split("\n").length < 30, human.stdout);
-      assert.equal(hints(human.stdout).length, 2);
+      assert.equal(hints(human.stdout).length, 0);
       if (width === 24) {
-        const listed = await replay(app.root, hints(human.stdout)[0]!);
+        const listed = await invokeRaw(app.root, [...prefix, "document", "section", "list"]);
         assert.equal(listed.stderr, "");
-        const docs = await replay(app.root, hints(listed.stdout)[0]!);
+        const docs = await invokeRaw(app.root, [
+          ...prefix,
+          "document",
+          "list",
+          "--section",
+          sections[0]?.id ?? "none",
+        ]);
         assert.equal(docs.stderr, "");
         assert.match(docs.stdout, /Документ|документ/);
       }
@@ -374,13 +385,12 @@ test("project: 0/5/25/100 разделов, Unicode 24/40/100, JSON полный
     assert.deepEqual(actual, sections);
     assert.equal(page.meta!.page!.total, count);
   }
-  // Путь из env также сохраняется в подсказке, обычный найденный конфиг — нет.
+  // Выбор через env не добавляет меню команд в карточку.
   const env = await invokeRaw(app.root, ["project", "get"], {
     env: { RELAY_CONFIG: quoted, COLUMNS: "24" },
   });
   assert.equal(env.code, 0, env.stdout);
-  assert.match(hints(env.stdout)[0]!, /--config/);
-  assert.equal((await replay(app.root, hints(env.stdout)[0]!)).stderr, "");
+  assert.deepEqual(hints(env.stdout), []);
   const ordinary = await invokeRaw(app.root, ["--config", config, "project", "get"]);
   assert.equal(ordinary.code, 0);
 });
@@ -602,16 +612,23 @@ test("project: workspace slug/rename сохраняют регистрацию, 
   );
   assert.equal(renamed.code, 0, renamed.stdout);
   assert.equal(renamed.stderr, "");
-  const hint = hints(renamed.stdout)[0]!;
-  assert.match(hint, /--project alpha/);
-  assert.match(hint, /--server-url/);
-  assert.match(hint, /project get$/);
+  assert.deepEqual(hints(renamed.stdout), []);
+  const hint = shellCommand([
+    "npx",
+    "@oim-dev/relay-cli",
+    "--server-url",
+    server.url,
+    "--project",
+    "alpha",
+    "project",
+    "get",
+  ]);
   const followed = await replay(root, hint);
   assert.match(followed.stdout, /PROJECT-WORKSPACE/);
   assert.equal(followed.stderr, "");
-  const sectionList = await replay(root, hints(followed.stdout)[0]!);
+  const sectionList = await invokeRaw(root, ["alpha", "document", "section", "list"]);
   assert.equal(sectionList.stderr, "");
-  assert.equal((await replay(root, hints(sectionList.stdout)[0]!)).stderr, "");
+  assert.deepEqual(hints(sectionList.stdout), []);
   const firstPage = successful(
     await invoke<any>(root, ["--project", "alpha", "document", "section", "list", "--limit", 2]),
   );
@@ -715,8 +732,17 @@ test("project: workspace slug/rename сохраняют регистрацию, 
   );
   assert.equal(bySlug.code, 0, bySlug.stdout);
   assert.equal(bySlug.stderr, "");
-  const stable = hints(bySlug.stdout)[0]!;
-  assert.ok(stable.includes(`--project ${before.ref.id}`), stable);
+  assert.deepEqual(hints(bySlug.stdout), []);
+  const stable = shellCommand([
+    "npx",
+    "@oim-dev/relay-cli",
+    "--server-url",
+    server.url,
+    "--project",
+    before.ref.id,
+    "project",
+    "get",
+  ]);
   const readStable = await replay(remoteOnly, stable);
   assert.match(readStable.stdout, /workspace-next/);
   assert.equal(readStable.stderr, "");

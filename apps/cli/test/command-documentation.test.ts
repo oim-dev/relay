@@ -16,13 +16,13 @@ import { tempDirectory } from "./helpers/cli.js";
 
 const cliRoot = fileURLToPath(new URL("../", import.meta.url));
 
-test("documentation: канонический справочник покрывает 146 регистраций, русские аргументы и параметры", async (t) => {
+test("documentation: канонический справочник покрывает 165 регистраций, русские аргументы и параметры", async (t) => {
   const root = await tempDirectory(t);
   const markdown = await readFile(join(cliRoot, "docs/CLI.md"), "utf8");
   const headings = [...markdown.matchAll(/^### (.+)$/gm)].map((match) => match[1]);
   const tree = commandTree(root);
   const leaves = tree.filter(({ command }) => command.commands.length === 0);
-  assert.equal(leaves.length, 146);
+  assert.equal(leaves.length, 165);
   for (const { command, path } of tree) {
     if (path.length) assert.match(command.description(), /[А-Яа-яЁё]/, path.join(" "));
     if (!command.commands.length)
@@ -200,18 +200,19 @@ test("documentation: установленный комплект skill сохр�
   const paths = (await filesBelow(installed)).filter((path: string) => path.endsWith(".md"));
   for (const path of [
     "SKILL.md",
-    "references/agent/ORCHESTRATOR.md",
-    "references/agent/WORKER.md",
-    "references/domain/TASKS.md",
-    "references/interfaces/CLI.md",
-    "references/interfaces/CLI-COMMANDS.md",
-    "references/guides/CONTENT.md",
+    "references/KNOWLEDGE.md",
+    "references/FEATURES.md",
+    "references/APPLICATIONS.md",
+    "references/TASKS.md",
+    "references/PLANNING.md",
+    "references/RELEASES.md",
+    "references/HISTORY.md",
   ])
     assert.ok(paths.includes(path), path);
   await checkDocumentation(installed, paths);
   const skill = await readFile(join(installed, "SKILL.md"), "utf8");
   assert.match(skill, /^---\nname: relay\ndescription: >-/);
-  assert.match(skill, /## Как заполнять содержание сущностей/);
+  assert.match(skill, /## Основной цикл работы над проектом/);
   assert.ok(!paths.some((path: string) => path.startsWith("scenarios/")));
   assert.ok(skill.split("\n").length <= 300);
 });

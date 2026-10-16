@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
+import { WORK_HISTORY_CAPABILITY } from "@relay/contracts/work-history";
+import { WORK_HISTORY_GRAPH_CAPABILITY } from "@relay/contracts/work-history-graph";
 import { defaultConfig } from "@relay/core/domain/config";
 import { initialize, readWorkspaceConfig } from "@relay/core/storage/workspace";
 import type { Workspace } from "@relay/core/storage/workspace";
@@ -128,6 +130,8 @@ for (const mode of ["local", "workspace"] as const) {
               "relay-release-refs-v1",
               "relay-entity-search-v2",
               "relay-project-catalog-v1",
+              WORK_HISTORY_CAPABILITY,
+              WORK_HISTORY_GRAPH_CAPABILITY,
             ],
             projectId: config.projectId,
             configPath: target.projectConfig,
@@ -293,7 +297,11 @@ test("config GET: manifest/миграционный WAL сохраняют ош�
   for (const [manifest, status, code] of [
     [unmarked, 200, undefined],
     [{ format: "relay-entities", schemaVersion: 3 }, 200, undefined],
-    [{ ...current, dataModelVersion: 3 }, 409, "STORAGE_VERSION_UNSUPPORTED"],
+    [
+      { ...current, dataModelVersion: current.dataModelVersion + 1 },
+      409,
+      "STORAGE_VERSION_UNSUPPORTED",
+    ],
     [{ format: "unknown", schemaVersion: 4 }, 409, "STORAGE_FORMAT_UNKNOWN"],
   ] as const) {
     await writeFile(manifestPath, JSON.stringify(manifest));
@@ -366,7 +374,10 @@ test("config GET: конфликт ordinary WAL и будущий профиль
       await writeFile(recordPath, recordBytes);
       const manifestPath = join(project.dataRoot, "storage.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      await writeFile(manifestPath, JSON.stringify({ ...manifest, dataModelVersion: 3 }));
+      await writeFile(
+        manifestPath,
+        JSON.stringify({ ...manifest, dataModelVersion: manifest.dataModelVersion + 1 }),
+      );
     }
     const before = await snapshot(root);
     let first;

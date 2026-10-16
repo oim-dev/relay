@@ -11,6 +11,61 @@ import { initializeRegistry, registerProject } from "@relay/project-runtime/regi
 import { startServer } from "@relay/server-runtime";
 import { ProductService } from "@relay/core/application/product/service";
 import { saveProjectSettings } from "@relay/core/application/project-settings/service";
+import { createLocalBackend } from "@relay/project-runtime/backend/local";
+
+test(
+  "SSE: local Backend публикует ветки, участия и checkpoints истории работы",
+  { timeout: 15000 },
+  async (t) => {
+    const { app, root } = await fixture(t);
+    await app.listen(0, "127.0.0.1");
+    const stream = await connect(await app.getUrl());
+    try {
+      await stream.next((event) => event.type === "connected");
+      const work = (await createLocalBackend(root)).workHistory;
+      let result = await work.start(
+        { title: "Локальный CLI", requestId: "sse-start" },
+        "cli-agent",
+      );
+      await stream.next((event) => event.type === "changed" && event.data.source === "storage");
+      assert.equal((await app.inject("/api/v1/work-history/sessions")).json().data.total, 1);
+      result = await work.openCheckpoint(
+        {
+          ref: result.session.key,
+          runId: result.run!.id,
+          ifRevision: result.session.revision,
+          title: "Намерение",
+          body: "## Полный текст\n\nМатериал  \n",
+          requestId: "sse-intent",
+        },
+        "cli-agent",
+      );
+      await stream.next((event) => event.type === "changed" && event.data.source === "storage");
+      assert.equal(
+        (await app.inject(`/api/v1/work-history/checkpoints/${result.checkpoint!.key}`)).json().data
+          .body,
+        "## Полный текст\n\nМатериал  \n",
+      );
+      result = await work.takeover(
+        {
+          ref: result.session.key,
+          ifRevision: result.session.revision,
+          reason: "Передача",
+          requestId: "sse-takeover",
+        },
+        "next-agent",
+      );
+      await stream.next((event) => event.type === "changed" && event.data.source === "storage");
+      assert.equal(
+        (await app.inject(`/api/v1/work-history/sessions/${result.session.key}`)).json().data
+          .currentRun.actor,
+        "next-agent",
+      );
+    } finally {
+      await stream.close();
+    }
+  },
+);
 
 test(
   "SSE: адресные изменения библиотеки уведомляют после публикации",

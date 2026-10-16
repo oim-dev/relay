@@ -48,7 +48,7 @@ export function overviewCommands(
 ): ProductOverviewCommands {
   const read = (...args: string[]) => commandInvocation(context, args);
   const metric = (name: string, ...args: string[]) =>
-    read("product", "overview", "--metric", name, ...args, "--snapshot", overview.snapshotVersion);
+    read("overview", "--metric", name, ...args, "--snapshot", overview.snapshotVersion);
   return {
     passport: read("product", "get"),
     passportHelp: read("product", "create", "--help"),
@@ -70,8 +70,9 @@ export function overviewCommands(
     documents: read("document", "list"),
     pinnedDocuments: read("document", "list", "--pinned", "true", "--status", "active"),
     sections: read("document", "section", "list"),
-    full: read("product", "overview", "--view", "full", "--snapshot", overview.snapshotVersion),
-    map: read("product", "overview", "--view", "map", "--snapshot", overview.snapshotVersion),
+    unfinishedSessions: read("session", "list", "--unfinished"),
+    full: read("overview", "--view", "full", "--snapshot", overview.snapshotVersion),
+    map: read("overview", "--view", "map", "--snapshot", overview.snapshotVersion),
     state: read("product", "state"),
     metrics: Object.fromEntries(
       productOverviewMetrics
@@ -93,7 +94,7 @@ export function metricCommands(
   page: ProductOverviewMetricPage,
 ): ProductOverviewMetricCommands {
   const read = (...args: string[]) => commandInvocation(context, args);
-  const commands: ProductOverviewMetricCommands = { overview: read("product", "overview") };
+  const commands: ProductOverviewMetricCommands = { overview: read("overview") };
   const first = page.items[0];
   if (first) {
     const kind =
@@ -114,7 +115,6 @@ export function metricCommands(
       page.items.map((blocker) => [
         blocker.id,
         read(
-          "product",
           "overview",
           "--metric",
           "blocker-affected",

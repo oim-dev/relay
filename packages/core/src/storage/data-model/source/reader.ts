@@ -994,6 +994,7 @@ function requiredRoots(
   if (facts.length) roots.add("records").add("file-hashes");
   if (facts.some((fact) => fact.addressable)) roots.add("addresses");
   if (facts.some((fact) => fact.addressable && fact.live)) roots.add("cards");
+  for (const fact of facts) for (const { index } of fact.indexKeys ?? []) roots.add(index);
   // Корни рёбер — по правилу построителя (`edgeIndexRoots`, entity-store/relations.ts).
   for (const name of edgeRoots) roots.add(name);
   // Индекс настроек строит только кодек проекта, объявивший свои индексы (Workspace).

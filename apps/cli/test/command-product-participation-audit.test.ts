@@ -133,8 +133,7 @@ test("APP-03/07 IMP-04/06/08: compact opt-in, атомарный composition и 
     assert.equal(human.stderr, "");
     assert.match(human.stdout, /Совместимая отметка: done/);
     assert.ok(human.stdout.includes(page.version));
-    assert.ok(human.stdout.includes(`implementation get ${first.data.items[0]!.key}`));
-    assert.ok(human.stdout.includes("replace --help"));
+    assert.doesNotMatch(human.stdout, /^npx /m);
     assert.doesNotMatch(human.stdout, /КОНЕЦ_ВКЛАДА|\u001b/);
   }
   const detail = successful(await f.run<EntityDetail>(["implementation", "get", fi.key])).data;

@@ -462,11 +462,8 @@ test(
     const readCommand = receipt
       .split("\n")
       .find((line) => line.startsWith("npx @oim-dev/relay-cli "));
-    assert.ok(readCommand, "Квитанция выпуска содержит короткую команду чтения из того же проекта");
-    const readArgs = readCommand
-      .match(/'(?:[^']|'\\'')*'|[^\s]+/g)!
-      .slice(2)
-      .map((arg) => (arg.startsWith("'") ? arg.slice(1, -1).replaceAll("'\\''", "'") : arg));
+    assert.equal(readCommand, undefined);
+    const readArgs = ["release", "get", r.key];
     assert.deepEqual(readArgs.slice(-3), ["release", "get", r.key]);
     assert.ok(!readArgs.includes("--config"));
     assert.ok(!readArgs.includes("--local"));

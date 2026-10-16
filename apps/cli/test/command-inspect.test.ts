@@ -258,16 +258,29 @@ for (const transport of ["local", "HTTP", "workspace"] as const) {
       assert.equal(full.nodes.length, 7);
       assert.equal(full.edges.length, 9);
       const contextText = await text(["inspect", "graph", "context", docs[0]!.key]);
+      assert.deepEqual(hints(contextText), []);
       for (const doc of docs.slice(0, 7)) {
-        const hint = hints(contextText).find((line) => line.endsWith(`document get ${doc.key}`));
-        assert.ok(hint, contextText);
-        assert.ok((await follow(cwd, hint)).includes(`Полное содержание ${docs.indexOf(doc)}`));
+        assert.ok(contextText.includes(doc.key));
+        assert.ok(
+          (await text(["document", "get", doc.key])).includes(
+            `Полное содержание ${docs.indexOf(doc)}`,
+          ),
+        );
       }
-      const deepHint = hints(contextText).find((line) =>
-        line.includes(`--root ${entityAddress(docs[5]!.ref)} `),
+      assert.match(
+        await text([
+          "inspect",
+          "graph",
+          "list",
+          "--root",
+          entityAddress(docs[5]!.ref),
+          "--depth",
+          1,
+          "--direction",
+          "outgoing",
+        ]),
+        /DEEP_5/,
       );
-      assert.ok(deepHint, contextText);
-      assert.match(await follow(cwd, deepHint), /DEEP_5/);
       const selection = [
         "inspect",
         "graph",
@@ -497,7 +510,8 @@ for (const transport of ["local", "HTTP", "workspace"] as const) {
         "inspect-author",
       ]);
       assert.match(rename, /Ключ изменён: BOARD-TEAM/);
-      assert.match(await follow(cwd, hints(rename)[0]!), /BOARD-TEAM/);
+      assert.deepEqual(hints(rename), []);
+      assert.match(await text(["board", "get", "BOARD-TEAM"]), /BOARD-TEAM/);
       failed(
         await run(["board", "rename", board.key, "BOARD-STALE", "--if-revision", board.revision]),
         "REVISION_CONFLICT",
@@ -658,6 +672,7 @@ test(
       "inspect-fixture",
     );
     const mixed = human(await invokeRaw(app.root, ["inspect", "graph", "context", "PROJECT"]));
+    assert.deepEqual(hints(mixed), []);
     for (const suffix of [
       "project get",
       "product get",
@@ -665,9 +680,7 @@ test(
       "board get BOARD-PRODUCT",
       `feature get ${feature.key}`,
     ]) {
-      const hint = hints(mixed).find((line) => line.endsWith(suffix));
-      assert.ok(hint, mixed);
-      assert.match(await follow(app.root, hint), /Ревизия/);
+      assert.match(await follow(app.root, `npx @oim-dev/relay-cli ${suffix}`), /Ревизия/);
     }
   },
 );

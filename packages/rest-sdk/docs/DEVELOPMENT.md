@@ -55,6 +55,48 @@ Manifest закрепляет `@gromlab/rest-api-codegen@5.2.4`. Генерат�
 импортируйте конкретные операции и собирайте собственное дерево. Имена функций,
 групп и файлов проверяйте по свежей генерации: их определяют operationId и первый tag.
 
+История работы сгруппирована в `operationsTree.workHistory` (тот же `api.workHistory`
+у полного клиента). Имена: `listWorkSessions`, `getWorkSession`, `getWorkSessionTree`,
+`getWorkSessionHistory`, `getWorkHistory`, `getWorkSessionContext`, `getWorkSessionOpenIntents`, `getWorkCheckpoint`,
+`startWorkSession`, `forkWorkSession`, `attachWorkSession`, `pauseWorkSession`,
+`resumeWorkSession`, `takeoverWorkSession`, `completeWorkSession`, `cancelWorkSession`,
+`openWorkCheckpoint`, `saveWorkCheckpoint`, `completeWorkCheckpoint`, `cancelWorkCheckpoint`.
+Каждая имеет scoped-вариант с суффиксом `ForProject` и прямой kebab-case subpath,
+например `@relay/rest-sdk/operations/start-work-session-for-project`.
+
+У связанного клиента чтение принимает один объект path/query, например
+`api.workHistory.getWorkSessionHistoryForProject({project, ref, includeChildren: false})`.
+Scoped-мутация принимает сначала `{project}`, затем полное JSON-тело:
+`api.workHistory.startWorkSessionForProject({project}, input)`. Unscoped-мутация —
+только тело. Сегменты project/ref передавайте URL-кодированными; ключ истории —
+непрозрачный безопасный token, не число. Фильтр корней SDK задаётся `parent: "null"`,
+а Backend преобразует предметный `parent: null` в эту wire-форму. Bool остаются bool.
+Capability, проверки полных ответов и политику отсутствия fallback реализует потребитель;
+SDK не вычисляет operator/git и не читает Git-конфигурацию сервера.
+
+Read-only граф добавляет в ту же группу `getWorkHistoryGraph`,
+`getWorkHistoryGraphPoint` и scoped-копии `getWorkHistoryGraphForProject`,
+`getWorkHistoryGraphPointForProject`. Прямые пути —
+`@relay/rest-sdk/operations/get-work-history-graph` и
+`@relay/rest-sdk/operations/get-work-history-graph-point` (также `-for-project`).
+Пример полного клиента: `api.workHistory.getWorkHistoryGraphForProject({project, limit: 50})`;
+карточка — `api.workHistory.getWorkHistoryGraphPointForProject({project, ref: encodeURIComponent(nodeId)})`.
+По умолчанию граф охватывает весь проект с order=desc; полные Markdown находятся
+только в адресной карточке. Перед вызовом потребитель проверяет
+`relay-work-history-graph-v2` в выбранном контексте, без fallback на старую историю.
+Эти операции не добавлены в CLI Backend и не меняют прежние lifecycle/checkpoint-методы.
+
+В графовом union `sequence` содержит node IDs `from`/`to`, `fork` —
+`fromSessionId` родительской линии и `to` видимого создания ребёнка, `branch-end` —
+`from` видимого закрытия ребёнка и `toSessionId` родителя. ID линий разрешаются через
+`branches`; время присоединения берётся из дочерней точки, не из давнего intent.
+`root-end` замыкает completed и cancelled корни. Визуальное закрытие ребёнка не ждёт
+приёмки: explicit acceptance остаётся checkpoint, вида ребра `acceptance` нет.
+Это производное чтение, без новой записи или события. Имена endpoint сохраняются,
+но capability `relay-work-history-graph-v2` отделяет несовместимый union от прежнего v1.
+Сервер не объявляет старую graph-capability, клиент не использует её как fallback.
+Потребители обновляют SDK, проверку capability и обработку union вместе.
+
 ## Настроенный клиент
 
 Клиент создаётся у потребителя, а не в общем SDK. Пример полного браузерного клиента

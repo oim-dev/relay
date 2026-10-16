@@ -98,7 +98,7 @@ export function registerReleases(program: Command, runtime: Runtime): void {
   const group = commandGroup(program, {
     name: "release",
     description: "Самостоятельные релизы, актуальный состав и готовность",
-    details,
+    details: `Релиз объединяет 1–200 планов целиком. preview проверяет выбранный состав без записи; create/update сохраняют его, publish фиксирует выпуск. Выпущенный релиз неизменяем; CLI не запускает CI/CD. ${details}`,
     examples: [["npx @oim-dev/relay-cli release list", "Прочитать релизы проекта"]],
   });
   registerEntityProgress(group, runtime, "release");
@@ -164,7 +164,7 @@ export function registerReleases(program: Command, runtime: Runtime): void {
     description: "Полные тексты и актуальное состояние",
     arguments: refArgument,
     details:
-      "Полное содержание отображается как Markdown; состав имеет отдельные постраничные команды.",
+      "Полное содержание отображается как Markdown. Состав страницами — release plans <reference>; текущая готовность и причины — release progress <reference>; прикреплённые документы — document list --target <reference>. Факт выпуска не равен текущей готовности состава.",
     examples: [["npx @oim-dev/relay-cli release get REL-1", "Прочитать запись"]],
     run: async (context, input) => {
       const data = await context.backend.releases.get(input.argument());
@@ -265,7 +265,11 @@ export function registerReleases(program: Command, runtime: Runtime): void {
         action === "create"
           ? "Создать релиз с выбранными планами"
           : "Изменить реквизиты, состав и состояние релиза",
-      details,
+      details:
+        (action === "create"
+          ? "Нужны название, обозначение выпуска (--release-version, не --version) и 1–200 планов. По умолчанию planned; незавершённые планы допустимы."
+          : "Непереданные реквизиты сохраняются; --plans заменяет весь состав (1–200 планов). Передайте ревизию из release get. Выпущенный релиз редактировать нельзя.") +
+        ` --status released выполняет проверки выпуска: все планы completed и фактически готовы. До записи проверьте состав через release preview. ${details}`,
       ...(action === "update" ? { arguments: refArgument } : {}),
       examples: [
         [
@@ -357,7 +361,14 @@ export function registerReleases(program: Command, runtime: Runtime): void {
         cancel: "Отменить плановый релиз",
         publish: "Зафиксировать выпуск выбранных планов",
       }[action],
-      details,
+      details:
+        {
+          plan: "Переводит отменённый релиз cancelled в planned, сохраняя его состав. Выпущенный релиз перепланировать нельзя.",
+          cancel:
+            "Отменяет плановый релиз planned, сохраняя планы и задачи без изменения их состояний. Выпущенный релиз отменить нельзя.",
+          publish:
+            "Фиксирует выпуск: все планы должны быть completed и фактически готовы. Причины отказа — release progress; состав — release plans. После выпуска релиз неизменяем. Команда не запускает CI/CD и не публикует внешние артефакты.",
+        }[action] + ` ${details}`,
       arguments: refArgument,
       examples: [
         [

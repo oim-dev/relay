@@ -18,6 +18,9 @@ import { BoardTaskRepository } from "../../storage/board-tasks.js";
 import { planningRecords } from "../../storage/planning.js";
 import { ProductRepository } from "../../storage/product.js";
 import { projectSettings } from "../../storage/project-settings.js";
+import { WorkHistoryRepository } from "../../storage/work-history.js";
+import { WorkHistoryReader } from "../work-history/read.js";
+import type { OverviewSessions } from "@relay/contracts/overview-sessions";
 import type { Workspace } from "../../storage/workspace.js";
 import { boardViews } from "../boards/service.js";
 import { planningCountsCompleted, readPlanningState } from "../planning/model.js";
@@ -53,6 +56,8 @@ export type OverviewSources = {
   releases: Release[];
   /** Предметный снимок планирования либо null для прежнего формата. */
   planning: PlanningState | null;
+  /** Компактная история и отпечаток всех её источников из того же чтения. */
+  workHistory: { snapshot: OverviewSessions; version: string | null };
 };
 
 /**
@@ -69,6 +74,21 @@ export async function readOverviewSources(
   const tasks = await new BoardTaskRepository(workspace).all();
   const boards = boardViews(await new BoardRepository(workspace).all(), records);
   const planning = workspace.storageSession ? await readPlanningState(workspace, tasks) : null;
+  const workHistory = workspace.storageSession
+    ? (
+        await WorkHistoryReader.open(
+          new WorkHistoryRepository(workspace.storageSession),
+          workspace.config.projectId ?? repository.productId,
+        )
+      ).projectOverview()
+    : {
+        snapshot: {
+          total: 0,
+          latest: null,
+          unfinished: { total: 0, shown: 0, hasMore: false, items: [] },
+        },
+        version: null,
+      };
   return {
     projectId: workspace.config.projectId ?? null,
     settings: projectSettings(workspace.config, workspace.configPath),
@@ -79,6 +99,7 @@ export async function readOverviewSources(
     plans: planning?.plans ?? [],
     releases: await planningRecords(workspace, "release"),
     planning,
+    workHistory,
   };
 }
 
@@ -93,7 +114,7 @@ export function overviewSnapshotVersion(sources: OverviewSources): string {
   return createHash("sha256")
     .update(
       JSON.stringify([
-        "product-overview/2",
+        "project-overview/3",
         sources.projectId,
         sources.settings,
         sources.productId,
@@ -102,6 +123,7 @@ export function overviewSnapshotVersion(sources: OverviewSources): string {
         byId(sources.boards),
         byId(sources.plans),
         byId(sources.releases),
+        sources.workHistory.version,
       ]),
     )
     .digest("hex");
@@ -329,6 +351,7 @@ export function buildOverviewWithIndex(
         slug: sources.settings.slug,
       },
       passport,
+      sessions: sources.workHistory.snapshot,
       knowledge: {
         features: { total: featureIds.length, byStatus: statusCounts(featureIds) },
         scenarios: { total: scenarioIds.length, byStatus: statusCounts(scenarioIds) },

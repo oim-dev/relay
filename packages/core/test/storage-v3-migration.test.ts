@@ -13,7 +13,7 @@ import { migrateStorage } from "../src/application/storage/maintenance.js";
 import type { MaintenanceHooks } from "../src/application/storage/maintenance.js";
 import { createTransitionRegistry } from "../src/storage/data-model/registry.js";
 import { HistoricalKindCatalog } from "../src/storage/data-model/history/catalog.js";
-import { PROFILE_2 } from "../src/storage/data-model/profiles.js";
+import { currentProfile } from "../src/storage/data-model/profiles.js";
 import {
   physicalUnified1,
   physicalUnified2,
@@ -39,7 +39,7 @@ const ref = (kind: string, id: string) => ({ kind, id });
 /** Реестр переходов теста: его кодеки — целевой профиль, физические шаги — производственные. */
 const transitions = (storage: EntityStorageRegistry) =>
   createTransitionRegistry({
-    profiles: [{ ...PROFILE_2, owners: { project: 1, task: 1, "work-plan": 1, note: 1 } }],
+    profiles: [{ ...currentProfile(), owners: { project: 1, task: 1, "work-plan": 1, note: 1 } }],
     transitions: [],
     physical: [physicalUnified1, physicalUnified2, physicalUnified3],
     storage,

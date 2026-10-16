@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
 import { entityAddress, entityRefSchema, graphEdgeSchema } from "@relay/contracts/entities/graph";
@@ -7,6 +6,7 @@ import type { GraphEdge } from "@relay/contracts/entities/graph";
 import { actorSchema } from "@relay/contracts/primitives";
 import { directories, jsonFiles } from "../files.js";
 import { invariant } from "../../shared/errors.js";
+import { shortId } from "../../shared/ids.js";
 import { digest, keyHash, jsonValue } from "./format.js";
 const json = (value: unknown) => jsonValue(JSON.parse(JSON.stringify(value)));
 import type { StorageSession } from "./store.js";
@@ -357,8 +357,8 @@ export async function replaceOwnedRelations(
         entry.edge.updatedBy = actor;
       }
     } else {
-      let id = randomUUID();
-      while ((await session.indexGet("edges", id)) !== undefined || byId.has(id)) id = randomUUID();
+      let id = shortId();
+      while ((await session.indexGet("edges", id)) !== undefined || byId.has(id)) id = shortId();
       entry = {
         slot,
         edge: {

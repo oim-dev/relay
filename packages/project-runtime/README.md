@@ -18,7 +18,7 @@
 - `backend/server` — отдельный клиент серверного реестра, без выбранного проекта.
 
 Backend охватывает настройки проекта, продукт, сущности, граф, доски и задачи,
-критерии и комментарии, планы, релизы, прогресс и validation. `projectSettings.get()`
+критерии и комментарии, планы, релизы, прогресс, историю работы и validation. `projectSettings.get()`
 читает актуальные настройки, `projectSettings.save({name, slug, ifRevision})` сохраняет
 полную пару имени/slug через Core либо REST `/context/settings`. Если потребителю нужна
 частичная правка, он дополняет отсутствующее поле прочитанным значением, сохраняя исходную
@@ -38,6 +38,14 @@ Backend охватывает настройки проекта, продукт, 
 Самостоятельное удаление доски не поддерживается. HTTP проверяет полный ответ
 схемой, использует закреплённый ID проекта и не повторяет подтверждение удаления.
 Покрытие интерфейсов — в [матрице](../../docs/CAPABILITIES.md).
+
+`workHistory` реализует `WorkHistoryServiceContract` из `@relay/contracts/work-history`:
+семь чтений и двенадцать явных lifecycle/checkpoint-мутаций. Local использует
+`WorkHistoryService(workspace)`, HTTP — generated SDK и строгие выходные схемы канона.
+Отсутствие `relay-work-history-v1` даёт `UNSUPPORTED` до предметного запроса, без fallback.
+Мутации принимают объект и `defaultActor`; явный actor тела имеет приоритет, повторов нет.
+Точная адресация, страницы и wire-форма null/bool — в
+[REST-справочнике](../server-runtime/docs/API.md#история-работы-агентов).
 
 Экспорты `@relay/project-runtime/config`, `registry`, `backend/types`, `backend/local`,
 `backend/http`, `backend/server` выбирают ESM и декларации из `dist`; условие

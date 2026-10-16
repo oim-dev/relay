@@ -689,7 +689,7 @@ test("document section: пять листьев, порядок, guards и со�
     assert.ok(text.includes(`${verb} раздел guides`), text);
     assert.ok(text.includes("PROJECT"), text);
     assert.match(text, new RegExp(`Ревизия проекта:\\s*${revision + 1}\\b`));
-    assert.match(human.stdout, /npx @oim-dev\/relay-cli .*document section list/);
+    assert.doesNotMatch(human.stdout, /^npx @oim-dev\/relay-cli /m);
     assert.doesNotMatch(human.stdout, /\u001b|"data":/);
   };
   await t.test("list: порядок и ревизия PROJECT", async () => {

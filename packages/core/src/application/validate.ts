@@ -5,6 +5,7 @@ import { BoardTaskRepository } from "../storage/board-tasks.js";
 import { readPlanningState } from "./planning/model.js";
 import { withWorkspaceValidation } from "./storage/validation.js";
 import { checkManagedRelations } from "./storage/managed-relations.js";
+import { validateWorkHistory } from "./work-history/validate.js";
 
 /** Проверяет действующие записи и связи под единой блокировкой проекта. */
 export async function validateWorkspace(workspace: Workspace) {
@@ -16,6 +17,7 @@ export async function validateWorkspace(workspace: Workspace) {
       return records;
     });
     await issues.check("planning", () => readPlanningState(workspace));
+    await issues.check("work-history", () => validateWorkHistory(workspace));
     // Сравнение не вызывает replaceOwnedRelations и выполняется в read-only StorageSession.
     const mismatches = await issues.check("managed-relations", () =>
       checkManagedRelations(workspace),

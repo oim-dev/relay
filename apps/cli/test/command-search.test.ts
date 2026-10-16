@@ -214,7 +214,7 @@ test("search/inspect: шесть листьев, schemas, aliases и snapshot ф
           assert.match(text, /Сортировка:\s*title/);
           assert.equal((out.stdout.match(/Показано:/g) ?? []).length, 1);
           assert.match(text, /Показано: 1 из 2/);
-          assert.match(out.stdout, /npx @oim-dev\/relay-cli .*feature get/);
+          assert.doesNotMatch(out.stdout, /npx @oim-dev\/relay-cli .*feature get/);
           if (expectedKey === created[1]!.key)
             assert.match(out.stdout, /npx @oim-dev\/relay-cli .*--cursor/);
           else assert.match(out.stdout, /Конец списка/);
