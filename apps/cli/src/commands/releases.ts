@@ -164,7 +164,7 @@ export function registerReleases(program: Command, runtime: Runtime): void {
     description: "Полные тексты и актуальное состояние",
     arguments: refArgument,
     details:
-      "Полное содержание отображается как Markdown; состав имеет отдельные постраничные команды.",
+      "Полное содержание отображается как Markdown. Состав страницами — release plans <reference>; текущая готовность и причины — release progress <reference>; прикреплённые документы — document list --target <reference>. Факт выпуска не равен текущей готовности состава.",
     examples: [["npx @oim-dev/relay-cli release get REL-1", "Прочитать запись"]],
     run: async (context, input) => {
       const data = await context.backend.releases.get(input.argument());

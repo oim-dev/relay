@@ -61,9 +61,8 @@ async function follow(cwd: string, command: string) {
 function commands(stdout: string): string[] {
   // Не рассматриваем похожую команду внутри пользовательского Markdown как служебную.
   const boundary = stdout.lastIndexOf("───\n");
-  assert.ok(boundary >= 0, stdout);
   return stdout
-    .slice(boundary)
+    .slice(Math.max(0, boundary))
     .split("\n")
     .filter((line) => line.startsWith("npx @oim-dev/relay-cli "));
 }
@@ -246,12 +245,9 @@ for (const transport of ["local", "HTTP"] as const) {
     assert.match(initialHuman.stdout.replace(/\s+/g, " "), /Прикрепления: 4 · уникальных целей: 3/);
     assert.doesNotMatch(initialHuman.stdout, /Другое направление|## Пояснение/);
     const initialLinks = await invokeRaw(app.root, [...globals, "document", "links", saved.key]);
-    assert.match(initialLinks.stdout, /Прочитать PROJECT\nnpx/);
-    const projectHint = commands(initialLinks.stdout).find((command) =>
-      command.endsWith("project get"),
-    );
-    assert.ok(projectHint, initialLinks.stdout);
-    assert.match(await follow(app.root, projectHint), /PROJECT/);
+    assert.doesNotMatch(initialLinks.stdout, /^npx /m);
+    assert.deepEqual(commands(initialLinks.stdout), []);
+    assert.match((await invokeRaw(app.root, [...globals, "project", "get"])).stdout, /PROJECT/);
     const changed = [relations[1]!];
     posts.length = 0;
     successful(
@@ -523,11 +519,8 @@ test("document reading: 20 аннотаций, 40 отношений, literal Ma
         assert.ok(out.stdout.includes(longSummary));
         assert.doesNotMatch(out.stdout, /Пояснение 0|КОНЕЦ ПОЯСНЕНИЯ|\u001b/);
         assert.match(out.stdout.replace(/\s+/g, " "), /Прикрепления: 40 · уникальных целей: 20/);
-        assert.ok(out.stdout.indexOf("───\n") > out.stdout.indexOf(body));
         const hints = commands(out.stdout);
-        assert.equal(hints.length, 3);
-        assert.match(hints[0]!, /document links/);
-        assert.match(hints[2]!, /document delete-preview/);
+        assert.equal(hints.length, 0);
         assert.ok(
           Buffer.byteLength(out.stdout) < 8000,
           `Карточка раскрыла соседние пояснения: ${Buffer.byteLength(out.stdout)}`,
@@ -538,19 +531,16 @@ test("document reading: 20 аннотаций, 40 отношений, literal Ma
       assert.match(list.stdout, /Аннотация \(фрагмент\)/);
       assert.doesNotMatch(list.stdout, /КОНЕЦ АННОТАЦИИ|ТОЛЬКОТЕЛО|Изменён:/);
       assert.equal((list.stdout.match(/Аннотация/g) ?? []).length, 19);
-      assert.equal(commands(list.stdout).length, 1);
-      const get = await follow(cwd, commands(list.stdout)[0]!);
+      assert.equal(commands(list.stdout).length, 0);
+      const get = (await raw(["document", "get", key])).stdout;
       assert.ok(get.includes(body));
-      const preview = await follow(cwd, commands(get)[2]!);
+      const preview = (await raw(["document", "delete-preview", key])).stdout;
       assert.match(preview, /Полный каскад удаления/);
-      const links = await follow(cwd, commands(get)[0]!);
+      const links = (await raw(["document", "links", key])).stdout;
       assert.match(links, /КОНЕЦ ПОЯСНЕНИЯ 0 documents/);
       const targetHints = commands(links).filter((line) => / (feature|document) get /.test(line));
-      assert.equal(targetHints.length, 2, links);
-      const target = await follow(
-        cwd,
-        targetHints.find((line) => line.includes("feature get"))!,
-      );
+      assert.equal(targetHints.length, 0, links);
+      const target = (await raw(["feature", "get", "FEATURE-1"])).stdout;
       assert.match(target, /Требование/);
       const nextHint = commands(links).find((line) => line.includes("--cursor"));
       assert.ok(nextHint, links);
@@ -558,17 +548,18 @@ test("document reading: 20 аннотаций, 40 отношений, literal Ma
       assert.match(last, /КОНЕЦ ПОЯСНЕНИЯ 19 references/);
       assert.match(last, /Конец списка/);
       const sections = await raw(["document", "section", "list"]);
-      const inSection = await follow(cwd, commands(sections.stdout)[0]!);
+      assert.deepEqual(commands(sections.stdout), []);
+      const inSection = (await raw(["document", "list", "--section", "product"])).stdout;
       assert.match(inSection, /Раздел:\s*product/);
       assert.match(inSection, /Регламент 1/);
       const search = await raw(["search", "ТОЛЬКОТЕЛО", "--kind", "document"]);
       assert.match(search.stdout, /Совпадение в содержании \(фрагмент\)/);
       assert.match(search.stdout, /ТОЛЬКОТЕЛО/);
-      assert.equal(commands(search.stdout).length, 1);
+      assert.equal(commands(search.stdout).length, 0);
       const summaryMatch = await raw(["document", "list", "--q", "Когда выбирать", "--limit", 20]);
       assert.doesNotMatch(summaryMatch.stdout, /Совпадение в содержании/);
       const searchPage = await raw(["search", "--kind", "document", "--limit", 20]);
-      assert.equal(commands(searchPage.stdout).length, 1);
+      assert.equal(commands(searchPage.stdout).length, 0);
       const sorted = await raw(["document", "list", "--sort", "updated", "--limit", 1]);
       assert.match(sorted.stdout, /Изменён:/);
       assert.ok(sorted.stdout.includes(expected.document!.updatedAt));

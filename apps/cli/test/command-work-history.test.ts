@@ -188,9 +188,12 @@ test(
       const command = hints(saveConflict.stdout)[0]!;
       let followed = await executeHint(client, command);
       if (command.includes("checkpoint get")) {
-        const branch = hints(followed.stdout).find((hint) => hint.includes("session get"));
-        assert.ok(branch, followed.stdout);
-        followed = await executeHint(client, branch);
+        assert.ok(followed.stdout.includes(start.session.id));
+        followed = await invokeRaw(
+          client,
+          [...prefix, "session", "get", start.session.key],
+          options,
+        );
       } else assert.ok(command.includes("session get"), command);
       assert.ok(followed.stdout.includes(start.session.key), followed.stdout);
     }
@@ -373,8 +376,8 @@ test(
       for (const [args, expected, fullMarkdown] of reads) {
         const output = human(await invokeRaw(root, args, options), fullMarkdown ? [markdown] : []);
         check(output, expected);
-        // Навигация остаётся общей, не разрастается на каждую строку.
-        if (args[1] === "list" || args[1] === "tree") assert.equal(hints(output).length, 1);
+        // Полные страницы не повторяют навигацию; адреса остаются в данных.
+        if (args[1] === "list" || args[1] === "tree") assert.equal(hints(output).length, 0);
       }
     }
     parent = (
@@ -430,7 +433,10 @@ for (const transport of ["local", "HTTP"] as const) {
       const empty = successful(await run<WorkSessionsPage>(["session", "list", "--unfinished"]));
       assert.equal(empty.meta?.page?.total, 0);
       assert.equal(empty.meta?.page?.nextCursor, null);
-      human(await text(["session", "list"]), ["В этой выборке веток нет", "session start --help"]);
+      assert.deepEqual(
+        hints(human(await text(["session", "list"]), ["В этой выборке веток нет"])),
+        [],
+      );
       const start = await save(
         [
           "session",
@@ -458,7 +464,6 @@ for (const transport of ["local", "HTTP"] as const) {
           markdown,
           parent.key,
           parent.currentRunId!,
-          "session context",
         ]);
 
       const opened = await save(
@@ -598,11 +603,7 @@ for (const transport of ["local", "HTTP"] as const) {
         await run<WorkOpenIntentsPage>(["session", "intents", parent.key]),
       );
       assert.equal(ownIntents.data.total, 1);
-      human(await text(["session", "intents", parent.key]), [
-        intent.key,
-        "Намерение родителя",
-        "checkpoint get",
-      ]);
+      human(await text(["session", "intents", parent.key]), [intent.key, "Намерение родителя"]);
       failed(
         await run([
           "session",
@@ -1104,7 +1105,7 @@ test(
         "get",
         parent.key,
       ]),
-      ["--config", "--local", "Причина отмены", markdown],
+      ["Причина отмены", markdown],
     );
     const error = await invoke(root, ["checkpoint", "get", "CP-999"], {
       subprocess: true,

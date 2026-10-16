@@ -1,4 +1,4 @@
-import { listText, cardText, commandText, actionsText } from "./common.js";
+import { listText, cardText, commandText } from "./common.js";
 import type { OutputCommand, OutputField } from "./common.js";
 import { filterFields } from "./entities.js";
 import type {
@@ -59,7 +59,7 @@ export function productSnapshotConflictText(
           ),
         },
       ],
-      commands: [{ label: "Прочитать актуальные данные", command: restart }],
+      commands: [{ label: "Прочитать актуальные данные", command: restart, purpose: "recovery" }],
     },
     options,
   );
@@ -325,14 +325,11 @@ function previewBlock<T>(
   empty: string,
   full: string,
   options: TextOptions,
-  emptyCommand?: string,
+  _emptyCommand?: string,
 ): string {
   const width = outputWidth(options);
   const parts = [prose(previewTitle(title, preview), width)];
-  if (!preview.items.length)
-    parts.push(
-      indent(empty, width) + (emptyCommand ? `\n${commandText(emptyCommand, options)}` : ""),
-    );
+  if (!preview.items.length) parts.push(indent(empty, width));
   else parts.push(preview.items.map(render).join("\n"));
   if (preview.hasMore)
     parts.push(
@@ -822,29 +819,7 @@ export function productOverviewMetricText(
     : data.metric === "blocker-affected"
       ? "Блокер сейчас не задерживает незавершённых задач."
       : "Таких элементов нет.";
-  const commands = cardText(
-    {
-      title: "Дальнейшее чтение",
-      commands: [
-        ...(data.commands.read
-          ? [
-              {
-                label: "Открыть первую запись (для остальных замените ключ)",
-                command: data.commands.read,
-              },
-            ]
-          : []),
-        ...(data.commands.blocker
-          ? [{ label: "Блокер целиком", command: data.commands.blocker }]
-          : []),
-        { label: "Обзор проекта", command: data.commands.overview },
-      ],
-    },
-    options,
-  );
-  return [head, note, items.length ? items.join("\n") : indent(empty, width), commands].join(
-    "\n\n",
-  );
+  return [head, note, items.length ? items.join("\n") : indent(empty, width)].join("\n\n");
 }
 
 const statusSplit = (counts: { none: number; partial: number; done: number }) =>
@@ -914,6 +889,7 @@ export function productOverviewCompactText(
   return cardText(
     {
       title: passport.state === "missing" ? "Продукт без паспорта" : `Продукт · ${passport.name}`,
+      fields: [["Срез", data.snapshotVersion, "opaque"]],
       sections: [
         ...(passport.state === "no-summary" && passport.excerpt.text
           ? [
@@ -924,13 +900,6 @@ export function productOverviewCompactText(
             ]
           : []),
         { title: "Сводка", body: lines.map((line) => prose(line, width)).join("\n") },
-        {
-          title: "Границы",
-          body: prose(
-            "Показатели пересекаются и не складываются. Выполненные обязательства не доказывают внешнюю проверку; состояние плана и релиза не равно готовности состава. Работа вне планов — сигнал, не ошибка; блокеры только прямые. Это сводка без списков; полные подборки и причины доступны командами ниже.",
-            width,
-          ),
-        },
       ],
       commands,
     },
@@ -989,19 +958,6 @@ export function productOverviewLegacyMapText(
       "",
       data.total ? "На этой странице записей нет." : "Записей продукта пока нет.",
     ),
-    ...(data.commands.map
-      ? [
-          cardText(
-            {
-              title: "Адресная карта без общего обзора",
-              commands: [
-                { label: "Открыть карту с адресами приложений", command: data.commands.map },
-              ],
-            },
-            options,
-          ),
-        ]
-      : []),
   ].join("\n\n");
 }
 
@@ -1015,7 +971,7 @@ function passportText(
     return {
       title: "Продукт без паспорта",
       fields: [["Паспорт", "ещё не создан"]],
-      body: `${prose("Назначение продукта пока не описано. Поля и пример создания:", width)}\n${commandText(data.commands.passportHelp, options)}`,
+      body: prose("Назначение продукта пока не описано.", width),
     };
   const fields: [string, string | number][] = [
     ["Паспорт", passport.state === "filled" ? "заполнен" : "без краткого описания"],
@@ -1061,6 +1017,7 @@ export function productOverviewText(
         ["Проект", `${snapshot.project.name} (${snapshot.project.slug})`],
         ["ID проекта", snapshot.project.id ?? "не назначен"],
         ["Срез получен", data.generatedAt],
+        ["Срез", data.snapshotVersion, "opaque"],
         ...passport.fields,
       ],
       sections: [{ title: "Паспорт", body: passport.body }],
@@ -1150,7 +1107,7 @@ export function productOverviewText(
       "Активные планы",
       plans.active,
       (plan) => planLine(plan, options),
-      plans.total ? "Активных планов нет. Все планы:" : "Планов пока нет.",
+      plans.total ? "Активных планов нет." : "Планов пока нет.",
       commands.activePlans,
       options,
       plans.total ? commands.plans : undefined,
@@ -1276,28 +1233,6 @@ export function productOverviewText(
     prose(`Версия для изменения состава: ${data.version}`, width),
   ].join("\n\n");
 
-  const next = cardText(
-    {
-      title: "Дальнейшее чтение",
-      commands: [
-        { label: "Паспорт целиком", command: commands.passport },
-        ...(commands.map
-          ? [{ label: "Адресная карта без повторения сводки", command: commands.map }]
-          : []),
-        { label: "Готовность фич", command: commands.progress },
-        { label: "Задачи в работе", command: commands.inProgress },
-        { label: "Задачи на проверке", command: commands.review },
-        { label: "Заблокированные задачи", command: commands.blocked },
-        { label: "Готовые к началу", command: commands.readyToStart },
-        { label: "Планы", command: commands.plans },
-        { label: "Релизы", command: commands.releases },
-        { label: "Документы", command: commands.documents },
-        { label: "Доски", command: commands.boards },
-      ],
-    },
-    options,
-  );
-
   return [
     head,
     summary,
@@ -1309,7 +1244,6 @@ export function productOverviewText(
     boards,
     documentsText,
     map,
-    next,
   ]
     .filter(Boolean)
     .join(`\n\n`);
@@ -1351,7 +1285,7 @@ export function productEntitiesText(
 export function productContextText(
   data: ProductContext,
   options: TextOptions,
-  commands: OutputCommand[] = [],
+  _commands: OutputCommand[] = [],
   filters: { id?: string; application?: string } = {},
 ): string {
   const addresses = new Map(data.records.map(({ record }) => [record.id, record.key ?? record.id]));
@@ -1395,7 +1329,6 @@ export function productContextText(
     );
   if (!data.records.length)
     sections.push("Записей в предметной подборке нет. Выберите продуктовую запись через --id.");
-  if (commands.length) sections.push(actionsText(commands, options));
   return sections.join(`\n\n${"─".repeat(options.width)}\n\n`);
 }
 

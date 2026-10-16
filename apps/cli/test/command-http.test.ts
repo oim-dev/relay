@@ -177,8 +177,7 @@ test("HTTP/local golden: проект, конфиг, задача, граф, doc
     const hints = human.stdout
       .split("\n")
       .filter((line) => line.startsWith("npx @oim-dev/relay-cli"));
-    const hint = hints[0];
-    assert.ok(hint?.includes("--server-url") && hint.includes(server.url), human.stdout);
+    assert.deepEqual(hints, []);
     if (args[0] === "project" || args[0] === "config") {
       assert.match(human.stdout, /HTTP проект/);
       assert.match(
@@ -189,19 +188,11 @@ test("HTTP/local golden: проект, конфиг, задача, граф, doc
     } else if (args[0] === "doctor") {
       assert.match(human.stdout.replace(/\s+/g, " "), /Проверка целостности пройдена/);
       assert.match(human.stdout, /Задач:\s+1/);
-      assert.match(hint!, /inspect graph list/);
     } else {
       assert.match(human.stdout, /PRODUCT-1/);
       assert.match(human.stdout, /Из HTTP/);
       assert.match(human.stdout, /http-example/);
       assert.match(human.stdout, /ревизия:\s*2/i);
-      assert.ok(
-        hints.some((line) => /task get PRODUCT-1(?:\s|$)/.test(line)),
-        human.stdout,
-      );
-      const descriptions = hints.find((line) => line.includes("inspect graph list"));
-      assert.ok(descriptions?.includes(server.url), human.stdout);
-      assert.match(descriptions!, /--depth 1 --direction outgoing/);
     }
   }
   assert.deepEqual(await readdir(empty), [], "remote-only не создаёт локальные данные");

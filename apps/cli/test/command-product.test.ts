@@ -187,7 +187,7 @@ test("product: восемь singleton-листьев и сохранение п�
       assert.match(human.stdout, /## Назначение/);
       assert.match(human.stdout, /  сохранить отступ/);
       assert.match(human.stdout, /Конец паспорта/);
-      assert.match(human.stdout, /npx @oim-dev\/relay-cli/);
+      assert.doesNotMatch(human.stdout, /^npx @oim-dev\/relay-cli /m);
       assert.doesNotMatch(human.stdout, /\u001b|"ok":|"data":/);
     });
 });
@@ -299,7 +299,7 @@ test("каталоги create/update: ввод до мутации и human-кв
         assert.equal(out.stderr, "");
         assert.ok(out.stdout.includes(key), out.stdout);
         assert.match(out.stdout, /ревизия/i);
-        assert.match(out.stdout, new RegExp(`npx @oim-dev/relay-cli .*${kind} get`));
+        assert.doesNotMatch(out.stdout, /^npx @oim-dev\/relay-cli /m);
         assert.doesNotMatch(out.stdout, /\u001b|"data":/);
       }
       const current = successful(
@@ -789,7 +789,6 @@ test("product overview: срез проекта, подборки, страни�
         "Продуктовые знания",
         "Документы",
         "Карта продукта",
-        "Дальнейшее чтение",
         "Есть продолжение",
       ];
       const positions = order.map((title) => out.indexOf(title));
@@ -1301,7 +1300,6 @@ test("product overview: показатели оператора, детализ�
       `Блокер: ${keys.A} — Блокер А`,
       "Всего: 2",
       "связь с блокером: зависимость",
-      "Блокер целиком",
       "Есть продолжение",
       "product overview --metric blocker-affected --blocker",
     ])

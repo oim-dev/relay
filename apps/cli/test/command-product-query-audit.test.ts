@@ -285,12 +285,14 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
     );
     assert.match(compact.stdout, /Задач всего: 1/);
     assert.match(compact.stdout, /review 1/);
-    assert.match(compact.stdout, /--view full/);
+    assert.ok(compact.stdout.includes(overview.data.snapshotVersion));
+    assert.doesNotMatch(compact.stdout, /^npx /m);
     assert.doesNotMatch(compact.stdout, /Показано:|Конец списка|Проверить поиск/);
     assert.match(full.stdout, /Требует внимания/);
     const mapText = await invokeRaw(app.root, ["product", "overview", "--view", "map"], { env });
     assert.equal(mapText.code, 0, mapText.stdout);
-    assert.match(mapText.stdout, /application participation list WEB/);
+    assert.match(mapText.stdout, /WEB/);
+    assert.doesNotMatch(mapText.stdout, /application participation list WEB/);
     assert.doesNotMatch(mapText.stdout, /Требует внимания|Задач всего|Показатели работы/);
     if (width === 40 || width === 100)
       t.diagnostic(
@@ -674,7 +676,8 @@ test("PROD-05: пустой обзор компактен, полный режи
     assert.equal(full.code, 0, full.stdout);
     assert.match(compact.stdout, /Продукт без паспорта/);
     assert.match(compact.stdout, /Задач всего: 0/);
-    assert.match(compact.stdout, /product create --help/);
+    assert.doesNotMatch(compact.stdout, /^npx /m);
+    assert.match(compact.stdout, /Срез:/);
     assert.doesNotMatch(compact.stdout, /Показано:|Конец списка/);
     assert.ok(compact.stdout.length < full.stdout.length * 0.65);
     t.diagnostic(

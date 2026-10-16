@@ -392,7 +392,7 @@ for (const status of ["none", "partial", "done"] as const)
         assert.match(text, /Приложение:\s*Web/);
         assert.match(text, new RegExp(`Ревизия состава:\\s*${current.revision}\\b`));
         assert.match(text, /Выбрано реализаций:\s*1/);
-        assert.match(human.stdout, /npx @oim-dev\/relay-cli .*application participation list/);
+        assert.doesNotMatch(human.stdout, /^npx @oim-dev\/relay-cli /m);
         assert.deepEqual(await raw(), before);
       },
     );

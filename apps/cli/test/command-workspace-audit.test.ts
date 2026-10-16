@@ -51,7 +51,7 @@ function hints(text: string) {
   return text.split("\n").filter((line) => line.startsWith("npx @oim-dev/relay-cli"));
 }
 
-test("WSP-04/05/06: remote-only каталог, регистрация/удаление, честный источник и исполнимые hints", async (t) => {
+test("WSP-04/05/06: remote-only каталог без меню, регистрация/удаление и исполнимое продолжение", async (t) => {
   const f = await setup(t);
   const url = ["--server-url", f.server.url];
   const empty = await invokeRaw(f.remoteRoot, ["workspace", "project", "list", ...url]);
@@ -59,8 +59,11 @@ test("WSP-04/05/06: remote-only каталог, регистрация/удал�
   assert.equal(empty.stderr, "");
   assert.match(empty.stdout, /Режим Server:\s+workspace/);
   assert.match(empty.stdout, /Реестр на сервере:/);
-  assert.equal(hints(empty.stdout).length, 1);
-  assert.match((await runHint(f.remoteRoot, hints(empty.stdout)[0]!)).stdout, /--project-config/);
+  assert.equal(hints(empty.stdout).length, 0);
+  assert.match(
+    (await invokeRaw(f.remoteRoot, ["workspace", "project", "add", "--help"])).stdout,
+    /--project-config/,
+  );
   const added = successful(
     await invoke<ServerContextResponse>(f.remoteRoot, [
       "workspace",
@@ -116,9 +119,8 @@ test("WSP-04/05/06: remote-only каталог, регистрация/удал�
       !text.stdout.includes(f.a.configPath),
       "Пути доступных баз раскрываются через config get",
     );
-    const command = hints(text.stdout)[0]!;
-    assert.match(command, /--project 'альфа' config get$/);
-    const result = await runHint(f.remoteRoot, command);
+    assert.deepEqual(hints(text.stdout), []);
+    const result = await invokeRaw(f.remoteRoot, [...url, "--project", "альфа", "config", "get"]);
     assert.equal(result.stderr, "");
     assert.ok(result.stdout.includes(f.a.configPath));
     assert.ok(!text.stdout.includes("\u001b"));
@@ -224,7 +226,7 @@ test("WSP-04/05: local Server доступен для discovery, не выдаё
   assert.match(text.stdout, /Проект local-сервера/);
   assert.match(text.stdout, /Режим Server:\s+local/);
   assert.ok(text.stdout.includes(f.a.configPath));
-  assert.equal((await runHint(f.clientRoot, hints(text.stdout)[0]!)).stderr, "");
+  assert.deepEqual(hints(text.stdout), []);
   failed(
     await invoke(f.remoteRoot, [
       "workspace",
@@ -322,12 +324,7 @@ test("WSP-06/08: недоступные базы сохраняют пути/п�
   assert.equal(unavailable.code, 0, unavailable.stdout);
   assert.match(unavailable.stdout, /Причина:/);
   assert.match(unavailable.stdout, /база не подтверждена/);
-  assert.equal(hints(unavailable.stdout).length, 1);
-  assert.match(hints(unavailable.stdout)[0]!, /workspace project add --help$/);
-  assert.match(
-    (await runHint(f.remoteRoot, hints(unavailable.stdout)[0]!)).stdout,
-    /--project-config/,
-  );
+  assert.equal(hints(unavailable.stdout).length, 0);
   const other = await httpServer(t, f.clientRoot);
   failed(
     await invoke(f.remoteRoot, [

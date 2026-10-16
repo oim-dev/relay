@@ -253,8 +253,13 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     name: "get <task>",
     description: "Прочитать полную задачу",
     arguments: { task: "Текущий/прежний ключ или ID задачи" },
-    details: "Перед изменением прочитайте содержание и используйте показанную ревизию.",
-    examples: [["npx @oim-dev/relay-cli task get PRODUCT-1", "Прочитать содержание и ревизию"]],
+    details:
+      "Полное описание и ревизия задачи. Перед изменением используйте эту ревизию. Вложенные коллекции читаются отдельно: task criterion list — критерии, task comment list — обсуждение, task children — подзадачи, task links — связи. task progress показывает готовность и причины; plan task memberships — участие в планах. Материалы и прямое окружение: inspect graph list --root <task> --depth 1. Полный каскад удаления: task delete-preview <task>.",
+    examples: [
+      ["npx @oim-dev/relay-cli task get PRODUCT-1", "Прочитать содержание и ревизию"],
+      ["npx @oim-dev/relay-cli task criterion list PRODUCT-1", "Прочитать критерии страницами"],
+      ["npx @oim-dev/relay-cli task progress PRODUCT-1", "Проверить причины неготовности"],
+    ],
     async run(context, input) {
       const data = await context.backend.boardTasks.get(input.argument());
       return { data, text: (options) => boardTaskText(data, options, taskInvocation(context)) };

@@ -475,6 +475,9 @@ export function taskErrorRecovery(error: AppError, options: TextOptions): string
   } else return;
   return [
     wrap(`Следующий шаг: ${prose}`, options.width),
-    actionsText([{ label: "Безопасное чтение без записи", command: invoke(args) }], options),
+    actionsText(
+      [{ label: "Безопасное чтение без записи", command: invoke(args), purpose: "recovery" }],
+      options,
+    ),
   ].join("\n\n");
 }

@@ -277,7 +277,7 @@ test(
     assert.equal(created.stderr, "");
     assert.match(created.stdout, /PRODUCT-1/);
     assert.match(created.stdout, /Ревизия:\s+1/);
-    assert.match(created.stdout, /npx @oim-dev\/relay-cli .*task get PRODUCT-1/);
+    assert.doesNotMatch(created.stdout, /^npx @oim-dev\/relay-cli /m);
     assert.doesNotMatch(created.stdout, uuid);
     const get = async (ref = "PRODUCT-1") =>
       successful(await app.run<BoardTaskView>(["task", "get", ref])).data;
@@ -496,7 +496,7 @@ test(
       assert.equal(result.code, 0, result.stdout + result.stderr);
       assert.equal(result.stderr, "");
       assert.match(result.stdout, /Ревизия:/);
-      assert.match(result.stdout, /npx @oim-dev\/relay-cli .*task get/);
+      assert.doesNotMatch(result.stdout, /^npx @oim-dev\/relay-cli /m);
       assert.doesNotMatch(result.stdout, uuid);
       return get(id);
     };
@@ -1062,10 +1062,8 @@ test(
       .split("\n")
       .filter((line) => line.startsWith("npx @oim-dev/relay-cli "));
     const firstTask = quoted.data.items[0]!;
-    const quotedConfig = `'${config.replaceAll("'", "'\\''")}'`;
-    const expectedGet = `npx @oim-dev/relay-cli --local --config ${quotedConfig} task get ${firstTask.key}`;
     const expectedNextCommand = nextCommand.replace(" --format json", "");
-    assert.deepEqual(footer, [expectedGet, expectedNextCommand]);
+    assert.deepEqual(footer, [expectedNextCommand]);
     assert.doesNotMatch(human.stdout, /\u001b/);
     for (const line of human.stdout.split("\n")) {
       if (line.startsWith("npx @oim-dev/relay-cli ")) {
@@ -1084,13 +1082,12 @@ test(
       assert.equal(args[args.indexOf("--config") + 1], config);
       return args;
     };
-    const getArgs = await shellArguments(footer[0]!);
-    assert.deepEqual(getArgs, ["--local", "--config", config, "task", "get", firstTask.key]);
+    const getArgs = ["--local", "--config", config, "task", "get", firstTask.key];
     const opened = successful(await invoke<BoardTaskView>(app.root, getArgs));
     assert.equal(opened.data.id, firstTask.id);
     assert.equal(opened.data.key, firstTask.key);
     assert.equal(opened.data.title, firstTask.title);
-    const nextArgs = await shellArguments(footer[1]!);
+    const nextArgs = await shellArguments(footer[0]!);
     assert.deepEqual(nextArgs, [
       "--local",
       "--config",

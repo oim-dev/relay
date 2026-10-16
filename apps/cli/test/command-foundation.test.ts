@@ -34,7 +34,7 @@ import {
 } from "./helpers/cli.js";
 import { helpRuntime } from "./helpers/help.js";
 
-test("foundation: карточка и квитанция пропускают пустые поля, но сохраняют ноль и копируемые команды", () => {
+test("foundation: карточка и квитанция сохраняют ноль без статической навигации", () => {
   const command =
     "npx @oim-dev/relay-cli task get PRODUCT-1 --config '/проект с пробелами/config.json'";
   const input = {
@@ -47,7 +47,7 @@ test("foundation: карточка и квитанция пропускают п
     ] as const,
     commands: [{ label: "Прочитайте запись", command }],
   };
-  const expected = `Сохранено\n\nРевизия: 0\n\nПрочитайте запись\n${command}`;
+  const expected = "Сохранено\n\nРевизия: 0";
   for (const width of [24, 100]) {
     assert.equal(cardText(input, { width, color: true }), expected);
     assert.equal(receiptText(input, { width, color: true }), expected);
@@ -103,7 +103,13 @@ test("foundation: команды вне содержания отделены в
         sections: [
           { title: "Содержание", body: renderMarkdown(markdown, { width, color: false }) },
         ],
-        commands: [{ label: "Прочитать", command: "npx @oim-dev/relay-cli feature get FEATURE-1" }],
+        commands: [
+          {
+            purpose: "recovery",
+            label: "Перечитать после конфликта",
+            command: "npx @oim-dev/relay-cli feature get FEATURE-1",
+          },
+        ],
       },
       { width, color: false },
     );

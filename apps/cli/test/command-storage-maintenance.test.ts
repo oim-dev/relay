@@ -109,7 +109,7 @@ test("storage status: текущая база — current, exit 0, JSON по с�
   assert.match(text.stdout, /Статус:\s+current/);
   assert.match(text.stdout, /Профиль данных:\s+3 → 3/);
   const hint = text.stdout.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli"));
-  assert.equal(hint, "npx @oim-dev/relay-cli --local doctor check");
+  assert.equal(hint, undefined);
   assert.deepEqual(await treeHashes(app.root), before, "status не меняет ни одного байта");
 });
 
@@ -126,10 +126,7 @@ test("storage status: формат 4 прежней версии Relay — migra
   assert.equal(text.code, 0, text.stdout);
   assert.match(text.stdout, /^Требуется перенос хранилища/);
   const commands = text.stdout.split("\n").filter((line) => line.startsWith("npx "));
-  assert.deepEqual(commands, [
-    "npx @oim-dev/relay-cli --local storage migrate --dry-run",
-    "npx @oim-dev/relay-cli --local storage migrate --backup-dir DIR --if-plan PLAN_FINGERPRINT",
-  ]);
+  assert.deepEqual(commands, ["npx @oim-dev/relay-cli --local storage migrate --dry-run"]);
   assert.deepEqual(await treeHashes(project), before);
 });
 

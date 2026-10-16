@@ -122,18 +122,15 @@ test(
       ]),
     ).data;
     let text = human(await raw(["plan", "list"]));
-    for (const path of [
-      "plan get",
-      "plan stage list",
-      "plan stage get",
-      "plan stage task list",
-      "task get",
+    for (const args of [
+      ["plan", "get", plan.key],
+      ["plan", "stage", "list", plan.key],
+      ["plan", "stage", "get", plan.key, stage.stageId!],
+      ["plan", "stage", "task", "list", plan.key, stage.stageId!],
+      ["task", "get", task.key],
     ]) {
-      const hint = commands(text).find((line) => line.includes(path));
-      assert.ok(hint, text);
-      assert.ok(hint.includes(server.url));
-      assert.ok(hint.includes("--project alpha"));
-      text = human(await invokeRaw(base, tokens(hint), { env: { COLUMNS: "40" } }));
+      assert.deepEqual(commands(text), []);
+      text = human(await raw(args));
     }
     const refusal = await raw([
       "plan",
@@ -273,8 +270,10 @@ test(
       failed(await run(["plan", "list", "--projection", "typo"]), "VALIDATION_ERROR");
       const overview = human(await raw(["plan", "list", "--projection", "compact", "--limit", 1]));
       const read = commands(overview).find((line) => line.includes("plan get"));
-      assert.ok(read);
-      const plan = successful(await invoke<PlanSummary>(base, tokens(read))).data;
+      assert.equal(read, undefined);
+      const plan = successful(
+        await run<PlanSummary>(["plan", "get", compact.data.items[0]!.key]),
+      ).data;
       assert.equal(plan.goal, markdown);
       const before = plan.revision;
       successful(
@@ -362,19 +361,14 @@ test(
         ]),
       );
       let text = human(await raw(["plan", "get", plan.key]));
-      for (const path of [
-        "plan stage list",
-        "plan stage get",
-        "plan stage task list",
-        "task get",
+      for (const args of [
+        ["plan", "stage", "list", plan.key],
+        ["plan", "stage", "get", plan.key, s.stageId!],
+        ["plan", "stage", "task", "list", plan.key, s.stageId!],
+        ["task", "get", task.key],
       ]) {
-        const hint = commands(text).find((line) => line.includes(path));
-        assert.ok(hint, text);
-        if (transport.includes("--server-url")) {
-          assert.ok(hint.includes(server.url));
-          assert.ok(hint.includes("--project alpha"));
-        }
-        text = human(await invokeRaw(base, tokens(hint), { env: { COLUMNS: "40" } }));
+        assert.deepEqual(commands(text), []);
+        text = human(await raw(args));
       }
     }
   },
@@ -546,7 +540,7 @@ test(
       const progressText = human(await raw(["plan", "progress", plan.key, "--limit", 20]));
       assert.equal(progressText.split("УникальноеНазваниеЗадачи").length - 1, 1);
       assert.ok(progressText.includes("Причины"));
-      assert.ok(progressText.includes("task progress"));
+      assert.doesNotMatch(progressText, /task progress/);
       const membership = human(await raw(["plan", "task", "memberships", done.key]));
       assert.match(membership, /Состояние плана:\s*Завершён/);
       const closed = await run(["task", "delete-preview", done.key]);

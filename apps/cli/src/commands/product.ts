@@ -376,7 +376,27 @@ export function registerProduct(program: Command, runtime: Runtime): void {
       name: singleton ? "get" : "get <ref>",
       ...(singleton ? {} : { arguments: { ref: "Ключ или ID записи" } }),
       description: "Прочитать полное содержание и ревизию",
-      details: "Сохраните ревизию для следующего изменения. Незаполненный паспорт имеет ревизию 0.",
+      details:
+        "Сохраните ревизию для следующего изменения. " +
+        {
+          product:
+            "Незаполненный паспорт имеет ревизию 0. product overview — сводка, product progress — готовность и причины.",
+          feature:
+            "Сценарии: scenario list --feature <ref>. Реализации: implementation list --feature <ref>. Задачи: task list --product-target <ref>. Готовность: feature progress <ref>.",
+          scenario:
+            "Общие требования: feature get <ключ фичи из карточки>. Реализации: implementation list --scenario <ref>. Задачи: task list --product-target <ref>. Готовность: scenario progress <ref>.",
+          application:
+            "Состав: application participation list <ref>. Задачи: task list --board <slug из карточки>. Предметная подборка: product context --id <ref>. Готовность: application progress <ref>.",
+          implementation:
+            "Карточка называет приложение и цель: application get, feature get или scenario get читают их полное содержание. Состав приложения: application participation list <приложение>. Задачи: task list --product-target <ref>. Готовность: implementation progress <ref>.",
+          document:
+            "Полные summary и body. Карточка показывает число прикреплений и уникальных целей; адреса и полные пояснения страницами — document links <ref>. Разделы — document section list, документы раздела — document list --section <id>.",
+        }[kind] +
+        (kind === "document"
+          ? ""
+          : " Прикреплённые документы: document list --target <ключ записи>.") +
+        " Граф связей: inspect graph context <ключ записи>." +
+        (singleton ? "" : ` Предпросмотр удаления без записи: ${kind} delete-preview <ref>.`),
       examples: [
         [
           `npx @oim-dev/relay-cli ${kind} get${singleton ? "" : ` ${examples[kind]}`}`,

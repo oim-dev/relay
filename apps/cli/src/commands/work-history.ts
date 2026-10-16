@@ -115,6 +115,7 @@ function registerCommand<O extends object = Record<string, never>>(
                 ],
                 commands: [
                   {
+                    purpose: "recovery",
                     label: invalidInput ? "Справка команды" : "Проверить сохранённое состояние",
                     command: commandInvocation(context, target),
                   },
@@ -349,6 +350,8 @@ export function registerWorkHistory(program: Command, runtime: Runtime): void {
     name: "get <reference>",
     description: "Прочитать полное поручение, итог и текущее участие",
     arguments: sessionArgument,
+    details:
+      "Карточка содержит ревизию ветки и currentRun.id для --run. session intents <reference> — все открытые намерения, включая старые; session context <reference> — полные материалы страницами; session tree <reference> — иерархия; session history <reference> --include-children — хронология с потомками. После записи используйте get для проверки сохранённого содержания.",
     examples: [["npx @oim-dev/relay-cli session get S-token", "Прочитать ветку и её ревизию"]],
     async run(context, input) {
       const data = await context.backend.workHistory.get({ ref: input.argument() });
@@ -430,7 +433,7 @@ export function registerWorkHistory(program: Command, runtime: Runtime): void {
     arguments: sessionArgument,
     configure: paging,
     details:
-      "История самой ветки, без потомков, от новых записей к старым. Это одна явно обозначенная страница, не весь контекст проекта.",
+      "История самой ветки, без потомков, от новых записей к старым. Это одна явно обозначенная страница, не весь контекст проекта. Продолжайте той же командой с --cursor; все открытые намерения, включая старые, доступны через session intents <reference>.",
     examples: [
       [
         "npx @oim-dev/relay-cli session context S-token --limit 10",
@@ -458,6 +461,8 @@ export function registerWorkHistory(program: Command, runtime: Runtime): void {
     name: "get <reference>",
     description: "Прочитать точку целиком: Markdown, автора, участие и сохранённые ссылки",
     arguments: { reference: "Точка любого типа: CP-token, постоянный ID или work-checkpoint:ID" },
+    details:
+      "Точка неизменяема. Состояние намерения определяется последующими точками: session history <ветка из карточки> --order asc. Актуальная ревизия и участие владельца — session get <ветка>; исходное намерение — checkpoint get <intent из карточки>. Поле nextStep является сохранённым пользовательским Markdown, а не подсказкой CLI.",
     examples: [["npx @oim-dev/relay-cli checkpoint get CP-token", "Прочитать полный материал"]],
     async run(context, input) {
       const data = await context.backend.workHistory.checkpoint({ ref: input.argument() });

@@ -313,7 +313,7 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     description: "Полные тексты и актуальное состояние",
     arguments: refArgument,
     details:
-      "Полное содержание отображается как Markdown; состав имеет отдельные постраничные команды.",
+      "Полное содержание отображается как Markdown. Этапы страницами — plan stage list <reference>; задачи этапа — plan stage task list <reference> <stage>; готовность и причины — plan progress <reference>. Связи и материалы — inspect graph list --root <reference>. Сохранённое завершение не равно текущей готовности состава.",
     examples: [["npx @oim-dev/relay-cli plan get PLN-1", "Прочитать запись"]],
     run: async (context, input) => {
       const data = await context.backend.plans.get(input.argument());
@@ -599,7 +599,8 @@ export function registerPlanning(program: Command, runtime: Runtime): void {
     name: "get <reference> <stage>",
     description: "Полное содержание этапа и явные ID задач",
     arguments: { ...refArgument, stage: "Внутренний ID этапа" },
-    details: "Этап читается из полной сущности плана; ревизия принадлежит плану.",
+    details:
+      "Этап читается из полной сущности плана; ревизия принадлежит плану. Карточка содержит полные тексты и число задач. Актуальный состав страницами — plan stage task list <reference> <stage>; общий прогресс — plan progress <reference>.",
     examples: [["npx @oim-dev/relay-cli plan stage get PLN-1 Ab12Cd34", "Прочитать этап"]],
     run: async (context, input) => {
       const entity = await context.backend.entities.get({

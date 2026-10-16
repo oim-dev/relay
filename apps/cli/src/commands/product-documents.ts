@@ -38,7 +38,7 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
     arguments: { ref: "Ключ или ID документа" },
     description: "Прочитать отношения и прежние продуктовые области",
     details:
-      "Собственные прикрепления документа: relations и links показаны отдельно, пояснения полностью. Это не все входящие рёбра: связи других записей читайте через inspect graph list --root. Подсказка чтения даётся для первой цели каждого вида на странице; для другой замените ключ или ID.",
+      "Собственные прикрепления документа: relations и links показаны отдельно, пояснения полностью. Это не все входящие рёбра: связи других записей читайте через inspect graph list --root <ref>. Полная цель — <вид> get <ключ или ID из строки>; для project и product аргумент не нужен, для work-plan используйте plan get.",
     examples: [["npx @oim-dev/relay-cli document links DOC-1", "Прочитать прикрепления"]],
     configure: paging,
     async run(context, input) {
@@ -234,7 +234,8 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
   registerCommand<PageOptions>(group, runtime, {
     name: "list",
     description: "Прочитать разделы в их порядке",
-    details: "Сохраните ревизию проекта для изменения разделов.",
+    details:
+      "Сохраните ревизию проекта для изменения разделов. Документы выбранного раздела — document list --section <id>; документы без раздела — document list --section none. Полный документ — document get <ключ>.",
     examples: [["npx @oim-dev/relay-cli document section list", "Прочитать разделы"]],
     configure: paging,
     async run(context, input) {

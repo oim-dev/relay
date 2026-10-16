@@ -160,19 +160,17 @@ for (const mode of ["local", "http"] as const)
         invoke<T>(root, [...connection, ...args]);
 
       const list = human(await raw(["release", "list"]));
-      assert.equal(list.split("\n").filter((line) => line.startsWith(prefix)).length, 1);
-      const getCommand = hint(list, `release get ${release.key}`);
-      assert.ok(getCommand.includes(server ? server.url : "--config"));
-      const card = await follow(root, getCommand);
+      assert.equal(list.split("\n").filter((line) => line.startsWith(prefix)).length, 0);
+      const card = human(await raw(["release", "get", release.key]));
       assert.ok(card.includes(description), "Полный Markdown не меняется");
-      const boundary = card.indexOf("───\nКоманды CLI — вне содержания");
-      assert.ok(boundary > card.indexOf("Конец-описания"));
-      assert.ok(card.indexOf(`release plans ${release.key}`) > boundary);
-      const plans = await follow(root, hint(card, `release plans ${release.key}`));
-      const plan = await follow(root, hint(plans, `plan get ${p.key}`));
+      assert.doesNotMatch(card, /^npx /m);
+      const plans = human(await raw(["release", "plans", release.key]));
+      assert.ok(plans.includes(p.key));
+      const plan = human(await raw(["plan", "get", p.key]));
       assert.ok(normalized(plan).includes("Первый план 世界"));
-      const docs = await follow(root, hint(card, `document list --target ${release.key}`));
-      const document = await follow(root, hint(docs, "document get DOC-1"));
+      const docs = human(await raw(["document", "list", "--target", release.key]));
+      assert.ok(docs.includes("DOC-1"));
+      const document = human(await raw(["document", "get", "DOC-1"]));
       assert.match(document, /Конец-документа/);
       assert.equal(
         successful(await json<ReleaseSummary>(["release", "get", release.key])).data.description,
@@ -181,18 +179,12 @@ for (const mode of ["local", "http"] as const)
       for (const width of ["24", "100", "160"]) {
         const text = human(await raw(["release", "get", release.key], width));
         assert.ok(text.includes(description));
-        assert.ok(
-          hint(text, `document list --target ${release.key}`).includes(
-            server ? server.url : "--config",
-          ),
-        );
+        assert.doesNotMatch(text, /^npx /m);
       }
       const first = human(await raw(["release", "plans", release.key, "--limit", 1]));
       const last = await follow(root, hint(first, "--cursor"));
       assert.match(last, /Конец списка/);
-      assert.ok(
-        normalized(await follow(root, hint(last, `plan get ${q.key}`))).includes("Второй план"),
-      );
+      assert.ok(normalized(human(await raw(["plan", "get", q.key]))).includes("Второй план"));
       for (const args of [
         ["release", "preview"],
         ["release", "list", "--q", "НетТакогоРелиза"],
@@ -200,10 +192,11 @@ for (const mode of ["local", "http"] as const)
         const text = human(await raw(args));
         assert.match(text, /На этой странице записей нет/);
         assert.doesNotMatch(text, /(?:plan|release) get [A-Z]+-/);
-        await follow(root, hint(text, args[1] === "preview" ? "plan list" : "release list --help"));
+        assert.doesNotMatch(text, /^npx /m);
       }
       const preview = human(await raw(["release", "preview", "--plans", p.key]));
-      await follow(root, hint(preview, `plan get ${p.key}`));
+      assert.ok(preview.includes(p.key));
+      assert.doesNotMatch(preview, /^npx /m);
       const before = successful(await json(["release", "get", release.key])).data;
       for (const args of [
         ["release", "publish", release.key, "--if-revision", 1],
@@ -410,7 +403,8 @@ test(
           env: { COLUMNS: "40" },
         }),
       );
-      await follow(root, hint(text, `plan get ${p.key}`));
+      assert.doesNotMatch(text, /^npx /m);
+      human(await invokeRaw(root, [...connection, "plan", "get", p.key]));
     }
     successful(
       await run(["task", "move", task.key, "--column", "ready", "--if-revision", task.revision]),

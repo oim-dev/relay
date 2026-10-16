@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { copyFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { join } from "node:path";
+import { shellCommand } from "../src/command-kit.js";
 import { test } from "node:test";
 import type {
   EntitiesPage,
@@ -34,7 +35,7 @@ async function follow(root: string, command: string) {
   });
 }
 
-test("PROD-04: passport get ведёт к документам по актуальному ключу, сохраняя local/HTTP контекст", async (t) => {
+test("PROD-04: паспорт и отдельное чтение документов по актуальному ключу в local/HTTP", async (t) => {
   const f = await fixture(t);
   const passport = successful(
     await f.run<EntitySaved>([
@@ -69,16 +70,25 @@ test("PROD-04: passport get ведёт к документам по актуал
     assert.equal(out.stderr, "");
     assert.ok(out.stdout.includes(markdown));
     assert.doesNotMatch(out.stdout, /\u001b/);
-    assert.match(out.stdout.replace(/\s+/g, " "), /Связи графа: вся достижимая компонента/);
-    const commands = hints(out.stdout);
-    const documents = commands.find((line) => line.includes(`document list --target ${key}`));
-    assert.ok(documents, out.stdout);
-    const graph = commands.find((line) => line.includes(`inspect graph context ${key}`));
-    assert.ok(graph, out.stdout);
-    for (const flag of globals.filter((value) => value.startsWith("--"))) {
-      assert.ok(documents.includes(flag), documents);
-      assert.ok(graph.includes(flag), graph);
-    }
+    assert.deepEqual(hints(out.stdout), []);
+    const documents = shellCommand([
+      "npx",
+      "@oim-dev/relay-cli",
+      ...globals,
+      "document",
+      "list",
+      "--target",
+      key,
+    ]);
+    const graph = shellCommand([
+      "npx",
+      "@oim-dev/relay-cli",
+      ...globals,
+      "inspect",
+      "graph",
+      "context",
+      key,
+    ]);
     // Выполняется точная shell-строка, заменяется только npx-launcher текущими исходниками.
     const linked = await follow(elsewhere, documents);
     assert.equal(linked.stderr, "");
@@ -258,16 +268,17 @@ test("FTR-04/05/06 SC-03/04/05/06 APP-04/05 IMP-02/03: адресные ката
       assert.equal(out.stderr, "");
       assert.ok(out.stdout.includes(markdown), out.stdout);
       assert.match(out.stdout, /Изменил/);
-      assert.match(out.stdout.replace(/\s+/g, " "), /Команды CLI — вне содержания/);
+      assert.doesNotMatch(out.stdout.replace(/\s+/g, " "), /Команды CLI — вне содержания/);
       assert.doesNotMatch(out.stdout, /\u001b/);
       const commands = hints(out.stdout);
-      assert.ok(commands.some((line) => line.includes(`${kind} progress ${record.key}`)));
-      assert.ok(commands.every((line) => line.includes("--local") && line.includes("--config")));
+      assert.deepEqual(commands, []);
       if (width === 100) {
-        for (const command of commands.filter(
-          (line) => !line.includes("delete-preview") && !line.includes("inspect graph"),
-        )) {
-          const next = await follow(f.root, command);
+        for (const args of [
+          [kind, "progress", record.key],
+          ["document", "list", "--target", record.key],
+        ]) {
+          const next = await invokeRaw(f.root, args);
+          assert.equal(next.code, 0, next.stdout);
           assert.equal(next.stderr, "");
           assert.ok(next.stdout.length > 0);
         }
@@ -275,11 +286,7 @@ test("FTR-04/05/06 SC-03/04/05/06 APP-04/05 IMP-02/03: адресные ката
     }
     const list = await invokeRaw(f.root, [kind, "list"]);
     assert.equal(list.code, 0, list.stdout);
-    assert.ok(
-      hints(list.stdout).some((line) => line.includes(`${kind} get `)),
-      list.stdout,
-    );
-    assert.equal(hints(list.stdout).filter((line) => line.includes(`${kind} get `)).length, 1);
+    assert.deepEqual(hints(list.stdout), []);
   }
   for (const width of [24, 160]) {
     const out = await invokeRaw(f.root, ["feature", "get", feature.key], {
@@ -374,7 +381,7 @@ test("SC-04/APP-05: плотность полных страниц 20 запис
       assert.equal(out.code, 0, out.stdout);
       assert.equal(out.stderr, "");
       assert.match(out.stdout, /Показано: 20 из 20/);
-      assert.equal(hints(out.stdout).length, 1);
+      assert.equal(hints(out.stdout).length, 0);
       assert.doesNotMatch(out.stdout, /Тело не попадает/);
       if (kind === "scenario") assert.equal(out.stdout.split(feature.key).length - 1, 1);
       else assert.equal((out.stdout.match(/Аннотация:/g) ?? []).length, 20);

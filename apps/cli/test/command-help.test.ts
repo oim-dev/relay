@@ -14,6 +14,7 @@ test("help: все 165 листов и группы работают без conf
   for (const { command, path } of tree) {
     const result = await renderHelp(root, [...path, "--help"]);
     assert.equal(result.code, 0, path.join(" ") + result.stdout);
+    assert.deepEqual(await renderHelp(root, [...path, "-h"]), result, path.join(" "));
     assert.match(result.stdout, /Примеры:/);
     assert.match(result.stdout, /[А-Яа-яЁё]/);
     assert.match(result.stdout, /npx @oim-dev\/relay-cli/);
@@ -42,6 +43,49 @@ test("help: все 165 листов и группы работают без conf
   assert.equal(child.code, 0);
   assert.equal(child.stderr, "");
   assert.doesNotMatch(child.stdout, /\x1b/);
+});
+
+test("help: навигация доступна по запросу без проекта и не путает предметные виды", async (t) => {
+  const root = await tempDirectory(t);
+  for (const [path, routes] of [
+    [
+      ["task", "get"],
+      [
+        "task criterion list",
+        "task comment list",
+        "task progress",
+        "plan task memberships",
+        "task delete-preview",
+      ],
+    ],
+    [
+      ["document", "get"],
+      ["document links", "document section list", "document delete-preview"],
+    ],
+    [
+      ["session", "get"],
+      ["session intents", "session context", "session tree", "session history"],
+    ],
+    [
+      ["checkpoint", "get"],
+      ["session get", "session history", "nextStep"],
+    ],
+    [
+      ["plan", "stage", "get"],
+      ["plan stage task list", "plan progress"],
+    ],
+    [
+      ["inspect", "graph", "context"],
+      ["--depth 1 --direction outgoing", "ID отношения"],
+    ],
+  ] as const) {
+    const result = await renderHelp(root, [...path, "--help"]);
+    assert.equal(result.code, 0, result.stdout);
+    for (const route of routes)
+      assert.ok(result.stdout.includes(route), `${path.join(" ")}: ${route}`);
+    if (path[0] === "document") assert.doesNotMatch(result.stdout, /Незаполненный паспорт/);
+  }
+  assert.deepEqual(await readdir(root), []);
 });
 
 test("help: запись объясняет содержание своего вида и показывает развёрнутый Markdown", async (t) => {

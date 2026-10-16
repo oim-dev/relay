@@ -124,10 +124,10 @@ test(
           await invokeRaw(app.root, args, { env: { COLUMNS: String(width), FORCE_COLOR: "3" } }),
         );
         await evidence(t, `${name}-${width}`, output);
-        assert.equal(hints(output).filter((line) => line.includes("board get ")).length, 1);
+        assert.equal(hints(output).filter((line) => line.includes("board get ")).length, 0);
         assert.equal(
           hints(output).filter((line) => line.includes("--metric board-work")).length,
-          1,
+          0,
         );
         assert.equal((output.match(/Показано:/g) ?? []).length, 1);
       }
@@ -169,12 +169,17 @@ test(
       ids.push(...page.data.items.map((item) => item.id));
       await show(`walk18-${++pageNumber}`, args);
       const output = human(await invokeRaw(app.root, args));
-      const get = hints(output).find((line) => line.includes("board get "))!;
-      assert.ok(get.endsWith(`board get ${page.data.items[0]!.key}`), get);
+      const get = shellCommand([
+        "npx",
+        "@oim-dev/relay-cli",
+        "board",
+        "get",
+        page.data.items[0]!.key,
+      ]);
       assert.match(await follow(app.root, get), /Ревизия/);
       if (!page.meta!.page!.nextCursor) {
         assert.match(output, /Конец списка/);
-        assert.equal(hints(output).length, 2);
+        assert.equal(hints(output).length, 0);
         break;
       }
       const continued = JSON.parse(await follow(app.root, page.meta!.page!.nextCommand!));
@@ -217,8 +222,11 @@ test(
       );
       await evidence(t, `rich24-${width}`, output);
       assert.doesNotMatch(output, /СКРЫТАЯ_ЗАДАЧА|Только приложение/);
-      assert.equal(hints(output).length, 2);
-      assert.match(await follow(app.root, hints(output)[0]!), /СКРЫТАЯ_ЗАДАЧА_1/);
+      assert.equal(hints(output).length, 0);
+      assert.match(
+        await follow(app.root, "npx @oim-dev/relay-cli task list --board audit-app-7"),
+        /СКРЫТАЯ_ЗАДАЧА_1/,
+      );
       const json = successful(
         await app.run(["board", "get", "BOARD-AU07"], { env: { COLUMNS: String(width) } }),
       ).data;
@@ -410,21 +418,8 @@ for (const mode of ["local", "http", "workspace"] as const)
         }
         await evidence(t, `${mode}-owner-${width}`, output);
         assert.match(output, /Приложение:\s*OWNER/);
-        assert.equal(hints(output).length, 2);
-        assert.ok(hints(output).some((line) => line.endsWith("application get OWNER")));
-        for (const hint of hints(output)) {
-          if (mode !== "local") assert.match(hint, /--server-url/);
-          if (mode === "workspace") {
-            assert.match(hint, /--project a/);
-            assert.match(hint, /--config/);
-            assert.ok(hint.includes("'\\''"), hint);
-          }
-          const next = await follow(cwd, hint);
-          assert.match(
-            next,
-            hint.endsWith("OWNER") ? /application delete-preview OWNER/ : /Удаляемая задача/,
-          );
-        }
+        assert.deepEqual(hints(output), []);
+        assert.match(await text(["application", "get", "OWNER"], width), /OWNER/);
       }
       assert.doesNotMatch(
         await text(["board", "get", "BOARD-PRODUCT"]),
@@ -583,8 +578,9 @@ for (const mode of ["local", "http", "workspace"] as const)
       }
       assert.match(receipt, /Каскад удалён/);
       assert.match(receipt, /delete-correlation/);
-      assert.equal(hints(receipt).length, 2);
-      for (const hint of hints(receipt)) assert.ok(await follow(cwd, hint));
+      assert.deepEqual(hints(receipt), []);
+      assert.match(await text(["board", "list"]), /Доски проекта/);
+      assert.match(await text(["application", "list"]), /Приложения/);
       for (const [kind, ref] of [
         ["application", "OWNER"],
         ["board", renamed.key],

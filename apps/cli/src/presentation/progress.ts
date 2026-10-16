@@ -3,7 +3,7 @@ import type { TextOptions } from "./theme.js";
 import { wrap, section } from "./layout.js";
 import { safeText } from "./text.js";
 import { planningStatusLabels, planningColumnLabel } from "./planning.js";
-import { actionsText, cardText } from "./common.js";
+import { cardText } from "./common.js";
 
 type Reason = Progress["reasons"]["items"][number];
 const address = (entry: ProgressAddress) => `${entry.kind}:${entry.id}`;
@@ -21,26 +21,15 @@ export function progressText(
   progress: Progress,
   query: ProgressPageQuery,
   options: TextOptions,
-  command: (tokens: readonly string[]) => string,
+  _command: (tokens: readonly string[]) => string,
 ): string {
   const attached = new Set<number>();
-  const reasonSources = new Set(progress.reasons.items.map((reason) => address(reason.source)));
-  const readExamples = new Map<ProgressAddress["kind"], ProgressAddress>();
   const visibleTitles = new Map([[address(progress.entity), progress.entity.title]]);
   const reasonText = (reason: Reason) => {
-    const source = reason.source;
-    const self = address(source) === address(progress.entity);
-    const kind = source.kind === "work-plan" ? "plan" : source.kind;
-    const ref = source.key ?? address(source);
-    const tokens =
-      reason.criterionId && source.kind === "task"
-        ? ["task", "criterion", "get", ref, reason.criterionId]
-        : self && source.kind === "release"
-          ? ["release", "plans", ref]
-          : self && source.kind === "work-plan"
-            ? ["plan", "stage", "list", ref]
-            : [kind, self ? "get" : "progress", ...(source.kind === "product" ? [] : [ref])];
-    return `${wrap(`${safeText(reason.code)}${reason.criterionId ? ` · Критерий: ${safeText(reason.criterionId)}` : ""}\n${safeText(reasonMessage(reason))}`, options.width)}\n→ ${command(tokens)}`;
+    return wrap(
+      `${safeText(reason.code)}${reason.criterionId ? ` · Критерий: ${safeText(reason.criterionId)}` : ""}\n${safeText(reasonMessage(reason))}`,
+      options.width,
+    );
   };
   // Сопоставляем только адреса и одинаковые названия текущей страницы, не позиции списков.
   const attachReasons = (entry: ProgressAddress) =>
@@ -88,8 +77,6 @@ export function progressText(
         value.items
           .map((entry) => {
             visibleTitles.set(address(entry), entry.title);
-            if (!reasonSources.has(address(entry)) && !readExamples.has(entry.kind))
-              readExamples.set(entry.kind, entry);
             const reasons = attachReasons(entry);
             return [
               wrap(
@@ -223,19 +210,5 @@ export function progressText(
       options,
     ),
   );
-  if (readExamples.size)
-    parts.push(
-      actionsText(
-        [...readExamples.values()].map((entry) => ({
-          label: "Полное содержание составляющей — get с ключом выбранной строки. Пример:",
-          command: command([
-            entry.kind === "work-plan" ? "plan" : entry.kind,
-            "get",
-            ...(entry.kind === "product" ? [] : [entry.key ?? address(entry)]),
-          ]),
-        })),
-        options,
-      ),
-    );
   return parts.join("\n\n");
 }

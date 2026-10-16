@@ -60,6 +60,7 @@ export function diagnosticRecovery(
         actionsText(
           [
             {
+              purpose: "recovery",
               label: "Прочитать полный каскад без удаления",
               command: context.command(deletion.preview),
             },
@@ -74,7 +75,13 @@ export function diagnosticRecovery(
           options.width,
         ),
         actionsText(
-          [{ label: "Найти планы выбранного проекта", command: context.command(["plan", "list"]) }],
+          [
+            {
+              purpose: "recovery",
+              label: "Найти планы выбранного проекта",
+              command: context.command(["plan", "list"]),
+            },
+          ],
           options,
         ),
       ].join("\n\n");
@@ -88,7 +95,11 @@ export function diagnosticRecovery(
           options.width,
         ),
         actionsText(
-          deletion.catalogs.map(({ label, args }) => ({ label, command: context.command(args) })),
+          deletion.catalogs.map(({ label, args }) => ({
+            purpose: "recovery",
+            label,
+            command: context.command(args),
+          })),
           options,
         ),
       ].join("\n\n");
@@ -219,7 +230,10 @@ export function diagnosticRecovery(
   return [
     "Следующий шаг:",
     ...prose.map((line) => wrap(safeText(line), options.width)),
-    actionsText(commands, options),
+    actionsText(
+      commands.map((command) => ({ ...command, purpose: "recovery" })),
+      options,
+    ),
   ]
     .filter(Boolean)
     .join("\n\n");

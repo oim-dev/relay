@@ -16,6 +16,8 @@ export interface OutputSection {
 export interface OutputCommand {
   label: string;
   command: string;
+  /** Навигационные команды без назначения остаются метаданными, а не подсказками text. */
+  purpose?: "continuation" | "recovery" | "confirmation";
 }
 
 function outputWidth(options: TextOptions): number {
@@ -72,7 +74,7 @@ function metadata(fields: readonly OutputField[], options: TextOptions): string 
 
 function commandsText(commands: readonly OutputCommand[], options: TextOptions): string {
   return commands
-    .filter(({ command }) => command.trim())
+    .filter(({ command, purpose }) => purpose !== undefined && command.trim())
     .map(
       ({ label, command }) =>
         `${wrap(safeText(label), outputWidth(options))}\n${commandText(command, options)}`,
@@ -173,10 +175,6 @@ export function receiptText(
 /** Команда копируется целиком: физические переносы по ширине здесь запрещены. */
 export function commandText(command: string, options: TextOptions = defaultTextOptions): string {
   return palette(options).cyan(safeText(command));
-}
-
-export function nextStepText(command: string, options: TextOptions = defaultTextOptions): string {
-  return `Следующий шаг:\n${commandText(command, options)}`;
 }
 
 export function emptyText(

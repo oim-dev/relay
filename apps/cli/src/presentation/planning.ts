@@ -228,7 +228,7 @@ export function releaseErrorText(
       title: error.message,
       fields,
       sections: [{ title: "Следующий шаг", body: wrap(safeText(next), options.width) }],
-      commands,
+      commands: commands.map((command) => ({ ...command, purpose: "recovery" })),
     },
     options,
   );

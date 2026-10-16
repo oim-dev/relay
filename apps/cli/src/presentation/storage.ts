@@ -196,34 +196,19 @@ function versionFields(status: StorageStatus): OutputField[] {
 function statusCommands(status: StorageStatus, invocation: Invocation): OutputCommand[] {
   switch (status.status) {
     case "current":
-      return [
-        {
-          label: "Проверить целостность проекта",
-          command: invocation(["doctor", "check"]),
-        },
-      ];
+      return [];
     case "migration-required":
       return [
         {
+          purpose: "recovery",
           label: "Остановите процессы Relay и проверьте точный план без изменения базы",
           command: invocation(["storage", "migrate", "--dry-run"]),
-        },
-        {
-          label:
-            "Затем выполните перенос. Шаблон: замените DIR каталогом копии вне базы и Git, PLAN_FINGERPRINT — отпечатком плана",
-          command: invocation([
-            "storage",
-            "migrate",
-            "--backup-dir",
-            "DIR",
-            "--if-plan",
-            "PLAN_FINGERPRINT",
-          ]),
         },
       ];
     case "recovery-required":
       return [
         {
+          purpose: "recovery",
           label:
             status.pending?.kind === "migration"
               ? "Остановите процессы Relay и продолжите миграцию с исходной резервной копией"
@@ -234,14 +219,11 @@ function statusCommands(status: StorageStatus, invocation: Invocation): OutputCo
             ...(status.pending?.kind === "migration" ? [] : ["--backup-dir", "DIR"]),
           ]),
         },
-        {
-          label: "После этого повторите диагностику",
-          command: invocation(["storage", "status"]),
-        },
       ];
     default:
       return [
         {
+          purpose: "recovery",
           label: "Устраните причины из списка блокеров и повторите диагностику",
           command: invocation(["storage", "status"]),
         },
@@ -407,6 +389,7 @@ export function storagePlanText(
               ? statusCommands(plan, invocation)
               : [
                   {
+                    purpose: "recovery",
                     label: "Устраните блокеры и повторите диагностику",
                     command: invocation(["storage", "status"]),
                   },
@@ -418,6 +401,7 @@ export function storagePlanText(
           ? []
           : [
               {
+                purpose: "confirmation",
                 label:
                   "Применить этот план. Шаблон: замените DIR каталогом резервной копии вне базы и Git-рабочей копии",
                 command: invocation([

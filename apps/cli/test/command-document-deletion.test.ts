@@ -170,11 +170,8 @@ for (const mode of ["local", "http"] as const)
     const before = successful(await run<EntityDetail>(["document", "get", other.key])).data;
     const read = await text(["document", "get", document.key]);
     assert.ok(read.includes(body));
-    const previewHint = hints(read).find((line) =>
-      line.includes("document delete-preview RULES-1"),
-    );
-    assert.ok(previewHint, read);
-    assert.match(await follow(app.root, previewHint), /Полный каскад удаления/);
+    assert.deepEqual(hints(read), []);
+    assert.match(await text(["document", "delete-preview", "RULES-1"]), /Полный каскад удаления/);
     requests.length = 0;
     const preview = successful(
       await run<EntityDeletionPreview>(["document", "delete-preview", document.key]),
@@ -332,10 +329,9 @@ for (const mode of ["local", "http"] as const)
     }
     assert.match(receipt, /Каскад удалён/);
     assert.match(receipt, /document-correlation/);
-    assert.equal(hints(receipt).length, 1);
-    assert.ok(hints(receipt)[0]!.endsWith("document list"));
+    assert.deepEqual(hints(receipt), []);
     assert.doesNotMatch(receipt, /document get|document delete /);
-    assert.match(await follow(app.root, hints(receipt)[0]!), /Сохраняемый материал/);
+    assert.match(await text(["document", "list"]), /Сохраняемый материал/);
     for (const ref of [document.key, renamed.key, `document:${document.ref.id}`])
       failed(await run(["document", "get", ref]), "ENTITY_NOT_FOUND", 3);
     for (const target of [feature, legacy]) {
