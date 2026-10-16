@@ -1,11 +1,12 @@
+/* Форма нового сообщения — плитка на поверхности окна. */
 .root {
   min-width: 0;
-  padding: var(--mantine-spacing-md);
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
-  background: var(--tasks-selected);
+  padding: var(--tasks-space-4);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-row);
+  background-color: var(--tasks-card);
 }
 
 .collapsed {
-  min-height: 38px;
+  min-height: var(--tasks-control-height);
 }

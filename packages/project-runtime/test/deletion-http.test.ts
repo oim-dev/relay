@@ -41,6 +41,8 @@ const preview: EntityDeletionPreview = {
       key: "DOC-1",
       document: {
         kind: "rules",
+        format: "markdown",
+        tags: [],
         status: "active",
         sectionId: null,
         pinned: true,

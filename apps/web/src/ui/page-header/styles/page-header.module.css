@@ -1,0 +1,95 @@
+/*
+ * Действия встают рядом с заголовком по общей шкале окна: сведения и действия записи —
+ * от --lg, строка инструментов каталога, которой нужно больше места, — от --xl.
+ * Container query здесь не используется: при перестановке строк с фокусом под шапкой
+ * Chrome сбрасывал прокрутку страницы к началу.
+ */
+.root {
+  min-width: 0;
+}
+
+.layout {
+  display: grid;
+  gap: var(--tasks-space-4) var(--tasks-space-8);
+
+  @media (--lg) {
+    .root:not([data-actions="toolbar"]) & {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+    }
+  }
+
+  @media (--xl) {
+    .root[data-actions="toolbar"] & {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 44rem);
+      align-items: end;
+    }
+  }
+}
+
+.identity {
+  display: grid;
+  gap: var(--tasks-space-2);
+  min-width: 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.125rem 0.625rem;
+  min-width: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--tasks-font-size-page-title);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  /*
+   * Длинное слово переносится по слогам (язык документа — ru), а break-word рвёт его
+   * только если иначе не помещается; anywhere ломал слово посреди без дефиса.
+   */
+  overflow-wrap: break-word;
+  hyphens: auto;
+
+  /* Программный фокус при входе объявляет страницу и не рисует рамку вокруг заголовка. */
+  &:focus {
+    outline: none;
+  }
+}
+
+.description {
+  display: grid;
+  gap: var(--tasks-space-2);
+  max-width: 48rem;
+  color: var(--tasks-muted);
+  font-size: var(--tasks-font-size-reading);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tasks-space-2) 0.875rem;
+  min-width: 0;
+
+  .root[data-actions="toolbar"] & {
+    gap: 0.625rem;
+  }
+
+  @media (--lg) {
+    .root[data-actions="stack"] & {
+      flex-direction: column;
+      align-items: flex-end;
+      padding-top: 1.375rem;
+    }
+  }
+}

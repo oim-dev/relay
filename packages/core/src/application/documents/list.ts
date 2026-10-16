@@ -1,10 +1,20 @@
 import { z } from "zod";
 import type { entitiesQuerySchema, EntitySummary } from "@relay/contracts/entities";
 import type { Workspace } from "../../storage/workspace.js";
+import type { StorageSession } from "../../storage/entity-store/store.js";
 import { invariant } from "../../shared/errors.js";
 import { entityAddress, entityDigest, entitySummary } from "../entities/catalog.js";
 import { readEntityCards, resolveEntityCard } from "../entities/indexed-catalog.js";
 import { readDocumentRecord } from "./read.js";
+import { matchesTarget } from "../entities/document-library.js";
+import { matchesSummary } from "../entities/query.js";
+
+/** Guard индексного документного чтения; счётчики библиотеки возвращают ту же версию. */
+export async function documentListVersion(session: StorageSession) {
+  return `documents-v1:${entityDigest(
+    Object.entries(await session.snapshotRoots()).sort(([a], [b]) => a.localeCompare(b)),
+  )}`;
+}
 
 /** Документная выборка не строит готовность продукта и не открывает чужие полные записи. */
 export async function readDocumentList(
@@ -13,9 +23,7 @@ export async function readDocumentList(
 ) {
   const session = workspace.storageSession;
   if (!session || session.changed) return undefined;
-  const version = `documents-v1:${entityDigest(
-    Object.entries(await session.snapshotRoots()).sort(([a], [b]) => a.localeCompare(b)),
-  )}`;
+  const version = await documentListVersion(session);
   invariant(
     query.version === undefined || query.version === version,
     "ENTITIES_CHANGED",
@@ -43,9 +51,7 @@ export async function readDocumentList(
     counts[section] = (counts[section] ?? 0) + 1;
   }
   const target =
-    query.target === undefined
-      ? undefined
-      : (await resolveEntityCard(session, query.target)).ref.id;
+    query.target === undefined ? undefined : (await resolveEntityCard(session, query.target)).ref;
   const selected = query.refs === undefined ? undefined : new Set<string>();
   for (const ref of query.refs ?? []) {
     const [kind, id, extra] = ref.split(":");
@@ -61,25 +67,24 @@ export async function readDocumentList(
   const needle = query.q?.trim().toLocaleLowerCase();
   const items: EntitySummary[] = [];
   for (const card of cards) {
-    const document = card.document!;
+    // Формат, теги и прикрепления хранятся в карточке: фильтр не читает полные записи.
     if (
       (selected && !selected.has(entityAddress(card.ref))) ||
-      (query.status !== undefined && card.status !== query.status) ||
-      (query.section !== undefined && (document.sectionId ?? "none") !== query.section) ||
-      (query.documentKind !== undefined && document.kind !== query.documentKind) ||
-      (query.pinned !== undefined && document.pinned !== (query.pinned === "true")) ||
-      (query.archived !== undefined &&
-        (document.status === "archived") !== (query.archived === "true"))
+      !matchesSummary({ ...card, status: card.status || null }, query)
     )
       continue;
-    // Цели принадлежат полям документа, не диагностическому графу. Поиск действительно ищет body.
+    // Цели принадлежат полям документа, не диагностическому графу. Поиск действительно ищет
+    // body, url и теги; цель сравнивается полным адресом, ID уникальны только внутри вида.
     const source =
       needle || target !== undefined ? await readDocumentRecord(workspace, card) : undefined;
-    if (target !== undefined && !source!.entry.filters.target?.includes(target)) continue;
+    if (target !== undefined && !matchesTarget(source!.entry, "target", target)) continue;
     const body = source?.entry.data.body ?? "";
+    // Составная строка прежнего документного reader-а сохраняется: совпадение на стыке полей
+    // проходит фильтр, а основание match определяется отдельно по одному полю.
+    const data = source?.entry.data;
     if (
       needle &&
-      !`${card.key} ${card.aliases.join(" ")} ${entityAddress(card.ref)} ${card.title} ${card.summary} ${card.context ?? ""} ${body}`
+      !`${card.key} ${card.aliases.join(" ")} ${entityAddress(card.ref)} ${card.title} ${card.summary} ${card.context ?? ""} ${body} ${data?.url ?? ""} ${(data?.tags ?? []).join(" ")}`
         .toLocaleLowerCase()
         .includes(needle)
     )

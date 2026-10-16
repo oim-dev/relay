@@ -1,10 +1,11 @@
-import { Anchor, Button, Text } from "@mantine/core";
+import { Button, Text } from "@mantine/core";
 import { ArrowRight, Pencil, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getFeatureStatus, getRelatedDocuments, useProductDemo } from "domains/product-demo";
-import { useProjectBasePath } from "domains/project";
+import { getFeatureStatus, ProductReadiness, useProductDemo } from "domains/product-demo";
+import { EntityDocuments } from "compositions/widgets/entity-documents";
 import { ProductPage, useProductPath } from "compositions/widgets/product-page";
 import { MarkdownView } from "ui/markdown-view";
+import { SectionPanel } from "ui/section-panel";
 import { StatePanel } from "ui/state-panel";
 import styles from "./styles/product-passport.module.css";
 
@@ -17,19 +18,15 @@ import styles from "./styles/product-passport.module.css";
 export const ProductPassportScreen = () => {
   const { snapshot } = useProductDemo();
   const base = useProductPath();
-  const projectBase = useProjectBasePath();
   const passportData = snapshot.passport;
   const isEmpty = passportData.name === "";
-  const doneCount = snapshot.features.filter(
-    (feature) => getFeatureStatus(feature) === "done",
-  ).length;
-  const partialCount = snapshot.features.filter(
-    (feature) => getFeatureStatus(feature) === "partial",
-  ).length;
-  const noneCount = snapshot.features.filter(
-    (feature) => getFeatureStatus(feature) === "none",
-  ).length;
-  const relatedDocuments = getRelatedDocuments(snapshot, [JSON.stringify({ kind: "product" })]);
+  const countByStatus = (status: "done" | "partial" | "none"): number =>
+    snapshot.features.filter((feature) => getFeatureStatus(feature) === status).length;
+  const statItems = [
+    { status: "done", label: "Реализовано", count: countByStatus("done") },
+    { status: "partial", label: "Частично", count: countByStatus("partial") },
+    { status: "none", label: "Впереди", count: countByStatus("none") },
+  ] as const;
   if (isEmpty)
     return (
       <ProductPage
@@ -55,85 +52,68 @@ export const ProductPassportScreen = () => {
     <ProductPage
       title={passportData.name}
       description={passportData.summary}
-      eyebrow="ПРОДУКТ / ПАСПОРТ"
+      meta="Паспорт продукта"
       actions={
         <Button
           component={Link}
           to={`${base}/passport/edit`}
           variant="default"
-          leftSection={<Pencil size={14} aria-hidden="true" />}
+          leftSection={<Pencil size={15} aria-hidden="true" />}
         >
           Редактировать
         </Button>
       }
     >
-      <div className={styles.root}>
+      <div className={styles.layout}>
         <article className={styles.document} aria-label="Описание продукта">
           <MarkdownView text={passportData.description} />
         </article>
         <aside className={styles.aside} aria-label="Карта продукта">
-          <section className={styles.panel}>
-            <h2 className={styles.panelTitle}>Карта продукта</h2>
-            <Text size="sm" c="dimmed" mb="lg">
-              От замысла к работающему сценарию.
-            </Text>
-            <Link className={styles.stat} to={`${base}/features?status=done`}>
-              <span className={styles.statLabel}>
-                <span className={styles.dot} data-status="done" />
-                Реализовано
-              </span>
-              <strong>{doneCount}</strong>
-            </Link>
-            <Link className={styles.stat} to={`${base}/features?status=partial`}>
-              <span className={styles.statLabel}>
-                <span className={styles.dot} data-status="partial" />
-                Частично
-              </span>
-              <strong>{partialCount}</strong>
-            </Link>
-            <Link className={styles.stat} to={`${base}/features?status=none`}>
-              <span className={styles.statLabel}>
-                <span className={styles.dot} data-status="none" />
-                Впереди
-              </span>
-              <strong>{noneCount}</strong>
-            </Link>
-            <Button
-              component={Link}
-              to={`${base}/features`}
-              fullWidth
-              variant="default"
-              mt="lg"
-              rightSection={<ArrowRight size={14} aria-hidden="true" />}
-            >
-              Все фичи · {snapshot.features.length}
-            </Button>
-            <Link to={`${base}/applications`} className={styles.appLink}>
-              Приложения · {snapshot.applications.length}
-              <ArrowRight size={14} aria-hidden="true" />
-            </Link>
-          </section>
-          <section className={styles.panel} aria-label="Документы продукта">
-            <h2 className={styles.panelTitle}>Документы продукта</h2>
-            <ul>
-              {relatedDocuments.map((document) => (
-                <li key={document.id}>
-                  <Anchor
-                    component={Link}
-                    c="var(--mantine-color-text)"
-                    to={`${projectBase}/documents/${document.id}`}
-                  >
-                    {document.name}
-                  </Anchor>
+          <SectionPanel
+            title="Карта продукта"
+            tone="feature"
+            description="От замысла к работающему сценарию."
+          >
+            <ul className={styles.stats}>
+              {statItems.map((item) => (
+                <li key={item.status}>
+                  <Link className={styles.stat} to={`${base}/features?status=${item.status}`}>
+                    <ProductReadiness status={item.status} label={item.label} />
+                    <strong className={styles.count}>{item.count}</strong>
+                  </Link>
                 </li>
               ))}
             </ul>
-          </section>
-          <Text size="xs" c="dimmed" lh={1.7}>
+            <div className={styles.links}>
+              <Button
+                component={Link}
+                to={`${base}/features`}
+                fullWidth
+                variant="default"
+                rightSection={<ArrowRight size={15} aria-hidden="true" />}
+              >
+                Все фичи · {snapshot.features.length}
+              </Button>
+              <Button
+                component={Link}
+                to={`${base}/applications`}
+                fullWidth
+                variant="subtle"
+                rightSection={<ArrowRight size={15} aria-hidden="true" />}
+              >
+                Приложения · {snapshot.applications.length}
+              </Button>
+            </div>
+          </SectionPanel>
+          <Text size="sm" c="dimmed" className={styles.note}>
             Фича готова, когда готовы все её сценарии и общие контракты участвующих приложений.
           </Text>
         </aside>
       </div>
+      <EntityDocuments
+        target={{ kind: "product", id: "passport" }}
+        targetTitle={passportData.name}
+      />
     </ProductPage>
   );
 };

@@ -9,9 +9,9 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.125rem 0.75rem;
   padding: 0.5625rem 0.875rem 0.625rem;
-  border-radius: 0.875rem;
+  border-radius: var(--tasks-radius-row);
   background: var(--tasks-tile);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 
   & dt {
     font-weight: 600;
@@ -30,6 +30,6 @@
   grid-column: 1 / -1;
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   font-variant-numeric: tabular-nums;
 }

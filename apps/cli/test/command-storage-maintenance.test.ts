@@ -10,8 +10,9 @@ import {
   storageMigrationResultSchema,
   storageStatusSchema,
 } from "@relay/contracts/storage-maintenance";
+import { CURRENT_DATA_MODEL } from "@relay/core/storage/data-model/profiles";
 import { fixture, invoke, invokeRaw, successful, failed, tempDirectory } from "./helpers/cli.js";
-import { httpProxy } from "./helpers/http.js";
+import { httpProxy, httpServer } from "./helpers/http.js";
 import { restoreFixtureTree } from "../../../packages/core/test/fixtures/data-migrations/restore-tree.mjs";
 
 const FIXTURES = fileURLToPath(
@@ -107,7 +108,10 @@ test("storage status: текущая база — current, exit 0, JSON по с�
   assert.doesNotMatch(text.stdout, /\u001b|"ok":/);
   assert.match(text.stdout, /^Хранилище актуально — перенос не требуется/);
   assert.match(text.stdout, /Статус:\s+current/);
-  assert.match(text.stdout, /Профиль данных:\s+2 → 2/);
+  assert.match(
+    text.stdout,
+    new RegExp(`Профиль данных:\\s+${CURRENT_DATA_MODEL} → ${CURRENT_DATA_MODEL}`),
+  );
   const hint = text.stdout.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli"));
   assert.equal(hint, "npx @oim-dev/relay-cli --local doctor check");
   assert.deepEqual(await treeHashes(app.root), before, "status не меняет ни одного байта");
@@ -265,7 +269,7 @@ test("storage status: recovery-required, unsupported и invalid — ненуле
   assert.match(unsupportedText.stdout, /  Действие:\n\S/);
   assert.deepEqual(await treeHashes(app.root), before);
   await editJson(join(relay, "storage.json"), (manifest) => {
-    manifest.dataModelVersion = 2;
+    manifest.dataModelVersion = CURRENT_DATA_MODEL;
   });
 
   const passport = join(relay, "entities/products/passport.json");
@@ -361,17 +365,28 @@ test("A02/A13: dry-run не меняет базу и даёт отпечаток
   assert.deepEqual(await treeHashes(app.root), current, "no-op не меняет файлы");
 });
 
-test("профиль 1 → 2: шаг profile в dry-run и результате, короткая подсказка Core, счётчики", async (t) => {
+test("профиль 1 → текущий: переход документа и шаг profile в dry-run и результате, короткая подсказка Core, счётчики", async (t) => {
   const project = await frozenBase(t, "physical4-v0.7.0-52c4609");
   const plan = storageMigrationPlanSchema.parse(
     successful(await invoke(project, ["--local", "storage", "migrate", "--dry-run"])).data,
   );
   assert.deepEqual(
     plan.steps.map(({ id, type }) => ({ id, type })),
-    [{ id: "profile.1-to-2", type: "profile" }],
+    [
+      { id: "document-v1-to-v2", type: "record" },
+      { id: `profile.1-to-${CURRENT_DATA_MODEL}`, type: "profile" },
+    ],
   );
+  assert.deepEqual(plan.profiles, { from: 1, to: CURRENT_DATA_MODEL });
+  assert.deepEqual(plan.steps[0]?.owners, ["document"]);
+  assert.ok(plan.steps[0]!.records.changed > 0, "прежние документы получают формат и теги");
   const dry = await invokeRaw(project, ["--local", "storage", "migrate", "--dry-run"], human);
-  assert.match(dry.stdout, /1\. Метка профиля данных 1 → 2 \(profile\.1-to-2, версия 1\)/);
+  assert.equal(dry.code, 0, dry.stdout);
+  const steps = dry.stdout.split("\n").filter((line) => /^\d+\. /.test(line));
+  assert.deepEqual(steps, [
+    "1. Переход записей document 1 → 2 (document-v1-to-v2, версия 1)",
+    `2. Метка профиля данных 1 → ${CURRENT_DATA_MODEL} (profile.1-to-${CURRENT_DATA_MODEL}, версия 1)`,
+  ]);
 
   // JSON сохраняет плейсхолдер Core, text оставляет только явно выбранный режим.
   const before = await treeHashes(project);
@@ -411,8 +426,12 @@ test("профиль 1 → 2: шаг profile в dry-run и результате,
     ).data,
   );
   assert.equal(result.migrated, true);
-  assert.deepEqual(result.profiles, { from: 1, to: 2 });
-  assert.equal(result.steps[0]?.type, "profile");
+  assert.deepEqual(result.profiles, { from: 1, to: CURRENT_DATA_MODEL });
+  assert.deepEqual(
+    result.steps.map(({ id, type }) => ({ id, type })),
+    plan.steps.map(({ id, type }) => ({ id, type })),
+    "исполнен ровно проверенный план",
+  );
   assert.ok(result.backup?.path.startsWith(`${backups}/`));
   const owners = Object.values(result.counts.owners);
   assert.equal(
@@ -427,6 +446,38 @@ test("профиль 1 → 2: шаг profile в dry-run и результате,
     ).status,
     "current",
   );
+});
+
+test("предыдущий профиль данных требует явного переноса: status и dry-run не меняют базу", async (t) => {
+  const app = await fixture(t);
+  const manifest = join(app.root, ".relay/storage.json");
+  const created = JSON.parse(await readFile(manifest, "utf8")) as { dataModelVersion?: number };
+  assert.equal(
+    created.dataModelVersion,
+    CURRENT_DATA_MODEL,
+    "новая база создаётся в текущем профиле",
+  );
+  const previous = CURRENT_DATA_MODEL - 1;
+  await editJson(manifest, (value) => {
+    value.dataModelVersion = previous;
+  });
+  const before = await treeHashes(app.root);
+  const status = storageStatusSchema.parse(
+    successful(await app.run(["--local", "storage", "status"])).data,
+  );
+  assert.equal(status.status, "migration-required");
+  assert.equal(status.current.dataModel, previous);
+  assert.equal(status.target.dataModel, CURRENT_DATA_MODEL);
+  const plan = storageMigrationPlanSchema.parse(
+    successful(await app.run(["--local", "storage", "migrate", "--dry-run"])).data,
+  );
+  assert.deepEqual(plan.profiles, { from: previous, to: CURRENT_DATA_MODEL });
+  assert.deepEqual(plan.steps.map(({ id, type }) => ({ id, type })).at(-1), {
+    id: `profile.${previous}-to-${CURRENT_DATA_MODEL}`,
+    type: "profile",
+  });
+  failed(await app.run(["--local", "task", "list"]), "STORAGE_MIGRATION_REQUIRED", 4);
+  assert.deepEqual(await treeHashes(app.root), before);
 });
 
 test("обычная local-команда на базе профиля 1: text подставляет фактический config, JSON хранит плейсхолдер", async (t) => {
@@ -458,4 +509,91 @@ test("обычная local-команда на базе профиля 1: text �
   ]);
   assert.match(text.stdout, /Фактически: 1\n/);
   assert.deepEqual(await treeHashes(project), before, "чтение не меняет базу");
+});
+
+test("связь документа с прежним адресом этапа после migrate: unlink снимает, link — ENTITY_RELOCATED (local и HTTP)", async (t) => {
+  const stage = "plan-stage:Lg6IfNWn";
+  const links = async (run: (args: (string | number)[]) => ReturnType<typeof invoke>) =>
+    (
+      successful(await run(["document", "links", "DOC-2"])).data as {
+        items: { target: { kind: string; id: string }; type: string }[];
+      }
+    ).items.map(({ target, type }) => `${type} ${target.kind}:${target.id}`);
+  for (const mode of ["local", "http"] as const) {
+    const project = await frozenBase(t, "physical2-plan-v1-43d683b");
+    const backups = await tempDirectory(t);
+    successful(
+      await invoke(project, [
+        "--local",
+        "storage",
+        "migrate",
+        "--backup-dir",
+        join(backups, "copy"),
+      ]),
+    );
+    const prefix =
+      mode === "local" ? ["--local"] : ["--server-url", (await httpServer(t, project)).url];
+    const run = (args: (string | number)[]) =>
+      invoke(project, [...prefix, "--actor", "agent", ...args]);
+    const before = await links(run);
+    assert.ok(before.includes(`documents ${stage}`), before.join("; "));
+    const revision = (
+      successful(await run(["document", "get", "DOC-2"])).data as { revision: number }
+    ).revision;
+
+    // Прикрепить и изменить связь по прежнему адресу нельзя: Core отказывает до записи.
+    const refused = await run([
+      "document",
+      "link",
+      "DOC-2",
+      "--target",
+      stage,
+      "--if-revision",
+      revision,
+    ]);
+    failed(refused, "ENTITY_RELOCATED", 3);
+    assert.ok(!refused.body.ok);
+    // Отказ записи по HTTP переносит предметные details в serverDetails вместе с requestId/URL.
+    const details = refused.body.error.details as {
+      from?: string;
+      serverDetails?: { from?: string };
+    };
+    assert.equal(mode === "local" ? details.from : details.serverDetails?.from, stage);
+    assert.deepEqual(await links(run), before, mode);
+
+    const removed = await invokeRaw(
+      project,
+      [
+        ...prefix,
+        "--actor",
+        "agent",
+        "document",
+        "unlink",
+        "DOC-2",
+        "--target",
+        stage,
+        "--if-revision",
+        revision,
+      ],
+      human,
+    );
+    assert.equal(removed.code, 0, removed.stdout);
+    assert.equal(removed.stderr, "");
+    assert.match(
+      removed.stdout,
+      new RegExp(`^Отношение снято \\(documents, ${stage}\\) для документа: DOC-2`),
+    );
+    assert.match(removed.stdout, new RegExp(`Ревизия:\\s+${revision + 1}`));
+    assert.deepEqual(
+      await links(run),
+      before.filter((link) => link !== `documents ${stage}`),
+      `${mode}: снята только связь с прежним адресом`,
+    );
+    // Сохранённой цели больше нет: повторное снятие — тот же отказ, не пустой успех.
+    failed(
+      await run(["document", "unlink", "DOC-2", "--target", stage, "--if-revision", revision + 1]),
+      "ENTITY_RELOCATED",
+      3,
+    );
+  }
 });

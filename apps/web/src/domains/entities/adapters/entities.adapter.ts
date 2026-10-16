@@ -1,4 +1,3 @@
-import { z } from "zod";
 import {
   entitiesQuerySchema,
   entitiesPageSchema,
@@ -7,39 +6,15 @@ import {
   entityDetailSchema,
 } from "@relay/contracts/entities";
 import type { EntitiesQuery, EntitiesPage, EntitySummary } from "@relay/contracts/entities";
-import { getProjectApi, ApiError, getStorageFailureMessage } from "infra/tasks-api";
+import { ApiError, getProjectApi } from "infra/tasks-api";
+import {
+  EntityAccessError,
+  EntityRelocatedError,
+  throwEntityFailure,
+  toEntityFailure,
+} from "../errors/entity-errors";
 import type { EntityContent } from "../types/entity-content.type";
-
-const FAILURE_SCHEMA = z.object({ error: z.object({ message: z.string() }) });
-
-/** Ожидаемая недоступность или отказ чтения сохраняет работающую форму. */
-export class EntityAccessError extends Error {}
-
-/** Отделяет ожидаемые ошибки доступа от нарушения контракта приложения. */
-const throwEntityFailure = (failure: unknown): never => {
-  if (failure instanceof ApiError) {
-    const response = FAILURE_SCHEMA.safeParse(failure.error);
-    if (response.success && failure.status < 500) {
-      throw new EntityAccessError(
-        getStorageFailureMessage(failure) ?? response.data.error.message,
-        { cause: failure },
-      );
-    }
-    if (failure.status === 502 || failure.status === 503) {
-      throw new EntityAccessError(
-        "Сервер недоступен. Обновите варианты после восстановления соединения.",
-        { cause: failure },
-      );
-    }
-  }
-  if (failure instanceof TypeError) {
-    throw new EntityAccessError(
-      "Не удалось загрузить сущности. Проверьте соединение и повторите запрос.",
-      { cause: failure },
-    );
-  }
-  throw failure;
-};
+import type { EntityRelocation } from "../types/entity-relocation.type";
 
 /** Читает страницу карточек через общий движок, включая поиск по прежним ключам. */
 export const getEntities = async (
@@ -63,6 +38,28 @@ export const getEntitySummary = async (projectId: string, ref: string): Promise<
     return entitySummarySchema.parse(response.data);
   } catch (failure) {
     return throwEntityFailure(failure);
+  }
+};
+
+/**
+ * Узнаёт, куда перенесён прежний адрес: Core отвечает на его разрешение ENTITY_RELOCATED
+ * со сведениями о владельце. Дополнительное чтение не ломает показ связи.
+ *
+ * @returns Перенос либо `null`, если адрес не перенесён или сведения прочитать не удалось.
+ */
+export const getEntityRelocation = async (
+  projectId: string,
+  ref: string,
+): Promise<EntityRelocation | null> => {
+  try {
+    await getProjectApi(projectId).entities.resolveEntity({ ref });
+    return null;
+  } catch (failure) {
+    const normalized = toEntityFailure(failure);
+    if (normalized instanceof EntityRelocatedError) return normalized.relocation;
+    // Сбой сервера или сети: связь показывается без сведений о переносе.
+    if (normalized instanceof EntityAccessError || normalized instanceof ApiError) return null;
+    throw normalized;
   }
 };
 

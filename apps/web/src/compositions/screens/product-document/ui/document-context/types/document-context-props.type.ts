@@ -1,12 +1,11 @@
-import type { KnowledgeDocument, DocumentInput } from "domains/documents";
-/** Контекст, отношения и оглавление читаемого материала. */
+import type { KnowledgeDocument } from "domains/documents";
+
+/** Свойства и оглавление читаемого материала. */
 export type DocumentContextProps = {
-  /** Подтверждённый документ. */
+  /** Подтверждённый материал. */
   document: KnowledgeDocument;
   /** Название его раздела. */
   sectionName: string;
-  /** Заголовки отрисованного Markdown. */
+  /** Заголовки отрисованного Markdown; для ссылки пусто. */
   outline: { id: string; title: string; level: number }[];
-  /** Запись изменения с исходной ревизией. */
-  onSave: (changes: Partial<DocumentInput>) => Promise<void>;
 };

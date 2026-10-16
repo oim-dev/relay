@@ -1,0 +1,8 @@
+.stage {
+  align-content: start;
+}
+
+.state {
+  border-radius: var(--tasks-radius-panel);
+  background: var(--tasks-card);
+}

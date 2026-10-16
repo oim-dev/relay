@@ -2,22 +2,24 @@ import { useEffect } from "react";
 import useSWR from "swr";
 import type { SWRResponse } from "swr";
 import { subscribeWorkspace } from "infra/workspace-events";
-import {
-  getDocument,
-  getLibrarySettings,
-  DocumentAccessError,
-} from "../adapters/documents.adapter";
+import { subscribeMaterialsChanged } from "../operations/materials-changes";
+import { getDocument, getLibrarySettings } from "../adapters/documents.adapter";
+import { DocumentAccessError } from "../errors/document-errors";
 import type { KnowledgeDocument, LibrarySettings } from "../types/document.type";
 
 /** SSE перечитывает подтверждённые данные, не изменяя локальный ввод формы. */
 const useDocumentRefresh = (projectId: string, refresh: () => Promise<unknown>): void => {
-  useEffect(
-    () =>
-      subscribeWorkspace(projectId, (signal) => {
-        if (signal.state === "connected") void refresh().catch(() => undefined);
-      }),
-    [projectId, refresh],
-  );
+  useEffect(() => {
+    const run = (): void => void refresh().catch(() => undefined);
+    const unsubscribeStream = subscribeWorkspace(projectId, (signal) => {
+      if (signal.state === "connected") run();
+    });
+    const unsubscribeLocal = subscribeMaterialsChanged(projectId, run);
+    return () => {
+      unsubscribeStream();
+      unsubscribeLocal();
+    };
+  }, [projectId, refresh]);
 };
 
 /** Адресное чтение материала без полного продуктового снимка. */

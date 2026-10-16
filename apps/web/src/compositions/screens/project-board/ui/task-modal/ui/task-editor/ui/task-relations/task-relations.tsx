@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
   Group,
   Combobox,
@@ -27,6 +26,8 @@ import {
 import type { TaskSummary } from "domains/board-tasks";
 import { useBoards } from "domains/boards";
 import { MarkdownView } from "ui/markdown-view";
+import { SectionPanel } from "ui/section-panel";
+import { StatusBadge } from "ui/status-badge";
 import { isEmptyArray } from "shared/value-predicates";
 import type { TaskRelationsProps } from "./types/task-relations-props.type";
 import type { SubtaskFormValues } from "./types/subtask-form-values.type";
@@ -122,7 +123,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
     columnLabel: TASK_COLUMNS.find((column) => column.value === entry.column)?.label,
     StatusIcon:
       entry.column === "done" ? CheckCircle2 : entry.column === "cancelled" ? Ban : Circle,
-    statusColor: TASK_COLUMNS.find((column) => column.value === entry.column)?.color,
+    statusTone: TASK_COLUMNS.find((column) => column.value === entry.column)?.tone ?? "neutral",
   }));
   const options =
     candidates.data
@@ -137,6 +138,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
         key: entry.key,
         board: entry.boardSlug,
         status: TASK_COLUMNS.find((column) => column.value === entry.column)?.label,
+        statusTone: TASK_COLUMNS.find((column) => column.value === entry.column)?.tone ?? "neutral",
         isLinked: entry.parentId === task.id,
       })) ?? [];
   const hasNoCandidates =
@@ -166,6 +168,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
   const cancelledCount = items.filter((entry) => entry.column === "cancelled").length;
   const cancelledLabel = cancelledCount > 0 ? ` · ${cancelledCount} отменено` : "";
   const shouldShowProgress = !isEmptyArray(items);
+  const subtaskCount = isEmptyArray(items) ? undefined : (query.data?.[0]?.total ?? items.length);
   const progressLabel = hasMore
     ? `Загружено ${items.length} из ${query.data?.[0]?.total ?? 0} подзадач`
     : `${items.filter((entry) => entry.column === "done").length} из ${items.length} готово${cancelledLabel}`;
@@ -213,15 +216,13 @@ export const TaskRelations = (props: TaskRelationsProps) => {
   };
   if (defect !== undefined) throw defect;
   return (
-    <Stack gap="sm">
-      <Group justify="space-between">
-        <Text component="h3" m={0} fw={600} size="sm">
-          Подзадачи
-        </Text>
+    <SectionPanel
+      titleAs="h3"
+      title="Подзадачи"
+      count={subtaskCount}
+      actions={
         <Button
-          variant="subtle"
-          color="gray"
-          size="xs"
+          variant="default"
           aria-label={addLabel}
           aria-expanded={isAdding}
           onClick={() => {
@@ -232,11 +233,12 @@ export const TaskRelations = (props: TaskRelationsProps) => {
                 input?.closest("form")?.scrollIntoView({ block: "start" });
               });
           }}
-          leftSection={<Plus size={14} />}
+          leftSection={<Plus size={16} aria-hidden="true" />}
         >
           {addLabel}
         </Button>
-      </Group>
+      }
+    >
       {isEmpty && (
         <Text size="sm" c="dimmed">
           Подзадач пока нет. Добавьте задачи, которые нужно выполнить для завершения текущей.
@@ -248,11 +250,11 @@ export const TaskRelations = (props: TaskRelationsProps) => {
         </Text>
       )}
       {shouldShowProgress && (
-        <Text size="xs" c="dimmed" ta="right">
+        <Text size="sm" c="dimmed" className={styles.progress}>
           {progressLabel}
         </Text>
       )}
-      <Stack component="ul" aria-label="Подзадачи" gap={0} m={0} p={0}>
+      <Stack component="ul" aria-label="Подзадачи" gap={0} m={0} p={0} className={styles.list}>
         {rows.map((entry) => (
           <Group
             component="li"
@@ -270,31 +272,18 @@ export const TaskRelations = (props: TaskRelationsProps) => {
               <span className={styles.key}>{entry.key}</span>
               <span>{entry.title}</span>
             </UnstyledButton>
-            <Group gap={4}>
-              <Badge
-                size="xs"
-                variant="light"
-                color={entry.statusColor}
-                tt="none"
-                className={styles.status}
-              >
+            <span className={styles.badges}>
+              <StatusBadge tone={entry.statusTone} className={styles.status}>
                 {entry.columnLabel}
-              </Badge>
-              {entry.blocked && (
-                <Badge size="xs" color="red" variant="light">
-                  Заблокирована
-                </Badge>
-              )}
-            </Group>
+              </StatusBadge>
+              {entry.blocked && <StatusBadge tone="danger">Заблокирована</StatusBadge>}
+            </span>
             <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="sm"
               aria-label={`Убрать подзадачу ${entry.key}`}
               disabled={isBusy}
               onClick={() => void handleRemove(entry)}
             >
-              <X size={14} />
+              <X size={16} aria-hidden="true" />
             </ActionIcon>
           </Group>
         ))}
@@ -310,7 +299,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
         </Button>
       )}
       {hasQueryError && (
-        <Alert color="red" title="Ошибка чтения задач">
+        <Alert color="danger" title="Ошибка чтения задач">
           {query.error?.message ?? candidates.error?.message}
           <Button
             variant="subtle"
@@ -423,9 +412,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
                               {option.title}
                             </Text>
                           </div>
-                          <Badge size="xs" variant="light" color="gray" tt="none">
-                            {option.status}
-                          </Badge>
+                          <StatusBadge tone={option.statusTone}>{option.status}</StatusBadge>
                         </Group>
                         {option.isLinked && (
                           <Text size="xs" c="dimmed">
@@ -465,7 +452,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
               </Button>
             )}
             {boards.error !== undefined && (
-              <Alert color="red">
+              <Alert color="danger">
                 Не удалось загрузить доски.{" "}
                 <Button
                   variant="subtle"
@@ -498,7 +485,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
                   </Text>
                 )}
                 {selectedTask.error !== undefined && (
-                  <Alert color="red">
+                  <Alert color="danger">
                     Не удалось загрузить описание.
                     <Button
                       variant="subtle"
@@ -535,7 +522,7 @@ export const TaskRelations = (props: TaskRelationsProps) => {
                   </Text>
                 )}
                 {shouldReplaceParent && (
-                  <Alert color="orange">Сохранение заменит прежнюю родительскую связь.</Alert>
+                  <Alert color="warning">Сохранение заменит прежнюю родительскую связь.</Alert>
                 )}
               </Stack>
             )}
@@ -558,10 +545,10 @@ export const TaskRelations = (props: TaskRelationsProps) => {
         </fieldset>
       </form>
       {hasError && (
-        <Alert color="red" title="Подзадачи не изменены" role="alert">
+        <Alert color="danger" title="Подзадачи не изменены" role="alert">
           {error}
         </Alert>
       )}
-    </Stack>
+    </SectionPanel>
   );
 };

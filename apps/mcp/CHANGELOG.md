@@ -1,5 +1,25 @@
 # История изменений Relay MCP
 
+## Не выпущено
+
+- Материалы библиотеки: `entity_document_create`/`entity_document_update` принимают
+  `documentFormat` (`markdown`/`link`), `url` и `tags`; `entities_list` фильтрует
+  библиотеку по формату, тегам и `unattached`. Новые инструменты:
+  `entity_document_facets`, `entity_documents_list`, `entity_document_bulk` и
+  `entity_document_relate`. Описание — в [MCP](docs/MCP.md#каталог-и-операции-материалов).
+
+### Совместимость
+
+- Текущий профиль модели данных — 3: материал библиотеки обязательно хранит формат и теги.
+  Базы Relay 0.9.2 и 0.10.0 требуют явного `storage migrate` в локальном CLI с резервной
+  копией; до переноса Server отвечает `STORAGE_MIGRATION_REQUIRED`. MCP базу не открывает
+  и миграцию не выполняет.
+- Прежние CLI, Server и MCP не открывают перенесённую или созданную новой версией базу.
+  Откат на прежнюю версию не поддерживается — только развёртывание резервной копии,
+  созданной переносом.
+- Новые клиенты с прежним Server получают `SERVER_INCOMPATIBLE` для новых полей, фильтров
+  и операций документов. Обновляйте CLI, Server и MCP одной версией.
+
 ## 0.10.0
 
 - Совместный выпуск с `@oim-dev/relay-cli@0.10.0` и `@oim-dev/relay-server@0.10.0`:

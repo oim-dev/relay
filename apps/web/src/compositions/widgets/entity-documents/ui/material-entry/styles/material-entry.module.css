@@ -1,0 +1,221 @@
+/* Строка — светлый подблок на тонированной карточке: материал сверху, его связи ниже. */
+.root {
+  display: grid;
+  gap: 0.625rem;
+  min-width: 0;
+  padding: var(--tasks-space-3);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-row);
+  background: var(--tasks-tile);
+
+  &[data-archived="true"] {
+    border-style: dashed;
+    background: var(--tasks-hatch-surface);
+  }
+
+  &[aria-busy="true"] {
+    opacity: 0.75;
+  }
+}
+
+.head {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--tasks-space-3);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--tasks-radius-compact);
+  background: var(--tasks-card);
+  color: var(--tasks-muted);
+
+  &[data-format="link"] {
+    background: var(--tasks-accent-subtle);
+    color: var(--tasks-accent-ink);
+  }
+}
+
+.main {
+  display: grid;
+  gap: var(--tasks-space-1);
+  min-width: 0;
+}
+
+.titleLine {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.title {
+  min-width: 0;
+  color: var(--tasks-ink);
+  font-size: var(--tasks-font-size-record-title);
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+
+  &:hover {
+    color: var(--tasks-accent-ink);
+  }
+}
+
+.pin {
+  flex: none;
+  color: var(--tasks-accent-ink);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tasks-space-1) var(--tasks-space-2);
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.kind {
+  color: var(--tasks-ink);
+  font-weight: 550;
+}
+
+.format {
+  padding: 0 0.375rem;
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-card);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  line-height: 1.125rem;
+
+  &[data-format="link"] {
+    background: var(--tasks-accent-subtle);
+    color: var(--tasks-accent-ink);
+  }
+}
+
+.key {
+  color: var(--tasks-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.archived {
+  margin: 0;
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 550;
+}
+
+.relations {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (--sm) {
+    margin-left: var(--tasks-space-12);
+  }
+}
+
+.relation {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+  padding: var(--tasks-space-2) 0.625rem;
+  border-radius: var(--tasks-radius-compact);
+  background: var(--tasks-surface);
+}
+
+.relationHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tasks-space-1) var(--tasks-space-2);
+}
+
+.relationType {
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-card);
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+  line-height: 1.25rem;
+
+  &[data-type="documents"] {
+    background: var(--tasks-accent-subtle);
+    color: var(--tasks-accent-ink);
+  }
+}
+
+.legacy {
+  color: var(--tasks-soft);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.relationActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem;
+  margin-left: auto;
+}
+
+.description {
+  min-width: 0;
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.noDescription {
+  margin: 0;
+  color: var(--tasks-soft);
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.45;
+}
+
+.confirm {
+  display: grid;
+  gap: var(--tasks-space-2);
+  padding: 0.625rem;
+  border: 1px solid var(--tasks-danger-border);
+  border-radius: var(--tasks-radius-compact);
+  background: var(--tasks-danger-surface);
+}
+
+.confirmText {
+  margin: 0;
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tasks-space-2);
+}
+
+.error {
+  font-size: var(--mantine-font-size-sm);
+}

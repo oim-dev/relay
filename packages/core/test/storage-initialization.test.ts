@@ -12,6 +12,7 @@ import { EntityDeletionService } from "../src/application/entities/deletion.js";
 import { PlanningService } from "../src/application/planning/service.js";
 import { ReleasesService } from "../src/application/releases/service.js";
 import { migrationBackupDir } from "./helpers/migration-bases.js";
+import { CURRENT_DATA_MODEL } from "../src/storage/data-model/profiles.js";
 
 test("100 смен статуса задачи: размер и число файлов стабильны, все владельцы и tombstone без аудита", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-status-growth-"));
@@ -175,7 +176,7 @@ test("прямой init через symlink публикует конфигура
     format: "relay-entities",
     schemaVersion: 4,
     productId: initialized.config.projectId,
-    dataModelVersion: 2,
+    dataModelVersion: CURRENT_DATA_MODEL,
   });
   const task = await new BoardTasksService(reopened).create(
     { board: "product", requestId: "init-write" },

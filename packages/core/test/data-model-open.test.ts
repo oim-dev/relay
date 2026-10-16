@@ -15,7 +15,10 @@ import {
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { z } from "zod";
-import { storageErrorDetailsSchema } from "@relay/contracts/storage-maintenance";
+import {
+  entityRelocatedDetailsSchema,
+  storageErrorDetailsSchema,
+} from "@relay/contracts/storage-maintenance";
 import { EntityStore, withStorageLocks } from "../src/storage/entity-store/store.js";
 import { EntityStorageRegistry } from "../src/storage/entity-store/registry.js";
 import type { EntityCodec, EntityRecord } from "../src/storage/entity-store/registry.js";
@@ -27,9 +30,17 @@ import type {
   TransactionStage,
 } from "../src/storage/entity-store/transaction.js";
 import { currentManifest } from "../src/storage/data-model/manifest.js";
+import { CURRENT_DATA_MODEL } from "../src/storage/data-model/profiles.js";
 import { jsonValue } from "../src/storage/entity-store/format.js";
 import { initialize, openWorkspace, readWorkspaceConfig } from "../src/storage/workspace.js";
 import { BoardTasksService } from "../src/application/board-tasks/service.js";
+import {
+  inspectStorage,
+  migrateStorage,
+  planStorageMigration,
+} from "../src/application/storage/maintenance.js";
+import { StorageService } from "../src/application/storage/service.js";
+import { migrationBackupDir } from "./helpers/migration-bases.js";
 import { AppError } from "../src/shared/errors.js";
 
 const at = "2026-10-01T10:00:00.000Z";
@@ -145,7 +156,7 @@ function migrationIntent(backup: string): MigrationIntent {
     registryDigest: "a".repeat(64),
     planFingerprint: "b".repeat(64),
     source: { layout: "unified-4", physical: 4, profile: 1 },
-    target: { profile: 2 },
+    target: { profile: CURRENT_DATA_MODEL },
     transitions: ["profile-marker@1"],
     backup: { path: backup, manifestSha256: "c".repeat(64) },
     // Итог плана пишет каждый выпущенный исполнитель; WAL без него — предварительная сборка.
@@ -157,7 +168,7 @@ function migrationIntent(backup: string): MigrationIntent {
   };
 }
 
-/** Профиль 1 → 2 с изменением записи: подготовка вне публикации, публикация WAL v2. */
+/** Профиль 1 → текущий с изменением записи: подготовка вне публикации, публикация WAL v2. */
 async function prepareMigration(root: string) {
   const { productId: _productId, dataModelVersion: _profile, ...legacy } = await manifestOf(root);
   await setManifest(root, legacy);
@@ -190,12 +201,15 @@ test("новая база: manifest текущего профиля; EntityStore
   assert.deepEqual(await manifestOf(root), {
     format: "relay-entities",
     schemaVersion: 4,
-    dataModelVersion: 2,
+    dataModelVersion: CURRENT_DATA_MODEL,
   });
   const directory = await realpath(await mkdtemp(join(tmpdir(), "relay-data-model-init-")));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const workspace = await initialize(directory, "tasks");
-  assert.equal((await manifestOf(dirname(workspace.configPath))).dataModelVersion, 2);
+  assert.equal(
+    (await manifestOf(dirname(workspace.configPath))).dataModelVersion,
+    CURRENT_DATA_MODEL,
+  );
 });
 
 test("профиль 1 и устаревший формат: предметная работа отказывает без изменения файлов", async (t) => {
@@ -206,7 +220,7 @@ test("профиль 1 и устаревший формат: предметна�
   const required = storageFailure("STORAGE_MIGRATION_REQUIRED", 4, {
     reason: "profile",
     current: 1,
-    expected: 2,
+    expected: CURRENT_DATA_MODEL,
     path: "storage.json",
   });
   await assert.rejects(store.get({ kind: "note", id: "a" }), required);
@@ -236,12 +250,15 @@ test("профиль новее поддерживаемого: отказ пр�
   t.after(() => rm(directory, { recursive: true, force: true }));
   const workspace = await initialize(directory, "tasks");
   const root = dirname(workspace.configPath);
-  await setManifest(root, { ...(await manifestOf(root)), dataModelVersion: 3 });
+  await setManifest(root, {
+    ...(await manifestOf(root)),
+    dataModelVersion: CURRENT_DATA_MODEL + 1,
+  });
   const before = await files(root);
   const unsupported = storageFailure("STORAGE_VERSION_UNSUPPORTED", 4, {
     reason: "profile",
-    current: 3,
-    expected: 2,
+    current: CURRENT_DATA_MODEL + 1,
+    expected: CURRENT_DATA_MODEL,
   });
   await assert.rejects(readWorkspaceConfig(directory), unsupported);
   await assert.rejects(openWorkspace(directory), unsupported);
@@ -327,7 +344,7 @@ test("WAL v2: обычный recovery не допубликовывает миг
   assert.equal(result.kind, "migration");
   assert.deepEqual(seen, [pending.kind === "migration" ? pending.intent.migration.id : ""]);
   assert.equal((await inspectPending(root)).kind, "none");
-  assert.equal((await manifestOf(root)).dataModelVersion, 2);
+  assert.equal((await manifestOf(root)).dataModelVersion, CURRENT_DATA_MODEL);
   assert.equal((await store.get({ kind: "note", id: "a" })).data.title, "Перенесённая заметка");
 });
 
@@ -515,6 +532,7 @@ test("relocation: прежний адрес отвечает ENTITY_RELOCATED, �
     assert(error instanceof AppError);
     assert.equal(error.code, "ENTITY_RELOCATED");
     assert.equal(error.exitCode, 3);
+    assert.deepEqual(entityRelocatedDetailsSchema.parse(error.details), error.details);
     assert.deepEqual(error.details, {
       code: "ENTITY_RELOCATED",
       from: "stage:s1",
@@ -621,4 +639,50 @@ test("единый замок: symlink-путь ждёт владельца, leg
     assert((await readdir(directory)).includes(".legacy-data-runtime"));
   });
   assert.equal((await readdir(directory)).includes(".legacy-data-runtime"), false);
+});
+
+test("профиль 2 и отметка index-stale: предметная работа требует migrate, а не reindex", async (t) => {
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "relay-data-model-stale-")));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await initialize(directory, "tasks");
+  const workspace = await openWorkspace(directory);
+  const root = dirname(workspace.configPath);
+  const tasks = new BoardTasksService(workspace);
+  await tasks.create({ board: "product", requestId: "first" }, "agent");
+  const stale = join(root, "runtime/index-stale.json");
+  const marker = JSON.stringify({ paths: ["entities/tasks/x.json"], total: 1 });
+  // Текущий профиль: отметка по-прежнему требует reindex.
+  await writeFile(stale, marker);
+  await assert.rejects(
+    tasks.create({ board: "product", requestId: "stale" }, "agent"),
+    (error: unknown) => error instanceof AppError && error.code === "STORAGE_INDEX_STALE",
+  );
+  await new StorageService(workspace).reindex();
+  await tasks.create({ board: "product", requestId: "after-reindex" }, "agent");
+
+  await setManifest(root, { ...(await manifestOf(root)), dataModelVersion: 2 });
+  await writeFile(stale, marker);
+  const before = persistent(await files(root));
+  const required = storageFailure("STORAGE_MIGRATION_REQUIRED", 4, {
+    reason: "profile",
+    current: 2,
+    expected: CURRENT_DATA_MODEL,
+  });
+  await assert.rejects(tasks.create({ board: "product", requestId: "old" }, "agent"), required);
+  await assert.rejects(tasks.list({ board: "product" }), required);
+  assert.deepEqual(persistent(await files(root)), before, "отказ не меняет файлы");
+  // Обслуживание видит отметку как предупреждение и переносит базу, снимая её.
+  const configPath = workspace.configPath;
+  const status = await inspectStorage({ configPath });
+  assert.equal(status.status, "migration-required");
+  const plan = await planStorageMigration({ configPath });
+  assert.equal(plan.applicable, true, JSON.stringify(plan.blockers));
+  const result = await migrateStorage(
+    { configPath },
+    { backupDir: await migrationBackupDir(), ifPlan: plan.planFingerprint },
+  );
+  assert.equal(result.migrated, true);
+  assert.equal(await readFile(stale, "utf8").catch(() => null), null);
+  const reopened = new BoardTasksService(await openWorkspace(directory));
+  await reopened.create({ board: "product", requestId: "migrated" }, "agent");
 });

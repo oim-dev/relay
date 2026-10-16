@@ -103,7 +103,7 @@ export const CommentForm = (props: CommentFormProps) => {
       <Group justify="space-between" className={styles.collapsed}>
         <Button
           variant="light"
-          leftSection={<MessageSquarePlus size={16} />}
+          leftSection={<MessageSquarePlus size={16} aria-hidden="true" />}
           onClick={() => {
             setNotice("");
             setError("");
@@ -114,7 +114,7 @@ export const CommentForm = (props: CommentFormProps) => {
           Написать сообщение
         </Button>
         {hasNotice && (
-          <Text role="status" size="sm" c="teal">
+          <Text role="status" size="sm" c="success">
             {notice}
           </Text>
         )}
@@ -153,17 +153,17 @@ export const CommentForm = (props: CommentFormProps) => {
           {...form.getInputProps("description")}
         />
         {!canPersist && (
-          <Alert color="yellow">
+          <Alert color="warning">
             Локальное хранилище недоступно. Не закрывайте карточку до публикации.
           </Alert>
         )}
         {hasError && (
-          <Alert color="red" role="alert">
+          <Alert color="danger" role="alert">
             {error}
           </Alert>
         )}
         {hasUnknownOutcome && (
-          <Alert color="yellow" title="Проверьте обсуждение перед новой публикацией" role="alert">
+          <Alert color="warning" title="Проверьте обсуждение перед новой публикацией" role="alert">
             Предыдущая отправка могла создать сообщение. Обновите ленту и проверьте новые записи,
             включая следующие страницы. Черновик сохранён. Повторная отправка может создать
             дубликат: сервер не устраняет повторные публикации автоматически.
@@ -177,7 +177,7 @@ export const CommentForm = (props: CommentFormProps) => {
           </Alert>
         )}
         {hasNotice && (
-          <Text role="status" c="green">
+          <Text role="status" size="sm" c="success">
             {notice}
           </Text>
         )}

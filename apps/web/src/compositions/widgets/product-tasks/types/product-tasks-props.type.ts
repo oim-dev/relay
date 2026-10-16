@@ -10,6 +10,6 @@ export type ProductTasksParams = {
   boardHref?: string;
 };
 /** Атрибуты корневого элемента. */
-type RootAttrs = Omit<ComponentPropsWithoutRef<"div">, "children">;
+type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children" | "title">;
 /** Свойства визуальной области. */
 export type ProductTasksProps = RootAttrs & ProductTasksParams;

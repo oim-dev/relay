@@ -141,6 +141,12 @@ export type PhysicalTransition = TransitionBase & {
   readonly from: Exclude<StorageLayout, "unified-4">;
   readonly to: "unified-4";
   /**
+   * Версии данных, в которых шаг выпускает записи, если они не берутся из источника
+   * (legacy-раскладка не хранит dataVersion). По ним планируются предметные шаги после
+   * физического; без поля план строится по версиям, найденным в источнике.
+   */
+  readonly produces?: Readonly<Record<string, number>>;
+  /**
    * Чистое чтение: без записи, часов и случайных ID. Блокеры — AppError хранилища;
    * при нескольких причинах у ошибки есть поле `blockers` со всеми (см. physicalBlockers).
    */

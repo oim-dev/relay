@@ -35,7 +35,6 @@ export const ScopeEditor = (props: ScopeEditorProps) => {
     <div {...rootAttrs} className={clsx(styles.root, className)}>
       <Button
         variant="subtle"
-        color="gray"
         size="compact-sm"
         leftSection={<ArrowLeft size={14} aria-hidden="true" />}
         className={styles.back}
@@ -44,7 +43,7 @@ export const ScopeEditor = (props: ScopeEditorProps) => {
         К выбору фич и сценариев
       </Button>
       <header className={styles.header}>
-        <Text size="xs" c="dimmed">
+        <Text size="sm" c="dimmed" fw={550}>
           2. Опишите вклад · {context}
         </Text>
         <h2 className={styles.title} tabIndex={-1}>
@@ -54,7 +53,7 @@ export const ScopeEditor = (props: ScopeEditorProps) => {
           Что приложение «{applicationName}» обеспечивает для выполнения этого контракта.
         </Text>
       </header>
-      <Accordion variant="separated">
+      <Accordion variant="separated" classNames={{ item: styles.source }}>
         <Accordion.Item value="source">
           <Accordion.Control>Исходное описание в продукте</Accordion.Control>
           <Accordion.Panel>

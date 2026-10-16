@@ -148,11 +148,55 @@ project-runtime, Web). Новое обязательное поле резуль
 `documentRelationSchema.target.kind` допускает `plan-stage` только для чтения: это сохранённая
 до миграции связь документа с прежним адресом этапа плана. Схема общая для ввода и результата,
 поэтому тип ввода тоже содержит это значение, но новое прикрепление к этапу отклоняет Core,
-а не схема. Клиент показывает такую цель как адрес `plan-stage:<id>` без перехода к сущности.
+а не схема. В `documentRelationChangeSchema` такой адрес допустим только для `detach`
+существующей связи: Core снимает её по сохранённой цели, attach/update дают `ENTITY_RELOCATED`. Клиент
+не переходит к такой цели как к сущности; чтобы назвать план-владельца, он может разрешить
+адрес `plan-stage:<id>` и разобрать `details` ответа `ENTITY_RELOCATED` по
+`entityRelocatedDetailsSchema`.
 
 Целевая модель не становится доступным полем до реализации. В частности, текущий
 релиз использует `planIds`, без `applicationId`; принятое расширение описано отдельно
 в [предметных правилах](../../../docs/domain/RELEASES.md).
+
+### Каталог документов
+
+Поля материала (`documentFormat`, `url`, `tags`) входят в `documentMetadataShape`
+модуля `entities/document-library.ts`; их предметный смысл описан в
+[документах](../../../docs/domain/DOCUMENTS.md). Схемы проверяют форму: допустимые
+значения формата, абсолютный `http`/`https` адрес до 2048 символов, однострочный тег
+до 50 символов и не более 20 тегов. Сочетание формата с адресом и непустым Markdown,
+нормализацию и дедупликацию тегов и переход к `markdown` без адреса выполняет Core.
+В `entityCreateDataSchemas.document` поле `body` имеет default `""` (для ссылки),
+в update default нет: отсутствие `body` сохраняет текущее содержание.
+В схемах `documentFormat` и `tags` необязательны (ввод прежних клиентов), но в хранилище
+документ `dataVersion` 2 (профиль 3) содержит их всегда: прежние записи получают `markdown`
+и `[]` явной миграцией Core ([формат](../../core/docs/FORMAT.md#перенос-документа-v1)),
+поэтому `data` прочитанного документа включает оба поля.
+
+`entitiesQuerySchema` дополнен фильтрами `documentFormat`, `tags` (все выбранные, AND)
+и `unattached`. Карточка `entitySummarySchema.document` всегда содержит `format` и `tags`,
+`url` — только у ссылки; `linkCount` учитывает и `relations`, и совместимые `links`.
+Обязательные `format` и `tags` делают ответ прежнего сервера невалидным для нового
+строгого клиента: Server и клиенты обновляются одной версией.
+
+Модуль `entities/document-catalog.ts` содержит операции каталога поверх реестра сущностей:
+
+| Схема                                                      | Назначение                                                  |
+| ---------------------------------------------------------- | ----------------------------------------------------------- |
+| `documentFacetsQuerySchema` / `documentFacetsSchema`       | Счётчики по полным данным; область каждой оси в `.describe` |
+| `documentBulkSchema` / `documentBulkResultSchema`          | Массовое действие с поэлементными ревизиями и статусами     |
+| `documentRelationChangeSchema`                             | `attach`/`update`/`detach` одной связи документа            |
+| `entityDocumentsQuerySchema` / `entityDocumentsPageSchema` | Прямые материалы сущности с источником связи                |
+
+Схема не проверяет, что `nextType` передан только для `update`, а `description` —
+не для `detach`: это делает Core (`INVALID_ARGUMENT`). Результат массового действия —
+частичный по контракту; `failed` не включает `unchanged`. Методы Core — `EntityEngine`
+`documentFacets`, `documentBulk`, `relateDocument`, `entityDocuments`; транспорт и
+доступность в интерфейсах фиксируются отдельно, не по наличию схемы.
+
+Одноимённая `documentRelationChangeSchema` есть и в `document-library.ts` (ниже):
+это другая форма (`link`/`unlink` с `source`) для `DocumentLibraryService.changeRelation`.
+Модули не реэкспортируют друг друга; импорт выбирается по операции Core.
 
 ### Документная библиотека
 
@@ -202,7 +246,8 @@ project-runtime, Web). Новое обязательное поле резуль
 равенство разрешается постоянным адресом. `EntitySummary.implementation?` содержит
 `type: FI|SI` и `application`/`target` с `{ref,key,title}`.
 `EntitiesQuery.implementationTarget` принимает `feature|scenario`; вместе с active
-ограничивает смешанную выдачу реализациями, а section/documentKind/pinned — документами.
+ограничивает смешанную выдачу реализациями, а section/documentKind/documentFormat/tags/
+unattached/pinned — документами.
 `EntityDetail.savedStatus?` — сохранённая ручная отметка реализации отдельно от
 вычисленного `data.status`; старый ответ без поля не разрешает угадывать его значение.
 Общий индексный каталог использует guard `entities-v2:<digest корней>`;
@@ -211,7 +256,7 @@ project-runtime, Web). Новое обязательное поле резуль
 `EntitySummary.match?` — одно подтверждённое основание поиска при непустом q,
 не новая аннотация и не полный список всех совпавших полей. Текущему ключу и названию
 отдаётся предпочтение. `field` принимает `key`, `alias`, `address`, `id`, `title`,
-`summary`, `context`, `description`, `body`, `goal`, `version`, `application.key`,
+`summary`, `context`, `description`, `body`, `url`, `tags`, `goal`, `version`, `application.key`,
 `application.title`, `target.key`, `target.title`.
 `text` — исходное значение или фрагмент вокруг первого совпадения, не более 240 единиц
 UTF-16; регистр и исходное содержание сохраняются, многоточие и разметка выделения
@@ -320,6 +365,13 @@ unsupported | invalid`, идентичность проекта, фактиче�
 - `storageErrorDetailsSchema` — форма `details` ошибок хранилища: код, причина, шаг, владелец,
   версии, безопасный относительный путь или ID и `next`, без пользовательского текста и
   конфигурации. `ApiFailure.error.details` остаётся `unknown`; клиенты различают ошибки по `code`.
+- `entityRelocatedDetailsSchema` — стабильная форма `details` ошибки `ENTITY_RELOCATED`
+  (прежний адрес перенесён владельцу; сейчас только этап `plan-stage` в план). Строгий объект:
+  `code: "ENTITY_RELOCATED"`, `from` — запрошенный прежний адрес `kind:id`
+  (`plan-stage:<id>`, также при обращении по ключу `STG-N`), `to` — адрес плана-владельца
+  `work-plan:<id>`, `stageId` — ID этапа в плане (равен ID прежней записи), `key` — прежний
+  ключ `STG-N` или `null`, `next` — подсказка. Название и ключ плана не входят: их даёт чтение
+  `to`. Все места Core, отвечающие этой ошибкой, формируют `details` одной функцией по схеме.
 
 `STORAGE_MAINTENANCE_ERROR_EXIT_CODES` — единая таблица кода и exit code CLI для ошибок
 совместимости (`STORAGE_MIGRATION_REQUIRED`, `STORAGE_VERSION_UNSUPPORTED`,

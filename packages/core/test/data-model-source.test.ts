@@ -39,6 +39,7 @@ import {
   unifiedBase,
   writeJsonFile,
 } from "./helpers/source-fixtures.js";
+import { CURRENT_DATA_MODEL } from "../src/storage/data-model/profiles.js";
 
 const registry = productionTransitionRegistry();
 const inspect = (path: string) => inspectStorageSource(path, { registry, lock: { retries: 0 } });
@@ -60,7 +61,7 @@ test("A13: status текущей базы не меняет ни одного б
   assert.equal(status.status, "current");
   assert.equal(status.layout, "unified-4");
   assert.equal(status.current.physical, 4);
-  assert.equal(status.current.dataModel, 2);
+  assert.equal(status.current.dataModel, CURRENT_DATA_MODEL);
   assert.deepEqual(status.current.envelope, [3]);
   assert.equal(status.current.owners.project?.versions["1"]?.live, 1);
   assert.equal(status.current.owners.board?.versions["1"]?.live, 2);
@@ -323,9 +324,9 @@ test("раскладки: unified 1/2/3, будущий формат и проф
   assert.equal(future.layout, null);
   assert.equal(future.current.physical, 5);
   assert.deepEqual(codes(future), ["STORAGE_VERSION_UNSUPPORTED"]);
-  const newer = await variant({ dataModelVersion: 3 });
+  const newer = await variant({ dataModelVersion: CURRENT_DATA_MODEL + 1 });
   assert.equal(newer.status, "unsupported");
-  assert.equal(newer.current.dataModel, 3);
+  assert.equal(newer.current.dataModel, CURRENT_DATA_MODEL + 1);
   assert.deepEqual(codes(newer), ["STORAGE_VERSION_UNSUPPORTED"]);
 
   const lost = await copyBase(t, root);

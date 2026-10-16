@@ -1,4 +1,8 @@
-import { entityDataSchemas } from "@relay/contracts/entities";
+import {
+  documentFormatSchema,
+  documentTagsSchema,
+  entityDataSchemas,
+} from "@relay/contracts/entities";
 import { acceptanceCriterionSchema } from "@relay/contracts/entities/board-task";
 import { z } from "zod";
 import type { JsonValue } from "@relay/contracts/storage";
@@ -51,6 +55,22 @@ export function markdownCodec(paths: readonly (readonly string[])[]) {
   };
 }
 
+/**
+ * Версии данных встроенных видов. Повышение требует профиля, замороженных схем и перехода
+ * (`storage/data-model`); документ v2 — формат материала и теги (`document-v1-to-v2`).
+ */
+const BUILTIN_DATA_VERSIONS: Readonly<Record<string, number>> = {
+  "work-plan": 2,
+  release: 2,
+  document: 2,
+};
+
+/** Версия данных встроенного вида для записей, которые предметные адаптеры собирают сами. */
+export const builtinDataVersion = (kind: string) => {
+  invariant(kind in entityDataSchemas, "UNKNOWN_ENTITY_KIND", `Вид ${kind} не встроенный`, 4);
+  return BUILTIN_DATA_VERSIONS[kind] ?? 1;
+};
+
 /** Коллекции и текстовые поля встроенных видов; добавление вида не меняет алгоритмы хранения. */
 const definitions: EntityCodec[] = Object.entries(entityDataSchemas).map(([kind, shape]) => {
   const schema = z.strictObject(shape.shape as z.ZodRawShape).omit({ kind: true });
@@ -75,11 +95,14 @@ const definitions: EntityCodec[] = Object.entries(entityDataSchemas).map(([kind,
   return {
     kind,
     collection: kind === "work-plan" ? "work-plans" : `${kind}s`,
-    dataVersion: kind === "work-plan" || kind === "release" ? 2 : 1,
+    dataVersion: builtinDataVersion(kind),
     schema:
       kind === "task"
         ? schema.extend({ acceptanceCriteria: z.array(acceptanceCriterionSchema).max(100) })
-        : schema,
+        : kind === "document"
+          ? // На диске v2 формат и теги обязательны: отсутствие означает непройденную миграцию.
+            schema.extend({ documentFormat: documentFormatSchema, tags: documentTagsSchema })
+          : schema,
     ...markdownCodec(paths),
     ...(BUILTIN_REFERENCES[kind] ? { references: BUILTIN_REFERENCES[kind] } : {}),
     card(record) {

@@ -1,31 +1,29 @@
+/* Якорь «Сценарии» оставляет заголовок панели ниже закреплённой шапки проекта. */
 .root {
-  min-width: 0;
   scroll-margin-top: 6rem;
-}
 
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.25rem;
-}
-
-.title {
-  margin: 0 0 0.3rem;
-  font-size: 1.125rem;
-  font-weight: 600;
+  &:focus {
+    outline: none;
+  }
 }
 
 .sections {
   display: grid;
-  gap: 1rem;
+  gap: var(--tasks-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .empty {
-  padding: 1.5rem;
-  border: 1px dashed var(--tasks-selected-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
+  display: grid;
+  gap: var(--tasks-space-1);
+  padding: var(--tasks-space-5);
+  border: 1px dashed var(--tasks-border-strong);
+  border-radius: var(--tasks-radius-row);
+  background: var(--tasks-tile-translucent);
+}
+
+.more {
+  justify-self: start;
 }

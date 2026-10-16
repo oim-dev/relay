@@ -200,6 +200,10 @@ test("missing/corrupt config и повреждение хранения: не п
   assert.equal(await readFile(configPath, "utf8"), "{invalid-config");
   assert.equal(await readFile(taskPath, "utf8"), original);
   await writeFile(configPath, config);
+  // Server нужен только для повреждённой конфигурации. Его файловый наблюдатель асинхронно
+  // пишет runtime/index-stale.json и может пропустить событие, поэтому дальше проверяется
+  // детерминированная локальная диагностика; отметку наблюдателя проверяет server-runtime.
+  await server.close();
   const markerPath = join(app.root, ".relay/storage.json");
   const marker = await readFile(markerPath, "utf8");
   await rm(markerPath);
@@ -212,12 +216,19 @@ test("missing/corrupt config и повреждение хранения: не п
   const corrupt = await app.run(["doctor", "check"]);
   failed(corrupt, "VALIDATION_FAILED", 5);
   assert.ok(!corrupt.body.ok);
-  assert.ok(
-    (corrupt.body.error.details as Array<{ code: string; details?: { path?: string } }>).some(
-      (issue) => issue.code === "INVALID_DATA" && issue.details?.path?.endsWith(`${task.id}.json`),
-    ),
-    corrupt.stdout,
-  );
+  const problems = corrupt.body.error.details as {
+    code: string;
+    message: string;
+    details?: { path?: string };
+  }[];
+  assert.ok(problems.length > 0, corrupt.stdout);
+  for (const problem of problems) {
+    assert.equal(problem.code, "INVALID_DATA");
+    assert.ok(
+      problem.message.endsWith(taskPath) || problem.details?.path?.endsWith(`${task.id}.json`),
+      problem.message,
+    );
+  }
   assert.equal(corrupt.stderr, "");
   assert.equal(await readFile(taskPath, "utf8"), "{invalid-record");
   const rebuild = await app.run(["--local", "storage", "reindex"]);

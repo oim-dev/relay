@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getProjectApi, ApiError, getStorageFailureMessage } from "infra/tasks-api";
 import { PRODUCT_STATE_SCHEMA } from "../config/product.schema";
+import { ProductNotFoundError } from "../errors/product-errors";
 import type { ProductCommand, ProductState } from "../types/product.type";
 
 /**
@@ -26,6 +27,8 @@ export const saveProduct = async (
  * Возвращает понятное сообщение ожидаемого отказа записи.
  */
 export const productError = (error: unknown): string => {
+  if (error instanceof ProductNotFoundError)
+    return "Запись не найдена: её удалили или адрес неверен.";
   if (error instanceof ApiError) {
     const parsed = z.object({ error: z.object({ message: z.string() }) }).safeParse(error.error);
     if (parsed.success && error.status < 500)

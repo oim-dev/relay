@@ -169,7 +169,7 @@ test("local config read: совместимость manifest не ослабле
     assert.deepEqual(await snapshot(directory), before);
   }
   for (const [manifest, code] of [
-    [{ ...current, dataModelVersion: 3 }, "STORAGE_VERSION_UNSUPPORTED"],
+    [{ ...current, dataModelVersion: current.dataModelVersion + 1 }, "STORAGE_VERSION_UNSUPPORTED"],
     [{ format: "relay-entities", schemaVersion: 5 }, "STORAGE_VERSION_UNSUPPORTED"],
     [{ format: "unknown", schemaVersion: 4 }, "STORAGE_FORMAT_UNKNOWN"],
   ] as const) {
@@ -243,7 +243,10 @@ test("local config read: обычный WAL не затирает внешнюю
   await writeFile(projectPath, projectBytes);
   const manifestPath = join(workspace.dataRoot, "storage.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  await writeFile(manifestPath, JSON.stringify({ ...manifest, dataModelVersion: 3 }));
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ ...manifest, dataModelVersion: manifest.dataModelVersion + 1 }),
+  );
   const future = await snapshot(directory);
   await assert.rejects(createLocalBackend(directory, undefined, options), {
     code: "STORAGE_VERSION_UNSUPPORTED",

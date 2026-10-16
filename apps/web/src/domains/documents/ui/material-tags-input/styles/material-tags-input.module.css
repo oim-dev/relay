@@ -1,0 +1,14 @@
+/*
+ * Список вариантов в потоке формы: занимает место под полем и сдвигает следующее действие,
+ * а не ложится поверх него. Положение floating-ui (top/left) для static не действует.
+ */
+.inlineDropdown {
+  position: static;
+  margin-top: var(--tasks-space-1);
+  box-shadow: none;
+}
+
+/* Длинный тег без пробелов переносится, а не растягивает список по горизонтали. */
+.option {
+  overflow-wrap: anywhere;
+}

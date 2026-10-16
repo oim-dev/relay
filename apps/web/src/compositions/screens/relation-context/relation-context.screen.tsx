@@ -1,18 +1,11 @@
 import { useCallback, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import {
-  Anchor,
-  Button,
-  Group,
-  NumberInput,
-  Select,
-  SegmentedControl,
-  Text,
-  Title,
-} from "@mantine/core";
-import { ArrowLeft, GitFork } from "lucide-react";
+import { Anchor, Button, NumberInput, Select, SegmentedControl } from "@mantine/core";
+import { ArrowLeft } from "lucide-react";
 import { useProjectId, useProjectBasePath } from "domains/project";
 import { getRelationLabel, RELATION_LABELS } from "domains/relations";
+import { PageHeader } from "ui/page-header";
+import { PageStage } from "ui/page-stage";
 import { StatePanel } from "ui/state-panel";
 import { ContextExplorer } from "./ui/context-explorer/context-explorer";
 import { readContextOptions } from "./helpers/read-context-options";
@@ -65,47 +58,43 @@ export const RelationContextScreen = () => {
 
   if (root === "") {
     return (
-      <StatePanel
-        title="Выберите исходную сущность"
-        titleAs="h1"
-        description="Откройте визуализацию из просмотра связей сущности."
-        action={
-          <Button component={Link} to={`${base}/relations`}>
-            К связям проекта
-          </Button>
-        }
-      />
+      <PageStage className={styles.stage}>
+        <StatePanel
+          title="Выберите исходную сущность"
+          titleAs="h1"
+          description="Откройте визуализацию из просмотра связей сущности."
+          action={
+            <Button component={Link} to={`${base}/relations`} variant="default">
+              К связям проекта
+            </Button>
+          }
+        />
+      </PageStage>
     );
   }
 
   return (
-    <section className={styles.root}>
-      <div className={styles.heading}>
-        <div>
-          <Anchor component={Link} to={backHref} size="sm" c="dimmed" className={styles.back}>
-            <ArrowLeft size={14} aria-hidden="true" /> К связям сущности
-          </Anchor>
-          <Group gap="sm" mt="sm">
-            <GitFork size={22} aria-hidden="true" />
-            <Title order={1} size="h2">
-              Контекст сущности
-            </Title>
-          </Group>
-          <Text size="sm" c="dimmed" mt={4}>
-            Исследуйте сохранённые связи и переходите к первоисточникам.
-          </Text>
-        </div>
-        <SegmentedControl
-          aria-label="Представление контекста"
-          value={mode}
-          onChange={(value) => handleParam("mode", value)}
-          data={[
-            { value: "tree", label: "Дерево" },
-            { value: "graph", label: "Граф" },
-            { value: "list", label: "Список" },
-          ]}
-        />
-      </div>
+    <PageStage className={styles.stage}>
+      <Anchor component={Link} to={backHref} className={styles.back}>
+        <ArrowLeft size={15} aria-hidden="true" />К связям сущности
+      </Anchor>
+      <PageHeader
+        title="Контекст сущности"
+        description="Исследуйте сохранённые связи и переходите к первоисточникам."
+        actionsLayout="inline"
+        actions={
+          <SegmentedControl
+            aria-label="Представление контекста"
+            value={mode}
+            onChange={(value) => handleParam("mode", value)}
+            data={[
+              { value: "tree", label: "Дерево" },
+              { value: "graph", label: "Граф" },
+              { value: "list", label: "Список" },
+            ]}
+          />
+        }
+      />
       <div className={styles.filters}>
         <NumberInput
           label="Глубина"
@@ -148,6 +137,6 @@ export const RelationContextScreen = () => {
         onRoot={(address) => handleParam("root", address)}
         onTypes={handleTypes}
       />
-    </section>
+    </PageStage>
   );
 };

@@ -1,12 +1,20 @@
 .root {
   display: grid;
-  gap: 1rem;
+  gap: var(--tasks-space-4);
   min-width: 0;
+}
+
+/*
+ * Пока форма с липкой панелью действий на странице, прокрутка документа оставляет под
+ * панелью запас: фокус по Tab, якоря и scrollIntoView не уводят поле под панель.
+ */
+:global(html):has(.root .footer) {
+  scroll-padding-bottom: var(--tasks-sticky-actions-clearance);
 }
 
 .workspace {
   display: grid;
-  gap: 1rem;
+  gap: var(--tasks-space-4);
   align-items: start;
   min-width: 0;
   margin: 0;
@@ -39,6 +47,7 @@
   }
 }
 
+/* Действия формы закреплены внизу сцены, как в редакторе материала. */
 .footer {
   position: sticky;
   bottom: 0;
@@ -47,10 +56,10 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
+  gap: var(--tasks-space-3) var(--tasks-space-4);
+  padding: 0.875rem var(--tasks-space-4);
   border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
+  border-radius: var(--tasks-radius-metric);
   background: var(--tasks-chrome);
   box-shadow: var(--tasks-card-shadow);
 }

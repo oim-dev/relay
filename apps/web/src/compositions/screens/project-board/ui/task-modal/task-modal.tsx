@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActionIcon,
-  Alert,
   Button,
   Group,
   Modal,
@@ -9,12 +8,13 @@ import {
   Tooltip,
   Tabs,
   Title,
-  Badge,
   Text,
 } from "@mantine/core";
-import { Maximize2, Minimize2, Link2, Check } from "lucide-react";
+import { Maximize2, Minimize2, Link2, Check, LockKeyhole } from "lucide-react";
 import { useMediaQuery, useClipboard } from "@mantine/hooks";
-import { useBoardTask } from "domains/board-tasks";
+import { BoardTaskNotFoundError, useBoardTask } from "domains/board-tasks";
+import { StatePanel } from "ui/state-panel";
+import { StatusBadge } from "ui/status-badge";
 import { EntityDelete } from "compositions/widgets/entity-delete";
 import { EntityDocuments } from "compositions/widgets/entity-documents";
 import { TaskEditor } from "./ui/task-editor";
@@ -33,19 +33,49 @@ export const TaskModal = (props: TaskModalProps) => {
   const query = useBoardTask(projectId, reference, !startEditing);
   const [isExpanded, setExpanded] = useState(false);
   const [isDeleteOpened, setDeleteOpened] = useState(false);
+  const nestedOpenerRef = useRef<HTMLElement | null>(null);
+  const backButtonRef = useRef<HTMLButtonElement>(null);
   const [tab, setTab] = useState<string | null>("task");
   const clipboard = useClipboard({ timeout: 2000 });
   const isMobile = useMediaQuery("(max-width: 48em)");
-  const hasError = query.error !== undefined;
+  // Отсутствующая задача — не сбой чтения: повтор не вернёт её, предлагается только возврат.
+  const isMissing = query.error instanceof BoardTaskNotFoundError;
+  const hasError = query.error !== undefined && !isMissing;
   const task = query.data;
   const title = task?.key ?? "Задача";
-  const size = isExpanded ? "calc(100vw - 32px)" : "min(1180px, calc(100vw - 48px))";
+  const size = isExpanded ? "calc(100vw - 2rem)" : "min(73.75rem, calc(100vw - 3rem))";
   const expandLabel = isExpanded ? "Обычный размер" : "Развернуть задачу";
   const SizeIcon = isExpanded ? Minimize2 : Maximize2;
   const offset = isExpanded ? 16 : 24;
   const taskTitle = task?.title || "Без названия";
+  // Начальный фокус окна: вкладка «Задача», а у новой задачи — поле заголовка редактора.
+  const tabAutofocus = startEditing ? undefined : true;
   const copyLabel = clipboard.copied ? "Ссылка скопирована" : "Копировать ссылку";
   const CopyIcon = clipboard.copied ? Check : Link2;
+  /**
+   * Вложенное окно (подтверждение удаления, выбор материала) временно снимает ловушку фокуса
+   * этого окна. Запоминает вызвавший элемент, чтобы вернуть к нему фокус после закрытия.
+   */
+  const handleNestedOpenedChange = (isNextOpened: boolean): void => {
+    if (isNextOpened && document.activeElement instanceof HTMLElement)
+      nestedOpenerRef.current = document.activeElement;
+    setDeleteOpened(isNextOpened);
+  };
+  useEffect(() => {
+    if (isDeleteOpened || nestedOpenerRef.current === null) return;
+    const opener = nestedOpenerRef.current;
+    nestedOpenerRef.current = null;
+    // Ловушка окна при повторном включении переводит фокус на начальный элемент;
+    // возврат выполняется следующей задачей, после неё.
+    const timer = window.setTimeout(() => {
+      if (opener.isConnected) opener.focus({ preventScroll: true });
+    });
+    return () => window.clearTimeout(timer);
+  }, [isDeleteOpened]);
+  // Ответ об отсутствии приходит после открытия окна: фокус переходит к единственному действию.
+  useEffect(() => {
+    if (isMissing) backButtonRef.current?.focus({ preventScroll: true });
+  }, [isMissing]);
   const taskUrl = task
     ? `${window.location.origin}/projects/${encodeURIComponent(projectId)}/boards/${encodeURIComponent(task.boardSlug)}/${task.id}`
     : "";
@@ -79,7 +109,7 @@ export const TaskModal = (props: TaskModalProps) => {
                 kind="task"
                 entityId={task.id}
                 onDeleted={onClose}
-                onOpenedChange={setDeleteOpened}
+                onOpenedChange={handleNestedOpenedChange}
               />
             )}
             {!isMobile && (
@@ -92,7 +122,7 @@ export const TaskModal = (props: TaskModalProps) => {
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => setExpanded(!isExpanded)}
                 >
-                  <SizeIcon size={18} />
+                  <SizeIcon size={18} aria-hidden="true" />
                 </ActionIcon>
               </Tooltip>
             )}
@@ -100,14 +130,36 @@ export const TaskModal = (props: TaskModalProps) => {
           </Group>
         </Modal.Header>
         <Modal.Body>
-          {query.isLoading && <Skeleton height={360} radius="md" />}
+          {query.isLoading && (
+            <Skeleton height="22.5rem" width="auto" radius="xl" className={styles.state} />
+          )}
+          {isMissing && (
+            <StatePanel
+              title="Задача не найдена"
+              description="В проекте нет задачи с таким адресом: её удалили или адрес неверен."
+              action={
+                <Button ref={backButtonRef} variant="default" data-autofocus onClick={onClose}>
+                  К доске
+                </Button>
+              }
+              className={styles.state}
+            />
+          )}
           {hasError && (
-            <Alert color="red" title="Не удалось прочитать задачу">
-              {query.error?.message}
-              <Button variant="subtle" onClick={() => void query.mutate().catch(() => undefined)}>
-                Повторить
-              </Button>
-            </Alert>
+            <StatePanel
+              state="error"
+              title="Не удалось прочитать задачу"
+              description={query.error?.message ?? "Сервер не ответил на запрос задачи."}
+              action={
+                <Button
+                  variant="default"
+                  onClick={() => void query.mutate().catch(() => undefined)}
+                >
+                  Повторить
+                </Button>
+              }
+              className={styles.state}
+            />
           )}
           {task !== undefined && (
             <Tabs value={tab} onChange={setTab} keepMounted key={task.id} className={styles.tabs}>
@@ -123,25 +175,31 @@ export const TaskModal = (props: TaskModalProps) => {
                       aria-label={copyLabel}
                       onClick={() => clipboard.copy(taskUrl)}
                     >
-                      <CopyIcon size={16} />
+                      <CopyIcon size={16} aria-hidden="true" />
                     </ActionIcon>
                   </Tooltip>
                 </Group>
                 {task.blocked && (
-                  <Badge color="red" variant="light" mt="sm">
+                  <StatusBadge
+                    tone="danger"
+                    icon={<LockKeyhole size={12} aria-hidden="true" />}
+                    className={styles.blocked}
+                  >
                     Есть блокеры
-                  </Badge>
+                  </StatusBadge>
                 )}
                 {clipboard.error && (
-                  <Text size="xs" c="red" role="alert">
+                  <Text size="xs" c="danger" role="alert">
                     Не удалось скопировать ссылку. Используйте адресную строку.
                   </Text>
                 )}
               </div>
               <Tabs.List aria-label="Разделы карточки" className={styles.tabList}>
-                <Tabs.Tab value="task">Задача</Tabs.Tab>
+                <Tabs.Tab value="task" data-autofocus={tabAutofocus}>
+                  Задача
+                </Tabs.Tab>
                 <Tabs.Tab value="comments">Обсуждения</Tabs.Tab>
-                <Tabs.Tab value="documents">Документы</Tabs.Tab>
+                <Tabs.Tab value="documents">Материалы</Tabs.Tab>
               </Tabs.List>
               <Tabs.Panel value="task" className={styles.tabPanel}>
                 <TaskEditor
@@ -160,7 +218,8 @@ export const TaskModal = (props: TaskModalProps) => {
                 {tab === "documents" && (
                   <EntityDocuments
                     target={{ kind: "task", id: task.id }}
-                    onOpenedChange={setDeleteOpened}
+                    targetTitle={taskTitle}
+                    onOpenedChange={handleNestedOpenedChange}
                   />
                 )}
               </Tabs.Panel>

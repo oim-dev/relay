@@ -27,18 +27,19 @@ EOF и сигналы закрывают транспорт. Проверки п
 
 ## Карта реализации
 
-| Файл                          | Ответственность                                                                                                                                                            |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/main.ts`                 | CLI, приоритеты флагов и окружения, сообщение запуска, SIGINT/SIGTERM. Текст идёт в stderr; JSON запуска с URL/PID — в stdout.                                             |
-| `src/server.ts`               | Проверка доступности Server перед стартом, loopback HTTP, путь /mcp, проверки Host/Origin, отдельный Server/transport на запрос, ожидание активных операций при остановке. |
-| `src/projects.ts`             | Свежий серверный реестр и выбор проекта на каждый вызов, только createHttpBackend. Нет глобального активного проекта и fallback на локальную базу.                         |
-| `src/tools.ts`                | Общие define/projectTool, строгие входные схемы, annotations, инструменты задач/продукта/реестра, обработчики tools/list и tools/call.                                     |
-| `src/entity-tools.ts`         | Чтение видов и сущностей, адреса, контекст, перемещение/связи задач; циклы регистрации create/update по картам схем Contracts.                                             |
-| `src/product-tools.ts`        | Предметные save-схемы из вариантов productMutationSchema, scope/contract, текст текущего результата.                                                                       |
-| `src/planning-tools.ts`       | Планирование, этапы, состав, перенос, релизы и их прогресс; явные аргументы поверх Backend.                                                                                |
-| `src/schema-documentation.ts` | Рекурсивное дополнение русских описаний JSON Schema, исключение для неизвестного недокументированного поля.                                                                |
-| `src/output.ts`               | content/structuredContent, ошибки бюджета и курсорная страница реестра.                                                                                                    |
-| `test/mcp.test.ts`            | Интеграция SDK Client и StreamableHTTPClientTransport с изолированными проектами и Server.                                                                                 |
+| Файл                              | Ответственность                                                                                                                                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main.ts`                     | CLI, приоритеты флагов и окружения, сообщение запуска, SIGINT/SIGTERM. Текст идёт в stderr; JSON запуска с URL/PID — в stdout.                                                                      |
+| `src/server.ts`                   | Проверка доступности Server перед стартом, loopback HTTP, путь /mcp, проверки Host/Origin, отдельный Server/transport на запрос, ожидание активных операций при остановке.                          |
+| `src/projects.ts`                 | Свежий серверный реестр и выбор проекта на каждый вызов, только createHttpBackend. Нет глобального активного проекта и fallback на локальную базу.                                                  |
+| `src/tools.ts`                    | Общие define/projectTool, строгие входные схемы, annotations, инструменты задач/продукта/реестра, обработчики tools/list и tools/call.                                                              |
+| `src/entity-tools.ts`             | Чтение видов и сущностей, адреса, контекст, перемещение/связи задач; циклы регистрации create/update по картам схем Contracts; фасеты, обратное чтение, массовая квитанция и одна связь материалов. |
+| `src/product-tools.ts`            | Предметные save-схемы из вариантов productMutationSchema, scope/contract, текст текущего результата.                                                                                                |
+| `src/planning-tools.ts`           | Планирование, этапы, состав, перенос, релизы и их прогресс; явные аргументы поверх Backend.                                                                                                         |
+| `src/schema-documentation.ts`     | Рекурсивное дополнение русских описаний JSON Schema, исключение для неизвестного недокументированного поля.                                                                                         |
+| `src/output.ts`                   | content/structuredContent, ошибки бюджета и курсорная страница реестра.                                                                                                                             |
+| `test/mcp.test.ts`                | Интеграция SDK Client и StreamableHTTPClientTransport с изолированными проектами и Server.                                                                                                          |
+| `test/document-materials.test.ts` | Материалы через реальный Server: формат link, теги, фильтры, фасеты, массовая квитанция, одна связь, обратное чтение и `SERVER_INCOMPATIBLE` прежнего Server.                                       |
 
 В `createTools` создаётся локальная Map определений и обработчиков. `define` строит
 `z.strictObject(shape)`, преобразует через `z.toJSONSchema(schema,{io:"input"})`,
@@ -63,7 +64,9 @@ board, work-plan и release не получают generic create/update авто
 
 Кроме этих циклов учитывайте динамические plan_start/complete/cancel,
 plan_stage_create/update/remove/move, release_plan/cancel/publish,
-прогресс и пять product-save инструментов. Полный пользовательский индекс
+прогресс пять product-save инструментов и четыре операции каталога материалов
+(`entity_document_facets`, `entity_documents_list`, `entity_document_bulk`,
+`entity_document_relate`), которые требуют capability `relay-document-materials-v1`. Полный пользовательский индекс
 находится только в [MCP.md](MCP.md#индекс-инструментов); проверка должна получать
 весь tools/list, а не искать строковые литералы в одном исходнике.
 

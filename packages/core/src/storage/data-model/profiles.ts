@@ -45,7 +45,7 @@ export const PROFILE_1: DataModelProfile = Object.freeze({
 });
 
 /**
- * Целевой профиль: первая версия с обязательным маркером и адресами совместимости
+ * Профиль 2: первая версия с обязательным маркером и адресами совместимости
  * прежних этапов plan-stage (dataVersion 2) и историческими техническими снимками выпуска
  * release-snapshot/release-snapshot-entry (dataVersion 1); кодеки в workspaceStorageRegistry.
  */
@@ -60,12 +60,27 @@ export const PROFILE_2: DataModelProfile = Object.freeze({
   }),
 });
 
+/**
+ * Целевой профиль: документ библиотеки dataVersion 2 — формат материала (`documentFormat`),
+ * внешний адрес `url` и теги `tags`; переход `document-v1-to-v2` записывает прежним
+ * документам `markdown` и `[]`. Остальные владельцы совпадают с профилем 2.
+ */
+export const PROFILE_3: DataModelProfile = Object.freeze({
+  ...base,
+  version: 3,
+  owners: Object.freeze({
+    ...PROFILE_2.owners,
+    document: 2,
+  }),
+});
+
 /** Поддерживаемые профили по возрастанию; последний — текущий. */
 export const DATA_MODEL_PROFILES: readonly DataModelProfile[] = Object.freeze([
   PROFILE_1,
   PROFILE_2,
+  PROFILE_3,
 ]);
-export const CURRENT_DATA_MODEL = 2;
+export const CURRENT_DATA_MODEL = 3;
 /** Профиль, который распознаётся по отсутствию поля dataModelVersion в manifest формата 4. */
 export const UNMARKED_DATA_MODEL = 1;
 

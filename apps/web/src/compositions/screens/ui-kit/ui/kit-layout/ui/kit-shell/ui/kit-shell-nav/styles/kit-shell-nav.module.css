@@ -1,0 +1,14 @@
+/*
+ * Раскладка навигации примера. Пункты оформляет тема (ui/themes, navigation.module.css) —
+ * те же правила, что у навигации каркаса проекта, без локальной копии.
+ */
+.root {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.group {
+  display: grid;
+  gap: 0.125rem;
+}

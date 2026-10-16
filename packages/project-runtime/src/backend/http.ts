@@ -99,6 +99,15 @@ import {
   entityDeletedSchema,
 } from "@relay/contracts/entities";
 import {
+  documentBulkResultSchema,
+  documentBulkSchema,
+  documentFacetsQuerySchema,
+  documentFacetsSchema,
+  documentRelationChangeSchema as documentRelateSchema,
+  entityDocumentsPageSchema,
+  entityDocumentsQuerySchema,
+} from "@relay/contracts/entities/document-catalog";
+import {
   graphPageSchema,
   graphQuerySchema,
   graphMutationSchema,
@@ -156,6 +165,8 @@ import type { ProductOverviewMetric } from "@relay/core/domain/product";
 
 /** Возможность сервера: snapshot.operator и детализация метрик оператора обзора. */
 export const OVERVIEW_METRICS_CAPABILITY = "relay-overview-metrics-v1";
+/** Возможность сервера: фасеты, массовые изменения, связи и обратное чтение материалов. */
+export const DOCUMENT_MATERIALS_CAPABILITY = "relay-document-materials-v1";
 /** Страницы библиотеки и адресные записи без клиентского полного чтения документа/проекта. */
 export const DOCUMENT_LIBRARY_CAPABILITY = "relay-document-library-v1";
 /** Адресные продуктовые чтения и атомарная замена участия без full-state fallback. */
@@ -330,6 +341,33 @@ export async function createHttpBackend(url: string, project?: string): Promise<
     configPath: context.configPath,
     root: context.storagePath,
   };
+  // Проверка до запроса: прежний сервер ответил бы неинформативным 404 маршрута.
+  const requireMaterials = () => {
+    if (!context.capabilities?.includes(DOCUMENT_MATERIALS_CAPABILITY))
+      throw new AppError(
+        "SERVER_INCOMPATIBLE",
+        `Операции библиотеки материалов требуют Relay Server с ${DOCUMENT_MATERIALS_CAPABILITY}. Обновите и перезапустите сервер той же версии, что и клиент.`,
+        5,
+        { url },
+      );
+  };
+  /**
+   * Новые поля и фильтры материалов прежний сервер отклонил бы сырой ошибкой строгой схемы
+   * (или проигнорировал фильтр). Запрос без них остаётся совместимым.
+   */
+  const requireMaterialFields = (value: object | undefined, names: readonly string[]) => {
+    const record = (value ?? {}) as Record<string, unknown>;
+    const used = names.filter((name) => record[name] !== undefined);
+    if (used.length > 0 && !context.capabilities?.includes(DOCUMENT_MATERIALS_CAPABILITY))
+      throw new AppError(
+        "SERVER_INCOMPATIBLE",
+        `Поля материалов (${used.join(", ")}) требуют Relay Server с ${DOCUMENT_MATERIALS_CAPABILITY}. Обновите и перезапустите сервер той же версии, что и клиент, или повторите без этих полей.`,
+        5,
+        { url, fields: used },
+      );
+  };
+  const documentFields = ["documentFormat", "url", "tags"] as const;
+  const documentFilters = ["documentFormat", "tags", "unattached"] as const;
   const writePlanning = async (
     operation: () => Promise<{ ok: true; data: unknown }>,
     requestId: string,
@@ -665,6 +703,7 @@ export async function createHttpBackend(url: string, project?: string): Promise<
       describe: async (input) =>
         decode(entityTypeDetailSchema, await call(() => api.entities.describeEntityType(input))),
       list: async (input = {}) => {
+        requireMaterialFields(input, documentFilters);
         const query = entitiesQuerySchema.parse(input);
         if (
           query.implementationTarget !== undefined ||
@@ -702,6 +741,7 @@ export async function createHttpBackend(url: string, project?: string): Promise<
         ),
       create: async (input, actor) => {
         const command = entityCreateSchema.parse(input);
+        if (command.data.kind === "document") requireMaterialFields(command.data, documentFields);
         return decode(
           entitySavedSchema,
           await call(
@@ -718,6 +758,8 @@ export async function createHttpBackend(url: string, project?: string): Promise<
       },
       update: async (input, actor) => {
         const command = entityUpdateSchema.parse(input);
+        if (command.changes.kind === "document")
+          requireMaterialFields(command.changes, documentFields);
         return decode(
           entitySavedSchema,
           await call(
@@ -768,6 +810,58 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             input.requestId,
           ),
         ),
+      documentFacets: async (input = {}) => {
+        requireMaterials();
+        return decode(
+          documentFacetsSchema,
+          await call(() =>
+            api.entities.getDocumentFacets(defined(documentFacetsQuerySchema.parse(input))),
+          ),
+        );
+      },
+      entityDocuments: async (input) => {
+        requireMaterials();
+        return decode(
+          entityDocumentsPageSchema,
+          await call(() =>
+            api.entities.getEntityDocuments(defined(entityDocumentsQuerySchema.parse(input))),
+          ),
+        );
+      },
+      documentBulk: async (input, actor) => {
+        requireMaterials();
+        const command = documentBulkSchema.parse(input);
+        return decode(
+          documentBulkResultSchema,
+          await call(
+            () =>
+              api.entities.bulkChangeDocuments({
+                ...defined(command),
+                operation: defined(command.operation),
+                actor: input.actor ?? actor,
+              }),
+            "write",
+            input.requestId,
+          ),
+        );
+      },
+      relateDocument: async (input, actor) => {
+        requireMaterials();
+        return decode(
+          entitySavedSchema,
+          await call(
+            () =>
+              api.entities.relateDocument(
+                defined({
+                  ...documentRelateSchema.parse(input),
+                  actor: input.actor ?? actor,
+                }),
+              ),
+            "write",
+            input.requestId,
+          ),
+        );
+      },
     },
     documents: {
       links: async (input) => {
@@ -1125,8 +1219,9 @@ export async function createHttpBackend(url: string, project?: string): Promise<
           productContextSchema,
           await call(() => api.product.getProductContext(defined(input))),
         ),
-      mutate: async (input, actor) =>
-        decode(
+      mutate: async (input, actor) => {
+        if (input.fields.kind === "document") requireMaterialFields(input.fields, documentFields);
+        return decode(
           productSavedSchema,
           await call(
             () =>
@@ -1141,7 +1236,8 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             "write",
             input.requestId,
           ),
-        ),
+        );
+      },
     },
     workspace,
     validate: () => call(() => api.project.validateProject()),

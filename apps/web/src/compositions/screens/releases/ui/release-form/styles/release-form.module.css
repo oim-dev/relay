@@ -1,55 +1,54 @@
 .root {
-  display: flex;
-  flex-direction: column;
-  gap: 1.15rem;
+  display: grid;
+  gap: var(--tasks-space-4);
+  min-width: 0;
 }
-.modalTitle {
-  font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: -0.025em;
-}
-.modalBody {
-  padding: 0 1.5rem 1.5rem;
-}
+
 .intro {
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
-  line-height: 1.8;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.5;
 }
+
 .fields {
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
+  display: grid;
+  gap: var(--tasks-space-4);
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
+
 .headingFields {
   display: grid;
-  gap: 0.9rem;
+  gap: var(--tasks-space-3);
+
   @media (--md) {
     grid-template-columns: minmax(0, 1fr) 11rem;
   }
 }
+
 .row {
   display: grid;
-  gap: 0.9rem;
+  gap: var(--tasks-space-3);
+
   @media (--sm) {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
 .footer {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 0.8rem;
-  padding-top: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tasks-space-3);
+  padding-top: var(--tasks-space-4);
   border-top: 1px solid var(--tasks-border);
+
   & > span {
-    color: var(--tasks-soft);
-    font-size: 0.625rem;
+    color: var(--tasks-muted);
+    font-size: var(--mantine-font-size-xs);
   }
 }

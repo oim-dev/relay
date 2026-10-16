@@ -76,15 +76,25 @@
     border-collapse: collapse;
   }
 
+  /* Ячейка не рвёт слова посередине: широкая таблица прокручивается внутри себя. */
   & :where(th, td) {
     padding: 0.375rem 0.75rem;
+    overflow-wrap: break-word;
     border: 1px solid var(--tasks-border);
     text-align: left;
   }
 
+  /* Ссылка в читаемом тексте — акцент с подчёркиванием, как Anchor в тексте (≥4.5:1). */
   & :where(a) {
-    color: var(--tasks-ink);
-    text-underline-offset: 3px;
+    color: var(--tasks-accent-ink);
+    text-decoration: underline;
+    text-decoration-thickness: from-font;
+    text-underline-offset: 0.2em;
+    border-radius: var(--mantine-radius-xs);
+
+    &:hover {
+      text-decoration-thickness: 2px;
+    }
   }
 
   & :where(img) {

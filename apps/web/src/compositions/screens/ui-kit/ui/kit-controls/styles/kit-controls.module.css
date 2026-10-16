@@ -1,0 +1,17 @@
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--tasks-space-3);
+  width: 100%;
+}
+
+.wide {
+  width: 100%;
+}
+
+.progress {
+  display: grid;
+  gap: var(--tasks-space-3);
+  width: 100%;
+  max-width: 24rem;
+}

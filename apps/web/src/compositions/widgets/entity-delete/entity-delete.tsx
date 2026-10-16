@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
-import { Trash2 } from "lucide-react";
+import { CircleAlert, Trash2 } from "lucide-react";
 import {
   deleteEntity,
   previewEntityDeletion,
@@ -119,7 +119,7 @@ export const EntityDelete = (props: EntityDeleteProps) => {
   return (
     <>
       <Button
-        color="red"
+        color="danger"
         variant="subtle"
         leftSection={<Trash2 size={15} aria-hidden="true" />}
         onClick={() => {
@@ -138,7 +138,6 @@ export const EntityDelete = (props: EntityDeleteProps) => {
         size="lg"
         closeOnClickOutside={!isDeleting}
         closeOnEscape={!isDeleting}
-        zIndex={400}
       >
         <Modal.Overlay />
         <Modal.Content>
@@ -153,7 +152,7 @@ export const EntityDelete = (props: EntityDeleteProps) => {
                 Восстановление после удаления не предусмотрено.
               </Text>
               {hasMessage && (
-                <Alert color="red" role="alert">
+                <Alert color="danger" icon={<CircleAlert size={18} aria-hidden="true" />}>
                   {message}
                 </Alert>
               )}
@@ -170,7 +169,7 @@ export const EntityDelete = (props: EntityDeleteProps) => {
                   </Text>
                 </>
               )}
-              <Group justify="flex-end">
+              <Group justify="flex-end" gap="xs">
                 <Button
                   variant="default"
                   disabled={isDeleting}
@@ -185,7 +184,7 @@ export const EntityDelete = (props: EntityDeleteProps) => {
                   </Button>
                 )}
                 <Button
-                  color="red.8"
+                  color="danger"
                   disabled={!canDelete}
                   loading={isDeleting}
                   onClick={() => void handleDelete()}

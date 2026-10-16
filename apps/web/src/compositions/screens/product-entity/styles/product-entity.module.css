@@ -1,4 +1,5 @@
-.root {
-  width: 100%;
-  min-width: 0;
+/* Технические сведения записи — в конце страницы, после связанных материалов. */
+.revision {
+  padding-inline: var(--tasks-space-2);
+  overflow-wrap: anywhere;
 }

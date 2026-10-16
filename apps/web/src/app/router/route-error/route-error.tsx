@@ -17,6 +17,7 @@ export const RouteError = () => (
       ]}
     />
     <StatePanel
+      state="error"
       title="Не удалось открыть страницу"
       description="Обновите приложение. Сохранённые локальные черновики останутся доступны."
       action={<Button onClick={() => window.location.reload()}>Обновить страницу</Button>}

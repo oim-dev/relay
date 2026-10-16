@@ -1,0 +1,154 @@
+/*
+ * Навигационные контролы на общей подложке, подключённые через Styles API
+ * в config/theme.config.ts: пункт NavLink, выбор Select variant="navigation"
+ * и выдвижная навигация Drawer variant="navigation".
+ * Единственный источник правил для каркаса проекта и примеров галереи; потребители
+ * не передают эти классы сами. Неактивный пункт — без постоянной плашки, текущий —
+ * локальная заливка тона акцента, цвет и вес текста; группы разделены отступами.
+ *
+ * Модификаторы пункта передаются свойством mod Mantine:
+ *  - data-nested — вложенный пункт (40px, на pointer: coarse 44px);
+ *  - data-current-group — раскрываемая группа, внутри которой текущий раздел;
+ *  - data-group-start — начало следующей группы пунктов (отступ вместо линии).
+ * data-tasks-preview="hover|expanded|focus" фиксирует состояние в инертном образце.
+ */
+.link {
+  min-height: var(--tasks-touch-target);
+  padding: 0.625rem var(--tasks-space-3);
+  border-radius: var(--tasks-radius-control);
+  color: var(--tasks-muted);
+  text-decoration: none;
+  transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
+
+  &:hover,
+  &[data-tasks-preview="hover"] {
+    background-color: var(--tasks-nav-hover);
+    color: var(--tasks-ink);
+  }
+
+  &[aria-current="page"],
+  &[data-active] {
+    background-color: var(--tasks-nav-current-surface);
+    color: var(--tasks-nav-current-ink);
+    font-weight: 600;
+
+    @media (--forced-colors) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+
+  &[data-current-group] {
+    color: var(--tasks-ink);
+    font-weight: 600;
+  }
+
+  &[data-group-start] {
+    margin-top: var(--tasks-space-3);
+  }
+
+  &[data-nested] {
+    min-height: 2.5rem;
+    padding: var(--tasks-space-2) 0.625rem;
+
+    @media (pointer: coarse) {
+      min-height: var(--tasks-touch-target);
+    }
+  }
+}
+
+.linkLabel {
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.5;
+  font-weight: inherit;
+  overflow-wrap: anywhere;
+}
+
+.linkSection {
+  flex-shrink: 0;
+}
+
+/* Вложенные пункты начинаются по вертикали подписи родителя: вложенность — отступом. */
+.linkChildren {
+  margin: var(--tasks-space-1) 0 var(--tasks-space-2) var(--tasks-space-8);
+}
+
+/*
+ * Выбор в навигации (variant="navigation") — компактный контрол: название и chevron
+ * без постоянной рамки и плашки. Ширина следует названию в пределах 6–20rem
+ * (без field-sizing — 14rem); длинное сокращается многоточием, полное — в подсказке
+ * и в списке.
+ */
+.select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 20rem;
+}
+
+/*
+ * Собственный вариант не получает переменных вариантов Mantine: рамка, заливка и цвет
+ * задаются здесь. Рамка прозрачна и в фокусе мышью; :focus-visible полей (index.css)
+ * красит её цветом фокуса, кольцо 1px добавляет controls.module.css.
+ */
+.selectInput {
+  --input-bd: transparent;
+  --input-bd-focus: transparent;
+  --input-bg: transparent;
+  --input-color: var(--tasks-ink);
+
+  width: 14rem;
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
+
+  @supports (field-sizing: content) {
+    width: auto;
+    min-width: 6rem;
+    field-sizing: content;
+  }
+
+  &:hover,
+  &[aria-expanded="true"],
+  &[data-tasks-preview="hover"],
+  &[data-tasks-preview="expanded"] {
+    background-color: var(--tasks-nav-hover);
+  }
+
+  /* На touch область нажатия не ниже 44px; при точном указателе высота поля sm (36px). */
+  @media (pointer: coarse) {
+    min-height: var(--tasks-touch-target);
+  }
+
+  &[data-tasks-preview="focus"] {
+    border-color: var(--tasks-focus-ring);
+    box-shadow: 0 0 0 1px var(--tasks-focus-ring);
+  }
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
+  }
+}
+
+/*
+ * Выдвижная навигация (Drawer variant="navigation") — временная поверхность поверх
+ * страницы: своя читаемая заливка chrome и шапка с разделителем; прозрачность постоянного
+ * сайдбара на неё не распространяется.
+ */
+.drawerContent {
+  background-color: var(--tasks-chrome);
+}
+
+.drawerHeader {
+  min-height: var(--tasks-app-header-height);
+  margin-bottom: var(--tasks-space-2);
+  border-bottom: 1px solid var(--tasks-border);
+  background-color: var(--tasks-chrome);
+}
+
+.drawerTitle {
+  font-size: var(--mantine-font-size-md);
+  font-weight: 650;
+}

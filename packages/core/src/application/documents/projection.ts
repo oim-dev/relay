@@ -23,7 +23,13 @@ export function documentEntityEntry(
   },
   sections: readonly { id: string }[] = defaultDocumentSections,
 ): DocumentEntry {
-  const fields = record.fields;
+  // Прежняя запись до перехода document-v1-to-v2 (legacy/dirty-чтение) не содержит формат
+  // и теги; публичные данные документа v2 всегда включают оба поля с прежними значениями.
+  const fields: DocumentData = {
+    ...record.fields,
+    documentFormat: record.fields.documentFormat ?? "markdown",
+    tags: record.fields.tags ?? [],
+  };
   return {
     ref: { kind: "document", id: record.id },
     key: record.key ?? record.id,
@@ -38,6 +44,13 @@ export function documentEntityEntry(
         ...fields.links.map((link) => (link.kind === "product" ? "passport" : link.id)),
         ...(fields.relations ?? []).map((link) => link.target.id),
       ],
+      // Цель документа может быть любого вида, а ID уникальны только внутри вида.
+      targetAddress: [
+        ...fields.links.map((link) =>
+          link.kind === "product" ? "product:passport" : `${link.kind}:${link.id}`,
+        ),
+        ...(fields.relations ?? []).map((link) => `${link.target.kind}:${link.target.id}`),
+      ],
     },
     status: fields.documentStatus ?? "active",
     active: true,
@@ -48,6 +61,9 @@ export function documentEntityEntry(
         ? (fields.sectionId ?? null)
         : null,
       pinned: fields.pinned ?? false,
+      format: fields.documentFormat ?? "markdown",
+      ...(fields.url === undefined ? {} : { url: fields.url }),
+      tags: fields.tags ?? [],
       updatedAt: record.updatedAt,
       linkCount: fields.links.length + (fields.relations?.length ?? 0),
     },

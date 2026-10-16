@@ -28,7 +28,10 @@ type PageBreadcrumbsParams = {
   /** Компактное размещение внутри модального окна. */
   embedded?: boolean;
 };
-/** Атрибуты корневого элемента. */
+/**
+ * Атрибуты корневого элемента. `aria-label` по умолчанию «Хлебные крошки»; отдельная
+ * подпись нужна, только если на странице несколько цепочек (примеры галереи).
+ */
 type RootAttrs = Omit<ComponentPropsWithoutRef<"nav">, "children">;
 /** Свойства общей навигации глубины. */
 export type PageBreadcrumbsProps = RootAttrs & PageBreadcrumbsParams;

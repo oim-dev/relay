@@ -1,0 +1,149 @@
+/*
+ * Светлая плитка записи на тонированной панели. На телефоне конец строки занимает
+ * отдельную полосу на всю ширину плитки (под началом строки тоже); от 768px он стоит
+ * справа от названия и переносится под него без брейкпоинта, когда ширины не хватает.
+ * Hover и выбор меняют фон и рамку, строка не сдвигается.
+ */
+.root {
+  display: grid;
+  grid-template-areas:
+    "main"
+    "trailing";
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--tasks-space-2) var(--tasks-space-3);
+  min-width: 0;
+  padding: 0.625rem var(--tasks-space-3);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-row);
+  background-color: var(--tasks-tile);
+  transition:
+    background-color var(--tasks-duration-control) var(--tasks-easing-standard),
+    border-color var(--tasks-duration-control) var(--tasks-easing-standard);
+
+  &[data-leading] {
+    grid-template-areas:
+      "leading main"
+      "trailing trailing";
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  &:hover,
+  &:focus-within {
+    background-color: var(--tasks-tile-hover);
+  }
+
+  &[data-selected] {
+    border-color: var(--tasks-accent);
+    background-color: var(--tasks-accent-subtle);
+  }
+
+  @media (--md) {
+    grid-template-areas: "main";
+    gap: var(--tasks-space-3);
+    padding: var(--tasks-space-3) var(--tasks-space-3) var(--tasks-space-3) 0.875rem;
+
+    &[data-leading] {
+      grid-template-areas: "leading main";
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
+
+    &[data-selected] {
+      border-width: 2px;
+    }
+  }
+}
+
+.leading {
+  display: flex;
+  grid-area: leading;
+  align-items: center;
+  gap: var(--tasks-space-3);
+  min-height: 2.25rem;
+}
+
+/* На телефоне обёртка не участвует в раскладке: название и конец строки — ячейки сетки. */
+.body {
+  display: contents;
+
+  @media (--md) {
+    display: flex;
+    flex-wrap: wrap;
+    grid-area: main;
+    align-items: center;
+    gap: var(--tasks-space-2) var(--tasks-space-4);
+    min-width: 0;
+  }
+}
+
+.main {
+  display: grid;
+  flex: 1 1 16rem;
+  grid-area: main;
+  gap: var(--tasks-space-1);
+  min-width: 0;
+}
+
+.code {
+  color: var(--tasks-muted);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.title {
+  min-width: 0;
+  color: var(--tasks-ink);
+  font-size: var(--tasks-font-size-record-title);
+  font-weight: var(--tasks-font-weight-record-title);
+  line-height: var(--tasks-line-height-record-title);
+  overflow-wrap: anywhere;
+
+  /* Ссылка названия: подчёркивание и акцент по наведению, видимый фокус клавиатуры. */
+  & :where(a) {
+    color: inherit;
+    text-decoration: none;
+    border-radius: var(--tasks-radius-control);
+
+    &:hover {
+      color: var(--tasks-accent-ink);
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--tasks-focus-ring);
+      outline-offset: 2px;
+    }
+  }
+}
+
+.meta {
+  display: grid;
+  gap: var(--tasks-space-1);
+  min-width: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.trailing {
+  display: flex;
+  flex-wrap: wrap;
+  grid-area: trailing;
+  align-items: center;
+  gap: var(--tasks-space-2) var(--tasks-space-3);
+  min-width: 0;
+
+  @media (--md) {
+    margin-left: auto;
+  }
+}

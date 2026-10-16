@@ -1,16 +1,25 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Alert, Button, TextInput } from "@mantine/core";
-import { Flag, Plus, Search, X } from "lucide-react";
+import { Alert, Button, CloseButton, Skeleton, TextInput, VisuallyHidden } from "@mantine/core";
+import { Plus, Search } from "lucide-react";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
 import { usePlans, planStatusFromValue } from "domains/planning";
 import { useProjectId } from "domains/project";
+import { PageHeader } from "ui/page-header";
+import { FilterChips } from "ui/filter-chips";
+import { SectionPanel } from "ui/section-panel";
+import { StatePanel } from "ui/state-panel";
+import { useInputDraft } from "ui/input-draft";
 import { PlanCard } from "./ui/plan-card/plan-card";
 import type { PlanCatalogProps } from "./types/plan-catalog-props.type";
 import styles from "./styles/plan-catalog.module.css";
 
+/** Число карточек-заготовок при первом чтении каталога. */
+const SKELETON_KEYS = ["first", "second", "third", "fourth"];
+
 /**
  * Показывает планы с их состояниями и позволяет выбрать нужную работу.
+ * Поиск, состояние и показанный объём хранятся в адресе.
  *
  * Используется для:
  *  - поиска и фильтрации планов работ
@@ -22,9 +31,10 @@ export const PlanCatalog = (props: PlanCatalogProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const title = "Планы";
-  const description = "От намерения — к понятному следующему шагу.";
   const createLabel = "Новый план";
   const query = searchParams.get("q") ?? "";
+  // Поле поиска показывает локальный черновик, адрес синхронизирует его при Back/Forward.
+  const [queryDraft, handleSearch] = useInputDraft(query, (value) => handleFilter("q", value));
   const state = planStatusFromValue(searchParams.get("status")) ?? "all";
   const limit = Math.max(12, Number(searchParams.get("limit")) || 12);
   const plansQuery = usePlans(
@@ -34,43 +44,54 @@ export const PlanCatalog = (props: PlanCatalogProps) => {
   );
   const counts = plansQuery.data?.statusCounts;
   const filterItems = [
-    { value: "all", label: "Все", count: counts?.all ?? "…" },
-    {
-      value: "active",
-      label: "В работе",
-      count: counts?.active ?? "…",
-    },
+    { value: "all", label: "Все", areaLabel: "Все планы", count: counts?.all },
+    { value: "active", label: "В работе", areaLabel: "Планы в работе", count: counts?.active },
     {
       value: "draft",
       label: "Запланированы",
-      count: counts?.draft ?? "…",
+      areaLabel: "Запланированные планы",
+      count: counts?.draft,
     },
     {
       value: "completed",
       label: "Завершённые",
-      count: counts?.completed ?? "…",
+      areaLabel: "Завершённые планы",
+      count: counts?.completed,
     },
     {
       value: "cancelled",
       label: "Отменённые",
-      count: counts?.cancelled ?? "…",
+      areaLabel: "Отменённые планы",
+      count: counts?.cancelled,
     },
   ];
+  const areaLabel = filterItems.find((filter) => filter.value === state)?.areaLabel ?? "Все планы";
   const planItems = plansQuery.data?.items ?? [];
   const total = plansQuery.data?.total ?? 0;
+  const hasData = isDefined(plansQuery.data);
   const hasError = isDefined(plansQuery.error);
-  // Отказ чтения без данных не выдаётся за пустой результат.
-  const resultLabel = plansQuery.isLoading
-    ? "Ищем…"
-    : `Найдено: ${isDefined(plansQuery.data) ? total : "—"}`;
+  const isFirstLoading = !hasData && !hasError;
+  const filterOptions = filterItems.map((filter) => ({
+    ...filter,
+    count: filter.count ?? (isFirstLoading ? "…" : undefined),
+  }));
+  const resultLabel = isFirstLoading ? "…" : total;
+  // Ошибка без прочитанного списка не даёт числа: ноль был бы ложным.
+  const hasResultCount = hasData || isFirstLoading;
+  const resultCount = hasResultCount ? (
+    <span role="status">
+      <VisuallyHidden>Найдено планов: </VisuallyHidden>
+      {resultLabel}
+    </span>
+  ) : undefined;
   const hasFilters = query !== "" || state !== "all";
-  const isEmpty = !plansQuery.isLoading && !hasError && isEmptyArray(planItems);
+  const isEmpty = hasData && isEmptyArray(planItems);
   const hasMore = isDefined(plansQuery.data?.nextOffset);
   const emptyTitle = hasFilters ? "Подходящих планов нет" : "Большие результаты начинаются с плана";
   const emptyDescription = hasFilters
-    ? "Попробуйте другой запрос или сбросьте фильтры."
+    ? "Попробуйте другой запрос или сбросьте условия поиска и состояния."
     : "Обозначьте цель, разбейте путь на этапы и выберите существующие задачи.";
-  const emptyAction = hasFilters ? "Сбросить фильтры" : createLabel;
+  const emptyAction = hasFilters ? "Сбросить условия" : createLabel;
 
   useEffect(() => {
     document.title = `${title} · Relay`;
@@ -94,109 +115,114 @@ export const PlanCatalog = (props: PlanCatalogProps) => {
     );
   };
 
-  return (
-    <div className={styles.root}>
-      <header className={styles.heading}>
-        <div>
-          <h1 className={styles.title} ref={headingRef} tabIndex={-1}>
-            {title}
-          </h1>
-          <p className={styles.description}>{description}</p>
-        </div>
-        <Button leftSection={<Plus size={16} />} onClick={onCreate}>
-          {createLabel}
-        </Button>
-      </header>
+  const clearButton = queryDraft !== "" && (
+    <CloseButton size="sm" aria-label="Очистить поиск" onClick={() => handleSearch("")} />
+  );
 
-      <div className={styles.controls}>
-        <div className={styles.filters} role="group" aria-label="Состояние плана">
-          {filterItems.map((filter) => (
-            <button
-              key={filter.value}
-              className={styles.filter}
-              type="button"
-              aria-pressed={state === filter.value}
-              onClick={() => handleFilter("status", filter.value)}
+  return (
+    <>
+      <PageHeader
+        title={title}
+        titleRef={headingRef}
+        description="План задаёт цель, этапы делают путь обозримым, а задачи остаются на своих досках."
+        actionsLayout="toolbar"
+        actions={
+          <>
+            <TextInput
+              className={styles.search}
+              type="search"
+              size="md"
+              placeholder="Найти план по названию или ключу"
+              aria-label="Поиск планов"
+              leftSection={<Search size={17} aria-hidden="true" />}
+              rightSection={clearButton}
+              value={queryDraft}
+              onChange={(event) => handleSearch(event.currentTarget.value)}
+            />
+            <Button
+              size="md"
+              className={styles.create}
+              leftSection={<Plus size={17} aria-hidden="true" />}
+              onClick={onCreate}
             >
-              {filter.label}
-              <span className={styles.count}>{filter.count}</span>
-            </button>
-          ))}
-        </div>
-        <div className={styles.searchRow}>
-          <TextInput
-            className={styles.search}
-            leftSection={<Search size={15} />}
-            placeholder="Найти план по названию или ключу"
-            aria-label="Поиск планов"
-            value={query}
-            onChange={(event) => handleFilter("q", event.currentTarget.value)}
-            rightSection={
-              query !== "" && (
-                <button
-                  type="button"
-                  className={styles.clear}
-                  aria-label="Очистить поиск"
-                  onClick={() => handleFilter("q", "")}
-                >
-                  <X size={14} />
-                </button>
-              )
+              {createLabel}
+            </Button>
+          </>
+        }
+      />
+
+      <SectionPanel title={areaLabel} density="compact" count={resultCount}>
+        <FilterChips
+          className={styles.filters}
+          label="Состояние плана"
+          options={filterOptions}
+          value={state}
+          onChange={(value) => handleFilter("status", value)}
+        />
+
+        {hasError && hasData && (
+          <Alert color="warning" title="Не удалось обновить планы">
+            Показан последний прочитанный список. {plansQuery.error?.message}
+            <Button size="xs" variant="subtle" onClick={() => void plansQuery.mutate()}>
+              Повторить чтение
+            </Button>
+          </Alert>
+        )}
+        {hasError && !hasData && (
+          <StatePanel
+            state="error"
+            title="Планы не удалось прочитать"
+            description={plansQuery.error?.message ?? "Сервер не ответил на запрос каталога."}
+            action={
+              <Button variant="default" onClick={() => void plansQuery.mutate()}>
+                Повторить чтение
+              </Button>
             }
           />
-          <span className={styles.resultCount} role="status">
-            {resultLabel}
-          </span>
-        </div>
-      </div>
+        )}
+        {isFirstLoading && (
+          <div className={styles.grid} role="status" aria-label="Загружаем планы">
+            {SKELETON_KEYS.map((key) => (
+              <Skeleton key={key} height={232} radius="xl" />
+            ))}
+          </div>
+        )}
+        {isEmpty && (
+          <StatePanel
+            title={emptyTitle}
+            description={emptyDescription}
+            action={
+              <Button
+                variant="default"
+                onClick={() => {
+                  if (hasFilters) setSearchParams({});
+                  else onCreate();
+                }}
+              >
+                {emptyAction}
+              </Button>
+            }
+          />
+        )}
 
-      {hasError && (
-        <Alert color="red" title="Планы не удалось прочитать">
-          {plansQuery.error?.message}
-          <Button size="xs" variant="subtle" onClick={() => void plansQuery.mutate()}>
-            Повторить
-          </Button>
-        </Alert>
-      )}
-      {plansQuery.isLoading && <p role="status">Загружаем планы…</p>}
-      {isEmpty && (
-        <div className={styles.empty}>
-          <span className={styles.emptyIcon}>
-            <Flag size={28} strokeWidth={1.4} />
-          </span>
-          <h2>{emptyTitle}</h2>
-          <p>{emptyDescription}</p>
+        {!isEmptyArray(planItems) && (
+          <div className={styles.grid}>
+            {planItems.map((plan) => (
+              <PlanCard key={plan.id} plan={plan} basePath={basePath} />
+            ))}
+          </div>
+        )}
+        {hasMore && (
           <Button
             variant="default"
-            onClick={() => {
-              if (hasFilters) setSearchParams({});
-              else onCreate();
-            }}
+            className={styles.more}
+            loading={plansQuery.isValidating}
+            onClick={() => handleFilter("limit", String(limit + 12))}
           >
-            {emptyAction}
+            Показать ещё · {planItems.length} из {total}
           </Button>
-        </div>
-      )}
-
-      <div className={styles.grid}>
-        {planItems.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} basePath={basePath} />
-        ))}
-      </div>
-      {hasMore && (
-        <Button
-          variant="default"
-          className={styles.more}
-          loading={plansQuery.isValidating}
-          onClick={() => handleFilter("limit", String(limit + 12))}
-        >
-          Показать ещё · {planItems.length} из {total}
-        </Button>
-      )}
-      <footer className={styles.footer}>
-        <Flag size={13} aria-hidden="true" />
-        <span>План задаёт цель. Этапы делают путь обозримым. Задачи сохраняют свои доски.</span>
-      </footer>
-    </div>
+        )}
+      </SectionPanel>
+    </>
   );
 };

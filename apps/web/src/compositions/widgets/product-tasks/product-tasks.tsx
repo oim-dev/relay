@@ -2,12 +2,26 @@ import clsx from "clsx";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useProjectBasePath, useProjectId } from "domains/project";
-import { Alert, Anchor, Badge, Button, Group, Progress, Stack, Text } from "@mantine/core";
-import { ArrowUpRight, ListTodo } from "lucide-react";
+import { Alert, Anchor, Button, Progress, Text } from "@mantine/core";
+import { ArrowUpRight } from "lucide-react";
 import { useBoardTasks, useProductTaskProgress, TASK_COLUMNS } from "domains/board-tasks";
+import { RecordRow } from "ui/record-row";
+import { SectionPanel } from "ui/section-panel";
+import { StatusBadge } from "ui/status-badge";
+import type { StatusBadgeTone } from "ui/status-badge";
 import { isEmptyArray } from "shared/value-predicates";
 import type { ProductTasksProps } from "./types/product-tasks-props.type";
 import styles from "./styles/product-tasks.module.css";
+
+/**
+ * Тон сохранённой колонки задачи: успех — только выполнение, подтверждённое обязательствами;
+ * отменённая задача нейтральна, остальные считаются работой в процессе.
+ */
+const getColumnTone = (column: string, canComplete: boolean | undefined): StatusBadgeTone => {
+  if (column === "done" && canComplete !== false) return "success";
+  if (column === "cancelled") return "neutral";
+  return "info";
+};
 
 /**
  * Показывает задачи продуктовой цели, включая задачи её активных имплементаций.
@@ -92,12 +106,7 @@ export const ProductTasks = (props: ProductTasksProps) => {
             ? "Не выполнена"
             : TASK_COLUMNS.find((entry) => entry.value === task.column)?.label,
         columnTitle: `Сохранённая колонка: ${task.column}. Фактическое выполнение учитывает обязательства.`,
-        color:
-          task.column === "done" && task.canComplete !== false
-            ? "green"
-            : task.column === "cancelled"
-              ? "gray"
-              : "blue",
+        tone: getColumnTone(task.column, task.canComplete),
         href: `${base}/boards/${task.boardSlug}/${task.id}`,
       })) ?? [];
   const hasMore = query.data !== undefined && query.data.at(-1)?.nextOffset !== null;
@@ -109,139 +118,146 @@ export const ProductTasks = (props: ProductTasksProps) => {
   const hasTaskError = query.error !== undefined;
   const canOpenBoard = isExpanded && boardHref !== undefined;
   if (!canRead) return null;
-  return (
-    <div {...rootAttrs} className={clsx(styles.root, isExpanded && styles._expanded, className)}>
-      {isCollapsedMode && (
-        <Button variant="subtle" size="xs" aria-expanded={isOpen} onClick={() => setOpen(!isOpen)}>
-          Задачи реализации
+  const taskList = shouldShowTasks && (
+    <div className={styles.body}>
+      {query.isLoading && (
+        <Text role="status" size="sm" c="dimmed">
+          Загружаем задачи…
+        </Text>
+      )}
+      {isEmpty && (
+        <div className={styles.empty}>
+          <Text fw={600}>{emptyLabel}</Text>
+          {isExpanded && (
+            <Text size="sm" c="dimmed">
+              {emptyDescription}
+            </Text>
+          )}
+          {canOpenBoard && (
+            <Button component={Link} to={boardHref} variant="default">
+              {boardLabel}
+            </Button>
+          )}
+        </div>
+      )}
+      {!isEmptyArray(items) && (
+        <ul className={styles.tasks}>
+          {items.map((task) => (
+            <RecordRow
+              key={task.id}
+              component="li"
+              code={task.key}
+              title={
+                <Link to={task.href}>
+                  {task.label}
+                  <ArrowUpRight size={15} aria-hidden="true" className={styles.taskIcon} />
+                </Link>
+              }
+              trailing={
+                <StatusBadge tone={task.tone} title={task.columnTitle}>
+                  {task.columnLabel}
+                </StatusBadge>
+              }
+            />
+          ))}
+        </ul>
+      )}
+      {hasMore && (
+        <Button
+          variant="subtle"
+          className={styles.more}
+          loading={query.isValidating}
+          onClick={() => void query.setSize(query.size + 1).catch(() => undefined)}
+        >
+          Ещё задачи
         </Button>
       )}
-      {isExpanded && (
-        <header className={styles.header}>
-          <Group gap="xs">
-            <ListTodo size={20} aria-hidden="true" />
-            <Text component="h2" size="lg" fw={650}>
-              Задачи реализации
-            </Text>
-          </Group>
-          <Text size="sm" c="dimmed">
-            {progressDescription}
-          </Text>
-          {isProgressLoading && (
-            <Text size="sm" role="status">
-              Считаем прогресс…
-            </Text>
-          )}
-          {hasProgress && (
-            <Stack gap={6} mt="sm">
-              <Group justify="space-between">
-                <Text size="sm" fw={600}>
-                  {progressLabel}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {progressValue}%
-                </Text>
-              </Group>
-              <Progress value={progressValue} color="green" size={6} aria-label={progressLabel} />
-              <Text size="sm">{readinessLabel}</Text>
-              {reasonItems.map((reason, index) => (
-                <Anchor key={`${reason.href}-${index}`} component={Link} to={reason.href} size="sm">
-                  {reason.message}
-                </Anchor>
-              ))}
-              {hasMoreReasons && (
-                <Button variant="subtle" size="compact-sm" onClick={handleNextReasons}>
-                  Следующие причины
-                </Button>
-              )}
-            </Stack>
-          )}
-          {hasProgressError && (
-            <Alert color="orange">
-              Прогресс недоступен.{" "}
-              <Button size="compact-xs" variant="subtle" onClick={() => void progress.mutate()}>
-                Повторить
-              </Button>
-            </Alert>
-          )}
-          {canResetReasons && (
-            <Button variant="subtle" size="compact-sm" onClick={handleResetReasons}>
-              Перечитать прогресс с начала
-            </Button>
-          )}
-        </header>
-      )}
-      {shouldShowTasks && (
-        <Stack gap="xs">
-          {query.isLoading && (
-            <Text role="status" size="sm">
-              Загружаем задачи…
-            </Text>
-          )}
-          {isEmpty && (
-            <div className={styles.empty}>
-              <Text fw={600}>{emptyLabel}</Text>
-              {isExpanded && (
-                <Text size="sm" c="dimmed">
-                  {emptyDescription}
-                </Text>
-              )}
-              {canOpenBoard && (
-                <Button component={Link} to={boardHref} variant="default" size="sm">
-                  {boardLabel}
-                </Button>
-              )}
-            </div>
-          )}
-          {items.map((task) => (
-            <div key={task.id} className={styles.task}>
-              <Anchor component={Link} to={task.href} className={styles.taskLink} underline="never">
-                <Text component="span" size="xs" c="dimmed" ff="monospace">
-                  {task.key}
-                </Text>
-                <Text component="span" size="sm" fw={550}>
-                  {task.label}
-                </Text>
-                <ArrowUpRight size={15} aria-hidden="true" />
-              </Anchor>
-              <Badge
-                variant="light"
-                color={task.color}
-                c="var(--mantine-color-text)"
-                size="sm"
-                title={task.columnTitle}
-              >
-                {task.columnLabel}
-              </Badge>
-            </div>
-          ))}
-          {hasMore && (
-            <Button
-              variant="subtle"
-              loading={query.isValidating}
-              onClick={() => void query.setSize(query.size + 1).catch(() => undefined)}
-            >
-              Ещё задачи
-            </Button>
-          )}
-          {hasTaskError && (
-            <Alert color="red">
-              Не удалось загрузить задачи.{" "}
-              <Button
-                variant="subtle"
-                onClick={() =>
-                  void query
-                    .setSize(1)
-                    .then(() => query.mutate())
-                    .catch(() => undefined)
-                }
-              >
-                Повторить
-              </Button>
-            </Alert>
-          )}
-        </Stack>
+      {hasTaskError && (
+        <Alert color="danger" role="alert" title="Не удалось загрузить задачи">
+          <Button
+            size="compact-sm"
+            variant="subtle"
+            onClick={() =>
+              void query
+                .setSize(1)
+                .then(() => query.mutate())
+                .catch(() => undefined)
+            }
+          >
+            Повторить
+          </Button>
+        </Alert>
       )}
     </div>
+  );
+  if (isCollapsedMode)
+    return (
+      <section
+        {...rootAttrs}
+        className={clsx(styles.root, className)}
+        aria-label="Задачи реализации"
+      >
+        <Button variant="subtle" aria-expanded={isOpen} onClick={() => setOpen(!isOpen)}>
+          Задачи реализации
+        </Button>
+        {taskList}
+      </section>
+    );
+  return (
+    <SectionPanel
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      title="Задачи реализации"
+      description={progressDescription}
+    >
+      {isProgressLoading && (
+        <Text size="sm" c="dimmed" role="status">
+          Считаем прогресс…
+        </Text>
+      )}
+      {hasProgress && (
+        <div className={styles.progress}>
+          <div className={styles.progressHeading}>
+            <span className={styles.progressLabel}>{progressLabel}</span>
+            <span className={styles.percent}>{progressValue}%</span>
+          </div>
+          <Progress variant="accent" value={progressValue} aria-label={progressLabel} />
+          <Text size="sm">{readinessLabel}</Text>
+          {reasonItems.map((reason, index) => (
+            <Anchor key={`${reason.href}-${index}`} component={Link} to={reason.href} size="sm">
+              {reason.message}
+            </Anchor>
+          ))}
+          {hasMoreReasons && (
+            <Button
+              variant="subtle"
+              size="compact-sm"
+              className={styles.more}
+              onClick={handleNextReasons}
+            >
+              Следующие причины
+            </Button>
+          )}
+        </div>
+      )}
+      {hasProgressError && (
+        <Alert color="warning" title="Прогресс недоступен">
+          <Button size="compact-sm" variant="subtle" onClick={() => void progress.mutate()}>
+            Повторить
+          </Button>
+        </Alert>
+      )}
+      {canResetReasons && (
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          className={styles.more}
+          onClick={handleResetReasons}
+        >
+          Перечитать прогресс с начала
+        </Button>
+      )}
+      {taskList}
+    </SectionPanel>
   );
 };

@@ -1,0 +1,59 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--tasks-space-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.swatch {
+  display: grid;
+  gap: var(--tasks-space-1);
+  padding: var(--tasks-space-3);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-compact);
+  background-color: var(--swatch-bg);
+  color: var(--swatch-ink);
+}
+
+.sample {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage {
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+}
+
+.roles {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.dataSwatch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--tasks-space-1) var(--tasks-space-2);
+  padding: var(--tasks-space-2) var(--tasks-space-3);
+  border-radius: var(--tasks-radius-compact);
+  background-color: var(--tasks-surface);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.dataRole {
+  grid-column: 1 / -1;
+  color: var(--tasks-muted);
+}
+
+.marker {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: var(--mantine-radius-xs);
+  background-color: var(--swatch-bg);
+}

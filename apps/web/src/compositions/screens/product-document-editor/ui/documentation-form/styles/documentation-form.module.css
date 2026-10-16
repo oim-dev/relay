@@ -1,9 +1,21 @@
 .root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
   min-width: 0;
+}
+
+/*
+ * Пока форма с липкой панелью действий на странице, прокрутка документа оставляет под
+ * панелью запас: фокус по Tab, якоря и scrollIntoView не уводят поле под панель.
+ */
+:global(html):has(.root .footer) {
+  scroll-padding-bottom: var(--tasks-sticky-actions-clearance);
 }
 
 .fields {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 1.25rem;
   min-width: 0;
@@ -11,58 +23,49 @@
   padding: 0;
   border: 0;
 
-  @media (--xl) {
-    grid-template-columns: minmax(0, 1fr) 17rem;
+  @media (--lg) {
+    grid-template-columns: minmax(0, 1fr) 20rem;
   }
 }
 
-.editor {
+/* Длинная опция поля не распирает карточку: колонка сжимается до ширины контейнера. */
+.editor,
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
   min-width: 0;
-  padding: 1.25rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
+  padding: 1.125rem 1rem 1.25rem;
+  border-radius: var(--tasks-radius-panel);
+  background-color: var(--tasks-card);
 
   @media (--md) {
-    padding: 1.5rem;
+    padding: 1.375rem 1.5rem 1.5rem;
   }
-}
-
-.editorHeading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--tasks-border);
 }
 
 .title {
   margin: 0;
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: var(--tasks-font-size-panel-title);
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.375rem;
 }
 
 .format {
-  margin-left: auto;
-  color: var(--tasks-muted);
-  font-family: var(--mantine-font-family-monospace);
-  font-size: 0.625rem;
-  letter-spacing: 0.06em;
+  justify-self: start;
+  max-width: 100%;
 }
 
 .aside {
   display: grid;
-  min-width: 0;
   gap: 1.25rem;
-}
-
-.properties {
-  padding: 1.25rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
+  min-width: 0;
 }
 
 .footer {
@@ -70,14 +73,19 @@
   bottom: 0;
   z-index: 5;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 1rem;
-  margin-top: 1.25rem;
-  padding: 1rem;
+  padding: 0.875rem 1rem;
   border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
+  border-radius: var(--tasks-radius-metric);
   background: var(--tasks-chrome);
   box-shadow: var(--tasks-card-shadow);
+}
+
+/* Закреплённая панель действий не закрывает ошибку под редактором текста. */
+.body {
+  min-width: 0;
+  scroll-margin-bottom: var(--tasks-sticky-actions-clearance);
 }

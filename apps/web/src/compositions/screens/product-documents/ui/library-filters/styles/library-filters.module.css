@@ -1,0 +1,33 @@
+.root {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+
+  @media (--md) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+  }
+}
+
+.field {
+  min-width: 0;
+}
+
+.tags,
+.target {
+  min-width: 0;
+
+  @media (--md) {
+    grid-column: span 3;
+  }
+
+  @media (--lg) {
+    grid-column: auto / span 2;
+  }
+}
+
+.target {
+  @media (--lg) {
+    grid-column: auto / span 1;
+  }
+}

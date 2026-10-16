@@ -29,8 +29,8 @@ export const ProductKey = (props: ProductKeyProps) => {
         <Tooltip label={label} withArrow>
           <ActionIcon
             size="xs"
-            color="gray"
             variant="subtle"
+            className={styles.copy}
             aria-label={label}
             onClick={() => clipboard.copy(value)}
           >

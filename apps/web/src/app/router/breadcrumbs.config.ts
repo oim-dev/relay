@@ -9,7 +9,7 @@ export const breadcrumbHandle = (...breadcrumbs: RouteBreadcrumb[]): BreadcrumbR
 
 /** Каталоги, существующие в дереве URL. */
 export const PRODUCT_CRUMBS = {
-  FEATURES: { label: "Фичи", path: "/product/features" },
+  FEATURES: { label: "Возможности", path: "/product/features" },
   APPLICATIONS: { label: "Приложения", path: "/product/applications" },
   DOCUMENTS: { label: "Библиотека знаний", path: "/documents" },
   PASSPORT: { label: "Паспорт", path: "/product/passport" },

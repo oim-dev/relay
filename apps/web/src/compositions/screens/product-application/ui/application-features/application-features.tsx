@@ -1,12 +1,13 @@
 import clsx from "clsx";
 import { useMemo } from "react";
-import { Button, Group, Text, Tree, useTree } from "@mantine/core";
+import { Button, Text, Tree, useTree, VisuallyHidden } from "@mantine/core";
 import type { ReactNode } from "react";
 import type { RenderTreeNodePayload } from "@mantine/core";
 import { ChevronsDown, ChevronsUp, ListChecks, Plus } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ProductReadiness, useProductDemo } from "domains/product-demo";
 import { useProductPath } from "compositions/widgets/product-page";
+import { SectionPanel } from "ui/section-panel";
 import { isEmptyArray } from "shared/value-predicates";
 import { ApplicationFeature } from "./ui/application-feature/application-feature";
 import { createApplicationTree } from "./helpers/create-application-tree";
@@ -75,20 +76,21 @@ export const ApplicationFeatures = (props: ApplicationFeaturesProps) => {
     return <ApplicationFeature {...entry} applicationId={applicationId} payload={payload} />;
   };
   return (
-    <section
+    <SectionPanel
       {...rootAttrs}
       id="application-features"
       tabIndex={-1}
       className={clsx(styles.root, className)}
-    >
-      <header className={styles.header}>
-        <div>
-          <h2 className={styles.title}>Реализуемые фичи и сценарии</h2>
-          <Text size="sm" c="dimmed">
-            Готовность обновляется по задачам. Откройте фичу или сценарий, чтобы увидеть описание и
-            ход реализации.
-          </Text>
-        </div>
+      density="compact"
+      title="Реализуемые фичи и сценарии"
+      count={
+        <>
+          <VisuallyHidden>Фич: </VisuallyHidden>
+          {treeData.nodes.length}
+        </>
+      }
+      description="Готовность обновляется по задачам. Откройте фичу или сценарий, чтобы увидеть описание и ход реализации."
+      actions={
         <Button
           component={Link}
           to={`${base}/applications/${applicationId}/scope`}
@@ -97,7 +99,8 @@ export const ApplicationFeatures = (props: ApplicationFeaturesProps) => {
         >
           Выбрать фичи и сценарии
         </Button>
-      </header>
+      }
+    >
       {hasNoFeatures && (
         <div className={styles.empty}>
           <Plus size={22} aria-hidden="true" />
@@ -108,21 +111,23 @@ export const ApplicationFeatures = (props: ApplicationFeaturesProps) => {
         </div>
       )}
       {hasFeatures && (
-        <div className={styles.scope}>
+        <>
           <div className={styles.toolbar}>
-            <Group gap="md" role="group" aria-label="Готовность реализации в приложении">
+            <div
+              className={styles.legend}
+              role="group"
+              aria-label="Готовность реализации в приложении"
+            >
               <ProductReadiness status="done" label="Реализовано" />
               <ProductReadiness status="partial" label="В работе" />
               <ProductReadiness status="none" label="Не реализовано" />
-            </Group>
+            </div>
             <Button
-              size="compact-xs"
+              size="compact-sm"
               variant="default"
-              fw={450}
               leftSection={<ToggleIcon size={14} aria-hidden="true" />}
               onClick={handleToggleAll}
               disabled={!canExpand}
-              className={styles.toggleAll}
             >
               {toggleLabel}
             </Button>
@@ -133,7 +138,6 @@ export const ApplicationFeatures = (props: ApplicationFeaturesProps) => {
             levelOffset={0}
             expandOnClick
             renderNode={renderNode}
-            className={styles.tree}
             aria-label="Фичи и сценарии приложения"
             onKeyDownCapture={(event) => {
               if (
@@ -152,8 +156,8 @@ export const ApplicationFeatures = (props: ApplicationFeaturesProps) => {
               event.target.querySelector<HTMLAnchorElement>("a[data-tree-link]")?.click();
             }}
           />
-        </div>
+        </>
       )}
-    </section>
+    </SectionPanel>
   );
 };

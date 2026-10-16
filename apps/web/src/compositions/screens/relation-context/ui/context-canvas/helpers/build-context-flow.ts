@@ -92,11 +92,12 @@ export const buildContextFlow = (
     const isOnPath = pathIds.has(edge.id);
     const isImportant = isSelected || isHovered || isOnPath || isIncident;
     const isTreeEdge = treeEdgeIds.has(edge.id);
+    // Выбранная линия и путь — основной текст, линии выбранной сущности — акцент, как в легенде.
     const color =
       isOnPath || isSelected || isHovered
-        ? "var(--mantine-color-teal-6)"
+        ? "var(--tasks-ink)"
         : isIncident
-          ? "var(--mantine-color-blue-6)"
+          ? "var(--tasks-accent)"
           : "var(--tasks-soft)";
     const fromLabel =
       props.nodes.find((node) => relationAddress(node.ref) === source)?.key ?? source;

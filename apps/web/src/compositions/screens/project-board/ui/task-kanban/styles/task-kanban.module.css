@@ -1,24 +1,48 @@
+/*
+ * Рабочее поле доски: колонки занимают оставшуюся высоту сцены и прокручиваются внутри,
+ * доска прокручивается по горизонтали сама, не расширяя страницу.
+ */
 .root {
   display: flex;
+  flex: none;
+  /* Телефон: колонки почти на высоту окна; от 768px высоту задаёт сцена экрана. */
+  height: calc(100dvh - 8rem);
+  min-height: 24rem;
   align-items: stretch;
-  gap: 16px;
-  overflow-x: auto;
-  padding: 2px 2px 14px;
-  flex: 1;
+  gap: var(--tasks-space-3);
+  min-width: 0;
   min-height: 0;
+  /* Поле под кольцо фокуса доски и карточек: прокрутка не обрезает его. */
+  padding: 0.125rem 0.125rem var(--tasks-space-3);
+  overflow-x: auto;
   scrollbar-width: thin;
   overscroll-behavior-x: contain;
+
+  @media (--md) {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 2px;
+  }
 }
+
 .overlay {
   cursor: grabbing;
 }
+
+/* Состояние сохранения переноса не перекрывает модальные окна (ниже слоя Modal). */
 .saving {
   position: fixed;
-  bottom: 16px;
-  right: 20px;
-  z-index: 40;
-  padding: 8px 12px;
-  background: var(--tasks-surface);
+  right: var(--tasks-space-5);
+  bottom: var(--tasks-space-4);
+  z-index: var(--mantine-z-index-app);
+  padding: var(--tasks-space-2) var(--tasks-space-3);
   border: 1px solid var(--tasks-border);
-  border-radius: 8px;
+  border-radius: var(--tasks-radius-control);
+  background-color: var(--tasks-surface);
+  box-shadow: var(--tasks-raised-shadow);
 }

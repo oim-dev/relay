@@ -27,8 +27,7 @@ export const ApplicationProgress = (props: ApplicationProgressProps) => {
         </Text>
         <Button
           className={styles.retry}
-          variant="light"
-          color="gray"
+          variant="default"
           size="compact-sm"
           loading={query.isValidating}
           onClick={() => void query.mutate().catch(() => undefined)}
@@ -86,8 +85,8 @@ export const ApplicationProgress = (props: ApplicationProgressProps) => {
       percentLabel: hasTasks ? `${percent}%` : "—",
       countLabel: hasTasks ? `${entry.completed} / ${entry.total} выполнено` : entry.empty,
       accessibleLabel: `${entry.label}: ${entry.completed} из ${entry.total} задач выполнено`,
-      color: isBusiness ? "teal" : "gray",
-      size: isBusiness ? 8 : 6,
+      variant: isBusiness ? "accent" : undefined,
+      barClassName: isBusiness ? undefined : styles.neutralBar,
       className: clsx(styles.metric, isBusiness && styles._business),
     };
   });
@@ -102,9 +101,8 @@ export const ApplicationProgress = (props: ApplicationProgressProps) => {
           </div>
           <Progress
             value={entry.percent}
-            color={entry.color}
-            size={entry.size}
-            radius="xl"
+            variant={entry.variant}
+            className={entry.barClassName}
             aria-label={entry.accessibleLabel}
           />
           <div className={styles.caption}>

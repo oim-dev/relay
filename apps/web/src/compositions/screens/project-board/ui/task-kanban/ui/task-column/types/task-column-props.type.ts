@@ -6,7 +6,7 @@ export type TaskColumnProps = {
   /** Текущий изолированный проект. */
   projectId: string;
   /** Колонка и её представление в шапке. */
-  column: { value: TaskColumn; label: string; color: string };
+  column: { value: TaskColumn; label: string };
   /** Фильтры списка задач. */
   filters: TaskFilters;
   /** Адрес места вставки. */
@@ -29,6 +29,8 @@ export type TaskColumnProps = {
     targets: Map<string, ProductTargetPreview> | undefined,
     targetState: "loading" | "ready" | "error",
   ) => void;
+  /** Сообщает доске, есть ли у колонки ошибка чтения: доска объявляет её один раз. */
+  onReadErrorChange: (column: TaskColumn, hasError: boolean) => void;
   /** Открывает существующую задачу. */
   onOpen: (id: string) => void;
   /** Создаёт задачу в выбранной колонке. */

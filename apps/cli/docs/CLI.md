@@ -1052,11 +1052,21 @@ K по `<ref> <key>`.
 Содержание документа D: `--name <text>`, T(summary), T(body),
 `--document-kind <kind>` (specification/description/rules/instruction/proposal/decision/research),
 `--document-status <state>` (draft/active/archived), `--section-id <id>`,
-`--clear-section`, `--pinned <value>` (строго true/false), `--targets <refs...>`,
+`--clear-section`, `--document-format <format>` (markdown/link), `--url <url>`,
+`--tag <tag>` (повторяемый), `--pinned <value>` (строго true/false), `--targets <refs...>`,
 `--clear-targets`, `--relations <json>`, `--relations-file <path>`, `--clear-relations`.
 Section-id конфликтует с clear-section,
 targets — с clear-targets. Targets заменяет прежние продуктовые области, clear-relations
 очищает только современные адресные отношения. Две формы не очищают друг друга.
+
+Формат задаётся `--document-format`, а не `--format`: глобальный `--format` выбирает
+text/json ответа. `markdown` (по умолчанию) требует непустого body и запрещает url;
+`link` требует абсолютного http/https `--url` (до 2048 символов), body становится
+необязательным Markdown-пояснением к ссылке. Согласованность формата, адреса и
+содержания проверяет Core; CLI дополняет его отказ `VALIDATION_ERROR` названиями
+своих флагов. Каждый `--tag` — один тег целиком, запятая внутри допустима. Core
+обрезает края, отбрасывает пустые и повторы без учёта регистра (сохраняется первое
+написание); не более 20 тегов по 50 символов.
 
 Relations — полный JSON-массив современных отношений, не добавление к прежнему набору:
 
@@ -1086,10 +1096,15 @@ Relations — полный JSON-массив современных отноше
 
 `npx @oim-dev/relay-cli document list` — L; дополнительно `--status <state>`,
 `--target <ref>`, `--section <id>` (none — без раздела), `--document-kind <kind>`,
-`--pinned <value>`, `--archived <value>` (true/false). Ответ — краткие документы:
+`--document-format <format>` (markdown/link), повторяемый `--tag <tag>` (нужны все
+выбранные теги, без учёта регистра), `--unattached <value>` (true — без relations и
+links, false — только прикреплённые), `--pinned <value>`, `--archived <value>`
+(true/false). Ответ — краткие документы с форматом, url, тегами и числом прикреплений:
 сохранённая аннотация (длинная помечена как фрагмент), при поиске — предоставленный
-фрагмент содержания, при `--sort updated` — время изменения. Подсказка читает первый
-документ страницы; для другого замените ключ. JSON сохраняет полные поля списка.
+фрагмент содержания, при `--sort updated` — время изменения. Поиск `--q` учитывает
+также адрес ссылки и теги. Продолжение повторяет `--tag` для каждого тега, поэтому
+тег с запятой сохраняется. Подсказка читает первый документ страницы; для другого
+замените ключ. JSON сохраняет полные поля списка.
 Версия списка — непрозрачный guard текущего состояния, не исторический снимок.
 При `ENTITIES_CHANGED`, в том числе для курсора прежнего алгоритма версий, начните
 чтение без `--cursor`; CLI не подставляет новую версию автоматически.
@@ -1119,10 +1134,22 @@ npx @oim-dev/relay-cli document create \
   --document-kind decision
 ```
 
-C и D; name и непустое body обязательны. Summary по умолчанию пустое,
-document-kind — description. Ответ — квитанция; проверьте document get.
-Для атомарного создания с современными прикреплениями добавьте к этому вызову
+C и D; name обязателен. Для markdown нужно непустое body, для link — `--url`,
+body — необязательное пояснение. Summary по умолчанию пустое, document-kind —
+description. Ответ — квитанция; проверьте document get, где показаны формат,
+адрес и теги, а содержание ссылки озаглавлено «Пояснение к ссылке».
+Для атомарного создания с современными прикреплениями добавьте к вызову
 `--relations-file ./relations.json` (формат — D выше).
+
+```bash
+npx @oim-dev/relay-cli document create \
+  --actor agent \
+  --name 'Макеты каталога' \
+  --document-format link \
+  --url https://example.com/catalog \
+  --body 'Читать перед изменением карточек' \
+  --tag Дизайн --tag Каталог
+```
 
 ### document update
 
@@ -1135,7 +1162,9 @@ npx @oim-dev/relay-cli document update DOC-1 \
 ```
 
 R и D, минимум одно поле. Дополнительно `--clear-summary`, несовместимый
-с T(summary). Непереданные поля сохраняются; смена proposal на decision сама
+с T(summary), и `--clear-tags`, несовместимый с `--tag`. `--tag` заменяет весь
+набор тегов; добавление и снятие отдельных тегов — document bulk add-tags/remove-tags.
+`--document-format markdown` снимает адрес и требует непустого содержания. Непереданные поля сохраняются; смена proposal на decision сама
 по себе не доказывает внешнюю приёмку.
 
 Текст и полный современный набор можно заменить вместе:
@@ -1231,14 +1260,20 @@ npx @oim-dev/relay-cli document link DOC-1 \
   --if-revision 1
 ```
 
-R документа; обязателен `--target <ref>`, необязательны `--relation <type>`
-(references/documents, по умолчанию documents), T(description), `--clear-description`,
-`--legacy`. Совпавшая цель+тип обновляет пояснение, пропущенное пояснение сохраняется.
-Clear-description конфликтует с текстом. Legacy меняет прежние links/targets и
-не допускает relation/пояснение/clear-description. Остальные связи сохраняются;
-Core проверяет исходную ревизию и атомарно меняет одно прикрепление. CLI передаёт одну
-предметную запись, без предварительных get/resolve и без отдельной записи графа.
-Весь текстовый ввод читается до этой операции. Ответ — квитанция документа.
+R документа; обязателен `--target <ref>` (ключ, ID или kind:ID), необязательны
+`--relation <type>` (references/documents, по умолчанию documents), T(description),
+`--clear-description`, `--legacy`. Новая пара цель+тип прикрепляется (пояснение
+по умолчанию пустое); у совпавшей пары обновляется пояснение, пропущенное пояснение
+сохраняется. Отдельной смены типа нет: снимите связь `document unlink --relation` и
+прикрепите с новым типом. Clear-description конфликтует с текстом. Legacy меняет
+прежние links/targets и не допускает relation/пояснение/clear-description. Прежний
+адрес этапа `plan-stage:<id>` отвечает `ENTITY_RELOCATED` (exit 3) с новым адресом
+в `details.to` (по HTTP — в `details.serverDetails`). Остальные связи сохраняются;
+Core разрешает цель, проверяет исходную ревизию и атомарно меняет одно прикрепление.
+CLI передаёт одну предметную запись, без предварительных get/resolve и без отдельной
+записи графа; по HTTP нужна возможность Server `relay-document-library-v1`, без неё —
+`SERVER_INCOMPATIBLE` без локального fallback. Весь текстовый ввод читается до этой
+операции. Ответ — квитанция документа.
 
 ### document unlink
 
@@ -1251,9 +1286,86 @@ npx @oim-dev/relay-cli document unlink DOC-1 \
 
 R документа; обязателен `--target <ref>`, допустимы `--relation <type>`
 (по умолчанию documents) или `--legacy`, но не вместе. Снимает только выбранное
-существующее прикрепление, не удаляет документ. Ответ — квитанция.
-Операция передаётся непосредственно владельцу документа с исходной ревизией,
-без чтения и сборки полного массива отношений в CLI.
+существующее прикрепление (адресное отношение или, с `--legacy`, прежнюю область),
+не удаляет документ и цель; отсутствующая связь — `INVALID_ARGUMENT`. Связь с прежним
+адресом этапа `plan-stage:<id>`, оставшаяся после `storage migrate`, снимается
+по сохранённой цели: Core находит её в полях документа без разрешения адреса, в local
+и HTTP одинаково. Повторное снятие такой связи отвечает `ENTITY_RELOCATED`.
+Операция передаётся непосредственно владельцу документа с исходной ревизией одним
+запросом, без чтения и сборки полного массива отношений в CLI. Ответ — квитанция.
+
+### document facets
+
+`npx @oim-dev/relay-cli document facets` — счётчики каталога по полным данным
+проекта, не по странице. Фильтры как у document list без пагинации и сортировки:
+`--q <text>`, `--target <ref>`, `--section <id>`, повторяемый `--tag <tag>`,
+`--document-format <format>`, `--document-kind <kind>`, `--status <state>`,
+`--pinned <value>`, `--archived <value>`, `--unattached <value>`. Каждая ось
+(разделы, теги, форматы, типы, состояния) считается по всем фильтрам, кроме
+собственного; состояния — без status и archived; счётчик тега — размер выборки
+после добавления тега. Представления (все, закреплённые, черновики, без раздела,
+без прикреплений, архив) учитывают только q, target, tag, document-format и
+document-kind. Ответ содержит total и version каталога; text предлагает
+document list той же выборки. Только чтение.
+
+### document materials
+
+`npx @oim-dev/relay-cli document materials FEATURE-1` — P обратного чтения: документы,
+прикреплённые напрямую к сущности любого из 11 видов (`<ref>` — ключ, ID или kind:ID;
+проект — `PROJECT`). Родитель и дети не учитываются. Для каждого документа —
+краткая карточка с форматом и тегами, признак архива и все связи с этой сущностью:
+тип, полное пояснение и источник relations или links. `--archived <value>`:
+по умолчанию архив включён с отметкой, false исключает, true — только архив.
+Порядок: закреплённые, затем по названию. Продолжение проверяет version каталога.
+
+### Массовые изменения document bulk
+
+Пять листьев применяют одно действие к 1–100 документам без повторов. Каждый
+документ — повторяемый `--item <ref@revision>` (ключ или ID и прочитанная ревизия,
+например `DOC-1@3`). Каждый документ записывается отдельно под своей ревизией:
+набор не атомарен, отказ одного не откатывает сохранённые, автоматических повторов
+нет; прикрепления не меняются. Необязателен `--request-id <id>`. Результат по
+каждому элементу в порядке запроса: applied, unchanged, conflict (с актуальной
+ревизией), not_found, invalid, error, а также applied/failed.
+
+Код выхода: 0 — все элементы applied или unchanged; 1 — хотя бы один отказ
+(частичный или полный). В обоих случаях полный поэлементный результат печатается
+в stdout (JSON — `ok:true`, `data.items`); text перечисляет отказы и команды
+перечитывания найденных документов. Ошибка самого запроса (параметры, подключение)
+— обычная ошибка с её кодом без результата. После отказа перечитайте только
+документы с отказом; при conflict сверьте содержание, а не подставляйте ревизию.
+
+### document bulk move
+
+```bash
+npx @oim-dev/relay-cli document bulk move \
+  --actor agent \
+  --item DOC-1@3 --item DOC-2@1 \
+  --section-id architecture
+```
+
+Ровно один из `--section-id <id>` (существующий раздел) или `--clear-section`.
+
+### document bulk add-tags
+
+`npx @oim-dev/relay-cli document bulk add-tags --item DOC-1@3 --tag API` — обязательный
+повторяемый `--tag <tag>`; повтор без учёта регистра не дублируется, больше 20
+тегов у документа — invalid.
+
+### document bulk remove-tags
+
+`npx @oim-dev/relay-cli document bulk remove-tags --item DOC-1@3 --tag API` — снимает
+указанные теги без учёта регистра; отсутствующий тег даёт unchanged.
+
+### document bulk status
+
+`npx @oim-dev/relay-cli document bulk status --item DOC-1@3 --document-status archived` —
+обязательный `--document-status <state>` (draft/active/archived).
+
+### document bulk pin
+
+`npx @oim-dev/relay-cli document bulk pin --item DOC-1@3 --pinned true` — обязательный
+`--pinned <value>`: true закрепляет, false открепляет.
 
 ### document section list
 
@@ -2253,8 +2365,11 @@ STORAGE_BACKUP_MISSING (5); порядок действий — в
 [восстановлении](../../../docs/guides/RECOVERY.md#явная-миграция-и-резервная-копия).
 Результат — `storageMigrationResultSchema`: сохраняются `migrated`, `format`, `entities`.
 Шаги плана и результата имеют `type`: `physical`, `record`, `snapshot` или `profile`
-(`profile.1-to-2` — только метка профиля данных с полной перепроверкой; в text —
-«Метка профиля данных 1 → 2»). Счётчики: `counts.checked` — записи с надгробиями, наборы
+(`profile.<из>-to-<в>`, например `profile.1-to-3`, — только метка профиля данных с полной
+перепроверкой; в text — «Метка профиля данных 1 → 3»). Переход записи `<вид>-v<N>-to-v<N+1>`,
+например `document-v1-to-v2` (формат материала и теги прежних документов), в text —
+«Переход записей document 1 → 2». Профили 1 и 2 требуют явного переноса до текущего
+профиля 3; новые базы создаются сразу в текущем профиле. Счётчики: `counts.checked` — записи с надгробиями, наборы
 отношений и keyspaces, прошедшие полную проверку; `counts.changed` — файлы постоянного
 набора (без `runtime/`), созданные, изменённые или удалённые публикацией, сумма
 `counts.owners[категория].changed`; `counts.removedByRule` — удалённые распознанные

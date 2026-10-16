@@ -210,13 +210,22 @@ export function offsetQuery(
 /** Кавычки POSIX shell; управляющие символы не становятся исполняемыми командами. */
 function quote(value: string): string {
   if (/[\x00-\x1f\x7f-\x9f\u2028\u2029]/.test(value)) {
-    // ANSI-C quoting поддерживается bash/zsh и сохраняет переносы внутри одного аргумента.
+    // ANSI-C quoting сохраняет переносы внутри одного аргумента. Системный Bash 3.2 macOS
+    // не понимает `\uXXXX`, а ksh93 читает `\x` без ограничения длины, поэтому символ
+    // записывается байтами UTF-8 в трёхзначном восьмеричном виде `\NNN`.
     return `$'${value
       .replaceAll("\\", "\\\\")
       .replaceAll("'", "\\'")
-      .replace(
-        /[\x00-\x1f\x7f-\x9f\u2028\u2029]/g,
-        (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      .replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, (character) =>
+        character === "\n"
+          ? "\\n"
+          : character === "\t"
+            ? "\\t"
+            : character === "\r"
+              ? "\\r"
+              : [...Buffer.from(character, "utf8")]
+                  .map((byte) => `\\${byte.toString(8).padStart(3, "0")}`)
+                  .join(""),
       )}'`;
   }
   return /^[a-zA-Z0-9_./:@=,+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
@@ -306,7 +315,9 @@ function continuationCommandFor(
   const args = [...context.invocation, ...command];
   for (const [name, value] of Object.entries(filters)) {
     if (value === undefined || value === null) continue;
-    args.push(`--${kebab(name)}`, Array.isArray(value) ? value.join(",") : String(value));
+    // Массив повторяет флаг: значение может содержать запятую (например, тег).
+    if (Array.isArray(value)) for (const item of value) args.push(`--${kebab(name)}`, String(item));
+    else args.push(`--${kebab(name)}`, String(value));
   }
   args.push("--cursor", cursor);
   return shellCommand(args);

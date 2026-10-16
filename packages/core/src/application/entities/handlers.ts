@@ -122,11 +122,14 @@ const productHandler: EntityHandler = {
     if (changes.kind === "product") fields = { ...entry.data, ...changes, kind: "passport" };
     if (changes.kind === "document" && entry.data.kind === "document") {
       const { targets, ...rest } = changes;
-      fields = {
+      const next: Record<string, unknown> = {
         ...entry.data,
         ...rest,
         ...(targets === undefined ? {} : { links: documentTargets(targets, context) }),
       };
+      // Переход к Markdown явно снимает прежний адрес ссылки; ID, текст и связи сохраняются.
+      if (rest.documentFormat === "markdown" && rest.url === undefined) delete next.url;
+      fields = next;
     }
     return new ProductQueries(context.workspace).mutate(
       productMutationSchema.parse({

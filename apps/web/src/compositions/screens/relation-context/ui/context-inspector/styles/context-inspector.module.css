@@ -1,23 +1,42 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: var(--mantine-spacing-md);
-  padding: var(--mantine-spacing-md);
+  gap: var(--tasks-space-4);
+  padding: var(--tasks-space-4);
   overflow-wrap: anywhere;
 }
 
+.origin {
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-accent-subtle);
+  color: var(--tasks-accent-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tasks-space-2);
+  margin: 0;
+  font-size: var(--mantine-font-size-md);
+}
+
 .endpoints {
-  padding: var(--mantine-spacing-sm);
-  border-radius: var(--mantine-radius-sm);
+  padding: var(--tasks-space-3);
+  border-radius: var(--tasks-radius-compact);
   background: var(--tasks-subtle);
 }
 
 .metadata {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px 12px;
-  font-size: var(--mantine-font-size-xs);
+  gap: var(--tasks-space-2) var(--tasks-space-3);
   margin: 0;
+  font-size: var(--mantine-font-size-xs);
 
   & dt {
     color: var(--tasks-muted);

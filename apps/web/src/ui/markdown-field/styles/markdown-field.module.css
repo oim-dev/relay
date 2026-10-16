@@ -2,45 +2,48 @@
   min-width: 0;
 }
 
-.heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.625rem;
-}
-
 .label {
   flex-shrink: 0;
   font-size: var(--mantine-font-size-sm);
   font-weight: 550;
 }
 
-.preview {
-  min-height: 10rem;
-  padding: 0.75rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
-}
-
-.tabs {
-  flex-shrink: 0;
+/* Звёздочка обязательного поля — роль danger, как у required полей Mantine. */
+.required {
+  color: var(--tasks-danger);
 }
 
 .hint {
   display: block;
   margin-top: 0.375rem;
   color: var(--tasks-soft);
-  font-size: 0.6875rem;
+  font-size: var(--mantine-font-size-xs);
 }
-.editor {
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-sm);
-  overflow: hidden;
-  margin-top: 4px;
 
+.editor {
+  margin-top: var(--tasks-space-1);
+  overflow: hidden;
+  border: 1px solid var(--tasks-field-border);
+  border-radius: var(--tasks-radius-control);
+
+  /* Ошибка поля — рамка danger, как у полей Mantine с error. */
+  &:has([aria-invalid="true"]) {
+    border-color: var(--tasks-danger);
+  }
+
+  /*
+   * Фокус — кольцо 2px (рамка и тень) цвета фокуса, как у полей в ui/themes/styles/controls.module.css;
+   * при ошибке кольцо тоже цвета фокуса, а ошибку продолжают сообщать текст и aria-invalid.
+   */
   &:focus-within {
     border-color: var(--tasks-focus-ring);
+    box-shadow: 0 0 0 1px var(--tasks-focus-ring);
+  }
+
+  @media (--forced-colors) {
+    &:focus-within {
+      outline: 2px solid Highlight;
+      outline-offset: 1px;
+    }
   }
 }

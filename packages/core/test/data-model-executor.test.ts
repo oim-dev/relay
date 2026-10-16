@@ -14,6 +14,7 @@ import {
   storageMigrationResultSchema,
 } from "@relay/contracts/storage-maintenance";
 import type { StorageMigrationPlan } from "@relay/contracts/storage-maintenance";
+import { entityRelocatedDetailsSchema } from "@relay/contracts/storage-maintenance";
 import type { JsonValue } from "@relay/contracts/storage";
 import { AppError } from "../src/shared/errors.js";
 import {
@@ -24,6 +25,7 @@ import {
 import { StorageService } from "../src/application/storage/service.js";
 import { initialize, openWorkspace } from "../src/storage/workspace.js";
 import { EntityEngine } from "../src/application/entities/service.js";
+import { DocumentLibraryService } from "../src/application/documents/library.js";
 import { BoardTasksService } from "../src/application/board-tasks/service.js";
 import { PlanningService } from "../src/application/planning/service.js";
 import { ReleasesService } from "../src/application/releases/service.js";
@@ -34,8 +36,9 @@ import { digest, jsonValue, RECORD_BYTES } from "../src/storage/entity-store/for
 import { verifyBackupContent } from "../src/storage/data-model/backup.js";
 import { createTransitionRegistry } from "../src/storage/data-model/registry.js";
 import { productionTransitionRegistry } from "../src/storage/data-model/transitions/index.js";
+import { documentV1ToV2 } from "../src/storage/data-model/transitions/document-v1-to-v2.js";
 import { planningV1ToV2 } from "../src/storage/data-model/transitions/planning-v1-to-v2.js";
-import { DATA_MODEL_PROFILES } from "../src/storage/data-model/profiles.js";
+import { CURRENT_DATA_MODEL, DATA_MODEL_PROFILES } from "../src/storage/data-model/profiles.js";
 import {
   HISTORICAL_KINDS,
   HistoricalKindCatalog,
@@ -69,7 +72,10 @@ test("A02: текущая база — status current, dry-run без шагов
   const root = join(project, ".relay");
   const configPath = join(root, "config.json");
   // Новая база создаётся сразу с маркером текущего профиля.
-  assert.equal((await readJsonFile(join(root, "storage.json"))).dataModelVersion, 2);
+  assert.equal(
+    (await readJsonFile(join(root, "storage.json"))).dataModelVersion,
+    CURRENT_DATA_MODEL,
+  );
   const before = await treeHashes(project);
   assert.equal((await inspectStorage({ configPath })).status, "current");
   const plan = await planStorageMigration({ configPath });
@@ -110,9 +116,9 @@ test("A05/A13/A17/A23: формат 4 с планированием v1 — dry-r
   assert.equal(plan.applicable, true, JSON.stringify(plan.blockers));
   assert.deepEqual(
     plan.steps.map((step) => `${step.id}@${step.version}`),
-    ["planning-v1-to-v2@1", "profile.1-to-2@1"],
+    ["document-v1-to-v2@1", "planning-v1-to-v2@1", `profile.1-to-${CURRENT_DATA_MODEL}@1`],
   );
-  assert.deepEqual(plan.profiles, { from: 1, to: 2 });
+  assert.deepEqual(plan.profiles, { from: 1, to: CURRENT_DATA_MODEL });
   assert.ok(plan.changes.relations.revoked > 0 && plan.changes.relations.created > 0);
   assert.ok(plan.changes.addresses.relocated > 0);
   assert.ok(plan.budgets.walBytes > 0 && plan.space.backupRequired > plan.budgets.backupBytes);
@@ -156,7 +162,7 @@ test("A05/A13/A17/A23: формат 4 с планированием v1 — dry-r
   const storage = workspaceStorageRegistry();
   const changedRegistry = createTransitionRegistry({
     profiles: DATA_MODEL_PROFILES,
-    transitions: [{ ...planningV1ToV2, version: 2 }],
+    transitions: [{ ...planningV1ToV2, version: 2 }, documentV1ToV2],
     storage,
     historical: new HistoricalKindCatalog(storage, HISTORICAL_KINDS),
   });
@@ -185,7 +191,7 @@ test("A05/A13/A17/A23: формат 4 с планированием v1 — dry-r
   assert.ok(!manifest.files.some((file) => file.path.startsWith("runtime/write.lock")));
   assert.equal(
     (await readJsonFile(join(root, "storage.json"))).dataModelVersion,
-    2,
+    CURRENT_DATA_MODEL,
     "последним опубликован маркер целевого профиля",
   );
   assert.equal((await inspectPending(root)).kind, "none", "WAL удалён после публикации");
@@ -235,11 +241,32 @@ test("A05/A13/A17/A23: формат 4 с планированием v1 — dry-r
     );
   }
   // Прежний адрес этапа не выдаётся повторно и указывает на план.
+  // Details — стабильный контракт (entityRelocatedDetailsSchema): Web по нему показывает
+  // прежнюю связь документа. Адрес и ключ этапа дают одинаковые details.
   const stageId = oracle.oldReader.p1Stages.items[0].id as string;
-  await assert.rejects(
-    new EntityEngine(workspace).resolve({ ref: `plan-stage:${stageId}` }),
-    code("ENTITY_RELOCATED"),
-  );
+  const planAddress = `work-plan:${oracle.entities.P1.id}`;
+  const engine = new EntityEngine(workspace);
+  const relocated = async (ref: string) => {
+    const error = await engine.resolve({ ref }).then(
+      () => assert.fail("ожидалась ENTITY_RELOCATED"),
+      (caught: unknown) => caught,
+    );
+    code("ENTITY_RELOCATED")(error);
+    const details = entityRelocatedDetailsSchema.parse((error as AppError).details);
+    assert.equal((error as AppError).exitCode, 3);
+    assert.match(details.key ?? "", /^STG-[1-9][0-9]*$/);
+    assert.deepEqual(details, {
+      code: "ENTITY_RELOCATED",
+      from: `plan-stage:${stageId}`,
+      to: planAddress,
+      stageId,
+      key: details.key,
+      next: `Используйте адрес ${planAddress}`,
+    });
+    return details;
+  };
+  const byAddress = await relocated(`plan-stage:${stageId}`);
+  assert.deepEqual(await relocated(byAddress.key!), byAddress);
 });
 
 test("A25 (Core): после миграции работают CAS-обновление, комментарий, документ/контекст, план, релиз, прогресс; повторное открытие", async (t) => {
@@ -259,10 +286,13 @@ test("A25 (Core): после миграции работают CAS-обновл�
     { backupDir, ifPlan: markerPlan.planFingerprint },
   );
   assert.equal(result.migrated, true);
-  // Переход только маркера — явный шаг плана и результата.
+  // Профиль 1 → текущий: документы v1 получают формат и теги, маркер — явный шаг плана и результата.
   assert.deepEqual(
     markerPlan.steps.map((step) => [step.id, step.type]),
-    [["profile.1-to-2", "profile"]],
+    [
+      ["document-v1-to-v2", "record"],
+      [`profile.1-to-${CURRENT_DATA_MODEL}`, "profile"],
+    ],
   );
   assert.deepEqual(result.steps, markerPlan.steps);
   // План и результат совпадают с фактическими изменениями файлов по хешам дерева.
@@ -270,7 +300,13 @@ test("A25 (Core): после миграции работают CAS-обновл�
   const diff = { create: 0, update: 0, delete: 0 };
   const byCategory: Record<string, typeof diff> = {};
   const category = (path: string) =>
-    path === "storage.json" ? "manifest" : path.startsWith(".indexes/") ? "indexes" : path;
+    path === "storage.json"
+      ? "manifest"
+      : path.startsWith(".indexes/")
+        ? "indexes"
+        : path.startsWith("entities/documents/")
+          ? "entities/document"
+          : path;
   for (const [path, hash] of after)
     if (filesBefore.get(path) !== hash) {
       const kind = filesBefore.has(path) ? "update" : "create";
@@ -325,6 +361,13 @@ test("A25 (Core): после миграции работают CAS-обновл�
   const engine = new EntityEngine(workspace);
   const document = await engine.get({ ref: oracle.entities.D1.key });
   assert.equal((document.data as { body: string }).body, oracle.entities.D1.body);
+  // Переход document v1 → v2 явно записал прежнему материалу Markdown-формат без тегов.
+  assert.equal((document.data as { documentFormat?: string }).documentFormat, "markdown");
+  assert.deepEqual((document.data as { tags?: string[] }).tags, []);
+  const d1 = document.data as Record<string, unknown>;
+  for (const field of ["name", "documentKind", "documentStatus", "sectionId", "pinned"])
+    assert.deepEqual(d1[field], oracle.entities.D1[field], field);
+  assert.equal(d1.url, undefined);
   const context = await new GraphService(workspace).context({ root: oracle.entities.D1.key });
   assert.equal(context.complete, true);
   const plan = await new PlanningService(workspace).stages(oracle.entities.P2.key, { limit: 100 });
@@ -790,5 +833,129 @@ test("A28: превышение пакета WAL — блокер dry-run и app
   assert.ok(
     walSize > 0 && real.budgets.walBytes >= walSize,
     `${real.budgets.walBytes} ≥ ${walSize}`,
+  );
+});
+
+test("перенесённая связь документа с прежним адресом этапа снимается detach, attach отказывает", async (t) => {
+  const { project, configPath } = await planV1Format4(t);
+  const oracle = await oracleOf("physical2-plan-v1-43d683b");
+  const plan = await planStorageMigration({ configPath });
+  await migrateStorage(
+    { configPath },
+    { backupDir: await tempDir(t), ifPlan: plan.planFingerprint },
+  );
+  const engine = new EntityEngine(await openWorkspace(project, configPath));
+  const d2 = oracle.entities.D2;
+  const stage = d2.relations.find((relation: unknown[]) => relation[0] === "plan-stage");
+  const stageRef = `plan-stage:${stage[1]}`;
+  const before = await engine.get({ ref: d2.key });
+  const relations = (
+    before.data as {
+      relations?: { target: { kind: string; id: string }; type: "documents" | "references" }[];
+    }
+  ).relations!;
+  const stageRelation = relations.find(
+    (relation) => `${relation.target.kind}:${relation.target.id}` === stageRef,
+  )!;
+  assert.ok(
+    relations.some((relation) => `${relation.target.kind}:${relation.target.id}` === stageRef),
+  );
+  const change = {
+    ref: d2.key,
+    ifRevision: before.revision,
+    target: stageRef,
+    type: stageRelation.type,
+  };
+  // Новое прикрепление и изменение по прежнему адресу этапа по-прежнему запрещены.
+  for (const action of ["attach", "update"] as const)
+    await assert.rejects(
+      engine.relateDocument({ ...change, action, requestId: `stage-${action}` }, "tester"),
+      code("ENTITY_RELOCATED"),
+    );
+  const saved = await engine.relateDocument(
+    { ...change, action: "detach", requestId: "stage-detach" },
+    "tester",
+  );
+  assert.equal(saved.revision, before.revision + 1);
+  const after = await engine.get({ ref: d2.key });
+  const left = (after.data as { relations?: { target: { kind: string; id: string } }[] })
+    .relations!;
+  assert.deepEqual(
+    left.map((relation) => `${relation.target.kind}:${relation.target.id}`),
+    relations
+      .map((relation) => `${relation.target.kind}:${relation.target.id}`)
+      .filter((address) => address !== stageRef),
+    "остальные связи сохранены",
+  );
+  // Повторное открепление: сохранённой связи больше нет, адрес разрешается и указывает на план.
+  await assert.rejects(
+    engine.relateDocument(
+      { ...change, ifRevision: after.revision, action: "detach", requestId: "stage-again" },
+      "tester",
+    ),
+    code("ENTITY_RELOCATED"),
+  );
+});
+
+test("DocumentLibraryService: прежняя связь этапа снимается unlink по сохранённой цели, link отказывает", async (t) => {
+  const { project, configPath } = await planV1Format4(t);
+  const oracle = await oracleOf("physical2-plan-v1-43d683b");
+  const plan = await planStorageMigration({ configPath });
+  await migrateStorage(
+    { configPath },
+    { backupDir: await tempDir(t), ifPlan: plan.planFingerprint },
+  );
+  const workspace = await openWorkspace(project, configPath);
+  const engine = new EntityEngine(workspace);
+  const library = new DocumentLibraryService(workspace);
+  const d2 = oracle.entities.D2;
+  const stage = d2.relations.find((relation: unknown[]) => relation[0] === "plan-stage");
+  const stageRef = `plan-stage:${stage[1]}`;
+  const before = await engine.get({ ref: d2.key });
+  const relations = (
+    before.data as {
+      relations?: { target: { kind: string; id: string }; type: "documents" | "references" }[];
+    }
+  ).relations!;
+  const stageRelation = relations.find(
+    (relation) => `${relation.target.kind}:${relation.target.id}` === stageRef,
+  )!;
+  const change = {
+    ref: d2.key,
+    ifRevision: before.revision,
+    target: stageRef,
+    source: "relations" as const,
+    relation: stageRelation.type,
+  };
+  await assert.rejects(
+    library.changeRelation({ ...change, action: "link", requestId: "lib-link" }, "tester"),
+    code("ENTITY_RELOCATED"),
+  );
+  const saved = await library.changeRelation(
+    { ...change, action: "unlink", requestId: "lib-unlink" },
+    "tester",
+  );
+  assert.equal(saved.revision, before.revision + 1);
+  const after = await engine.get({ ref: d2.key });
+  const data = after.data as {
+    relations?: { target: { kind: string; id: string } }[];
+    documentFormat?: string;
+    tags?: string[];
+  };
+  assert.deepEqual(
+    data.relations!.map((relation) => `${relation.target.kind}:${relation.target.id}`),
+    relations
+      .map((relation) => `${relation.target.kind}:${relation.target.id}`)
+      .filter((address) => address !== stageRef),
+  );
+  // Запись идёт в формате документа v2: формат и теги сохраняются.
+  assert.equal(data.documentFormat, (before.data as { documentFormat?: string }).documentFormat);
+  assert.deepEqual(data.tags, (before.data as { tags?: string[] }).tags);
+  await assert.rejects(
+    library.changeRelation(
+      { ...change, ifRevision: after.revision, action: "unlink", requestId: "lib-again" },
+      "tester",
+    ),
+    code("ENTITY_RELOCATED"),
   );
 });

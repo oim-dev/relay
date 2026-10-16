@@ -1,3 +1,63 @@
 .root {
-  display: block;
+  display: grid;
+  gap: var(--tasks-space-4);
+  min-width: 0;
+}
+
+/*
+ * Пока форма с липкой панелью действий на странице, прокрутка документа оставляет под
+ * панелью запас: фокус по Tab, якоря и scrollIntoView не уводят поле под панель.
+ */
+:global(html):has(.root .footer) {
+  scroll-padding-bottom: var(--tasks-sticky-actions-clearance);
+}
+
+.fields {
+  display: grid;
+  gap: var(--tasks-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--tasks-space-5) var(--tasks-space-4);
+  border: 0;
+  border-radius: var(--tasks-radius-panel);
+  background: var(--tasks-card);
+
+  @media (--md) {
+    padding: var(--tasks-space-6);
+  }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
+}
+
+/*
+ * Заголовок панели формы: legend сохраняет связь полей с группой, а float делает его
+ * обычной ячейкой сетки, чтобы он не пересекал верхний край панели.
+ */
+.legend {
+  float: left;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  font-size: var(--tasks-font-size-panel-title);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+/* Действия формы закреплены внизу и не закрывают сообщение об ошибке над ними. */
+.footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tasks-space-3);
+  padding: 0.875rem var(--tasks-space-4);
+  border: 1px solid var(--tasks-border);
+  border-radius: var(--tasks-radius-metric);
+  background: var(--tasks-chrome);
+  box-shadow: var(--tasks-card-shadow);
 }

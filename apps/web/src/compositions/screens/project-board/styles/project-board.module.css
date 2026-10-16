@@ -1,62 +1,44 @@
-.root {
-  width: 100%;
-  min-width: 0;
-  padding: 28px 28px 0;
-  height: calc(100dvh - 7rem);
-  min-height: 420px;
+/*
+ * Доска — шаблон «рабочее поле» на общей сцене (PageStage layout="workspace"): шапка,
+ * строка поиска и фильтров, затем колонки на всю оставшуюся высоту окна. Сцена не
+ * ограничивается шириной документа (обычный максимум сцены 90rem вмещает все пять рабочих
+ * колонок) и не получает внутренней рамки вокруг доски; горизонтальная прокрутка
+ * принадлежит самой доске. От 768px высоту задаёт PageStage, на телефоне сцена растёт
+ * по содержимому, а высоту колонок задаёт сама доска.
+ */
+.stage {
   display: flex;
   flex-direction: column;
 }
-.toolbar {
+
+.prefix {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+
+/* Поиск во всю строку на телефоне; от 768px — рядом с переключателями фильтров. */
+.filters {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  min-height: 48px;
-  margin-bottom: 24px;
   flex-shrink: 0;
-}
-.title {
-  font-size: 26px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
-}
-.heading {
-  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tasks-space-2) var(--tasks-space-3);
   min-width: 0;
 }
+
 .search {
-  width: 260px;
+  flex: 1 1 100%;
+  min-width: 0;
+
+  @media (--md) {
+    flex: 0 1 18rem;
+  }
 }
-.filterbar {
-  padding-bottom: 18px;
-  flex-shrink: 0;
-}
-.controls {
+
+.toggles {
+  display: flex;
   flex-wrap: wrap;
-}
-@media (max-width: 48em) {
-  .subtitle,
-  .prefix {
-    display: none;
-  }
-  .title {
-    font-size: 24px;
-  }
-  .root {
-    padding: 20px 14px 0;
-  }
-  .toolbar {
-    gap: 16px;
-    margin-bottom: 18px;
-  }
-  .controls {
-    width: 100%;
-    gap: 8px;
-  }
-  .search {
-    flex: 1 0 100%;
-    min-width: 140px;
-  }
+  align-items: center;
+  gap: var(--tasks-space-2);
+  min-width: 0;
 }

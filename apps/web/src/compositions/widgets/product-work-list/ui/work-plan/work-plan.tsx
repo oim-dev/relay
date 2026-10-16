@@ -1,8 +1,8 @@
 import clsx from "clsx";
-import { Badge } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Flag } from "lucide-react";
 import { useProductPath } from "compositions/widgets/product-page";
+import { StatusBadge } from "ui/status-badge";
 import type { WorkPlanProps } from "./types/work-plan-props.type";
 import styles from "./styles/work-plan.module.css";
 
@@ -17,7 +17,7 @@ export const WorkPlan = (props: WorkPlanProps) => {
   const base = useProductPath();
   const isDone = plan.status === "done";
   const planLabel = isDone ? "Завершён" : "Текущий план";
-  const planColor = isDone ? "gray" : "blue";
+  const planTone = isDone ? "neutral" : "info";
   const stageItems = stages
     .filter((stage) => stage.parentId === plan.id)
     .map((stage) => ({
@@ -29,7 +29,7 @@ export const WorkPlan = (props: WorkPlanProps) => {
           statusLabel: { done: "Готово", active: "В работе", planned: "Запланировано" }[
             task.status
           ],
-          color: { done: "teal", active: "blue", planned: "gray" }[task.status],
+          tone: ({ done: "success", active: "info", planned: "neutral" } as const)[task.status],
         })),
     }));
   return (
@@ -40,14 +40,12 @@ export const WorkPlan = (props: WorkPlanProps) => {
           {plan.name}
           <ArrowUpRight size={14} aria-hidden="true" />
         </Link>
-        <Badge size="sm" variant="light" color={planColor}>
-          {planLabel}
-        </Badge>
+        <StatusBadge tone={planTone}>{planLabel}</StatusBadge>
       </header>
       {stageItems.map((stage) => (
         <section key={stage.id} className={styles.stage}>
           <h3 className={styles.stageTitle}>
-            <span className={styles.stageLabel}>ЭТАП</span>
+            <span className={styles.stageLabel}>Этап</span>
             <Link to={`${base}/work/${stage.id}`} state={{ returnTo }} className={styles.stageLink}>
               {stage.name}
             </Link>
@@ -63,9 +61,7 @@ export const WorkPlan = (props: WorkPlanProps) => {
                   >
                     {task.name}
                   </Link>
-                  <Badge size="xs" variant="light" color={task.color}>
-                    {task.statusLabel}
-                  </Badge>
+                  <StatusBadge tone={task.tone}>{task.statusLabel}</StatusBadge>
                 </div>
                 <p className={styles.result}>{task.result}</p>
                 <Link

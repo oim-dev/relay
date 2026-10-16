@@ -80,7 +80,12 @@ export const ContextNodeRelations = (props: ContextNodeRelationsProps) => {
         ))}
       </ul>
       {hasMore && (
-        <Button variant="subtle" size="xs" onClick={() => setVisibleCount((count) => count + 8)}>
+        <Button
+          variant="subtle"
+          color="gray"
+          size="xs"
+          onClick={() => setVisibleCount((count) => count + 8)}
+        >
           Ещё связи · показано {visibleItems.length} из {relationItems.length}
         </Button>
       )}

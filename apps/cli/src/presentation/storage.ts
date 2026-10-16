@@ -316,6 +316,9 @@ function stepTitle(step: StorageMigrationStep): string {
   const profile = /^profile\.(\d+)-to-(\d+)$/.exec(step.id);
   if (step.type === "profile" && profile)
     return `Метка профиля данных ${profile[1]} → ${profile[2]} (${step.id}, версия ${step.version})`;
+  const record = /^(.+)-v(\d+)-to-v(\d+)$/.exec(step.id);
+  if (step.type === "record" && record)
+    return `Переход записей ${record[1]} ${record[2]} → ${record[3]} (${step.id}, версия ${step.version})`;
   return `${step.id} — ${STEP_TYPES[step.type]} (версия ${step.version})`;
 }
 

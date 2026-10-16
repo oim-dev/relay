@@ -1,30 +1,43 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: var(--mantine-spacing-md);
+  gap: var(--tasks-space-3);
   min-width: 0;
 }
 
+/* Группа связей — светлая плитка на тонированной панели выбранной сущности. */
 .group {
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
-  background: var(--tasks-surface);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-row);
+  background: var(--tasks-tile);
   overflow: hidden;
 }
 
 .groupHeader {
-  padding: 12px var(--mantine-spacing-md);
+  padding: var(--tasks-space-3) var(--tasks-space-4);
   color: var(--tasks-muted);
-  background: var(--tasks-subtle);
+}
+
+.count {
+  min-width: 1.5rem;
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-card);
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+  line-height: 1.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .empty {
   display: flex;
   flex-direction: column;
-  gap: var(--mantine-spacing-xs);
-  padding: var(--mantine-spacing-xl);
-  border: 1px dashed var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
+  gap: var(--tasks-space-1);
+  padding: var(--tasks-space-8) var(--tasks-space-4);
+  border: 1px dashed var(--tasks-border-strong);
+  border-radius: var(--tasks-radius-row);
   text-align: center;
 }
 
@@ -36,8 +49,8 @@
 
 .pageControl {
   &[data-active] {
-    background: var(--tasks-ink);
-    color: var(--tasks-surface);
-    border-color: var(--tasks-ink);
+    border-color: var(--tasks-action-primary);
+    background: var(--tasks-action-primary);
+    color: var(--tasks-action-primary-text);
   }
 }

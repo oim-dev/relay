@@ -8,6 +8,7 @@ import { initialize } from "../src/storage/workspace.js";
 import { inspectPending } from "../src/storage/entity-store/transaction.js";
 import { manifestV4Profile1Schema } from "../src/storage/data-model/history/manifest-v4-profile1.js";
 import { intentV1Schema } from "../src/storage/data-model/history/intent-v1.js";
+import { CURRENT_DATA_MODEL } from "../src/storage/data-model/profiles.js";
 
 /**
  * A24: прежний клиент Relay 0.9.2 отказывается от базы нового профиля до изменения данных.
@@ -33,13 +34,13 @@ async function files(root: string, prefix = ""): Promise<Map<string, string>> {
   return result;
 }
 
-test("A24: строгий parser 0.9.2 отвергает manifest профиля 2 до изменения данных", async (t) => {
+test("A24: строгий parser 0.9.2 отвергает manifest текущего профиля до изменения данных", async (t) => {
   const directory = await realpath(await mkdtemp(join(tmpdir(), "relay-historical-client-")));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const workspace = await initialize(directory, "tasks");
   const root = dirname(workspace.configPath);
   const manifest = JSON.parse(await readFile(join(root, "storage.json"), "utf8"));
-  assert.equal(manifest.dataModelVersion, 2);
+  assert.equal(manifest.dataModelVersion, CURRENT_DATA_MODEL);
   const parsed = manifestV4Profile1Schema.safeParse(manifest);
   assert.equal(parsed.success, false);
   assert.deepEqual(
@@ -75,7 +76,7 @@ test("A24: WAL миграции (intent v2) прежний recovery отверг
       registryDigest: "a".repeat(64),
       planFingerprint: "b".repeat(64),
       source: { layout: "unified-4", physical: 4, profile: 1 },
-      target: { profile: 2 },
+      target: { profile: CURRENT_DATA_MODEL },
       transitions: ["profile-marker@1"],
       backup: { path: join(directory, "backup"), manifestSha256: "c".repeat(64) },
     },

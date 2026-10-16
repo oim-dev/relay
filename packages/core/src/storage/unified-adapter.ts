@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { JsonValue } from "@relay/contracts/storage";
-import { createEntityStorageRegistry } from "./entity-store/codecs.js";
+import { builtinDataVersion, createEntityStorageRegistry } from "./entity-store/codecs.js";
 import type { EntityRecord } from "./entity-store/registry.js";
 import type { EntityReference } from "./entity-store/references.js";
 import { EntityStorageRegistry } from "./entity-store/registry.js";
@@ -222,7 +222,7 @@ function metadata(
 ): EntityRecord {
   return {
     schemaVersion: 1,
-    dataVersion: 1,
+    dataVersion: kind === "scope" ? 1 : builtinDataVersion(kind),
     kind,
     id: record.id,
     revision: record.revision,

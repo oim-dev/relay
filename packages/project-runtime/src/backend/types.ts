@@ -82,6 +82,10 @@ export interface Backend {
     | "rename"
     | "moveTask"
     | "linkTask"
+    | "documentFacets"
+    | "documentBulk"
+    | "relateDocument"
+    | "entityDocuments"
   >;
   deletion: Pick<EntityDeletionService, "preview" | "delete">;
   documents: Pick<

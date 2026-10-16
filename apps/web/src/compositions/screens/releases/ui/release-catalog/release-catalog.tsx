@@ -1,13 +1,21 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Alert, Button, TextInput } from "@mantine/core";
-import { Plus, Rocket, Search } from "lucide-react";
+import { Alert, Button, CloseButton, Skeleton, TextInput, VisuallyHidden } from "@mantine/core";
+import { Plus, Search } from "lucide-react";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
 import { useReleases, releaseStatusFromValue } from "domains/releases";
 import { useProjectId } from "domains/project";
+import { PageHeader } from "ui/page-header";
+import { FilterChips } from "ui/filter-chips";
+import { SectionPanel } from "ui/section-panel";
+import { StatePanel } from "ui/state-panel";
+import { useInputDraft } from "ui/input-draft";
 import { ReleaseCard } from "./ui/release-card/release-card";
 import type { ReleaseCatalogProps } from "./types/release-catalog-props.type";
 import styles from "./styles/release-catalog.module.css";
+
+/** Число карточек-заготовок при первом чтении каталога. */
+const SKELETON_KEYS = ["first", "second", "third", "fourth"];
 
 /**
  * Показывает будущие и состоявшиеся выпуски отдельно от планирования работ.
@@ -21,6 +29,8 @@ export const ReleaseCatalog = (props: ReleaseCatalogProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const query = searchParams.get("q") ?? "";
+  // Поле поиска показывает локальный черновик, адрес синхронизирует его при Back/Forward.
+  const [queryDraft, handleSearch] = useInputDraft(query, (value) => handleFilter("q", value));
   const status = releaseStatusFromValue(searchParams.get("status")) ?? "all";
   const limit = Math.max(12, Number(searchParams.get("limit")) || 12);
   const releasesQuery = useReleases(
@@ -30,38 +40,54 @@ export const ReleaseCatalog = (props: ReleaseCatalogProps) => {
   );
   const counts = releasesQuery.data?.statusCounts;
   const filterItems = [
-    { value: "all", label: "Все релизы", count: counts?.all ?? "…" },
+    { value: "all", label: "Все", areaLabel: "Все релизы", count: counts?.all },
     {
       value: "planned",
       label: "Запланированные",
-      count: counts?.planned ?? "…",
+      areaLabel: "Запланированные релизы",
+      count: counts?.planned,
     },
     {
       value: "released",
       label: "Выпущенные",
-      count: counts?.released ?? "…",
+      areaLabel: "Выпущенные релизы",
+      count: counts?.released,
     },
     {
       value: "cancelled",
       label: "Отменённые",
-      count: counts?.cancelled ?? "…",
+      areaLabel: "Отменённые релизы",
+      count: counts?.cancelled,
     },
   ];
+  const areaLabel =
+    filterItems.find((filter) => filter.value === status)?.areaLabel ?? "Все релизы";
   const releaseItems = releasesQuery.data?.items ?? [];
   const total = releasesQuery.data?.total ?? 0;
+  const hasData = isDefined(releasesQuery.data);
   const hasError = isDefined(releasesQuery.error);
-  const isEmpty = !releasesQuery.isLoading && !hasError && isEmptyArray(releaseItems);
+  const isFirstLoading = !hasData && !hasError;
+  const filterOptions = filterItems.map((filter) => ({
+    ...filter,
+    count: filter.count ?? (isFirstLoading ? "…" : undefined),
+  }));
+  const isEmpty = hasData && isEmptyArray(releaseItems);
   const hasFilters = query !== "" || status !== "all";
   const hasMore = isDefined(releasesQuery.data?.nextOffset);
-  // Отказ чтения без данных не выдаётся за пустой результат.
-  const countLabel = releasesQuery.isLoading
-    ? "Ищем…"
-    : `Найдено: ${isDefined(releasesQuery.data) ? total : "—"}`;
+  const resultLabel = isFirstLoading ? "…" : total;
+  // Ошибка без прочитанного списка не даёт числа: ноль был бы ложным.
+  const hasResultCount = hasData || isFirstLoading;
+  const resultCount = hasResultCount ? (
+    <span role="status">
+      <VisuallyHidden>Найдено релизов: </VisuallyHidden>
+      {resultLabel}
+    </span>
+  ) : undefined;
   const emptyTitle = hasFilters ? "Релизы не найдены" : "Запланируйте первый выпуск";
   const emptyDescription = hasFilters
-    ? "Измените запрос или сбросьте фильтры."
+    ? "Измените запрос или сбросьте условия поиска и статуса."
     : "Выберите планы работ, которые войдут в релиз. Они могут ещё выполняться.";
-  const emptyAction = hasFilters ? "Сбросить фильтры" : "Создать релиз";
+  const emptyAction = hasFilters ? "Сбросить условия" : "Создать релиз";
 
   useEffect(() => {
     document.title = "Релизы · Relay";
@@ -83,86 +109,111 @@ export const ReleaseCatalog = (props: ReleaseCatalogProps) => {
       { replace: name === "q" },
     );
 
+  const clearButton = queryDraft !== "" && (
+    <CloseButton size="sm" aria-label="Очистить поиск" onClick={() => handleSearch("")} />
+  );
+
   return (
-    <div className={styles.root}>
-      <header className={styles.heading}>
-        <div>
-          <h1 ref={headingRef} tabIndex={-1} className={styles.title}>
-            Релизы
-          </h1>
-          <p className={styles.subtitle}>Соберите планы в выпуск и запланируйте его заранее.</p>
-        </div>
-        <Button leftSection={<Plus size={15} />} onClick={onCreate}>
-          Создать релиз
-        </Button>
-      </header>
-      <div className={styles.filters} role="group" aria-label="Статус релиза">
-        {filterItems.map((filter) => (
-          <button
-            key={filter.value}
-            type="button"
-            className={styles.filter}
-            aria-pressed={status === filter.value}
-            onClick={() => handleFilter("status", filter.value)}
-          >
-            {filter.label}
-            <span>{filter.count}</span>
-          </button>
-        ))}
-      </div>
-      <div className={styles.toolbar}>
-        <TextInput
-          className={styles.search}
-          aria-label="Поиск релизов"
-          placeholder="Название, версия или ключ"
-          leftSection={<Search size={14} />}
-          value={query}
-          onChange={(event) => handleFilter("q", event.currentTarget.value)}
+    <>
+      <PageHeader
+        title="Релизы"
+        titleRef={headingRef}
+        description="Соберите планы в выпуск и запланируйте его заранее. Статус выпуска и готовность его планов показаны отдельно."
+        actionsLayout="toolbar"
+        actions={
+          <>
+            <TextInput
+              className={styles.search}
+              type="search"
+              size="md"
+              aria-label="Поиск релизов"
+              placeholder="Название, версия или ключ"
+              leftSection={<Search size={17} aria-hidden="true" />}
+              rightSection={clearButton}
+              value={queryDraft}
+              onChange={(event) => handleSearch(event.currentTarget.value)}
+            />
+            <Button
+              size="md"
+              className={styles.create}
+              leftSection={<Plus size={17} aria-hidden="true" />}
+              onClick={onCreate}
+            >
+              Создать релиз
+            </Button>
+          </>
+        }
+      />
+      <SectionPanel title={areaLabel} density="compact" count={resultCount}>
+        <FilterChips
+          className={styles.filters}
+          label="Статус релиза"
+          options={filterOptions}
+          value={status}
+          onChange={(value) => handleFilter("status", value)}
         />
-        <span className={styles.count} role="status">
-          {countLabel}
-        </span>
-      </div>
-      {releasesQuery.isLoading && <p role="status">Загружаем релизы…</p>}
-      {hasError && (
-        <Alert color="red">
-          {releasesQuery.error?.message}
-          <Button size="xs" variant="subtle" onClick={() => void releasesQuery.mutate()}>
-            Повторить
-          </Button>
-        </Alert>
-      )}
-      {isEmpty && (
-        <div className={styles.empty}>
-          <Rocket size={30} strokeWidth={1.4} />
-          <h2>{emptyTitle}</h2>
-          <p>{emptyDescription}</p>
+        {hasError && hasData && (
+          <Alert color="warning" title="Не удалось обновить релизы">
+            Показан последний прочитанный список. {releasesQuery.error?.message}
+            <Button size="xs" variant="subtle" onClick={() => void releasesQuery.mutate()}>
+              Повторить чтение
+            </Button>
+          </Alert>
+        )}
+        {hasError && !hasData && (
+          <StatePanel
+            state="error"
+            title="Релизы не удалось прочитать"
+            description={releasesQuery.error?.message ?? "Сервер не ответил на запрос каталога."}
+            action={
+              <Button variant="default" onClick={() => void releasesQuery.mutate()}>
+                Повторить чтение
+              </Button>
+            }
+          />
+        )}
+        {isFirstLoading && (
+          <div className={styles.grid} role="status" aria-label="Загружаем релизы">
+            {SKELETON_KEYS.map((key) => (
+              <Skeleton key={key} height={248} radius="xl" />
+            ))}
+          </div>
+        )}
+        {isEmpty && (
+          <StatePanel
+            title={emptyTitle}
+            description={emptyDescription}
+            action={
+              <Button
+                variant="default"
+                onClick={() => {
+                  if (hasFilters) setSearchParams({});
+                  else onCreate();
+                }}
+              >
+                {emptyAction}
+              </Button>
+            }
+          />
+        )}
+        {!isEmptyArray(releaseItems) && (
+          <div className={styles.grid}>
+            {releaseItems.map((release) => (
+              <ReleaseCard key={release.id} release={release} basePath={basePath} />
+            ))}
+          </div>
+        )}
+        {hasMore && (
           <Button
             variant="default"
-            onClick={() => {
-              if (hasFilters) setSearchParams({});
-              else onCreate();
-            }}
+            className={styles.more}
+            loading={releasesQuery.isValidating}
+            onClick={() => handleFilter("limit", String(limit + 12))}
           >
-            {emptyAction}
+            Показать ещё · {releaseItems.length} из {total}
           </Button>
-        </div>
-      )}
-      <div className={styles.grid}>
-        {releaseItems.map((release) => (
-          <ReleaseCard key={release.id} release={release} basePath={basePath} />
-        ))}
-      </div>
-      {hasMore && (
-        <Button
-          variant="default"
-          className={styles.more}
-          loading={releasesQuery.isValidating}
-          onClick={() => handleFilter("limit", String(limit + 12))}
-        >
-          Показать ещё · {releaseItems.length} из {total}
-        </Button>
-      )}
-    </div>
+        )}
+      </SectionPanel>
+    </>
   );
 };

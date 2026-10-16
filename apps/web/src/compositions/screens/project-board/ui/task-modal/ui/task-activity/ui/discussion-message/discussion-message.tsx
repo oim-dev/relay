@@ -49,10 +49,10 @@ export const DiscussionMessage = (props: DiscussionMessageProps) => {
         <Text component="h4" id={titleId} className={styles.title}>
           {entry.title}
         </Text>
-        {query.isLoading && <Skeleton height={14} width="65%" mt={8} />}
+        {query.isLoading && <Skeleton height="0.875rem" width="65%" mt="xs" />}
         {hasError && (
           <div role="alert" className={styles.error}>
-            <Text size="sm" c="red">
+            <Text size="sm" c="danger">
               {query.error?.message}
             </Text>
             <Button

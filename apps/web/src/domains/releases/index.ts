@@ -9,7 +9,7 @@ export type {
 } from "./types/release.type";
 export {
   RELEASE_STATUS_LABELS,
-  RELEASE_STATUS_COLORS,
+  RELEASE_STATUS_TONES,
   RELEASE_STATUS_OPTIONS,
   releaseStatusFromValue,
 } from "./config/releases.config";

@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   ActionIcon,
   Anchor,
-  Badge,
   Button,
   Collapse,
   Group,
@@ -68,7 +67,7 @@ export const RelationCard = ({
           onClick={() => onSelect(address)}
           aria-label={`Связи: ${label}`}
         >
-          <ThemeIcon variant="light" color={presentation.color} size={32} radius="md">
+          <ThemeIcon variant="light" color="accent" size={32}>
             <presentation.icon size={17} aria-hidden="true" />
           </ThemeIcon>
           <span className={styles.label}>
@@ -104,9 +103,7 @@ export const RelationCard = ({
             >
               {fromLabel}
             </Anchor>
-            <Badge variant="light" color="gray" tt="none">
-              {getRelationLabel(edge.type)} →
-            </Badge>
+            <span className={styles.type}>{getRelationLabel(edge.type)} →</span>
             <Anchor
               component="button"
               size="sm"
@@ -132,7 +129,7 @@ export const RelationCard = ({
           {shouldShowRemove && (
             <Button
               variant="subtle"
-              color="red"
+              color="danger"
               size="compact-xs"
               onClick={() => setConfirming(true)}
               className={styles.remove}
@@ -149,7 +146,7 @@ export const RelationCard = ({
               <Group gap="xs">
                 <Button
                   size="xs"
-                  color="red"
+                  color="danger"
                   loading={isRemoving}
                   onClick={() => void handleRemove()}
                 >

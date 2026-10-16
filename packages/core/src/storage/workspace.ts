@@ -234,6 +234,9 @@ export class Workspace {
     }
     if (await this.hasUnifiedStorage())
       return this.withEntityStorage(async (store, assertOwned) => {
+        // Сначала профиль: на устаревшем профиле reindex невозможен, отметка внешних
+        // изменений для миграции — лишь предупреждение, и её снимает storage migrate.
+        store.requireCompatible();
         invariant(
           !(await exists(join(store.root, "runtime/index-stale.json"))),
           "STORAGE_INDEX_STALE",

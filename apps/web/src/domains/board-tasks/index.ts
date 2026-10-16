@@ -20,6 +20,7 @@ export {
   linkBoardTask,
   getBoardTask,
   BoardTaskError,
+  BoardTaskNotFoundError,
   getTaskCriterion,
   changeTaskCriterion,
   publishTaskComment,

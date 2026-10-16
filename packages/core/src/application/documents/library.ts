@@ -29,6 +29,7 @@ import {
   resolveEntity,
 } from "../entities/catalog.js";
 import { resolveEntityCard } from "../entities/indexed-catalog.js";
+import { storedDocumentTarget } from "../entities/document-library.js";
 import { readDocumentRecord, documentReferences } from "./read.js";
 
 function page<T>(
@@ -141,7 +142,15 @@ export class DocumentLibraryService {
       invariant(record.data.kind === "document", "INVALID_ARGUMENT", "Нужен документ");
       assertRevision(record, command.ifRevision);
       const engine = new EntityEngine(this.workspace);
-      const target = await engine.resolve({ ref: command.target });
+      // Снятие ищет сохранённую цель по полному адресу без разрешения сущности: иначе связь
+      // с прежним адресом этапа плана (ENTITY_RELOCATED) или удалённой целью не убрать.
+      // Добавление по-прежнему разрешает цель; прежний адрес этапа даёт ENTITY_RELOCATED.
+      const stored =
+        command.action === "unlink" ? storedDocumentTarget(record.data, command.target) : undefined;
+      // Сохранённая цель взята из полей этого документа, поэтому её вид допустим для связи.
+      const target = stored
+        ? { ref: stored as NonNullable<typeof record.data.relations>[number]["target"] }
+        : await engine.resolve({ ref: command.target });
       let changes;
       if (command.source === "links") {
         const targets = record.data.links.map(

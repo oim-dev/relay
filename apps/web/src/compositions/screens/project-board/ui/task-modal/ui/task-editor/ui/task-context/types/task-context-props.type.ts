@@ -14,6 +14,6 @@ export type TaskContextParams = {
   onOwnRevision: (revision: number) => void;
 };
 /** Атрибуты корневого элемента. */
-type RootAttrs = Omit<ComponentPropsWithoutRef<"div">, "children">;
+type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children" | "title">;
 /** Свойства визуальной области. */
 export type TaskContextProps = RootAttrs & TaskContextParams;

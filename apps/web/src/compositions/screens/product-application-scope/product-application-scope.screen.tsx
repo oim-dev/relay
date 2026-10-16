@@ -1,9 +1,14 @@
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { useProductRoute } from "compositions/widgets/product-page";
-import { findProductEntry, ProductKey } from "domains/product";
 import { Button } from "@mantine/core";
+import { findProductEntry, ProductKey } from "domains/product";
 import { useProductDemo } from "domains/product-demo";
-import { getProductReturn, ProductPage, useProductPath } from "compositions/widgets/product-page";
+import {
+  getProductReturn,
+  ProductPage,
+  useProductPath,
+  useProductRoute,
+} from "compositions/widgets/product-page";
+import { PageStage } from "ui/page-stage";
 import { StatePanel } from "ui/state-panel";
 import { ApplicationScopeForm } from "./ui/application-scope-form";
 
@@ -22,15 +27,18 @@ export const ProductApplicationScopeScreen = () => {
   const application = snapshot.applications.find((entry) => entry.id === applicationId);
   if (application === undefined)
     return (
-      <StatePanel
-        title="Приложение не найдено"
-        description="Откройте настройку из списка приложений."
-        action={
-          <Button component={Link} to={`${base}/applications`}>
-            К приложениям
-          </Button>
-        }
-      />
+      <PageStage>
+        <StatePanel
+          titleAs="h1"
+          title="Приложение не найдено"
+          description="Такого приложения нет в продукте. Откройте настройку из списка приложений."
+          action={
+            <Button component={Link} to={`${base}/applications`} variant="default">
+              К приложениям
+            </Button>
+          }
+        />
+      </PageStage>
     );
   const backTo = getProductReturn(
     location.state,
@@ -45,10 +53,12 @@ export const ProductApplicationScopeScreen = () => {
     <ProductPage
       title={`Реализация: ${application.name}`}
       description="Выберите фичи и сценарии, затем опишите, что приложение должно обеспечить в каждом из них."
-      eyebrow="ПРОДУКТ / ПРИЛОЖЕНИЕ"
-      backTo={backTo}
-      backLabel="К приложению"
-      meta={<ProductKey value={application.key} copyable />}
+      meta={
+        <>
+          <span>Состав приложения</span>
+          <ProductKey value={application.key} copyable />
+        </>
+      }
     >
       <ApplicationScopeForm
         key={draftScope}

@@ -2,7 +2,7 @@
   display: grid;
   gap: 0.125rem;
   padding: 0.625rem 0.875rem 0.6875rem;
-  border-radius: 1rem;
+  border-radius: var(--tasks-radius-row);
   background: var(--tasks-tile);
 }
 
@@ -14,7 +14,7 @@
   min-height: 1.5rem;
   padding-block: 0.125rem;
   color: var(--tasks-ink);
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   text-decoration: none;
 
   &:hover .title {
@@ -27,7 +27,7 @@
   flex: none;
   max-width: 45%;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   font-weight: 550;
   overflow-wrap: anywhere;
 }
@@ -44,7 +44,7 @@
   gap: 0 0.75rem;
   margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
+  font-size: var(--mantine-font-size-xs);
   font-variant-numeric: tabular-nums;
 }
 

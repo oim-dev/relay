@@ -85,6 +85,7 @@ const missing = new Set([
   "PROJECT_NOT_FOUND",
   "PROJECT_RECORD_NOT_FOUND",
   "PROJECT_REFERENCE_NOT_FOUND",
+  "RELATION_NOT_FOUND",
   "ENTITY_RELOCATED",
 ]);
 const httpCodes: Record<number, string> = {

@@ -1,27 +1,32 @@
+/*
+ * Путь страницы на общей подложке, без собственной полосы и разделителя. Текст первого
+ * уровня стоит на вертикали начала контента: внутреннее поле ссылки вынесено влево.
+ * Уровни переносятся на следующую строку, а не сжимаются до нескольких букв.
+ */
 .root {
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 3rem;
-  padding-inline: var(--tasks-page-gutter);
-  border-bottom: 1px solid var(--tasks-border);
-  background: var(--tasks-chrome);
+  min-height: 2.75rem;
+  margin-left: calc(var(--tasks-space-2) * -1);
+  padding-block: var(--tasks-space-1);
 
   &._embedded {
-    padding-inline: 0;
-    margin-bottom: var(--mantine-spacing-md);
-    background: transparent;
+    min-height: 0;
+    margin-bottom: var(--tasks-space-4);
   }
 }
 
 .trail {
   flex: 1;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  row-gap: 0.125rem;
   min-width: 0;
 }
 
 .crumb {
   min-width: 0;
+  max-width: 100%;
   flex: 0 1 auto;
 }
 

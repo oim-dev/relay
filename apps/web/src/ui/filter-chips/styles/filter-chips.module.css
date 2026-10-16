@@ -1,0 +1,64 @@
+/* Варианты переносятся на следующую строку: на телефоне ни один не уходит за край. */
+.root {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tasks-space-2);
+}
+
+/* Выбранный вариант использует роль текущего места навигации, а не цвет состояния. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tasks-space-2);
+  min-height: var(--tasks-control-height-compact);
+  padding: 0 var(--tasks-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-tile);
+  color: var(--tasks-muted);
+  font: inherit;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background-color var(--tasks-duration-control) var(--tasks-easing-standard),
+    color var(--tasks-duration-control) var(--tasks-easing-standard);
+
+  &:hover {
+    background: var(--tasks-tile-hover);
+    color: var(--tasks-ink);
+  }
+
+  &[aria-pressed="true"] {
+    background: var(--tasks-nav-current-surface);
+    color: var(--tasks-nav-current-ink);
+    font-weight: 650;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    min-height: var(--tasks-touch-target);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
+
+    &[aria-pressed="true"] {
+      border-width: 2px;
+    }
+  }
+}
+
+.count {
+  color: inherit;
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}

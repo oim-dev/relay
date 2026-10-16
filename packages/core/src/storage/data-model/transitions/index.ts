@@ -5,6 +5,7 @@ import { DATA_MODEL_PROFILES } from "../profiles.js";
 import { createTransitionRegistry } from "../registry.js";
 import type { TransitionRegistry } from "../registry.js";
 import type { DataTransition, PhysicalRecordCatalog, PhysicalTransition } from "../types.js";
+import { documentV1ToV2 } from "./document-v1-to-v2.js";
 import { planningV1ToV2 } from "./planning-v1-to-v2.js";
 import { physicalLegacy } from "./physical-legacy.js";
 import { physicalUnified1, physicalUnified2, physicalUnified3 } from "./physical-unified.js";
@@ -15,9 +16,12 @@ import { physicalUnified1, physicalUnified2, physicalUnified3 } from "./physical
  * здесь; движок обхода и планирования их не перечисляет.
  *
  * Пакеты переноса подключают свои определения добавлением в эти списки:
- * физические unified 1/2/3 и legacy → 4, предметный planning v1 → v2.
+ * физические unified 1/2/3 и legacy → 4, предметные planning v1 → v2 и document v1 → v2.
  */
-export const DATA_TRANSITIONS: readonly DataTransition[] = Object.freeze([planningV1ToV2]);
+export const DATA_TRANSITIONS: readonly DataTransition[] = Object.freeze([
+  planningV1ToV2,
+  documentV1ToV2,
+]);
 export const PHYSICAL_TRANSITIONS: readonly PhysicalTransition[] = Object.freeze([
   physicalLegacy,
   physicalUnified1,

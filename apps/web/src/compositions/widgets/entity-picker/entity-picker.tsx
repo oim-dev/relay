@@ -14,8 +14,11 @@ import type { ComboboxItem } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { relationAddress } from "domains/relations";
 import { useEntities, useEntitySummary, entityKindLabel } from "domains/entities";
-import { isEmptyArray } from "shared/value-predicates";
+import { isDefined, isEmptyArray } from "shared/value-predicates";
 import type { EntityPickerProps } from "./types/entity-picker-props.type";
+
+/** Ширина списка вариантов: длинные названия и переход по страницам без обрезки. */
+const OPTIONS_WIDTH = "min(22rem, calc(100vw - 2rem))";
 
 /**
  * Выбирает сущность проекта по названию, ключу или адресу.
@@ -57,13 +60,22 @@ export const EntityPicker = (props: EntityPickerProps) => {
     (response.data?.total ?? 0) > page.offset + 40;
   const errorMessage = response.error?.message ?? selection.error?.message;
   const hasError = errorMessage !== undefined;
-  const emptyMessage = response.isLoading ? "Загружаем сущности…" : "Сущностей не найдено";
+  // Отказ чтения без данных не выдаётся за пустой результат.
+  const hasData = response.data !== undefined;
+  const emptyMessage = response.isLoading
+    ? "Загружаем сущности…"
+    : hasData
+      ? "Сущностей не найдено"
+      : "Список сущностей не загружен";
   const inputValue = combobox.dropdownOpened ? search : (selectedLabel ?? "");
   const hasSelection = selected !== null && selected !== "";
   const hasPrevious = page.offset > 0;
   const hasPages = hasMore || hasPrevious;
   const hasNoOptions = isEmptyArray(optionsData);
-  const pageLabel = `${page.offset + 1}–${Math.min(page.offset + 40, response.data?.total ?? 0)} из ${response.data?.total ?? 0}`;
+  const total = response.data?.total;
+  const pageLabel = isDefined(total)
+    ? `${page.offset + 1}–${Math.min(page.offset + 40, total)} из ${total}`
+    : "—";
   /** Сбрасывает продолжение при изменении серверного поиска. */
   const handleSearch = (text: string): void => {
     setSearch(text);
@@ -79,6 +91,8 @@ export const EntityPicker = (props: EntityPickerProps) => {
     <Stack gap={4}>
       <Combobox
         store={combobox}
+        width={OPTIONS_WIDTH}
+        position="bottom-start"
         onOptionSubmit={(address) => {
           const option = optionsData.find((entry) => entry.value === address);
           if (option === undefined) return;
@@ -131,20 +145,28 @@ export const EntityPicker = (props: EntityPickerProps) => {
             if (!event.currentTarget.contains(event.relatedTarget)) combobox.closeDropdown();
           }}
         >
-          <ScrollArea.Autosize mah={240} type="auto">
+          <ScrollArea.Autosize mah={240} type="auto" scrollbars="y">
             <Combobox.Options>
               {optionsData.map((option) => (
                 <Combobox.Option key={option.value} value={option.value}>
-                  <Text size="sm">{option.label}</Text>
+                  <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                    {option.label}
+                  </Text>
                 </Combobox.Option>
               ))}
               {hasNoOptions && <Combobox.Empty>{emptyMessage}</Combobox.Empty>}
             </Combobox.Options>
           </ScrollArea.Autosize>
           {hasPages && (
-            <Group justify="space-between" p="xs" onMouseDown={(event) => event.preventDefault()}>
+            <Group
+              justify="space-between"
+              gap="xs"
+              p="xs"
+              wrap="nowrap"
+              onMouseDown={(event) => event.preventDefault()}
+            >
               <Button
-                size="compact-xs"
+                size="xs"
                 variant="subtle"
                 disabled={!hasPrevious}
                 onClick={() =>
@@ -156,11 +178,11 @@ export const EntityPicker = (props: EntityPickerProps) => {
               >
                 Назад
               </Button>
-              <Text size="xs" c="dimmed">
+              <Text size="xs" c="dimmed" ta="center">
                 {pageLabel}
               </Text>
               <Button
-                size="compact-xs"
+                size="xs"
                 variant="subtle"
                 disabled={!hasMore}
                 onClick={() =>
@@ -174,14 +196,14 @@ export const EntityPicker = (props: EntityPickerProps) => {
         </Combobox.Dropdown>
       </Combobox>
       {hasError && (
-        <Stack gap={4}>
-          <Text size="xs" c="red" role="alert">
+        <Group gap="xs" align="center" role="alert">
+          <Text size="xs" c="danger">
             {errorMessage}
           </Text>
-          <Button size="compact-xs" variant="subtle" onClick={handleRefresh}>
+          <Button size="xs" variant="subtle" onClick={handleRefresh}>
             Обновить варианты
           </Button>
-        </Stack>
+        </Group>
       )}
     </Stack>
   );

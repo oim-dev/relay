@@ -14,7 +14,10 @@ import type {
   StoredKeySpace,
 } from "@relay/contracts/storage";
 import { entityAddress, entityRefSchema } from "@relay/contracts/entities/graph";
-import { STORAGE_MAINTENANCE_ERROR_EXIT_CODES } from "@relay/contracts/storage-maintenance";
+import {
+  STORAGE_MAINTENANCE_ERROR_EXIT_CODES,
+  entityRelocatedDetailsSchema,
+} from "@relay/contracts/storage-maintenance";
 import type { EntityRef } from "@relay/contracts/entities/graph";
 import { actorSchema, requestIdSchema, entityReferenceSchema } from "@relay/contracts/primitives";
 import { AppError, invariant, isErrno } from "../../shared/errors.js";
@@ -64,7 +67,10 @@ const kindSchema = entityRefSchema.shape.kind;
 /** Последний увиденный процессом manifest каждой базы: смена профиля сбрасывает кеши. */
 const seenManifests = new Map<string, string>();
 
-/** Прежний адрес перенесён другому владельцу; details называют новый адрес. */
+/**
+ * Прежний адрес перенесён другому владельцу; details по entityRelocatedDetailsSchema
+ * называют прежний адрес, адрес владельца, ID и ключ этапа. Это единственный источник ошибки.
+ */
 export function entityRelocated(
   from: EntityRef,
   key: string | null,
@@ -75,14 +81,14 @@ export function entityRelocated(
     "ENTITY_RELOCATED",
     `Адрес ${key ?? entityAddress(from)} перенесён: используйте ${to}`,
     STORAGE_MAINTENANCE_ERROR_EXIT_CODES.ENTITY_RELOCATED,
-    {
+    entityRelocatedDetailsSchema.parse({
       code: "ENTITY_RELOCATED",
       from: entityAddress(from),
       to,
       stageId: target.stageId,
       key,
       next: `Используйте адрес ${to}`,
-    },
+    }),
   );
 }
 

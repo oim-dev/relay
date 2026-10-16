@@ -1,0 +1,229 @@
+/*
+ * Пример каркаса на общей подложке. Геометрия повторяет compositions/layouts/project
+ * теми же токенами: высота шапки, поле рабочей области, промежуток сайдбара, ширина
+ * сайдбара и порог --lg. Подложка нарисована на области примера (в приложении — на окне),
+ * шапка и сайдбар своей заливки, рамок и теней не имеют. Модификатор _mobile фиксирует
+ * узкую раскладку независимо от ширины окна.
+ */
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--tasks-radius-row);
+  background-color: var(--tasks-backdrop);
+  background-image: var(--tasks-backdrop-image);
+  background-repeat: no-repeat;
+  color: var(--tasks-ink);
+
+  /* Ширина узкого окна 390px: пример показывает раскладку телефона. */
+  &._mobile {
+    max-width: 24.375rem;
+  }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tasks-space-3);
+  min-height: var(--tasks-app-header-height);
+  padding: var(--tasks-space-3) var(--tasks-workspace-gutter);
+
+  /* Значок бренда стоит на одной вертикали со значками пунктов сайдбара. */
+  @media (--lg) {
+    &:not(._mobile) {
+      padding-left: calc(var(--tasks-space-2) + var(--tasks-space-3));
+    }
+  }
+}
+
+.identity {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--tasks-space-3);
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--tasks-space-3);
+}
+
+.menuToggle {
+  flex-shrink: 0;
+
+  @media (--lg) {
+    &:not(._mobile) {
+      display: none;
+    }
+  }
+}
+
+.brandIcon {
+  display: none;
+  flex-shrink: 0;
+  color: var(--tasks-muted);
+
+  @media (--sm) {
+    &:not(._mobile) {
+      display: block;
+    }
+  }
+}
+
+.brand {
+  display: none;
+  font-size: var(--mantine-font-size-lg);
+  font-weight: 750;
+  letter-spacing: -0.045em;
+
+  @media (--md) {
+    &:not(._mobile) {
+      display: inline;
+    }
+  }
+}
+
+.divider {
+  display: none;
+  color: var(--tasks-soft);
+
+  @media (--md) {
+    &:not(._mobile) {
+      display: inline;
+    }
+  }
+}
+
+/* Поле рабочей области у края; рядом с сайдбаром — промежуток сайдбара. */
+.workspace {
+  display: flex;
+  flex-direction: column;
+  padding-inline: var(--tasks-workspace-gutter);
+
+  @media (--lg) {
+    &:not(._mobile) {
+      flex-direction: row;
+      gap: var(--tasks-sidebar-gap);
+      padding-left: 0;
+    }
+  }
+}
+
+.sidebar {
+  display: none;
+
+  @media (--lg) {
+    display: flex;
+    flex: 0 0 13.75rem;
+    flex-direction: column;
+    padding: var(--tasks-space-3) 0 var(--tasks-space-4) var(--tasks-space-2);
+  }
+}
+
+.sectionLabel {
+  margin: 0;
+  padding: 0 var(--tasks-space-3) var(--tasks-space-3);
+  color: var(--tasks-soft);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Ритм PageStage: панели и заголовок через зазор --tasks-panel-gap. */
+.stage {
+  display: grid;
+  gap: var(--tasks-panel-gap);
+  min-width: 0;
+  padding: var(--tasks-space-1) 0 var(--tasks-workspace-gutter);
+}
+
+.pageHeader {
+  display: grid;
+  gap: var(--tasks-space-1);
+  min-width: 0;
+  padding-bottom: var(--tasks-space-2);
+}
+
+.meta {
+  margin: 0;
+  overflow: hidden;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: var(--tasks-font-size-page-title);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.grid {
+  display: grid;
+  gap: var(--tasks-panel-gap);
+  min-width: 0;
+
+  @media (--md) {
+    &:not(._mobile) {
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    }
+  }
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.metric {
+  display: flex;
+  align-items: baseline;
+  gap: var(--tasks-space-2);
+  margin: 0;
+  font-size: var(--tasks-font-size-metric-max);
+  font-weight: 700;
+  line-height: var(--tasks-line-height-metric);
+  font-variant-numeric: tabular-nums;
+}
+
+.metricNote {
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+}
+
+.rows {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.note {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+}

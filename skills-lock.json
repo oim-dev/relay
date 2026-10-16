@@ -11,13 +11,13 @@
       "source": "gromlab-ru/rest-api-codegen",
       "sourceType": "github",
       "skillPath": "skills/rest-api-codegen-ru/SKILL.md",
-      "computedHash": "d5ef9c3ae0f68664b01b5526ea4706a3fa532cb93065185287328ab20d7ca5a1"
+      "computedHash": "386581db840e040250979678f579324807e7f35707ce2f7c14bacde9cbc3cb66"
     },
     "svg-sprites-ru": {
       "source": "gromlab-ru/svg-sprites",
       "sourceType": "github",
       "skillPath": "skills/svg-sprites-ru/SKILL.md",
-      "computedHash": "cc9370059c7bd50250035013681b25546c86b744dde00e7afcaacae3cdada32f"
+      "computedHash": "199ceac57a32817e08610736349920475d751f559e59d509174897c6fe1fcfed"
     },
     "unit-architecture": {
       "source": "gromlab-ru/unit-architecture",

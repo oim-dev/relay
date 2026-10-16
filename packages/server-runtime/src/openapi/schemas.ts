@@ -79,6 +79,15 @@ import {
   entityDeletedSchema,
 } from "@relay/contracts/entities";
 import {
+  documentBulkResultSchema,
+  documentBulkSchema,
+  documentFacetsQuerySchema,
+  documentFacetsSchema,
+  documentRelationChangeSchema as entityDocumentRelationChangeSchema,
+  entityDocumentsPageSchema,
+  entityDocumentsQuerySchema,
+} from "@relay/contracts/entities/document-catalog";
+import {
   graphPageSchema,
   graphQuerySchema,
   graphMutationSchema,
@@ -233,6 +242,13 @@ export const schemas = {
   MoveEntityTask: entityMoveTaskSchema,
   LinkEntityTask: entityLinkTaskSchema,
   EntitySaved: entitySavedSchema,
+  DocumentFacetsQuery: documentFacetsQuerySchema,
+  DocumentFacets: documentFacetsSchema,
+  DocumentBulk: documentBulkSchema,
+  DocumentBulkResult: documentBulkResultSchema,
+  EntityDocumentRelationChange: entityDocumentRelationChangeSchema,
+  EntityDocumentsQuery: entityDocumentsQuerySchema,
+  EntityDocumentsPage: entityDocumentsPageSchema,
   GraphPage: graphPageSchema,
   GraphQuery: graphQuerySchema,
   GraphMutation: graphMutationSchema,

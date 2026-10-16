@@ -68,10 +68,11 @@ export const ScopeTree = (props: ScopeTreeProps) => {
     <div {...rootAttrs} className={clsx(styles.root, className)}>
       <div className={styles.controls}>
         <h2 className={styles.title}>1. Выберите состав</h2>
-        <Text size="xs" c="dimmed">
+        <Text size="sm" c="dimmed">
           Чекбокс включает в реализацию. Название открывает описание вклада.
         </Text>
         <TextInput
+          type="search"
           aria-label="Найти фичу или сценарий для приложения"
           placeholder="Найти фичу или сценарий…"
           value={query}
@@ -92,7 +93,7 @@ export const ScopeTree = (props: ScopeTreeProps) => {
       </div>
       <div className={styles.items}>
         {hasNoResults && (
-          <Text size="sm" c="dimmed" p="md">
+          <Text size="sm" c="dimmed" role="status" className={styles.noResults}>
             Нет подходящих элементов. Измените поиск или покажите все фичи.
           </Text>
         )}

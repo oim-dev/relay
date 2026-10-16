@@ -122,6 +122,7 @@ for (const mode of ["local", "workspace"] as const) {
               "relay-projects-v1",
               "relay-full-context-v1",
               "relay-overview-metrics-v1",
+              "relay-document-materials-v1",
               "relay-document-library-v1",
               "relay-product-queries-v1",
               "relay-work-read-models-v1",
@@ -293,7 +294,11 @@ test("config GET: manifest/миграционный WAL сохраняют ош�
   for (const [manifest, status, code] of [
     [unmarked, 200, undefined],
     [{ format: "relay-entities", schemaVersion: 3 }, 200, undefined],
-    [{ ...current, dataModelVersion: 3 }, 409, "STORAGE_VERSION_UNSUPPORTED"],
+    [
+      { ...current, dataModelVersion: current.dataModelVersion + 1 },
+      409,
+      "STORAGE_VERSION_UNSUPPORTED",
+    ],
     [{ format: "unknown", schemaVersion: 4 }, 409, "STORAGE_FORMAT_UNKNOWN"],
   ] as const) {
     await writeFile(manifestPath, JSON.stringify(manifest));
@@ -366,7 +371,10 @@ test("config GET: конфликт ordinary WAL и будущий профиль
       await writeFile(recordPath, recordBytes);
       const manifestPath = join(project.dataRoot, "storage.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      await writeFile(manifestPath, JSON.stringify({ ...manifest, dataModelVersion: 3 }));
+      await writeFile(
+        manifestPath,
+        JSON.stringify({ ...manifest, dataModelVersion: manifest.dataModelVersion + 1 }),
+      );
     }
     const before = await snapshot(root);
     let first;

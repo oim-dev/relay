@@ -1,44 +1,55 @@
+/*
+ * Холст графа: собственная область с камерой React Flow. Размеры карточек, отступы
+ * и сетка фона — геометрия раскладки ELK (config/context-canvas.config.ts), цвета — роли темы.
+ */
 .root {
   height: 100%;
-  min-height: 470px;
+  min-height: 29.375rem;
   min-width: 0;
   background: var(--tasks-canvas);
   --xy-background-color: var(--tasks-canvas);
   --xy-node-boxshadow-selected: none;
-  /* Библиотека задаёт серый текст ссылки; тёмная подложка обеспечивает контраст в обеих темах. */
-  --xy-attribution-background-color: var(--mantine-color-dark-8);
+  --xy-attribution-background-color: var(--tasks-surface);
+
+  /* Подпись библиотеки — на поверхности темы с читаемым вторичным текстом в обеих схемах. */
+  & :global(.react-flow__attribution a) {
+    color: var(--tasks-muted);
+  }
 }
 
 .panel {
-  border-radius: var(--mantine-radius-sm);
+  border-radius: var(--tasks-radius-control);
+  background: var(--tasks-surface);
   box-shadow: var(--tasks-card-shadow);
 }
 
 .notice {
-  padding: var(--mantine-spacing-xs);
-  border-radius: var(--mantine-radius-sm);
+  padding: var(--tasks-space-2);
+  border-radius: var(--tasks-radius-control);
   background: var(--tasks-surface);
   color: var(--tasks-muted);
 }
 
+/* Легенда — значимые подписи: не меньше 12px, обозначения совпадают с рамками карточек. */
 .legend {
   display: flex;
   flex-wrap: wrap;
-  max-width: calc(100% - 32px);
-  gap: var(--mantine-spacing-md);
-  padding: 7px 10px;
-  border-radius: var(--mantine-radius-sm);
+  max-width: calc(100% - var(--tasks-space-8));
+  gap: var(--tasks-space-1) var(--tasks-space-4);
+  padding: var(--tasks-space-2) var(--tasks-space-3);
+  border-radius: var(--tasks-radius-control);
   background: var(--tasks-surface);
   color: var(--tasks-muted);
-  font-size: 10px;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.4;
 }
 
-.origin {
-  border-left: 3px solid var(--mantine-color-blue-6);
-  padding-left: 6px;
+.origin,
+.selected {
+  padding-left: 0.375rem;
+  border-left: 3px solid var(--tasks-accent);
 }
 
 .selected {
-  border-left: 3px solid var(--mantine-color-teal-6);
-  padding-left: 6px;
+  border-left-color: var(--tasks-ink);
 }

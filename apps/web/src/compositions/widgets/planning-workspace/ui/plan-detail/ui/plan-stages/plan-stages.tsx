@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Alert, Button, Drawer, Group } from "@mantine/core";
-import { Layers3, Plus } from "lucide-react";
+import { Alert, Anchor, Button, Drawer, Skeleton } from "@mantine/core";
+import { CircleAlert, Plus } from "lucide-react";
 import { useProjectId, useProjectBasePath } from "domains/project";
 import {
   usePlanStages,
@@ -10,10 +10,13 @@ import {
   PlanningError,
   EMPTY_PLAN_SUMMARY,
   PLANNING_TASK_LABELS,
+  PLANNING_TASK_TONES,
 } from "domains/planning";
 import type { PlanStage } from "domains/planning";
 import { useBoardTask, useTaskExecutionProgress } from "domains/board-tasks";
 import { MarkdownView } from "ui/markdown-view";
+import { StatePanel } from "ui/state-panel";
+import { StatusBadge } from "ui/status-badge";
 import { isDefined, isEmptyArray } from "shared/value-predicates";
 import { StageRow } from "./ui/stage-row/stage-row";
 import { TaskPicker } from "./ui/task-picker";
@@ -69,6 +72,7 @@ export const PlanStages = (props: PlanStagesProps) => {
   const isTaskOpen = selectedTaskId !== null;
   const taskTitle = taskData?.title || "Задача";
   const taskStatus = isDefined(taskData) ? PLANNING_TASK_LABELS[taskData.column] : "";
+  const taskTone = isDefined(taskData) ? PLANNING_TASK_TONES[taskData.column] : "neutral";
   const taskHref = isDefined(taskData)
     ? `${basePath}/boards/${taskData.boardSlug}/${taskData.id}`
     : basePath;
@@ -76,12 +80,37 @@ export const PlanStages = (props: PlanStagesProps) => {
   const hasMoreReasons = isDefined(progressQuery.data?.nextOffset);
   const hasTaskError = isDefined(taskQuery.error);
   const hasProgressError = isDefined(progressQuery.error);
+  const reasonsTitleId = useId();
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const stageDraftKey = `relay:planning-stage:server-v2:${projectId}:${plan.id}:${editor?.isNew ? "new" : editor?.stage.id}`;
 
   /**
-   * Создаёт ввод этапа без предварительной записи пустой сущности.
+   * Окна этапа снимаются вместе с состоянием, поэтому фокус после закрытия возвращает
+   * владелец: к вызвавшей кнопке, а если её больше нет — к постоянной «Добавить этап».
    */
-  const handleCreate = (): void =>
+  useEffect(() => {
+    if (isDefined(editor) || isDefined(picker) || returnFocusRef.current === null) return;
+    const opener = returnFocusRef.current;
+    returnFocusRef.current = null;
+    const target = opener.isConnected ? opener : addButtonRef.current;
+    target?.focus({ preventScroll: true });
+  }, [editor, picker]);
+
+  /**
+   * Запоминает элемент, вызвавший окно этапа.
+   */
+  const rememberOpener = (): void => {
+    if (document.activeElement instanceof HTMLElement)
+      returnFocusRef.current = document.activeElement;
+  };
+
+  /**
+   * Создаёт ввод этапа без предварительной записи пустой сущности.
+   * Кнопка пустого состояния исчезнет с первым этапом, поэтому фокус вернётся к постоянной.
+   */
+  const handleCreate = (): void => {
+    returnFocusRef.current = addButtonRef.current;
     setEditor({
       revision: plan.revision,
       isNew: true,
@@ -95,6 +124,7 @@ export const PlanStages = (props: PlanStagesProps) => {
         progress: { ...EMPTY_PLAN_SUMMARY },
       },
     });
+  };
 
   /**
    * Сохраняет текст по исходной ревизии редактора, независимо от SSE.
@@ -154,15 +184,26 @@ export const PlanStages = (props: PlanStagesProps) => {
     setSelectedTaskId(id);
   };
 
+  const emptyAction = canEdit ? (
+    <Button
+      variant="default"
+      leftSection={<Plus size={16} aria-hidden="true" />}
+      onClick={handleCreate}
+    >
+      Добавить этап
+    </Button>
+  ) : undefined;
+
   return (
     <div className={styles.root}>
       <div className={styles.intro}>
         <p>У каждого этапа — свой результат и понятный состав работ.</p>
         {canEdit && (
           <Button
-            variant="subtle"
+            ref={addButtonRef}
+            variant="default"
             size="xs"
-            leftSection={<Plus size={13} />}
+            leftSection={<Plus size={16} aria-hidden="true" />}
             onClick={handleCreate}
           >
             Добавить этап
@@ -170,61 +211,88 @@ export const PlanStages = (props: PlanStagesProps) => {
         )}
       </div>
       {hasError && (
-        <Alert color="red" mb="md">
+        <Alert
+          color="danger"
+          title="Этап не изменён"
+          withCloseButton
+          closeButtonLabel="Скрыть сообщение"
+          onClose={() => setError(null)}
+        >
           {error}
         </Alert>
       )}
-      {hasReadError && (
-        <Alert color="red">
-          {query.error?.message}
+      {hasReadError && isDefined(query.data) && (
+        <Alert color="warning" title="Не удалось обновить этапы">
+          Показан последний прочитанный состав. {query.error?.message}
           <Button size="xs" variant="subtle" onClick={() => void query.mutate()}>
-            Повторить
+            Повторить чтение
           </Button>
         </Alert>
       )}
-      {query.isLoading && <p role="status">Загружаем этапы…</p>}
-      {isEmpty && (
-        <div className={styles.empty}>
-          <Layers3 size={28} strokeWidth={1.3} />
-          <h2>Наметьте первый этап</h2>
-          <p>Начните с ближайшего результата. Даже небольшому плану достаточно одного этапа.</p>
+      {hasReadError && !isDefined(query.data) && (
+        <StatePanel
+          state="error"
+          title="Этапы не удалось прочитать"
+          description={query.error?.message ?? "Сервер не ответил на запрос этапов."}
+          action={
+            <Button variant="default" onClick={() => void query.mutate()}>
+              Повторить чтение
+            </Button>
+          }
+        />
+      )}
+      {query.isLoading && (
+        <div className={styles.timeline} role="status" aria-label="Загружаем этапы">
+          <Skeleton height={72} radius="xl" />
+          <Skeleton height={72} radius="xl" />
         </div>
       )}
-      <div className={styles.timeline}>
-        {stageItems.map((stage, index) => (
-          <StageRow
-            key={stage.id}
-            planId={plan.id}
-            stage={stage}
-            index={index}
-            total={total}
-            canEdit={canEdit}
-            isBusy={isBusy}
-            onOpenTask={handleOpenTask}
-            onEdit={() =>
-              setEditor({
-                stage,
-                revision: query.data?.planRevision ?? plan.revision,
-                isNew: false,
-              })
-            }
-            onChoose={() =>
-              setPicker({
-                stage,
-                revision: query.data?.planRevision ?? plan.revision,
-                isNew: false,
-              })
-            }
-            onRemove={() => void handleAction(stage, "remove")}
-            onMove={(direction) => void handleAction(stage, "move", direction)}
-          />
-        ))}
-      </div>
+      {isEmpty && (
+        <StatePanel
+          title="Наметьте первый этап"
+          description="Начните с ближайшего результата. Даже небольшому плану достаточно одного этапа."
+          action={emptyAction}
+        />
+      )}
+      {!isEmptyArray(stageItems) && (
+        <ol className={styles.timeline} aria-label="Этапы плана">
+          {stageItems.map((stage, index) => (
+            <li key={stage.id} className={styles.timelineItem}>
+              <StageRow
+                planId={plan.id}
+                stage={stage}
+                index={index}
+                total={total}
+                canEdit={canEdit}
+                isBusy={isBusy}
+                onOpenTask={handleOpenTask}
+                onEdit={() => {
+                  rememberOpener();
+                  setEditor({
+                    stage,
+                    revision: query.data?.planRevision ?? plan.revision,
+                    isNew: false,
+                  });
+                }}
+                onChoose={() => {
+                  rememberOpener();
+                  setPicker({
+                    stage,
+                    revision: query.data?.planRevision ?? plan.revision,
+                    isNew: false,
+                  });
+                }}
+                onRemove={() => void handleAction(stage, "remove")}
+                onMove={(direction) => void handleAction(stage, "move", direction)}
+              />
+            </li>
+          ))}
+        </ol>
+      )}
       {hasMore && (
         <Button
           variant="default"
-          fullWidth
-          mt="md"
+          className={styles.more}
           loading={query.isValidating}
           onClick={() => setLimit(limit + 12)}
         >
@@ -256,28 +324,37 @@ export const PlanStages = (props: PlanStagesProps) => {
         title={taskTitle}
         position="right"
         size="lg"
+        classNames={{ title: styles.drawerTitle }}
         closeButtonProps={{ "aria-label": "Закрыть просмотр задачи" }}
       >
-        {taskQuery.isLoading && <p role="status">Загружаем задачу…</p>}
+        {taskQuery.isLoading && (
+          <div className={styles.drawerBody} role="status" aria-label="Загружаем задачу">
+            <Skeleton height={20} width="40%" />
+            <Skeleton height={120} />
+          </div>
+        )}
         {hasTaskError && (
-          <Alert color="red">
+          <Alert color="danger" title="Задачу не удалось прочитать">
             {taskQuery.error?.message}
-            <Button onClick={() => void taskQuery.mutate()}>Повторить</Button>
+            <Button size="xs" variant="subtle" onClick={() => void taskQuery.mutate()}>
+              Повторить чтение
+            </Button>
           </Alert>
         )}
         {isDefined(taskData) && (
-          <div>
-            <Group mb="md">
-              <strong>{taskData.key}</strong>
-              <span>{taskData.boardSlug}</span>
-              <span>{taskStatus}</span>
-            </Group>
+          <div className={styles.drawerBody}>
+            <p className={styles.taskMeta}>
+              <span className={styles.taskKey}>{taskData.key}</span>
+              <span>Доска: {taskData.boardSlug}</span>
+              <StatusBadge tone={taskTone}>{taskStatus}</StatusBadge>
+            </p>
             <MarkdownView text={taskData.description} emptyText="Описание ещё не заполнено." />
             {hasProgressError && (
-              <Alert color="red">
+              <Alert color="danger" title="Прогресс задачи недоступен">
                 {progressQuery.error?.message}
                 <Button
                   size="xs"
+                  variant="subtle"
                   onClick={() => {
                     setReasonPage({ offset: 0 });
                     void progressQuery.mutate();
@@ -287,14 +364,27 @@ export const PlanStages = (props: PlanStagesProps) => {
                 </Button>
               </Alert>
             )}
-            {reasonItems.map((reason, index) => (
-              <p key={`${reason.path}:${index}`}>
-                <Link to={`${basePath}${reason.path}`}>{reason.message}</Link>
-              </p>
-            ))}
+            {!isEmptyArray(reasonItems) && (
+              <section className={styles.reasons} aria-labelledby={reasonsTitleId}>
+                <h3 id={reasonsTitleId} className={styles.reasonsTitle}>
+                  Невыполненные обязательства: {progressQuery.data?.reasonCount}
+                </h3>
+                <ul className={styles.reasonList}>
+                  {reasonItems.map((reason, index) => (
+                    <li key={`${reason.path}:${index}`}>
+                      <CircleAlert size={16} aria-hidden="true" />
+                      <Anchor component={Link} to={`${basePath}${reason.path}`}>
+                        {reason.message}
+                      </Anchor>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {hasMoreReasons && (
               <Button
                 variant="subtle"
+                size="xs"
                 onClick={() =>
                   setReasonPage({
                     offset: progressQuery.data?.nextOffset ?? 0,
@@ -305,7 +395,7 @@ export const PlanStages = (props: PlanStagesProps) => {
                 Следующая страница причин · всего {progressQuery.data?.reasonCount}
               </Button>
             )}
-            <Button component={Link} to={taskHref} variant="default" mt="lg">
+            <Button component={Link} to={taskHref} variant="default" className={styles.openTask}>
               Открыть задачу на доске
             </Button>
           </div>

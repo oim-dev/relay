@@ -101,7 +101,7 @@ export async function runCli(argv: string[], runtime: Runtime): Promise<number> 
         },
       );
     await program.parseAsync(prepared.args, { from: "user" });
-    return 0;
+    return runtime.exitCode ?? 0;
   } catch (error) {
     if (error instanceof CommanderError && error.exitCode === 0) return 0;
     const options = { ...earlyOptions, ...program.opts<GlobalOptions>() };

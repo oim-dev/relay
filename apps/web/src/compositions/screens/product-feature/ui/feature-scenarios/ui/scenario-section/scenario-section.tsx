@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ActionIcon, Group, ThemeIcon } from "@mantine/core";
+import { ActionIcon } from "@mantine/core";
 import { ArrowUpRight, Route } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ProductReadiness } from "domains/product-demo";
@@ -28,9 +28,9 @@ export const ScenarioSection = (props: ScenarioSectionProps) => {
       className={clsx(styles.root, className)}
     >
       <header className={styles.header}>
-        <ThemeIcon variant="light" color="teal" size="lg" radius="md">
-          <Route size={18} aria-hidden="true" />
-        </ThemeIcon>
+        <span className={styles.icon} aria-hidden="true">
+          <Route size={18} />
+        </span>
         <div className={styles.meaning}>
           <ProductKey value={scenario.key} />
           <h3 id={headingId} className={styles.title}>
@@ -40,19 +40,16 @@ export const ScenarioSection = (props: ScenarioSectionProps) => {
           </h3>
           <ProductReadiness status={scenario.status} />
         </div>
-        <Group gap={4} wrap="nowrap">
-          <ActionIcon
-            component={Link}
-            to={href}
-            state={{ returnTo }}
-            variant="subtle"
-            color="gray"
-            aria-label={`Ссылка на сценарий: ${scenario.name}`}
-            title="Открыть описание и задачи"
-          >
-            <ArrowUpRight size={16} aria-hidden="true" />
-          </ActionIcon>
-        </Group>
+        <ActionIcon
+          component={Link}
+          to={href}
+          state={{ returnTo }}
+          variant="subtle"
+          aria-label={`Открыть описание и задачи: ${scenario.name}`}
+          title="Открыть описание и задачи"
+        >
+          <ArrowUpRight size={16} aria-hidden="true" />
+        </ActionIcon>
       </header>
     </section>
   );

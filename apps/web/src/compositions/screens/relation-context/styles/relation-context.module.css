@@ -1,29 +1,27 @@
-.root {
-  display: flex;
-  flex-direction: column;
-  gap: var(--mantine-spacing-md);
-  padding: var(--tasks-page-gutter);
-  min-width: 0;
-}
-
-.heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--mantine-spacing-md);
+.stage {
+  align-content: start;
 }
 
 .back {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-self: start;
+  gap: 0.375rem;
+  min-height: var(--tasks-control-height-compact);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+
+  &:hover {
+    color: var(--tasks-ink);
+  }
 }
 
+/* Фильтры области чтения: строкой от 768px, столбцом на телефоне. */
 .filters {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--mantine-spacing-sm);
+  gap: var(--tasks-space-3);
 
   @media (--md) {
     grid-template-columns: 7rem minmax(10rem, 14rem) minmax(10rem, 18rem);

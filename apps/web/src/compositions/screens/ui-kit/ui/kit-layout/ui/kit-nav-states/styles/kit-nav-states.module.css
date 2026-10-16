@@ -1,0 +1,88 @@
+/*
+ * Образцы стоят на той же общей подложке, что навигация каркаса: основа и декор —
+ * роли backdrop и backdrop-image. Слой здесь привязан к области образца, а не к окну.
+ */
+.root {
+  display: grid;
+  gap: var(--tasks-space-5);
+  width: 100%;
+  padding: var(--tasks-space-4) var(--tasks-workspace-gutter);
+  border-radius: var(--tasks-radius-row);
+  background-color: var(--tasks-backdrop);
+  background-image: var(--tasks-backdrop-image);
+  background-repeat: no-repeat;
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
+  }
+}
+
+.control {
+  display: grid;
+  gap: var(--tasks-space-2);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 650;
+}
+
+.states {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--tasks-space-3) var(--tasks-panel-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.state {
+  display: grid;
+  grid-template-rows: auto minmax(2.25rem, auto) auto;
+  align-content: start;
+  gap: 0.125rem;
+  min-width: 0;
+
+  /*
+   * Название, пояснение и образец — общие строки ряда: при длинном пояснении у соседа
+   * образцы одного ряда остаются на одной линии.
+   */
+  @supports (grid-template-rows: subgrid) {
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+  }
+}
+
+/*
+ * Место под контур фокуса образца, чтобы он не обрезался соседями. Колонка с началом
+ * по левому краю: выбор проекта сжимается по названию, как в шапке каркаса.
+ */
+.sample {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  margin-top: var(--tasks-space-1);
+  padding: 0.25rem;
+
+  /* Раскрытая группа — на ширину колонки, как в сайдбаре: вложенный пункт во всю ширину. */
+  &[data-control="group"] {
+    align-items: stretch;
+  }
+}
+
+.name {
+  color: var(--tasks-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+}
+
+.note {
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}

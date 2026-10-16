@@ -17,6 +17,13 @@ import {
 import type { EntitySaved } from "@relay/contracts/entities";
 import { actorSchema, entityReferenceSchema, requestIdSchema } from "@relay/contracts/primitives";
 import { fullContextQuerySchema } from "@relay/contracts/entities/graph";
+import {
+  documentBulkSchema,
+  documentFacetsQuerySchema,
+  documentRelationChangeSchema,
+  entityDocumentsQuerySchema,
+} from "@relay/contracts/entities/document-catalog";
+import type { DocumentBulkResult } from "@relay/contracts/entities/document-catalog";
 import type { Backend } from "@relay/project-runtime/backend/types";
 import type { Result } from "./output.js";
 
@@ -32,6 +39,83 @@ const saved = (data: EntitySaved): Result => ({
   text: `${data.key}: ${data.action}. Вид: ${data.ref.kind}. ID: ${data.ref.id}. Ревизия: ${data.revision}. requestId: ${data.requestId}.`,
 });
 const write = { actor: actorSchema, requestId: requestIdSchema };
+
+/** Поэлементная квитанция массовой операции: текст перечисляет каждый элемент без сокращения. */
+const bulkReceipt = (data: DocumentBulkResult): Result => ({
+  data,
+  text: [
+    `Массовая операция над материалами: сохранено ${data.applied}, отказов ${data.failed}, всего ${data.items.length}. requestId: ${data.requestId}.`,
+    ...data.items.map(
+      (item) =>
+        `- ${item.ref}: ${item.status}${item.key ? `; ключ ${item.key}` : ""}${item.revision === undefined ? "" : `; ревизия ${item.revision}`}${item.error ? `; ${item.error.code}: ${item.error.message}` : ""}`,
+    ),
+    data.failed
+      ? "Набор не атомарен и не повторяется автоматически: сохранённые элементы остаются. Перечитайте материалы с отказом; при conflict сверьте актуальное содержание и решите, нужно ли новое действие только для них."
+      : "Все элементы обработаны.",
+  ].join("\n"),
+});
+
+/** Описания уточняют смысл общих фильтров для каталога материалов; валидация не меняется. */
+const documentFacetsInputSchema = documentFacetsQuerySchema.extend({
+  q: documentFacetsQuerySchema.shape.q.describe(
+    "Поиск по ключу, названию, краткому описанию, содержанию, адресу ссылки и тегам материала",
+  ),
+  status: documentFacetsQuerySchema.shape.status.describe(
+    "Состояние материала: draft, active или archived",
+  ),
+});
+
+/** Отдельные действия каталога материалов; правила формата, тегов и связей проверяет Core. */
+const documentTools: EntityTool[] = [
+  {
+    name: "entity_document_facets",
+    description:
+      "Счётчики каталога материалов по полным данным проекта: разделы, теги, форматы, типы, состояния и системные представления. Фильтры как у entities_list; каждая ось считается без собственного фильтра, теги — с учётом уже выбранных. version совпадает с версией списка",
+    schema: documentFacetsInputSchema,
+    readOnly: true,
+    run: async (backend, input) => ({
+      data: await backend.entities.documentFacets(documentFacetsQuerySchema.parse(input)),
+    }),
+  },
+  {
+    name: "entity_documents_list",
+    description:
+      "Материалы, прикреплённые непосредственно к сущности любого из 11 видов, со всеми связями с ней: тип, пояснение и источник (relations или совместимые links). Материалы родителя и детей не включаются; архивные включены с отметкой. Продолжение по nextOffset/version; полный текст читайте через entity_get",
+    schema: entityDocumentsQuerySchema,
+    readOnly: true,
+    run: async (backend, input) => ({
+      data: await backend.entities.entityDocuments(entityDocumentsQuerySchema.parse(input)),
+    }),
+  },
+  {
+    name: "entity_document_bulk",
+    description:
+      "Одно действие для 1–100 материалов: переместить в раздел, добавить или снять теги, изменить состояние, закрепить или открепить. Каждый материал передаётся со своей прочитанной ревизией и сохраняется отдельно; набор не атомарен, прикрепления не меняются. Ответ — поэлементная квитанция applied/unchanged/conflict/not_found/invalid/error; при частичном отказе вызов успешен, перечитайте только элементы с отказом.",
+    schema: documentBulkSchema.extend({ actor: actorSchema }),
+    readOnly: false,
+    run: async (backend, input) =>
+      bulkReceipt(
+        await backend.entities.documentBulk(
+          documentBulkSchema.parse(input),
+          actorSchema.parse(input.actor),
+        ),
+      ),
+  },
+  {
+    name: "entity_document_relate",
+    description:
+      "Прикрепить, изменить или открепить одну связь материала с сущностью проекта под ревизией материала; прочие relations и совместимые links сохраняются. attach повтора цели и типа даёт ALREADY_EXISTS, отсутствующая связь — RELATION_NOT_FOUND, устаревшая ревизия — REVISION_CONFLICT. target принимает ключ, ID или kind:ID.",
+    schema: documentRelationChangeSchema.extend({ actor: actorSchema }),
+    readOnly: false,
+    run: async (backend, input) =>
+      saved(
+        await backend.entities.relateDocument(
+          documentRelationChangeSchema.parse(input),
+          actorSchema.parse(input.actor),
+        ),
+      ),
+  },
+];
 
 /** Аргументы инструментов выводятся из контрактов видов и остаются на верхнем уровне. */
 export const entityTools: EntityTool[] = [
@@ -56,7 +140,7 @@ export const entityTools: EntityTool[] = [
   {
     name: "entities_list",
     description:
-      "Найти сущности по виду, ключу, доске, приложению и другим объявленным фильтрам; продолжение по nextOffset/version",
+      "Найти сущности по виду, ключу, доске, приложению и другим объявленным фильтрам; для материалов (kind=document) также раздел, формат, теги (все выбранные), тип, состояние, закрепление и признак без прикреплений. Продолжение по nextOffset/version",
     schema: entitiesQuerySchema,
     readOnly: true,
     run: async (backend, input) => ({
@@ -156,7 +240,10 @@ for (const [kind, schema] of Object.entries(entityCreateDataSchemas)) {
   const { kind: _kind, ...shape } = schema.shape;
   entityTools.push({
     name: `entity_${kind}_create`,
-    description: `Создать сущность ${kind} с продуктовыми линками. В едином хранилище бекенд сохраняет соответствующие связи Core в той же операции; старую базу предварительно переносят через storage migrate. Полные описания — Markdown; ссылки принимают ключи или ID.`,
+    description:
+      kind === "document"
+        ? "Создать материал библиотеки: формат markdown (непустой body) либо link (обязательный url http/https, body — необязательное пояснение), тип, состояние, раздел, теги и прикрепления. Без documentFormat материал создаётся как markdown. Правила формата, адреса и нормализацию тегов проверяет Core; связи сохраняются в той же операции. Ссылки targets принимают ключи или ID."
+        : `Создать сущность ${kind} с продуктовыми линками. В едином хранилище бекенд сохраняет соответствующие связи Core в той же операции; старую базу предварительно переносят через storage migrate. Полные описания — Markdown; ссылки принимают ключи или ID.`,
     schema: z.strictObject({ ...shape, ...write }),
     readOnly: false,
     run: async (backend, input) => {
@@ -170,7 +257,10 @@ for (const [kind, schema] of Object.entries(entityUpdateDataSchemas)) {
   const { kind: _kind, ...shape } = schema.shape;
   entityTools.push({
     name: `entity_${kind}_update`,
-    description: `Изменить содержание и продуктовые линки сущности ${kind} по ключу или ID. Бекенд согласует соответствующие связи Core в едином хранилище. Отсутствующие поля сохраняются, пустой массив снимает линки; требуются прочитанная ревизия и requestId для корреляции.`,
+    description:
+      kind === "document"
+        ? "Изменить материал по ключу или ID под прочитанной ревизией. Отсутствующие поля сохраняются; переданные tags, relations и targets заменяют набор целиком, [] очищает. Переход на documentFormat=link требует url, на markdown — снимает url и требует непустой body. Для одной связи используйте entity_document_relate, для группы материалов — entity_document_bulk."
+        : `Изменить содержание и продуктовые линки сущности ${kind} по ключу или ID. Бекенд согласует соответствующие связи Core в едином хранилище. Отсутствующие поля сохраняются, пустой массив снимает линки; требуются прочитанная ревизия и requestId для корреляции.`,
     schema: z.strictObject({
       ...shape,
       ...write,
@@ -191,3 +281,4 @@ for (const [kind, schema] of Object.entries(entityUpdateDataSchemas)) {
     },
   });
 }
+entityTools.push(...documentTools);

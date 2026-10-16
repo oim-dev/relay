@@ -1,26 +1,65 @@
+/*
+ * Каркас проекта на общей подложке документа: шапка, боковая навигация от 1024px
+ * и Drawer ниже не имеют собственных поверхностей, рамок и теней.
+ * Шапка остаётся в слое приложения Mantine: выпадающие списки, окна и Drawer выше неё.
+ * Каркас — flex-колонка на высоту окна: рабочее поле (PageStage layout="workspace")
+ * заполняет остаток высоты под шапкой и крошками без расчёта их размеров.
+ */
 .root {
+  display: flex;
+  flex-direction: column;
   min-height: 100dvh;
   color: var(--tasks-ink);
-  background: var(--tasks-canvas);
 }
 
+/*
+ * Закреплённая шапка рисует продолжение общей подложки — те же роли основы и декора,
+ * привязанные к окну, — поэтому шва нет, а прокручиваемое содержимое не просвечивает
+ * под текстом и кнопками. Это не отдельная заливка: цвет совпадает с подложкой в любой точке.
+ */
 .header {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: var(--mantine-z-index-app);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  min-height: 4rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--tasks-border);
-  background: var(--tasks-chrome);
+  gap: var(--tasks-space-3);
+  min-height: var(--tasks-app-header-height);
+  padding: var(--tasks-space-3) var(--tasks-workspace-gutter);
+  background-color: var(--tasks-backdrop);
+  background-image: var(--tasks-backdrop-image);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+
+  /* Значок бренда стоит на одной вертикали со значками пунктов сайдбара. */
+  @media (--lg) {
+    padding-left: calc(var(--tasks-space-2) + var(--tasks-space-3));
+  }
+}
+
+.identity {
+  flex: 1;
+  min-width: 0;
+}
+
+.actions {
+  flex-shrink: 0;
+}
+
+.brandIcon {
+  display: none;
+  flex-shrink: 0;
+  color: var(--tasks-muted);
+
+  @media (--sm) {
+    display: block;
+  }
 }
 
 .brand {
   display: none;
-  font-size: 1rem;
+  font-size: var(--mantine-font-size-lg);
   font-weight: 750;
   letter-spacing: -0.045em;
 
@@ -28,27 +67,7 @@
     display: inline;
   }
 }
-.identity {
-  flex: 1;
-  min-width: 0;
-}
-.actions {
-  flex-shrink: 0;
-}
-.projectName {
-  min-width: 0;
-  max-width: 16rem;
-  &[data-workspace="true"] {
-    display: none;
-    @media (--md) {
-      display: block;
-    }
-  }
-}
-.brandIcon {
-  color: var(--tasks-muted);
-  flex-shrink: 0;
-}
+
 .divider {
   display: none;
   color: var(--tasks-soft);
@@ -57,66 +76,59 @@
     display: inline;
   }
 }
-.selector {
-  width: 7rem;
-  flex-shrink: 0;
+
+.projectName {
+  min-width: 0;
+  max-width: 16rem;
 }
-.connection {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--tasks-soft);
-  font-size: 0.6875rem;
-}
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mantine-color-orange-5);
-}
-.connection[data-state="connected"] .dot {
-  background: var(--mantine-color-teal-5);
-}
-.connectionText {
-  display: none;
-  @media (--xl) {
-    display: inline;
-  }
-}
+
+/* Поле рабочей области у края окна; рядом с сайдбаром — промежуток сайдбара. */
 .workspace {
   display: flex;
+  flex: 1 0 auto;
   flex-direction: column;
+  padding-inline: var(--tasks-workspace-gutter);
+
   @media (--lg) {
     flex-direction: row;
+    gap: calc(var(--tasks-sidebar-gap) - var(--tasks-focus-ring-outset));
+    padding-left: 0;
   }
 }
+
+/*
+ * Сайдбар прокручивается сам (overflow), поэтому справа оставляет поле под вылет кольца
+ * фокуса пунктов. Поле вычитается из промежутка до контента: от края пункта до контента
+ * по-прежнему --tasks-sidebar-gap, ширина пунктов и положение контента не меняются.
+ */
 .sidebar {
   display: none;
-  background: var(--tasks-chrome);
+
   @media (--lg) {
     position: sticky;
-    top: 4rem;
-    align-self: flex-start;
-    flex: 0 0 13.75rem;
-    height: calc(100dvh - 4rem);
-    overflow-y: auto;
-    border-right: 1px solid var(--tasks-border);
-    padding: 1.5rem 0.75rem;
+    top: var(--tasks-app-header-height);
     display: flex;
     flex-direction: column;
+    flex: 0 0 calc(13.75rem + var(--tasks-focus-ring-outset));
+    align-self: flex-start;
+    height: calc(100dvh - var(--tasks-app-header-height));
+    padding: var(--tasks-space-3) var(--tasks-focus-ring-outset) var(--tasks-space-4)
+      var(--tasks-space-2);
+    overflow-y: auto;
   }
 }
+
 .sectionLabel {
-  display: none;
-  @media (--lg) {
-    display: block;
-    padding: 0 0.75rem 0.75rem;
-    color: var(--tasks-soft);
-    font-size: 0.625rem;
-    letter-spacing: 0.14em;
-    font-weight: 600;
-  }
+  margin: 0;
+  padding: 0 var(--tasks-space-3) var(--tasks-space-3);
+  color: var(--tasks-soft);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
+
 .menuToggle {
   flex-shrink: 0;
 
@@ -125,28 +137,25 @@
   }
 }
 
-.drawer {
-  background: var(--tasks-chrome);
+.sidebarFooter {
+  display: flex;
+  align-items: center;
+  gap: var(--tasks-space-3);
+  margin-top: auto;
+  padding: var(--tasks-space-8) var(--tasks-space-3) 0;
+  color: var(--tasks-soft);
 }
 
-.drawerHeader {
-  margin-bottom: 0.5rem;
-  border-bottom: 1px solid var(--tasks-border);
-  background: var(--tasks-chrome);
-}
-.sidebarFooter {
-  display: none;
-  @media (--lg) {
-    display: flex;
-    gap: 0.6rem;
-    align-items: center;
-    margin-top: auto;
-    padding: 1.5rem 0.75rem 0;
-    border-top: 1px solid var(--tasks-border);
-    color: var(--tasks-soft);
-  }
-}
+/*
+ * Колонка крошек и экрана не шире --tasks-page-max-width и центрируется в области справа
+ * от сайдбара: крошки и PageStage остаются на одной вертикали на любом широком окне.
+ */
 .content {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  width: 100%;
   min-width: 0;
+  max-width: var(--tasks-page-max-width);
+  margin-inline: auto;
 }

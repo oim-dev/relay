@@ -7,6 +7,8 @@ import type {
 } from "@relay/contracts/entities";
 import { entityAddress, entitySummary } from "./catalog.js";
 import type { EntityEntry } from "./catalog.js";
+import { matchesTarget, selectedTags } from "./document-library.js";
+import { documentTagKey } from "../../domain/document-library.js";
 
 export type ParsedEntitiesQuery = z.output<typeof entitiesQuerySchema>;
 
@@ -35,7 +37,11 @@ export function entitySearchFields(
     { field: "context", value: entry.context ?? "" },
   ];
   if ("description" in data) fields.push({ field: "description", value: data.description });
-  if (data.kind === "document") fields.push({ field: "body", value: data.body });
+  if (data.kind === "document") {
+    fields.push({ field: "body", value: data.body });
+    if (data.url !== undefined) fields.push({ field: "url", value: data.url });
+    if (data.tags?.length) fields.push({ field: "tags", value: data.tags.join(" ") });
+  }
   if (data.kind === "work-plan") fields.push({ field: "goal", value: data.goal });
   if (data.kind === "release") fields.push({ field: "version", value: data.version });
   if (entry.implementation) {
@@ -107,6 +113,15 @@ export function entitySearchMatch(
   };
 }
 
+/** Все выбранные теги без учёта регистра; пустой выбор не фильтрует и не сужает виды. */
+function matchesTags(entry: EntitySummary, tags: readonly string[] | undefined) {
+  const selected = selectedTags(tags);
+  if (!selected.length) return true;
+  if (!entry.document) return false;
+  const own = new Set(entry.document.tags.map(documentTagKey));
+  return selected.every((tag) => own.has(tag));
+}
+
 /** Неприменимость типового фильтра не равна пустому значению поля. */
 export function matchesSummary(entry: EntitySummary, query: ParsedEntitiesQuery) {
   return (
@@ -118,6 +133,11 @@ export function matchesSummary(entry: EntitySummary, query: ParsedEntitiesQuery)
     (query.section === undefined ||
       (entry.ref.kind === "document" && (entry.document?.sectionId ?? "none") === query.section)) &&
     (query.documentKind === undefined || entry.document?.kind === query.documentKind) &&
+    (query.documentFormat === undefined || entry.document?.format === query.documentFormat) &&
+    matchesTags(entry, query.tags) &&
+    (query.unattached === undefined ||
+      (entry.document !== undefined &&
+        (entry.document.linkCount === 0) === (query.unattached === "true"))) &&
     (query.pinned === undefined || entry.document?.pinned === (query.pinned === "true")) &&
     (query.archived === undefined ||
       (entry.document?.status === "archived") === (query.archived === "true"))
@@ -127,7 +147,7 @@ export function matchesSummary(entry: EntitySummary, query: ParsedEntitiesQuery)
 export function matchesEntry(
   entry: EntityEntry,
   query: ParsedEntitiesQuery,
-  resolved: Readonly<Record<string, string>>,
+  resolved: Readonly<Record<string, { kind: string; id: string }>>,
 ) {
   const needle = query.q?.trim().toLocaleLowerCase();
   return (
@@ -137,10 +157,8 @@ export function matchesEntry(
         (entry.data.scenarioId === null ? "feature" : "scenario") ===
           query.implementationTarget)) &&
     (!needle || findEntityMatch(entry, needle) !== undefined) &&
-    Object.entries(resolved).every(([name, value]) => {
-      const field = entry.filters[name];
-      return Array.isArray(field) ? field.includes(value) : field === value;
-    })
+    // Цель документа сравнивается полным адресом, прочие фильтры — ID внутри своей области.
+    Object.entries(resolved).every(([name, ref]) => matchesTarget(entry, name, ref))
   );
 }
 

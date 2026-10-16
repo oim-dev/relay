@@ -1,54 +1,121 @@
+/* Узел выбора: раскрытие, включение checkbox, кнопка описания и готовность. */
 .root {
   display: flex;
   align-items: flex-start;
-  gap: 0.4rem;
+  gap: var(--tasks-space-2);
   min-width: 0;
-  padding-block: 0.55rem;
-  padding-inline-end: 0.35rem;
-  border-radius: var(--mantine-radius-sm);
+  padding-block: var(--tasks-space-2);
+  padding-inline-end: var(--tasks-space-1);
+  border-radius: var(--tasks-radius-compact);
+  transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
 
   &:hover {
-    background: var(--tasks-subtle);
+    background: var(--tasks-tile-hover);
   }
+
+  /* Открытое описание — выбранная запись, отличная от наведения. */
   &._current {
-    background: var(--tasks-selected);
+    background: var(--tasks-tile);
+    box-shadow: inset 0 0 0 1px var(--tasks-selected-border);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }
 
 .arrowSlot {
-  width: 1rem;
+  display: flex;
+  justify-content: center;
+  width: 1.25rem;
   min-height: 1.25rem;
   flex-shrink: 0;
+
+  @media (pointer: coarse) {
+    width: var(--tasks-touch-target);
+    min-height: var(--tasks-touch-target);
+  }
 }
+
 .chevron {
   &._expanded {
     transform: rotate(90deg);
   }
 }
-.checkbox {
-  flex-shrink: 0;
-  padding-top: 2px;
+
+/*
+ * На touch раскрытие, checkbox и «Выбрать все сценарии» получают собственную область
+ * 44×44px без наложения друг на друга (общая псевдо-область ActionIcon перекрыла бы checkbox).
+ */
+.touchControl {
+  @media (pointer: coarse) {
+    width: var(--tasks-touch-target);
+    min-width: var(--tasks-touch-target);
+    height: var(--tasks-touch-target);
+    min-height: var(--tasks-touch-target);
+  }
 }
+
+.checkbox {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  padding-top: 0.125rem;
+
+  @media (pointer: coarse) {
+    align-items: center;
+    width: var(--tasks-touch-target);
+    min-height: var(--tasks-touch-target);
+    padding-top: 0;
+  }
+}
+
+/* Подпись скрыта визуально; её область совпадает с областью нажатия checkbox. */
+.checkboxLabelWrapper {
+  position: static;
+  padding: 0;
+}
+
+.checkboxLabel {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
 .label {
   display: grid;
-  gap: 0.3rem;
+  gap: var(--tasks-space-1);
   flex: 1;
   min-width: 0;
+  border-radius: var(--tasks-radius-control);
+
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 2px;
+  }
 }
+
 .name {
   color: var(--tasks-ink);
-  font-size: 0.75rem;
-  line-height: 1.5;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
   overflow-wrap: anywhere;
+
   &._feature {
     font-weight: 600;
   }
 }
+
 .meta {
   color: var(--tasks-muted);
-  font-size: 0.625rem;
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
+
 .missing {
   color: var(--tasks-warning-ink);
-  font-size: 0.625rem;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 550;
 }

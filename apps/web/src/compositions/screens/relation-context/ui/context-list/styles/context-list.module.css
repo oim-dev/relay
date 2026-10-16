@@ -1,25 +1,33 @@
+/* Текстовая проекция графа: доступное линейное чтение узлов и связей той же области. */
 .root {
-  padding: var(--mantine-spacing-md);
+  padding: var(--tasks-space-4);
 }
 
 .list {
+  display: grid;
+  gap: var(--tasks-space-1);
+  margin: var(--tasks-space-3) 0;
   padding: 0;
-  margin: var(--mantine-spacing-sm) 0;
   list-style: none;
 }
 
 .row {
   display: flex;
   align-items: center;
-  gap: var(--mantine-spacing-sm);
+  gap: var(--tasks-space-3);
   width: 100%;
-  padding: var(--mantine-spacing-sm);
-  border-bottom: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-sm);
+  min-height: var(--tasks-touch-target);
+  padding: var(--tasks-space-2) var(--tasks-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--tasks-radius-compact);
   overflow-wrap: anywhere;
 
-  &:hover,
+  &:hover {
+    background: var(--tasks-tile-hover);
+  }
+
   &._selected {
+    border-color: var(--tasks-selected-border);
     background: var(--tasks-selected);
   }
 

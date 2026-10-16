@@ -1,11 +1,12 @@
+/* Детали: навигация по разделам, содержание и контекст; контекст сбоку от широкого экрана. */
 .root {
   display: grid;
-  gap: var(--mantine-spacing-lg);
-  min-width: 0;
+  gap: var(--tasks-space-5);
   align-items: start;
+  min-width: 0;
 
   @media (--xl) {
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) 19rem;
   }
 }
 
@@ -13,41 +14,54 @@
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--mantine-spacing-md) var(--mantine-spacing-xl);
-  padding-bottom: var(--mantine-spacing-md);
-  border-bottom: 1px solid var(--mantine-color-default-border);
+  gap: var(--tasks-space-2) var(--tasks-space-5);
+  padding: 0 var(--tasks-space-2) var(--tasks-space-3);
+  border-bottom: 1px solid var(--tasks-border);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
 }
 
-.content {
-  display: grid;
-  gap: var(--mantine-spacing-lg);
-  min-width: 0;
-}
-
+.content,
 .sidebar {
   display: grid;
-  gap: var(--mantine-spacing-md);
+  gap: var(--tasks-space-5);
   min-width: 0;
 }
 
-.document {
-  min-width: 0;
+/* Переход к разделу по якорю оставляет заголовок ниже закреплённой шапки проекта. */
+.anchor {
   scroll-margin-top: 5rem;
-  padding: var(--mantine-spacing-md);
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-md);
-  background: var(--mantine-color-body);
-  overflow-wrap: anywhere;
 
-  @media (--md) {
-    padding: var(--mantine-spacing-xl);
+  &:focus {
+    outline: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 3px;
   }
 }
 
-.context {
-  padding: var(--mantine-spacing-lg);
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-md);
-  background: var(--mantine-color-default);
+/* Длина строки описания ограничена для чтения. */
+.document {
+  max-width: var(--tasks-reading-measure-max);
+  min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.context {
+  display: grid;
+  gap: var(--tasks-space-1);
+  margin: 0;
+  overflow-wrap: anywhere;
+
+  & dt {
+    color: var(--tasks-muted);
+    font-size: var(--mantine-font-size-xs);
+    font-weight: 550;
+  }
+
+  & dd {
+    margin: 0;
+  }
 }

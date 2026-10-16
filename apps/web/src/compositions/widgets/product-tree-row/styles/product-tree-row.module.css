@@ -1,15 +1,21 @@
+/*
+ * Строка двухуровневого дерева на панели: фича и её сценарии соединены линией ветки.
+ * Наведение меняет только фон; геометрия линий привязана к слоту раскрытия (1.5rem)
+ * и отступу сценария, поэтому значения ниже — локальная геометрия дерева.
+ */
 .root {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: var(--tasks-space-2);
   min-width: 0;
-  padding: 0.4rem 0.75rem 0.4rem 0;
-  border-radius: var(--mantine-radius-sm);
+  padding: 0.375rem var(--tasks-space-3) 0.375rem 0;
+  border-radius: var(--tasks-radius-compact);
+  transition: background-color var(--tasks-duration-control) var(--tasks-easing-standard);
 
   &._feature {
-    margin-top: 0.5rem;
-    padding-block: 0.75rem 0.5rem;
+    margin-top: var(--tasks-space-2);
+    padding-block: var(--tasks-space-3) var(--tasks-space-2);
   }
 
   &._feature._expanded::after {
@@ -18,7 +24,7 @@
     top: 2.125rem;
     bottom: 0;
     left: 2.5625rem;
-    border-left: 1px solid var(--tasks-border);
+    border-left: 1px solid var(--tasks-border-strong);
     pointer-events: none;
   }
 
@@ -31,7 +37,7 @@
       top: 0;
       bottom: 0;
       left: 2.5625rem;
-      border-left: 1px solid var(--tasks-border);
+      border-left: 1px solid var(--tasks-border-strong);
       pointer-events: none;
     }
 
@@ -41,7 +47,7 @@
       top: 1.125rem;
       left: 2.5625rem;
       width: 0.8125rem;
-      border-top: 1px solid var(--tasks-border);
+      border-top: 1px solid var(--tasks-border-strong);
       pointer-events: none;
     }
   }
@@ -52,7 +58,11 @@
   }
 
   &:hover {
-    background: var(--tasks-subtle);
+    background: var(--tasks-tile-hover);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }
 
@@ -66,8 +76,14 @@
 }
 
 .chevron {
+  transition: transform var(--tasks-duration-control) var(--tasks-easing-standard);
+
   &._expanded {
     transform: rotate(90deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }
 
@@ -80,33 +96,43 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: var(--tasks-space-2);
   min-height: 1.5rem;
-  padding-top: 0.15rem;
+  padding-top: 0.125rem;
 }
 
+/* На узком экране название — отдельной строкой на одной линии с подписями ниже. */
 .title {
+  flex: 1 1 100%;
   min-width: 0;
-  max-width: calc(100% - 1.625rem);
+  padding-left: 1.625rem;
   color: var(--tasks-ink);
-  font-size: 0.875rem;
+  font-size: var(--mantine-font-size-md);
   line-height: 1.4;
   text-decoration: none;
   overflow-wrap: anywhere;
 
   &._feature {
-    font-weight: 600;
+    font-size: var(--tasks-font-size-record-title);
+    font-weight: var(--tasks-font-weight-record-title);
+    line-height: var(--tasks-line-height-record-title);
   }
 
   &:hover {
     text-decoration: underline;
-    text-underline-offset: 3px;
+    text-underline-offset: 0.2em;
   }
 
   &:focus-visible {
     outline: 2px solid var(--tasks-focus-ring);
     outline-offset: 3px;
-    border-radius: 2px;
+    border-radius: var(--tasks-radius-control);
+  }
+
+  /* Длинное название переносится внутри своей колонки, а не уходит на новую строку. */
+  @media (--md) {
+    flex: 1 1 12rem;
+    padding-left: 0;
   }
 }
 
@@ -114,21 +140,22 @@
   width: 100%;
   padding-left: 1.625rem;
   color: var(--tasks-muted);
-  font-size: 0.6875rem;
-  line-height: 1.8;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 
   @media (--md) {
     width: auto;
     margin-left: auto;
-    padding-left: 0.5rem;
+    padding-left: var(--tasks-space-2);
   }
 }
 
 .summary {
-  margin: 0.35rem 0 0 1.625rem;
+  margin: var(--tasks-space-1) 0 0 1.625rem;
   color: var(--tasks-muted);
-  font-size: 0.75rem;
-  line-height: 1.6;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 

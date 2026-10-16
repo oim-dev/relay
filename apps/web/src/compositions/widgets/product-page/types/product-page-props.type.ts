@@ -2,26 +2,23 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 /** Параметры страницы продукта. */
 export type ProductPageParams = {
-  /** Заголовок. */
+  /** Заголовок страницы первого уровня; также задаёт заголовок вкладки. */
   title: string;
-  /** Краткий смысл. */
-  description: string;
-  /** Контекст заголовка. */
-  eyebrow?: string;
-  /** Адрес возврата. */
-  backTo?: string;
-  /** Контекст страницы просмотра при возврате из редактора. */
-  backState?: unknown;
-  /** Подпись возврата. */
-  backLabel?: string;
-  /** Основные действия. */
-  actions?: ReactNode;
-  /** Готовность и текущая работа. */
+  /** Краткий смысл под заголовком; пустая строка не выводится. */
+  description?: string;
+  /** Контекст над заголовком: ключ, готовность, тип записи. */
   meta?: ReactNode;
+  /** Действия страницы либо поиск и фильтры каталога. */
+  actions?: ReactNode;
+  /**
+   * Раскладка действий: inline — действия записи справа от заголовка,
+   * toolbar — поиск, фильтры и создание в каталоге.
+   */
+  actionsLayout?: "inline" | "toolbar";
   /** Содержимое страницы. */
   children?: ReactNode;
 };
-/** Атрибуты области страницы. */
-type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children" | "title">;
+/** Атрибуты сцены страницы. */
+type RootAttrs = Omit<ComponentPropsWithoutRef<"div">, "children" | "title">;
 /** Свойства страницы. */
 export type ProductPageProps = RootAttrs & ProductPageParams;

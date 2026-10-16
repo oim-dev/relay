@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { StatusBadgeTone } from "ui/status-badge";
 
 export const COLUMN_SCHEMA = z.enum([
   "inbox",
@@ -59,18 +60,23 @@ export const TASK_SAVED_SCHEMA = z.object({
   task: BOARD_TASK_SCHEMA.optional(),
 });
 
-/** Колонки новой модели отделены от настроек прежнего числового канбана. */
+/**
+ * Колонки новой модели отделены от настроек прежнего числового канбана.
+ * `tone` — визуальный тон бейджа статуса задачи: «Готово» — положительный, «На проверке» —
+ * требующий внимания, «В работе» — информационный; остальные нейтральны и различаются подписью.
+ * Тон колонки не означает фактического выполнения задачи.
+ */
 export const KANBAN_COLUMNS = [
-  { value: "inbox", label: "Входящие", color: "gray" },
-  { value: "ready", label: "К выполнению", color: "grape" },
-  { value: "in-progress", label: "В работе", color: "ultramarine" },
-  { value: "review", label: "На проверке", color: "orange" },
-  { value: "done", label: "Готово", color: "teal" },
-] as const;
+  { value: "inbox", label: "Входящие", tone: "neutral" },
+  { value: "ready", label: "К выполнению", tone: "neutral" },
+  { value: "in-progress", label: "В работе", tone: "info" },
+  { value: "review", label: "На проверке", tone: "warning" },
+  { value: "done", label: "Готово", tone: "success" },
+] as const satisfies readonly { value: string; label: string; tone: StatusBadgeTone }[];
 export const TASK_COLUMNS = [
   ...KANBAN_COLUMNS,
-  { value: "cancelled", label: "Отменено", color: "gray" },
-] as const;
+  { value: "cancelled", label: "Отменено", tone: "neutral" },
+] as const satisfies readonly { value: string; label: string; tone: StatusBadgeTone }[];
 export const TASK_RELATIONS = [
   { value: "depends-on", label: "Зависит от" },
   { value: "related", label: "Связана с" },

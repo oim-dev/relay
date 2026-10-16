@@ -8,6 +8,6 @@ export type ProductWorkListParams = {
   applicationId?: string;
 };
 /** Атрибуты области работы. */
-type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children">;
+type RootAttrs = Omit<ComponentPropsWithoutRef<"section">, "children" | "title">;
 /** Свойства истории реализации. */
 export type ProductWorkListProps = RootAttrs & ProductWorkListParams;

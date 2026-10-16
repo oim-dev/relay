@@ -2,12 +2,9 @@ import { useState } from "react";
 import {
   Alert,
   Button,
-  Group,
   Pagination,
   Select,
   Skeleton,
-  Stack,
-  Text,
   TextInput,
   ThemeIcon,
   UnstyledButton,
@@ -17,6 +14,7 @@ import { ChevronRight, Search } from "lucide-react";
 import { useEntities } from "domains/entities";
 import type { EntityKind } from "domains/entities";
 import { relationAddress } from "domains/relations";
+import { SectionPanel } from "ui/section-panel";
 import { isEmptyArray } from "shared/value-predicates";
 import {
   ENTITY_PRESENTATION,
@@ -54,6 +52,7 @@ export const EntityBrowser = ({ projectId, selected, onSelect }: EntityBrowserPr
   const pageCount = Math.ceil(total / 40);
   const hasPages = pageCount > 1;
   const hasResults = !query.isLoading && !hasError;
+  const hasEntities = !isEmptyArray(entityItems);
   /**
    * Меняет вид только на одно из известных значений каталога.
    */
@@ -71,19 +70,10 @@ export const EntityBrowser = ({ projectId, selected, onSelect }: EntityBrowserPr
     setPage({ offset: 0, version: undefined });
     void query.mutate().catch(() => undefined);
   };
+  const countValue = hasResults ? total : undefined;
   return (
-    <section className={styles.root} aria-label="Каталог сущностей">
-      <Stack gap="sm" p="md">
-        <Group justify="space-between">
-          <Text fw={600} size="sm">
-            Сущности проекта
-          </Text>
-          {hasResults && (
-            <Text size="xs" c="dimmed">
-              {total}
-            </Text>
-          )}
-        </Group>
+    <SectionPanel title="Сущности проекта" titleAs="h2" count={countValue} density="compact">
+      <div className={styles.filters}>
         <TextInput
           aria-label="Найти сущность"
           placeholder="Название или ключ…"
@@ -102,60 +92,61 @@ export const EntityBrowser = ({ projectId, selected, onSelect }: EntityBrowserPr
           value={kind ?? null}
           onChange={handleKind}
         />
-      </Stack>
+      </div>
       {query.isLoading && (
-        <Stack p="md" aria-label="Загрузка каталога">
+        <div className={styles.loading} role="status" aria-label="Загрузка каталога">
           <Skeleton h={48} />
           <Skeleton h={48} />
           <Skeleton h={48} />
-        </Stack>
+        </div>
       )}
       {hasError && (
-        <Alert color="red" m="sm" title="Каталог не загрузился">
+        <Alert color="danger" title="Каталог не загрузился">
           {query.error?.message}
-          <Button variant="subtle" onClick={handleRefresh}>
+          <Button variant="subtle" color="gray" mt="xs" onClick={handleRefresh}>
             Повторить
           </Button>
         </Alert>
       )}
       {isEmpty && (
-        <Text p="lg" size="sm" c="dimmed">
+        <p className={styles.empty} role="status">
           Ничего не найдено. Попробуйте другой ключ или вид сущности.
-        </Text>
+        </p>
       )}
-      <div className={styles.list}>
-        {entityItems.map(({ address, key, title, presentation, isSelected }) => (
-          <UnstyledButton
-            key={address}
-            className={styles.entity}
-            data-selected={isSelected}
-            aria-current={isSelected}
-            onClick={() => onSelect(address)}
-          >
-            <ThemeIcon color={presentation.color} variant="light" size={30} radius="md">
-              <presentation.icon size={16} aria-hidden="true" />
-            </ThemeIcon>
-            <span className={styles.label}>
-              <Text component="span" size="xs" c="dimmed">
-                {key} · {presentation.label}
-              </Text>
-              <Text component="span" size="sm" className={styles.title}>
-                {title}
-              </Text>
-            </span>
-            <ChevronRight size={14} aria-hidden="true" className={styles.chevron} />
-          </UnstyledButton>
-        ))}
-      </div>
+      {hasEntities && (
+        <ul className={styles.list}>
+          {entityItems.map(({ address, key, title, presentation, isSelected }) => (
+            <li key={address}>
+              <UnstyledButton
+                className={styles.entity}
+                data-selected={isSelected}
+                aria-current={isSelected}
+                onClick={() => onSelect(address)}
+              >
+                <ThemeIcon color="accent" variant="light" size={30}>
+                  <presentation.icon size={16} aria-hidden="true" />
+                </ThemeIcon>
+                <span className={styles.label}>
+                  <span className={styles.meta}>
+                    {key} · {presentation.label}
+                  </span>
+                  <span className={styles.title}>{title}</span>
+                </span>
+                <ChevronRight size={14} aria-hidden="true" className={styles.chevron} />
+              </UnstyledButton>
+            </li>
+          ))}
+        </ul>
+      )}
       {hasPages && (
-        <Stack p="sm" gap={6} align="center">
-          <Text size="xs" c="dimmed">
+        <div className={styles.pages}>
+          <p className={styles.range}>
             {page.offset + 1}–{Math.min(page.offset + 40, total)} из {total}
-          </Text>
+          </p>
           <Pagination
             autoContrast
             classNames={{ control: styles.pageControl }}
-            size="xs"
+            size="sm"
             total={pageCount}
             value={page.offset / 40 + 1}
             siblings={0}
@@ -168,8 +159,8 @@ export const EntityBrowser = ({ projectId, selected, onSelect }: EntityBrowserPr
               setPage({ offset: (number - 1) * 40, version: query.data?.version })
             }
           />
-        </Stack>
+        </div>
       )}
-    </section>
+    </SectionPanel>
   );
 };

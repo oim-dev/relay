@@ -1,204 +1,120 @@
 .root {
-  display: block;
-}
-.intro {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  & p {
-    margin: 0;
-    color: var(--tasks-soft);
-    font-size: 0.6875rem;
-    line-height: 1.7;
-  }
-}
-.timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-}
-.stage {
-  position: relative;
-  background: var(--tasks-surface);
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  &[data-active="true"] {
-    border-color: light-dark(var(--mantine-color-blue-3), #344b61);
-  }
-  &:not(:last-child)::after {
-    content: "";
-    position: absolute;
-    left: 2.25rem;
-    top: 100%;
-    height: 0.95rem;
-    width: 1px;
-    background: var(--tasks-border);
-  }
-}
-.stageHeader {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 1.05rem;
-  list-style: none;
-  cursor: pointer;
-  &::-webkit-details-marker {
-    display: none;
-  }
-  &:focus-visible {
-    outline: 2px solid var(--tasks-focus-ring);
-    outline-offset: 3px;
-    border-radius: var(--mantine-radius-lg);
-  }
-}
-.marker {
   display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  width: 2.35rem;
-  height: 2.35rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
-  color: var(--tasks-soft);
-  background: var(--tasks-subtle);
-  font-family: var(--mantine-font-family-monospace);
-  font-size: 0.75rem;
-  &[data-done="true"] {
-    color: light-dark(var(--mantine-color-teal-7), var(--mantine-color-teal-3));
-    background: light-dark(var(--mantine-color-teal-0), #26392c);
-    border-color: light-dark(var(--mantine-color-teal-2), var(--mantine-color-teal-9));
-  }
-  &[data-active="true"] {
-    color: light-dark(var(--mantine-color-blue-8), var(--mantine-color-blue-3));
-    background: light-dark(var(--mantine-color-blue-0), #263340);
-    border-color: light-dark(var(--mantine-color-blue-2), #344b61);
-  }
-}
-.stageIdentity {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  flex: 1;
+  gap: var(--tasks-space-4);
   min-width: 0;
 }
-.stageTitle {
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  font-weight: 600;
-}
-.stageMeta {
+
+.intro {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.625rem;
-  color: var(--tasks-soft);
-}
-.metaDivider {
-  color: var(--tasks-border);
-}
-.miniProgress {
-  display: none;
-  @media (--md) {
-    display: block;
-    height: 3px;
-    width: 3rem;
-    background: var(--tasks-border);
-    border-radius: 3px;
-    overflow: hidden;
-    & span {
-      display: block;
-      height: 100%;
-      background: var(--mantine-color-teal-6);
-    }
-  }
-}
-.chevron {
-  color: var(--tasks-soft);
-  flex-shrink: 0;
-  transition: transform 150ms;
-  &[data-open="true"] {
-    transform: rotate(180deg);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
-}
-.stageBody {
-  border-top: 1px solid var(--tasks-border);
-}
-.outcome {
-  padding: 1.05rem 1.2rem;
-  background: var(--tasks-subtle);
-}
-.outcomeLabel {
-  display: block;
-  margin-bottom: 0.4rem;
-  color: var(--tasks-soft);
-  font-size: 0.5625rem;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-}
-.taskList {
-  padding-inline: 0.9rem;
-}
-.stageActions {
-  display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.55rem 0.6rem;
-  border-top: 1px solid var(--tasks-border);
-}
-.footnote {
-  font-size: 0.6875rem;
-  line-height: 1.75;
-  color: var(--tasks-soft);
-  margin: 1.25rem 0 0;
-}
-.noTasks {
-  padding: 0 1.2rem;
-  color: var(--tasks-soft);
-  font-size: 0.75rem;
-  line-height: 1.7;
-}
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 3rem 1rem;
-  border: 1px dashed var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  color: var(--tasks-soft);
-  text-align: center;
-  & h2 {
-    margin: 0;
-    color: var(--tasks-ink);
-    font-size: 1rem;
-  }
+  gap: var(--tasks-space-2) var(--tasks-space-3);
+
   & p {
     margin: 0;
-    max-width: 23rem;
-    font-size: 0.75rem;
-    line-height: 1.8;
+    color: var(--tasks-muted);
+    font-size: var(--mantine-font-size-sm);
+    line-height: 1.45;
   }
 }
-.taskPreview {
-  padding: 0.5rem;
-  & h2 {
-    font-size: 1.4rem;
-    font-weight: 600;
-    line-height: 1.5;
-    letter-spacing: -0.025em;
-    margin: 1rem 0 1.5rem;
+
+/* Этапы — упорядоченный маршрут; связь между соседними этапами — тонкая линия. */
+.timeline {
+  display: grid;
+  gap: var(--tasks-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timelineItem {
+  position: relative;
+  min-width: 0;
+
+  &:not(:last-child)::after {
+    position: absolute;
+    top: 100%;
+    left: 2.25rem;
+    width: 1px;
+    height: var(--tasks-space-3);
+    background: var(--tasks-border-strong);
+    content: "";
   }
 }
-.previewMeta {
+
+.more {
+  justify-self: center;
+}
+
+.drawerTitle {
+  font-size: var(--tasks-font-size-panel-title);
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.drawerBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--tasks-space-4);
+  min-width: 0;
+}
+
+.taskMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tasks-space-2) var(--tasks-space-3);
+  margin: 0;
   color: var(--tasks-muted);
-  font-size: 0.6875rem;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.taskKey {
+  color: var(--tasks-ink);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.reasons {
+  display: grid;
+  gap: var(--tasks-space-2);
+  padding: var(--tasks-space-3) var(--tasks-space-4);
+  border: 1px solid var(--tasks-warning-border);
+  border-radius: var(--tasks-radius-compact);
+  background: var(--tasks-warning-surface);
+}
+
+.reasonsTitle {
+  margin: 0;
+  color: var(--tasks-warning);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 650;
+}
+
+.reasonList {
+  display: grid;
+  gap: var(--tasks-space-2);
+  margin: 0;
+  padding: 0;
+  font-size: var(--mantine-font-size-sm);
+  list-style: none;
+  overflow-wrap: anywhere;
+
+  & li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--tasks-space-2);
+  }
+
+  & svg {
+    flex: none;
+    margin-top: 0.125rem;
+    color: var(--tasks-warning);
+  }
+}
+
+.openTask {
+  justify-self: start;
 }

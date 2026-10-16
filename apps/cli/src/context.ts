@@ -31,6 +31,8 @@ export interface Runtime {
   env: NodeJS.ProcessEnv;
   output: OutputOptions;
   helpCommand?: string;
+  /** Код выхода успешно напечатанного результата с частичным отказом; по умолчанию 0. */
+  exitCode?: number;
   /**
    * Вызов обслуживания с сохранением явного выбора базы и режима:
    * подставляется вместо плейсхолдера `<config>` в подсказках Core только в text-выводе.
@@ -118,6 +120,7 @@ export function action(
     }
     if (globals.project) result.meta = { ...result.meta, project: globals.project };
     printResult(runtime.stdout, result, output);
+    if (result.exitCode) runtime.exitCode = result.exitCode;
   });
 }
 

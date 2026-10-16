@@ -4,7 +4,6 @@ import { useProjectBasePath } from "domains/project";
 import {
   Alert,
   Anchor,
-  Badge,
   Button,
   Group,
   Menu,
@@ -29,6 +28,8 @@ import {
 import { readSessionStored, writeSessionStored, removeSessionStored } from "infra/browser-storage";
 import { MarkdownField } from "ui/markdown-field";
 import { MarkdownView } from "ui/markdown-view";
+import { SectionPanel } from "ui/section-panel";
+import { StatusBadge } from "ui/status-badge";
 import { isDefined } from "shared/value-predicates";
 import { TaskRelations } from "./ui/task-relations";
 import { TaskContext } from "./ui/task-context";
@@ -61,6 +62,7 @@ export const TaskEditor = (props: TaskEditorProps) => {
   const executionLabel = executionData?.isComplete
     ? "Фактически выполнена"
     : "Фактически не выполнена";
+  const executionTone = executionData?.isComplete === true ? "success" : "neutral";
   const executionReasons =
     executionData?.reasons.map((reason) => ({ ...reason, href: `${base}${reason.path}` })) ?? [];
   const hasMoreExecutionReasons = isDefined(executionData) && executionData.nextOffset !== null;
@@ -105,7 +107,6 @@ export const TaskEditor = (props: TaskEditorProps) => {
   const boardData = currentBoard.data;
   const hasBoardError = isDefined(currentBoard.error);
   const canLinkProduct = isDefined(boardData) && boardData.kind !== "infrastructure";
-  const shouldShowProductSection = currentBoard.isLoading || hasBoardError || canLinkProduct;
   const initial = { title: task?.title ?? "", description: task?.description ?? "" };
   const form = useForm({
     mode: "uncontrolled",
@@ -247,20 +248,29 @@ export const TaskEditor = (props: TaskEditorProps) => {
     handleUseCurrent();
     setEditing(false);
   };
+  const editAction = isEditing ? undefined : (
+    <Button
+      variant="default"
+      leftSection={<Pencil size={16} aria-hidden="true" />}
+      onClick={handleEdit}
+    >
+      Изменить
+    </Button>
+  );
   if (defect !== undefined) throw defect;
   return (
     <div className={styles.workspace}>
       <div className={styles.panel}>
-        <Stack gap="lg">
+        <Stack gap="md">
           {hasNewerRevision && (
             <Alert
-              color="orange"
+              color="warning"
               title="Задача изменилась после начала редактирования"
               classNames={{ title: styles.alertTitle }}
             >
               Введённый текст сохранён. Сверьте актуальное содержание перед сохранением.
               <Group mt="sm">
-                <Button variant="light" onClick={handleUseCurrent}>
+                <Button variant="default" onClick={handleUseCurrent}>
                   Загрузить актуальное
                 </Button>
                 <Button variant="default" onClick={handleRebase}>
@@ -270,260 +280,250 @@ export const TaskEditor = (props: TaskEditorProps) => {
             </Alert>
           )}
           {!canPersist && (
-            <Alert color="orange">
+            <Alert color="warning">
               Браузер не смог сохранить черновик. Не закрывайте окно до сохранения задачи.
             </Alert>
           )}
           <div className={styles.root}>
             <div className={styles.content}>
-              <div hidden={isEditing}>
-                <Group justify="space-between" align="flex-start" wrap="nowrap" mb="lg">
-                  <Text size="sm" fw={600} c="dimmed">
-                    Описание задачи
-                  </Text>
-                  <Button
-                    size="xs"
-                    variant="subtle"
-                    color="gray"
-                    leftSection={<Pencil size={14} />}
-                    onClick={handleEdit}
-                    className={styles.editButton}
-                  >
-                    Изменить
-                  </Button>
-                </Group>
-                <MarkdownView
-                  text={task.description}
-                  emptyText="Описание пока не добавлено. Нажмите «Изменить», чтобы уточнить задачу."
-                />
-              </div>
-              <form
-                hidden={!isEditing}
-                ref={formRef}
-                noValidate
-                onSubmit={form.onSubmit(handleSubmit, (errors) => {
-                  const field = Object.keys(errors)[0];
-                  if (field) form.getInputNode(field)?.focus();
-                })}
-              >
-                <fieldset disabled={isBusy} className={styles.fields}>
-                  <Stack gap="md">
-                    <TextInput
-                      key={form.key("title")}
-                      label="Заголовок задачи"
-                      placeholder="Без названия"
-                      data-autofocus
-                      {...form.getInputProps("title")}
-                    />
-                    {isEditing && (
-                      <MarkdownField
-                        key={form.key("description")}
-                        label="Описание в Markdown"
-                        minRows={10}
-                        disabled={isBusy}
-                        {...form.getInputProps("description")}
+              <SectionPanel titleAs="h3" title="Описание задачи" actions={editAction}>
+                <div hidden={isEditing}>
+                  <MarkdownView
+                    text={task.description}
+                    emptyText="Описание пока не добавлено. Нажмите «Изменить», чтобы уточнить задачу."
+                  />
+                </div>
+                <form
+                  hidden={!isEditing}
+                  ref={formRef}
+                  noValidate
+                  onSubmit={form.onSubmit(handleSubmit, (errors) => {
+                    const field = Object.keys(errors)[0];
+                    if (field) form.getInputNode(field)?.focus();
+                  })}
+                >
+                  <fieldset disabled={isBusy} className={styles.fields}>
+                    <Stack gap="md">
+                      <TextInput
+                        key={form.key("title")}
+                        label="Заголовок задачи"
+                        placeholder="Без названия"
+                        data-autofocus={isEditing || undefined}
+                        {...form.getInputProps("title")}
                       />
-                    )}
-                    <Group justify="space-between">
-                      <Text size="xs" c="dimmed">
-                        Черновик сохраняется в этой вкладке
-                      </Text>
-                      <Group gap="xs">
-                        <Button variant="subtle" color="gray" onClick={handleCancelEdit}>
-                          Отменить
-                        </Button>
-                        <Button type="submit" loading={form.submitting}>
-                          Сохранить
-                        </Button>
+                      {isEditing && (
+                        <MarkdownField
+                          key={form.key("description")}
+                          label="Описание в Markdown"
+                          minRows={10}
+                          disabled={isBusy}
+                          {...form.getInputProps("description")}
+                        />
+                      )}
+                      <Group justify="space-between">
+                        <Text size="xs" c="dimmed">
+                          Черновик сохраняется в этой вкладке
+                        </Text>
+                        <Group gap="xs">
+                          <Button variant="subtle" color="gray" onClick={handleCancelEdit}>
+                            Отменить
+                          </Button>
+                          <Button type="submit" loading={form.submitting}>
+                            Сохранить
+                          </Button>
+                        </Group>
                       </Group>
-                    </Group>
-                  </Stack>
-                </fieldset>
-              </form>
-              {shouldShowProductSection && (
-                <section className={styles.section}>
-                  {currentBoard.isLoading && (
+                    </Stack>
+                  </fieldset>
+                </form>
+              </SectionPanel>
+              {currentBoard.isLoading && (
+                <SectionPanel titleAs="h3" title="Связь с продуктом">
+                  <Text size="sm" c="dimmed" role="status">
+                    Загружаем возможности доски…
+                  </Text>
+                </SectionPanel>
+              )}
+              {hasBoardError && (
+                <SectionPanel titleAs="h3" title="Связь с продуктом">
+                  <Alert color="danger" title="Возможности доски недоступны">
+                    <Button variant="default" onClick={() => void currentBoard.mutate()}>
+                      Повторить
+                    </Button>
+                  </Alert>
+                </SectionPanel>
+              )}
+              {canLinkProduct && (
+                <TaskContext
+                  key={task.boardId}
+                  projectId={projectId}
+                  task={task}
+                  board={boardData}
+                  onOwnRevision={handleOwnRevision}
+                />
+              )}
+              <TaskRelations projectId={projectId} task={task} onOpen={onOpen} />
+              <SectionPanel
+                titleAs="h3"
+                title="Фактическое выполнение"
+                description="Выполнение по подзадачам и критериям, а не по колонке доски."
+              >
+                <Stack gap="xs" className={styles.execution}>
+                  {execution.isLoading && (
                     <Text size="sm" c="dimmed" role="status">
-                      Загружаем возможности доски…
+                      Считаем выполнение…
                     </Text>
                   )}
-                  {hasBoardError && (
-                    <Alert color="red" title="Возможности доски недоступны">
-                      <Button variant="subtle" onClick={() => void currentBoard.mutate()}>
-                        Повторить
+                  {hasExecution && (
+                    <StatusBadge tone={executionTone} className={styles.executionBadge}>
+                      {executionLabel}
+                    </StatusBadge>
+                  )}
+                  {isDefined(planningData) && (
+                    <Anchor component={Link} to={`${base}/plans/${planningData.planId}`} size="sm">
+                      План {planningData.planKey} · {planningData.stageTitle}
+                    </Anchor>
+                  )}
+                  {hasExecution &&
+                    executionReasons.map((reason, index) => (
+                      <Anchor
+                        key={`${reason.href}-${index}`}
+                        component={Link}
+                        to={reason.href}
+                        size="sm"
+                      >
+                        {reason.message}
+                      </Anchor>
+                    ))}
+                  {hasMoreExecutionReasons && (
+                    <Button
+                      variant="subtle"
+                      size="compact-sm"
+                      className={styles.inlineAction}
+                      onClick={handleMoreExecution}
+                    >
+                      Следующие причины
+                    </Button>
+                  )}
+                  {hasExecutionError && (
+                    <Alert color="warning">
+                      Не удалось прочитать актуальное выполнение.{" "}
+                      <Button variant="subtle" size="compact-sm" onClick={handleResetExecution}>
+                        Перечитать
                       </Button>
                     </Alert>
                   )}
-                  {canLinkProduct && (
-                    <TaskContext
-                      key={task.boardId}
-                      projectId={projectId}
-                      task={task}
-                      board={boardData}
-                      onOwnRevision={handleOwnRevision}
-                    />
-                  )}
-                </section>
-              )}
-              <section className={styles.section}>
-                <TaskRelations projectId={projectId} task={task} onOpen={onOpen} />
-              </section>
-              <Stack gap="xs" className={styles.section}>
-                <Text fw={600}>Фактическое выполнение</Text>
-                {isDefined(planningData) && (
-                  <Anchor component={Link} to={`${base}/plans/${planningData.planId}`} size="sm">
-                    План {planningData.planKey} · {planningData.stageTitle}
-                  </Anchor>
-                )}
-                {execution.isLoading && (
-                  <Text size="sm" role="status">
-                    Считаем выполнение…
-                  </Text>
-                )}
-                {hasExecution && <Text size="sm">{executionLabel}</Text>}
-                {hasExecution &&
-                  executionReasons.map((reason, index) => (
-                    <Anchor
-                      key={`${reason.href}-${index}`}
-                      component={Link}
-                      to={reason.href}
-                      size="sm"
+                  {canResetExecution && (
+                    <Button
+                      variant="subtle"
+                      size="compact-sm"
+                      className={styles.inlineAction}
+                      onClick={handleResetExecution}
                     >
-                      {reason.message}
-                    </Anchor>
-                  ))}
-                {hasMoreExecutionReasons && (
-                  <Button variant="subtle" size="compact-sm" onClick={handleMoreExecution}>
-                    Следующие причины
-                  </Button>
-                )}
-                {hasExecutionError && (
-                  <Alert color="orange">
-                    Не удалось прочитать актуальное выполнение.{" "}
-                    <Button variant="subtle" size="compact-sm" onClick={handleResetExecution}>
-                      Перечитать
+                      К первой странице причин
                     </Button>
-                  </Alert>
-                )}
-                {canResetExecution && (
-                  <Button variant="subtle" size="compact-sm" onClick={handleResetExecution}>
-                    К первой странице причин
-                  </Button>
-                )}
-              </Stack>
-              <TaskAcceptance
-                className={styles.section}
-                projectId={projectId}
-                task={task}
-                onOwnRevision={handleOwnRevision}
-              />
+                  )}
+                </Stack>
+              </SectionPanel>
+              <TaskAcceptance projectId={projectId} task={task} onOwnRevision={handleOwnRevision} />
             </div>
-            <Stack gap="lg" className={styles.sidebar}>
-              <Stack gap="sm">
+            <aside className={styles.sidebar} aria-label="Свойства задачи">
+              <dl className={styles.properties}>
                 <div className={styles.propertyRow}>
-                  <Text size="sm" c="dimmed">
-                    Статус
-                  </Text>
-                  <Menu position="bottom-end" width={220} withinPortal>
-                    <Menu.Target>
-                      <UnstyledButton
-                        className={styles.propertyButton}
-                        disabled={isBusy}
-                        aria-label={`Изменить статус: ${statusData?.label}`}
-                      >
-                        <Badge
-                          variant="light"
-                          color={statusData?.color}
-                          tt="none"
-                          radius="sm"
-                          size="md"
-                          fw={500}
+                  <dt className={styles.propertyName}>Статус</dt>
+                  <dd className={styles.propertyValue}>
+                    <Menu position="bottom-end" width={240} withinPortal>
+                      <Menu.Target>
+                        <UnstyledButton
+                          className={styles.propertyButton}
+                          disabled={isBusy}
+                          aria-label={`Изменить статус: ${statusData?.label}`}
                         >
-                          {statusData?.label}
-                        </Badge>
-                        <ChevronDown size={13} className={styles.chevron} />
-                      </UnstyledButton>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Label>Статус задачи</Menu.Label>
-                      {statusMenuItems.map((item) => (
-                        <Menu.Item
-                          key={item.value}
-                          onClick={() => void handleMove(task.boardSlug, item.value)}
-                          leftSection={<Circle size={13} />}
-                        >
-                          <Group justify="space-between" wrap="nowrap">
-                            <span>{item.label}</span>
-                            {item.isSelected && <Check size={14} />}
-                          </Group>
-                        </Menu.Item>
-                      ))}
-                    </Menu.Dropdown>
-                  </Menu>
+                          <StatusBadge tone={statusData?.tone ?? "neutral"}>
+                            {statusData?.label}
+                          </StatusBadge>
+                          <ChevronDown size={14} className={styles.chevron} aria-hidden="true" />
+                        </UnstyledButton>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Label>Статус задачи</Menu.Label>
+                        {statusMenuItems.map((item) => (
+                          <Menu.Item
+                            key={item.value}
+                            onClick={() => void handleMove(task.boardSlug, item.value)}
+                            leftSection={<Circle size={14} aria-hidden="true" />}
+                            rightSection={item.isSelected && <Check size={14} aria-hidden="true" />}
+                            aria-current={item.isSelected || undefined}
+                          >
+                            {item.label}
+                          </Menu.Item>
+                        ))}
+                      </Menu.Dropdown>
+                    </Menu>
+                  </dd>
                 </div>
                 <div className={styles.propertyRow}>
-                  <Text size="sm" c="dimmed">
-                    Доска
-                  </Text>
-                  <Menu position="bottom-end" width={240} withinPortal>
-                    <Menu.Target>
-                      <UnstyledButton
-                        className={styles.propertyButton}
-                        disabled={isBusy}
-                        aria-label={`Изменить доску: ${boardLabel}`}
-                        title={boardLabel}
-                      >
-                        <Columns3 size={14} className={styles.chevron} />
-                        <span className={styles.propertyLabel}>{boardLabel}</span>
-                        <ChevronDown size={13} className={styles.chevron} />
-                      </UnstyledButton>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Label>Переместить на доску</Menu.Label>
-                      {boardMenuItems.map((item) => (
-                        <Menu.Item
-                          key={item.value}
-                          onClick={() => void handleMove(item.value, task.column)}
+                  <dt className={styles.propertyName}>Доска</dt>
+                  <dd className={styles.propertyValue}>
+                    <Menu position="bottom-end" width={240} withinPortal>
+                      <Menu.Target>
+                        <UnstyledButton
+                          className={styles.propertyButton}
+                          disabled={isBusy}
+                          aria-label={`Изменить доску: ${boardLabel}`}
+                          title={boardLabel}
                         >
-                          <Group justify="space-between" wrap="nowrap">
-                            <span>{item.label}</span>
-                            {item.isSelected && <Check size={14} />}
-                          </Group>
-                        </Menu.Item>
-                      ))}
-                      {hasMoreBoards && (
-                        <Menu.Item
-                          closeMenuOnClick={false}
-                          onClick={() =>
-                            void boards.setSize(boards.size + 1).catch(() => undefined)
-                          }
-                        >
-                          Загрузить ещё доски
-                        </Menu.Item>
-                      )}
-                    </Menu.Dropdown>
-                  </Menu>
+                          <Columns3 size={14} className={styles.chevron} aria-hidden="true" />
+                          <span className={styles.propertyLabel}>{boardLabel}</span>
+                          <ChevronDown size={14} className={styles.chevron} aria-hidden="true" />
+                        </UnstyledButton>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Label>Переместить на доску</Menu.Label>
+                        {boardMenuItems.map((item) => (
+                          <Menu.Item
+                            key={item.value}
+                            onClick={() => void handleMove(item.value, task.column)}
+                            rightSection={item.isSelected && <Check size={14} aria-hidden="true" />}
+                            aria-current={item.isSelected || undefined}
+                          >
+                            {item.label}
+                          </Menu.Item>
+                        ))}
+                        {hasMoreBoards && (
+                          <Menu.Item
+                            closeMenuOnClick={false}
+                            onClick={() =>
+                              void boards.setSize(boards.size + 1).catch(() => undefined)
+                            }
+                          >
+                            Загрузить ещё доски
+                          </Menu.Item>
+                        )}
+                      </Menu.Dropdown>
+                    </Menu>
+                  </dd>
                 </div>
-                {isPlacementSaving && (
-                  <Text size="xs" c="dimmed" role="status">
-                    Сохраняем…
-                  </Text>
-                )}
-                {hasPlacementError && (
-                  <Text size="xs" c="red" role="alert">
-                    {placementError}
-                  </Text>
-                )}
-              </Stack>
-            </Stack>
+              </dl>
+              {isPlacementSaving && (
+                <Text size="xs" c="dimmed" role="status">
+                  Сохраняем…
+                </Text>
+              )}
+              {hasPlacementError && (
+                <Text size="xs" c="danger" role="alert">
+                  {placementError}
+                </Text>
+              )}
+            </aside>
           </div>
           {hasError && (
-            <Alert color="red" title="Действие не сохранено" role="alert">
+            <Alert color="danger" title="Действие не сохранено" role="alert">
               {error}
             </Alert>
           )}
           {hasNotice && (
-            <Text role="status" c="teal" size="sm">
+            <Text role="status" c="success" size="sm">
               {notice}
             </Text>
           )}

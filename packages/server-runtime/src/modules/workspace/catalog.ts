@@ -91,6 +91,8 @@ export class ProjectContext {
         "relay-full-context-v1",
         // Детализация метрик оператора обзора и snapshot.operator.
         "relay-overview-metrics-v1",
+        // Фасеты, массовые изменения, одна связь и обратное чтение материалов.
+        "relay-document-materials-v1",
         "relay-document-library-v1",
         "relay-product-queries-v1",
         "relay-work-read-models-v1",

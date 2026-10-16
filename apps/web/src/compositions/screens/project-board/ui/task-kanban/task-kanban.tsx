@@ -14,7 +14,7 @@ import type {
   DragEndEvent,
   CollisionDetection,
 } from "@dnd-kit/core";
-import { Alert, Box, Text } from "@mantine/core";
+import { Alert, Box, Text, VisuallyHidden } from "@mantine/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useReducedMotion } from "@mantine/hooks";
 import {
@@ -96,6 +96,17 @@ export const TaskKanban = (props: TaskKanbanProps) => {
     },
     [],
   );
+  const [readErrors, setReadErrors] = useState<ReadonlySet<ColumnId>>(new Set());
+  const handleReadErrorChange = useCallback((column: ColumnId, hasError: boolean): void => {
+    setReadErrors((current) => {
+      if (current.has(column) === hasError) return current;
+      const next = new Set(current);
+      if (hasError) next.add(column);
+      else next.delete(column);
+      return next;
+    });
+  }, []);
+  const hasReadError = readErrors.size > 0;
   const updatePreview = (next: Map<ColumnId, TaskSummary[]> | null): void => {
     previewRef.current = next;
     setPreview(next);
@@ -103,13 +114,47 @@ export const TaskKanban = (props: TaskKanbanProps) => {
   const [targetId, setTargetId] = useState<string | null>(null);
   const [isSaving, setSaving] = useState(false);
   const focusTaskId = useRef<string | null>(null);
+  /*
+   * Фокус клавиатурного переноса возвращается на ручку перенесённой карточки. Между
+   * колонками карточка монтируется заново (место вставки, затем серверная проекция),
+   * поэтому ручка ищется после каждого изменения доски, пока сохранение не завершится
+   * и карточка не появится. Фокус, уведённый пользователем, не перехватывается.
+   */
   useEffect(() => {
-    if (active !== null || isSaving || focusTaskId.current === null) return;
-    const handle = boardRef.current?.querySelector<HTMLButtonElement>(
-      `[data-task-id="${CSS.escape(focusTaskId.current)}"] [data-drag-handle]`,
-    );
-    (handle ?? boardRef.current)?.focus({ preventScroll: true });
-    focusTaskId.current = null;
+    const taskId = focusTaskId.current;
+    const board = boardRef.current;
+    if (active !== null || taskId === null || board === null) return;
+    const selector = `[data-task-id="${CSS.escape(taskId)}"] [data-drag-handle]`;
+    const isFocusLost = (): boolean =>
+      document.activeElement === null || document.activeElement === document.body;
+    const restore = (): boolean => {
+      const handle = board.querySelector<HTMLElement>(selector);
+      if (handle !== null && isFocusLost()) handle.focus({ preventScroll: true });
+      return handle !== null;
+    };
+    if (restore() && !isSaving) {
+      focusTaskId.current = null;
+      return;
+    }
+    const observer = new MutationObserver(() => {
+      if (!restore() || isSaving) return;
+      observer.disconnect();
+      window.clearTimeout(timer);
+      focusTaskId.current = null;
+    });
+    observer.observe(board, { childList: true, subtree: true });
+    // Карточка может не попасть в прочитанную часть колонки: тогда фокус остаётся на доске.
+    const timer = isSaving
+      ? undefined
+      : window.setTimeout(() => {
+          observer.disconnect();
+          focusTaskId.current = null;
+          if (isFocusLost()) board.focus({ preventScroll: true });
+        }, 3000);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
   }, [active, isSaving]);
   const [error, setError] = useState("");
   const [defect, setDefect] = useState<unknown>();
@@ -119,6 +164,8 @@ export const TaskKanban = (props: TaskKanbanProps) => {
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
     useSensor(KeyboardSensor, {
+      // Прокрутка доски к соседней колонке при переносе стрелкой учитывает reduced motion.
+      scrollBehavior: shouldReduceMotion ? "auto" : "smooth",
       coordinateGetter: (event, args) =>
         getKeyboardCoordinates(
           event,
@@ -140,7 +187,8 @@ export const TaskKanban = (props: TaskKanbanProps) => {
   const hasError = error !== "";
   const hasActive = active !== null;
   const activeSize = active === null ? undefined : { width: active.width, height: active.height };
-  const dropAnimation = shouldReduceMotion ? null : { duration: 180, easing: "ease-out" };
+  // Длительность раскрытия панели темы (--tasks-duration-panel): dnd-kit принимает число.
+  const dropAnimation = shouldReduceMotion ? null : { duration: 200, easing: "ease-out" };
   const handleStart = (event: DragStartEvent): void => {
     const task = TASK_SUMMARY_SCHEMA.safeParse(event.active.data.current?.task);
     const version = event.active.data.current?.version;
@@ -284,7 +332,7 @@ export const TaskKanban = (props: TaskKanbanProps) => {
       }}
     >
       {hasError && (
-        <Alert color="red" title="Перенос не сохранён" mb="md">
+        <Alert color="danger" title="Перенос не сохранён">
           {error}
         </Alert>
       )}
@@ -293,6 +341,10 @@ export const TaskKanban = (props: TaskKanbanProps) => {
           Сохраняем перемещение…
         </Text>
       )}
+      {/* Одно объявление на доску вместо отдельного alert в каждой колонке. */}
+      <VisuallyHidden role="alert">
+        {hasReadError && "Не удалось загрузить задачи доски. Повторите загрузку в колонках."}
+      </VisuallyHidden>
       <Box
         ref={boardRef}
         className={styles.root}
@@ -314,6 +366,7 @@ export const TaskKanban = (props: TaskKanbanProps) => {
             activeId={active?.task.id ?? null}
             activeSize={activeSize}
             onSnapshot={handleSnapshot}
+            onReadErrorChange={handleReadErrorChange}
             onOpen={onOpen}
             onCreate={onCreate}
           />

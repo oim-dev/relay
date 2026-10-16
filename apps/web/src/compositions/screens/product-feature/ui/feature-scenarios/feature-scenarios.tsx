@@ -1,9 +1,10 @@
 import clsx from "clsx";
 import { useState } from "react";
-import { Button, Text } from "@mantine/core";
+import { Button, Text, VisuallyHidden } from "@mantine/core";
 import { Plus } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useProductPath } from "compositions/widgets/product-page";
+import { SectionPanel } from "ui/section-panel";
 import { isEmptyArray } from "shared/value-predicates";
 import { ScenarioSection } from "./ui/scenario-section/scenario-section";
 import type { FeatureScenariosProps } from "./types/feature-scenarios-props.type";
@@ -33,49 +34,60 @@ export const FeatureScenarios = (props: FeatureScenariosProps) => {
   const hasNoScenarios = isEmptyArray(feature.scenarios);
   const readyCount = feature.scenarios.filter((scenario) => scenario.status === "done").length;
   return (
-    <section {...rootAttrs} id="scenarios" tabIndex={-1} className={clsx(styles.root, className)}>
-      <header className={styles.header}>
-        <div>
-          <h2 className={styles.title}>Сценарии фичи</h2>
-          <Text size="sm" c="dimmed">
-            Реализовано {readyCount} из {feature.scenarios.length} · каждый сценарий имеет свои
-            задачи
-          </Text>
-        </div>
+    <SectionPanel
+      {...rootAttrs}
+      id="scenarios"
+      tabIndex={-1}
+      className={clsx(styles.root, className)}
+      title="Сценарии фичи"
+      count={
+        <>
+          <VisuallyHidden>Сценариев: </VisuallyHidden>
+          {feature.scenarios.length}
+        </>
+      }
+      description={`Реализовано ${readyCount} из ${feature.scenarios.length} · у каждого сценария свои задачи`}
+      actions={
         <Button
           component={Link}
           to={`${featurePath}/scenarios/new${location.search}`}
           variant="default"
-          size="sm"
-          leftSection={<Plus size={14} aria-hidden="true" />}
+          leftSection={<Plus size={15} aria-hidden="true" />}
         >
           Добавить сценарий
         </Button>
-      </header>
+      }
+    >
       {hasNoScenarios && (
         <div className={styles.empty}>
           <Text fw={600}>Сценарии не описаны</Text>
-          <Text size="sm" c="dimmed" mt="xs">
+          <Text size="sm" c="dimmed">
             Опишите первое конкретное поведение. У сценария будет собственная страница и список
             задач.
           </Text>
         </div>
       )}
-      <div className={styles.sections}>
-        {scenarioItems.map((scenario) => (
-          <ScenarioSection
-            key={scenario.id}
-            scenario={scenario}
-            featurePath={featurePath}
-            search={location.search}
-          />
-        ))}
-      </div>
+      {!hasNoScenarios && (
+        <div className={styles.sections}>
+          {scenarioItems.map((scenario) => (
+            <ScenarioSection
+              key={scenario.id}
+              scenario={scenario}
+              featurePath={featurePath}
+              search={location.search}
+            />
+          ))}
+        </div>
+      )}
       {hasMore && (
-        <Button variant="subtle" mt="md" onClick={() => setCount(visibleCount + 10)}>
+        <Button
+          variant="subtle"
+          className={styles.more}
+          onClick={() => setCount(visibleCount + 10)}
+        >
           Ещё сценарии · показано {scenarioItems.length} из {feature.scenarios.length}
         </Button>
       )}
-    </section>
+    </SectionPanel>
   );
 };

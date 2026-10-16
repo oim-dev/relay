@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActionIcon,
   Alert,
@@ -12,7 +12,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { Copy, Fingerprint, Link2 } from "lucide-react";
+import { CircleAlert, Copy, Fingerprint, Link2, TriangleAlert } from "lucide-react";
 import { ProjectSettingsError, useProjectId, useSaveProjectSettings } from "domains/project";
 import type { ProjectSettings } from "domains/project";
 import { readSessionStored, writeSessionStored, removeSessionStored } from "infra/browser-storage";
@@ -42,6 +42,9 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
   const [error, setError] = useState("");
   const [hasSaved, setSaved] = useState(false);
   const [hasDraftStorageError, setDraftStorageError] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
   const form = useForm<SettingsFormValues>({
     name: "project-settings",
     mode: "uncontrolled",
@@ -103,6 +106,14 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
   };
 
   /**
+   * Возвращает фокус после действия, которое сделало нажатую кнопку недоступной или убрало её.
+   * Цель появляется после отрисовки нового состояния, поэтому фокус ставится в следующем кадре.
+   */
+  const restoreFocus = (getTarget: () => HTMLElement | null): void => {
+    requestAnimationFrame(() => getTarget()?.focus());
+  };
+
+  /**
    * Сохраняет пару настроек; при отказе оставляет введённый текст.
    */
   const handleSubmit = async (values: SettingsFormValues): Promise<void> => {
@@ -116,14 +127,20 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
       });
       acceptSettings(confirmed);
       setSaved(true);
+      // Обе кнопки формы стали недоступны: фокус — к началу раздела, статус объявит итог.
+      restoreFocus(() => titleRef.current);
     } catch (failure) {
-      if (failure instanceof ProjectSettingsError) {
-        if (failure.code === "PROJECT_SLUG_TAKEN") form.setFieldError("slug", failure.message);
-        else setError(failure.message);
-      } else {
+      if (failure instanceof ProjectSettingsError && failure.code === "PROJECT_SLUG_TAKEN") {
+        form.setFieldError("slug", failure.message);
+        restoreFocus(() => form.getInputNode("slug") ?? null);
+        return;
+      }
+      if (failure instanceof ProjectSettingsError) setError(failure.message);
+      else {
         console.error("Неожиданная ошибка сохранения настроек проекта", failure);
         setError("Не удалось обработать ответ сервера. Введённые значения сохранены.");
       }
+      restoreFocus(() => errorRef.current);
     }
   };
 
@@ -142,6 +159,7 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
   const handleReset = (): void => {
     acceptSettings(settings);
     setSaved(false);
+    restoreFocus(() => titleRef.current);
   };
 
   /**
@@ -153,6 +171,8 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
     setDraftStorageError(
       !writeSessionStored(draftKey, { ...form.getValues(), ifRevision: settings.revision }),
     );
+    // Предупреждение о конфликте исчезает; следующий шаг — сохранить свой вариант.
+    restoreFocus(() => submitRef.current);
   };
 
   return (
@@ -172,7 +192,14 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
             {monogram}
           </div>
           <div className={styles.introductionText}>
-            <Title order={2} id="general-settings-title" size="h3">
+            <Title
+              ref={titleRef}
+              order={2}
+              id="general-settings-title"
+              size="h3"
+              tabIndex={-1}
+              className={styles.title}
+            >
               Основное
             </Title>
             <Text size="sm" c="dimmed" mt={4}>
@@ -184,7 +211,7 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
           <div className={styles.fieldRow}>
             <div className={styles.fieldLabel}>
               <label htmlFor="project-name">Имя проекта</label>
-              <Text size="xs" c="dimmed" mt={5}>
+              <Text size="xs" c="dimmed" mt={4}>
                 В шапке и списке проектов
               </Text>
             </div>
@@ -198,7 +225,7 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
                 required
                 {...form.getInputProps("name")}
               />
-              <Text size="xs" c="dimmed" mt={9}>
+              <Text size="sm" c="dimmed" mt="xs">
                 Короткое и понятное название. Можно на русском.
               </Text>
             </div>
@@ -206,7 +233,7 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
           <div className={styles.fieldRow}>
             <div className={styles.fieldLabel}>
               <label htmlFor="project-slug">Slug проекта</label>
-              <Text size="xs" c="dimmed" mt={5}>
+              <Text size="xs" c="dimmed" mt={4}>
                 Уникальный адрес в Relay
               </Text>
             </div>
@@ -223,14 +250,14 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
                 required
                 {...form.getInputProps("slug")}
               />
-              <Text size="xs" c="dimmed" mt={9}>
+              <Text size="sm" c="dimmed" mt="xs">
                 Латинские буквы в нижнем регистре, цифры и дефисы.
               </Text>
               <div className={styles.addressPreview}>
-                <span className={styles.addressLabel}>АДРЕС ПРОЕКТА</span>
+                <span className={styles.addressLabel}>Адрес проекта</span>
                 <code className={styles.address}>{previewPath}</code>
               </div>
-              <Text size="xs" c="dimmed" mt={10}>
+              <Text size="sm" c="dimmed" mt="sm">
                 При смене slug адрес обновится. Ссылки по постоянному ID продолжат работать.
               </Text>
             </div>
@@ -238,8 +265,9 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
         </fieldset>
         {hasConflict && (
           <Alert
-            color="orange"
+            color="warning"
             title="Настройки изменились в другом окне"
+            icon={<TriangleAlert size={18} aria-hidden="true" />}
             className={styles.feedback}
           >
             <Text size="sm">Ваш ввод сохранён. Сейчас на сервере: {currentSettingsLabel}</Text>
@@ -254,18 +282,32 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
           </Alert>
         )}
         {hasError && (
-          <Alert color="red" className={styles.feedback}>
+          <Alert
+            ref={errorRef}
+            color="danger"
+            title="Не удалось сохранить"
+            tabIndex={-1}
+            icon={<CircleAlert size={18} aria-hidden="true" />}
+            className={styles.feedback}
+          >
             {error}
           </Alert>
         )}
         {hasDraftStorageError && (
-          <Alert color="orange" className={styles.feedback}>
+          <Alert
+            color="warning"
+            icon={<TriangleAlert size={18} aria-hidden="true" />}
+            className={styles.feedback}
+          >
             Браузер не сохранил черновик. Не закрывайте страницу до сохранения.
           </Alert>
         )}
         <footer className={styles.footer}>
           <span className={styles.status} role="status">
-            <span className={clsx(styles.statusDot, hasChanges && styles._changed)} />
+            <span
+              className={clsx(styles.statusDot, hasChanges && styles._changed)}
+              aria-hidden="true"
+            />
             {statusLabel}
           </span>
           <Group gap="xs" className={styles.buttons}>
@@ -277,7 +319,7 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
             >
               Отменить
             </Button>
-            <Button type="submit" disabled={!canSave} loading={form.submitting}>
+            <Button ref={submitRef} type="submit" disabled={!canSave} loading={form.submitting}>
               Сохранить изменения
             </Button>
           </Group>
@@ -286,10 +328,10 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
       <div className={styles.identity}>
         <Fingerprint size={20} aria-hidden="true" className={styles.identityIcon} />
         <div className={styles.identityText}>
-          <Text size="xs" fw={500}>
+          <Text size="sm" fw={550}>
             Постоянный ID проекта
           </Text>
-          <Text size="xs" c="dimmed" mt={3}>
+          <Text size="sm" c="dimmed" mt={4}>
             Не меняется вместе с именем и адресом. Связи и данные остаются на месте.
           </Text>
         </div>
@@ -304,7 +346,7 @@ export const GeneralSettings = (props: GeneralSettingsProps) => {
                   aria-label="Скопировать ID проекта"
                   onClick={copy}
                 >
-                  <Copy size={14} />
+                  <Copy size={16} aria-hidden="true" />
                 </ActionIcon>
               </Tooltip>
             )}

@@ -1,19 +1,24 @@
+/* Панель описания вклада: шапка выбранного элемента, исходный контракт и поля формы. */
 .root {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--tasks-space-5);
   min-width: 0;
-  padding: 1.25rem;
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
-  background: var(--tasks-surface);
+  padding: var(--tasks-space-5) var(--tasks-space-4);
+  border-radius: var(--tasks-radius-panel);
+  background: var(--tasks-card);
 
   @media (--lg) {
-    padding: 1.5rem;
+    padding: var(--tasks-space-6);
+  }
+
+  @media (--forced-colors) {
+    border: 1px solid CanvasText;
   }
 }
 
 .back {
   justify-self: start;
+
   @media (--lg) {
     display: none;
   }
@@ -21,36 +26,46 @@
 
 .header {
   display: grid;
-  gap: 0.625rem;
+  gap: var(--tasks-space-2);
   min-width: 0;
 }
+
 .title {
   margin: 0;
-  font-size: 1.25rem;
-  line-height: 1.4;
-  font-weight: 600;
+  font-size: var(--tasks-font-size-panel-title);
+  line-height: 1.25;
+  font-weight: 700;
   overflow-wrap: anywhere;
+
   &:focus {
     outline: none;
   }
 }
+
+/* Исходное описание — вложенная плитка на панели. */
+.source {
+  border: 0;
+  border-radius: var(--tasks-radius-row);
+  background: var(--tasks-tile);
+
+  &[data-active] {
+    background: var(--tasks-tile);
+  }
+}
+
 .notSelected {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  border-radius: var(--mantine-radius-md);
-  background: var(--tasks-subtle);
+  gap: var(--tasks-space-3);
+  padding: var(--tasks-space-4);
+  border-radius: var(--tasks-radius-row);
+  background: var(--tasks-tile);
 }
 
 .readiness {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  align-items: flex-end;
-}
-
-.statusField {
-  flex: 1 1 16rem;
+  gap: var(--tasks-space-2) var(--tasks-space-4);
+  align-items: center;
 }

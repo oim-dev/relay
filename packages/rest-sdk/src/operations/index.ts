@@ -4,6 +4,8 @@
  * https://github.com/gromlab-ru/rest-api-codegen
  */
 
+export { bulkChangeDocumentsForProject } from "./bulk-change-documents-for-project.js";
+export { bulkChangeDocuments } from "./bulk-change-documents.js";
 export { changeDocumentRelationForProject } from "./change-document-relation-for-project.js";
 export { changeDocumentRelation } from "./change-document-relation.js";
 export { changeDocumentSectionForProject } from "./change-document-section-for-project.js";
@@ -42,10 +44,14 @@ export { getBoardsForProject } from "./get-boards-for-project.js";
 export { getBoards } from "./get-boards.js";
 export { getContextForProject } from "./get-context-for-project.js";
 export { getContext } from "./get-context.js";
+export { getDocumentFacetsForProject } from "./get-document-facets-for-project.js";
+export { getDocumentFacets } from "./get-document-facets.js";
 export { getDocumentLinksForProject } from "./get-document-links-for-project.js";
 export { getDocumentLinks } from "./get-document-links.js";
 export { getDocumentSectionsForProject } from "./get-document-sections-for-project.js";
 export { getDocumentSections } from "./get-document-sections.js";
+export { getEntityDocumentsForProject } from "./get-entity-documents-for-project.js";
+export { getEntityDocuments } from "./get-entity-documents.js";
 export { getEntityForProject } from "./get-entity-for-project.js";
 export { getEntityKeySpacesForProject } from "./get-entity-key-spaces-for-project.js";
 export { getEntityKeySpaces } from "./get-entity-key-spaces.js";
@@ -159,6 +165,8 @@ export { publishTaskCommentForProject } from "./publish-task-comment-for-project
 export { publishTaskComment } from "./publish-task-comment.js";
 export { registerProjectCompact } from "./register-project-compact.js";
 export { registerProject } from "./register-project.js";
+export { relateDocumentForProject } from "./relate-document-for-project.js";
+export { relateDocument } from "./relate-document.js";
 export { renameEntityKeyForProject } from "./rename-entity-key-for-project.js";
 export { renameEntityKey } from "./rename-entity-key.js";
 export { replaceProductParticipationForProject } from "./replace-product-participation-for-project.js";

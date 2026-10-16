@@ -49,8 +49,8 @@ export const ContextList = ({
               onClick={() => onNodeSelect(node.address)}
               aria-pressed={selectedNodeId === node.address}
             >
-              <ThemeIcon color={node.presentation.color} variant="light">
-                <node.presentation.icon size={18} />
+              <ThemeIcon color="accent" variant="light">
+                <node.presentation.icon size={18} aria-hidden="true" />
               </ThemeIcon>
               <span>
                 <Text component="span" size="xs" c="dimmed" display="block">
@@ -65,7 +65,7 @@ export const ContextList = ({
         ))}
       </ul>
       {hasMoreNodes && (
-        <Button variant="subtle" onClick={() => setNodeCount((count) => count + 30)}>
+        <Button variant="subtle" color="gray" onClick={() => setNodeCount((count) => count + 30)}>
           Показать ещё сущности
         </Button>
       )}
@@ -93,7 +93,7 @@ export const ContextList = ({
         ))}
       </ul>
       {hasMoreEdges && (
-        <Button variant="subtle" onClick={() => setEdgeCount((count) => count + 30)}>
+        <Button variant="subtle" color="gray" onClick={() => setEdgeCount((count) => count + 30)}>
           Показать ещё связи
         </Button>
       )}

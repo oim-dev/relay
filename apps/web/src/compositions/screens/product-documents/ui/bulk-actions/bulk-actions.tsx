@@ -1,0 +1,254 @@
+import { useRef, useState } from "react";
+import clsx from "clsx";
+import { ActionIcon, Button, Menu, Modal } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import { ChevronDown, FolderInput, MoreHorizontal, Tag, TagsIcon, X } from "lucide-react";
+import { isEmptyArray } from "shared/value-predicates";
+import { BulkTagsForm } from "./ui/bulk-tags-form/bulk-tags-form";
+import type { BulkActionsProps } from "./types/bulk-actions-props.type";
+import styles from "./styles/bulk-actions.module.css";
+
+/** Изменения состояния и закрепления для выбранных материалов. */
+const STATE_ACTIONS = [
+  { key: "pin", label: "Закрепить", operation: { type: "pin", pinned: true } },
+  { key: "unpin", label: "Открепить", operation: { type: "pin", pinned: false } },
+  {
+    key: "active",
+    label: "Сделать действующими",
+    operation: { type: "setStatus", documentStatus: "active" },
+  },
+  {
+    key: "draft",
+    label: "Вернуть в черновики",
+    operation: { type: "setStatus", documentStatus: "draft" },
+  },
+  {
+    key: "archived",
+    label: "Перенести в архив",
+    operation: { type: "setStatus", documentStatus: "archived" },
+  },
+] as const;
+
+/**
+ * Применяет одно действие ко всем выбранным материалам: раздел, теги, состояние, закрепление.
+ * На телефоне панель занимает одну строку: счётчик, меню действий и снятие выбора.
+ *
+ * Используется для:
+ *  - упорядочивания нескольких материалов каталога за один шаг
+ */
+export const BulkActions = (props: BulkActionsProps) => {
+  const {
+    projectId,
+    count,
+    isOverLimit,
+    isRunning,
+    sections,
+    selectedTags,
+    onRun,
+    onClear,
+    className,
+    ...rootAttrs
+  } = props;
+  const isWide = useMediaQuery("(min-width: 48em)", true, { getInitialValueInEffect: false });
+  // Режим окна тегов остаётся до конца анимации закрытия: заголовок и форма не меняются на лету.
+  const [tagsMode, setTagsMode] = useState<"addTags" | "removeTags" | null>(null);
+  const [isTagsOpened, setTagsOpened] = useState(false);
+  const actionsRef = useRef<HTMLButtonElement>(null);
+  const addTagsRef = useRef<HTMLButtonElement>(null);
+  const removeTagsRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const pendingTagsRef = useRef<{ mode: "addTags" | "removeTags"; tags: string[] } | null>(null);
+  const isDisabled = isRunning || isOverLimit;
+  const hasNoSelectedTags = isEmptyArray(selectedTags);
+  const sectionItems = [{ id: null, name: "Без раздела" }, ...sections].map((section) => ({
+    key: section.id ?? "none",
+    id: section.id,
+    name: section.name,
+  }));
+  const tagsTitle = tagsMode === "removeTags" ? "Снять теги" : "Добавить теги";
+  /**
+   * Открывает окно тегов и запоминает, куда вернуть фокус после отмены: кнопку панели
+   * на широком экране или «Действия» на телефоне — пункта меню после закрытия уже нет.
+   */
+  const openTags = (mode: "addTags" | "removeTags"): void => {
+    const opener = isWide ? (mode === "addTags" ? addTagsRef : removeTagsRef) : actionsRef;
+    openerRef.current = opener.current;
+    setTagsMode(mode);
+    setTagsOpened(true);
+  };
+  /** Запускает действие с тегами. */
+  const runTags = (mode: "addTags" | "removeTags", tags: string[]): void => {
+    const label = mode === "addTags" ? "Добавить теги" : "Снять теги";
+    onRun({ type: mode, tags }, `${label}: ${tags.join(", ")}`);
+  };
+  /**
+   * Применяет набор тегов после закрытия окна: иначе исчезающее окно уносит фокус
+   * с результата операции.
+   */
+  const handleTags = (mode: "addTags" | "removeTags", tags: string[]): void => {
+    pendingTagsRef.current = { mode, tags };
+    setTagsOpened(false);
+  };
+  /**
+   * После закрытия окна: запускает отложенное действие (результат сам получит фокус) или,
+   * при отмене, возвращает фокус к кнопке, открывшей окно.
+   */
+  const handleTagsClosed = (): void => {
+    const pending = pendingTagsRef.current;
+    pendingTagsRef.current = null;
+    setTagsMode(null);
+    if (pending === null) openerRef.current?.focus();
+    else runTags(pending.mode, pending.tags);
+  };
+  const sectionMenuItems = sectionItems.map((section) => (
+    <Menu.Item
+      key={section.key}
+      onClick={() =>
+        onRun({ type: "move", sectionId: section.id }, `Переместить в «${section.name}»`)
+      }
+    >
+      {section.name}
+    </Menu.Item>
+  ));
+  const stateMenuItems = STATE_ACTIONS.map((action) => (
+    <Menu.Item key={action.key} onClick={() => onRun(action.operation, action.label)}>
+      {action.label}
+    </Menu.Item>
+  ));
+  return (
+    <div
+      {...rootAttrs}
+      className={clsx(styles.root, className)}
+      role="region"
+      aria-label="Действия с выбранными материалами"
+    >
+      <p className={styles.count} aria-live="polite">
+        Выбрано: {count}
+      </p>
+      {!isWide && (
+        <div className={styles.compact}>
+          <Menu position="top-end" withinPortal>
+            <Menu.Target>
+              <Button
+                ref={actionsRef}
+                size="xs"
+                variant="default"
+                disabled={isDisabled}
+                leftSection={<MoreHorizontal size={14} aria-hidden="true" />}
+              >
+                Действия
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>В раздел</Menu.Label>
+              {sectionMenuItems}
+              <Menu.Divider />
+              <Menu.Item onClick={() => openTags("addTags")}>Добавить теги…</Menu.Item>
+              <Menu.Item disabled={hasNoSelectedTags} onClick={() => openTags("removeTags")}>
+                Снять теги…
+              </Menu.Item>
+              <Menu.Divider />
+              {stateMenuItems}
+            </Menu.Dropdown>
+          </Menu>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="lg"
+            disabled={isRunning}
+            aria-label="Снять выбор"
+            onClick={onClear}
+          >
+            <X size={16} aria-hidden="true" />
+          </ActionIcon>
+        </div>
+      )}
+      {isWide && (
+        <div className={styles.actions}>
+          <Menu position="top-start" withinPortal>
+            <Menu.Target>
+              <Button
+                size="xs"
+                variant="default"
+                disabled={isDisabled}
+                leftSection={<FolderInput size={14} aria-hidden="true" />}
+                rightSection={<ChevronDown size={13} aria-hidden="true" />}
+              >
+                В раздел
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>{sectionMenuItems}</Menu.Dropdown>
+          </Menu>
+          <Button
+            ref={addTagsRef}
+            size="xs"
+            variant="default"
+            disabled={isDisabled}
+            aria-haspopup="dialog"
+            leftSection={<Tag size={14} aria-hidden="true" />}
+            onClick={() => openTags("addTags")}
+          >
+            Добавить теги
+          </Button>
+          <Button
+            ref={removeTagsRef}
+            size="xs"
+            variant="default"
+            disabled={isDisabled || hasNoSelectedTags}
+            aria-haspopup="dialog"
+            leftSection={<TagsIcon size={14} aria-hidden="true" />}
+            onClick={() => openTags("removeTags")}
+          >
+            Снять теги
+          </Button>
+          <Menu position="top-start" withinPortal>
+            <Menu.Target>
+              <Button
+                size="xs"
+                variant="default"
+                disabled={isDisabled}
+                rightSection={<ChevronDown size={13} aria-hidden="true" />}
+              >
+                Состояние
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>{stateMenuItems}</Menu.Dropdown>
+          </Menu>
+          <Button
+            size="xs"
+            variant="subtle"
+            color="gray"
+            disabled={isRunning}
+            leftSection={<X size={14} aria-hidden="true" />}
+            onClick={onClear}
+          >
+            Снять выбор
+          </Button>
+        </div>
+      )}
+      {isOverLimit && (
+        <p className={styles.limit}>За один раз можно изменить не более 100 материалов.</p>
+      )}
+      {/*
+        Одно окно на всех ширинах: Modal закрывает по Escape только закрытый список вариантов
+        (поле с открытым списком помечено data-mantine-stop-propagation) и держит фокус внутри.
+      */}
+      <Modal
+        opened={isTagsOpened}
+        title={tagsTitle}
+        returnFocus={false}
+        onClose={() => setTagsOpened(false)}
+        onExitTransitionEnd={handleTagsClosed}
+      >
+        {tagsMode !== null && (
+          <BulkTagsForm
+            mode={tagsMode}
+            projectId={projectId}
+            selectedTags={selectedTags}
+            onApply={(tags) => handleTags(tagsMode, tags)}
+          />
+        )}
+      </Modal>
+    </div>
+  );
+};

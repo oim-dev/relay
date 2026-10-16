@@ -25,6 +25,7 @@ import {
   physicalUnified3,
 } from "../src/storage/data-model/transitions/physical-unified.js";
 import { physicalLegacy } from "../src/storage/data-model/transitions/physical-legacy.js";
+import { documentV1ToV2 } from "../src/storage/data-model/transitions/document-v1-to-v2.js";
 import { planningV1ToV2 } from "../src/storage/data-model/transitions/planning-v1-to-v2.js";
 import { deterministicId } from "../src/storage/data-model/registry.js";
 import type {
@@ -402,7 +403,7 @@ test("physical2-plan-v1-43d683b: записи в исходных версиях
     assert.deepEqual([...present.get(kind)!], [1], kind);
   assert.deepEqual(
     registry.plan(present).map((step) => step.id),
-    [planningV1ToV2.id],
+    [documentV1ToV2.id, planningV1ToV2.id],
   );
   // Прежнее тело DOC-4 живёт только в снимке выпуска: снимки не удаляются физическим шагом.
   const d4 = expected.entities.D4!;

@@ -1,19 +1,24 @@
+/*
+ * Карточка узла имеет фиксированный размер раскладки (CONTEXT_NODE_SIZE), поэтому внутренние
+ * отступы и положение нижней строки — собственная геометрия графа; цвета и радиус — из темы.
+ */
 .root {
   position: relative;
   height: 100%;
-  padding: 12px 14px;
-  background: var(--tasks-surface);
+  padding: var(--tasks-space-3) 0.875rem;
   border: 1px solid var(--tasks-selected-border);
-  border-radius: var(--mantine-radius-md);
+  border-radius: var(--tasks-radius-compact);
+  background: var(--tasks-surface);
   color: var(--tasks-ink);
   box-shadow: var(--tasks-card-shadow);
 
   &._origin {
-    border: 2px solid var(--mantine-color-blue-6);
+    border: 2px solid var(--tasks-accent);
   }
 
+  /* Выбор отличается и от исходной (акцентная рамка), и от фокуса клавиатуры. */
   &._selected {
-    outline: 3px solid var(--mantine-color-teal-6);
+    outline: 3px solid var(--tasks-ink);
     outline-offset: 3px;
     background: var(--tasks-selected);
   }
@@ -21,29 +26,48 @@
   &._dimmed {
     filter: grayscale(1);
   }
+
+  @media (--forced-colors) {
+    &._origin,
+    &._selected {
+      outline-color: Highlight;
+      border-color: Highlight;
+    }
+  }
+}
+
+.origin {
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-accent-subtle);
+  color: var(--tasks-accent-ink);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  line-height: 1.25rem;
+  white-space: nowrap;
 }
 
 .additional {
-  color: light-dark(var(--mantine-color-blue-9), var(--mantine-color-blue-3));
+  color: var(--tasks-accent-ink);
 }
 
 .key {
-  margin-top: 6px;
+  margin-top: 0.375rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .title {
-  line-height: 1.35;
-  margin-top: 3px;
+  margin-top: 0.125rem;
+  line-height: var(--tasks-line-height-record-title);
 }
 
 .footer {
   position: absolute;
-  bottom: 9px;
-  left: 14px;
-  right: 14px;
+  right: 0.875rem;
+  bottom: var(--tasks-space-2);
+  left: 0.875rem;
 }
 
 .port {

@@ -8,17 +8,34 @@
   box-sizing: border-box;
 }
 
+/*
+ * Общая подложка приложения: сплошная основа на html и декоративный слой окна под всем
+ * содержимым. Слой фиксирован относительно окна, поэтому на длинной странице нет шва,
+ * повтора и растяжения переходов; события и overlays он не перехватывает.
+ */
 html {
   color-scheme: var(--mantine-color-scheme);
-  background: var(--tasks-canvas);
+  background-color: var(--tasks-backdrop);
   color: var(--tasks-ink);
   font-family: var(--mantine-font-family);
   -webkit-font-smoothing: antialiased;
 }
 
+/* Заливка body из стилей Mantine закрыла бы слой подложки. */
 body {
   margin: 0;
   min-width: 20rem;
+  background-color: transparent;
+
+  &::before {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image: var(--tasks-backdrop-image);
+    background-repeat: no-repeat;
+    content: "";
+    pointer-events: none;
+  }
 }
 
 button {
@@ -39,9 +56,15 @@ textarea,
 select,
 [tabindex] {
   &:focus-visible {
-    outline: 2px solid var(--tasks-focus-ring);
-    outline-offset: 3px;
+    outline: var(--tasks-focus-ring-width) solid var(--tasks-focus-ring);
+    outline-offset: var(--tasks-focus-ring-offset);
   }
+}
+
+/* Зафиксированный фокус инертного образца (галерея) — тот же контур, что у :focus-visible. */
+[data-tasks-preview="focus"] {
+  outline: var(--tasks-focus-ring-width) solid var(--tasks-focus-ring);
+  outline-offset: var(--tasks-focus-ring-offset);
 }
 
 button,

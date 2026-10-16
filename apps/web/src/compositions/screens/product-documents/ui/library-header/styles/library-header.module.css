@@ -1,0 +1,38 @@
+/* Поиск, разделы (до широкого экрана), фильтры и добавление — в порядке чтения. */
+.search {
+  flex: 1 1 100%;
+  min-width: 0;
+
+  /* До широкой раскладки поиск стоит отдельной строкой, кнопки — под ним. */
+  @media (--xl) {
+    flex-basis: 10rem;
+  }
+}
+
+/* Счётчик активных фильтров виден и при скрытой панели: акцентная метка в обеих темах. */
+.filtersCount {
+  --badge-bg: var(--tasks-accent);
+  --badge-color: var(--tasks-accent-contrast);
+
+  font-variant-numeric: tabular-nums;
+}
+
+.navigationButton,
+.filtersButton {
+  flex: none;
+}
+
+.navigationButton {
+  @media (--xl) {
+    display: none;
+  }
+}
+
+.create {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  @media (--sm) {
+    flex-grow: 0;
+  }
+}

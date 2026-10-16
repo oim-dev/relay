@@ -1,68 +1,87 @@
-.page {
-  max-width: 76rem;
+.stage {
+  align-content: start;
 }
-.root {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 2rem;
-  @media (--lg) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 17.5rem;
-    gap: 2.5rem;
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 0.375rem;
+  min-height: 2rem;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 550;
+
+  &:hover {
+    color: var(--tasks-ink);
   }
 }
+
+/* Метки свойств одной высоты с бейджем состояния. */
+.chip,
+.format {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  min-height: 1.25rem;
+  padding: 0 var(--tasks-space-2);
+  border-radius: var(--tasks-radius-pill);
+  background: var(--tasks-card);
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  line-height: 1.125rem;
+}
+
+.format[data-format="link"] {
+  background: var(--tasks-accent-subtle);
+  color: var(--tasks-accent-ink);
+}
+
+/* Краткое описание сохраняет переносы строк автора. */
+.summary {
+  white-space: pre-line;
+}
+
+.layout {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+
+  @media (--xl) {
+    grid-template-columns: minmax(0, 1fr) 19rem;
+    align-items: start;
+  }
+}
+
+.main {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
 .document {
   min-width: 0;
-  padding: 1.25rem;
-  background: var(--tasks-surface);
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-lg);
+  padding: 1.25rem 1rem;
+  border-radius: var(--tasks-radius-panel);
+  background: var(--tasks-card);
+  overflow-wrap: anywhere;
+
   & h1,
   & h2,
   & h3 {
     scroll-margin-top: 5rem;
   }
+
+  /*
+   * Мера чтения: текстовые блоки около 70ch на любом широком окне, панель остаётся
+   * на ширину колонки. Таблицы и код не ограничиваются и прокручиваются сами.
+   */
+  & :where(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6) {
+    max-width: var(--tasks-reading-measure);
+  }
+
   @media (--md) {
-    padding: 2rem 2.25rem;
-  }
-}
-.type {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--tasks-muted);
-  font-size: 0.75rem;
-}
-.key {
-  color: var(--tasks-soft);
-  font-family: var(--mantine-font-family-monospace);
-  font-size: 0.7rem;
-  margin-left: 0.25rem;
-}
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 1.5rem;
-  font-size: 0.75rem;
-}
-.draftNotice {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid light-dark(var(--mantine-color-yellow-3), var(--mantine-color-dark-4));
-  border-radius: var(--mantine-radius-md);
-  background: light-dark(var(--mantine-color-yellow-0), var(--mantine-color-dark-7));
-  color: var(--tasks-warning-ink);
-  font-size: 0.8125rem;
-  & strong {
-    font-weight: 600;
-  }
-  & p {
-    margin: 0.2rem 0 0;
-    font-size: 0.75rem;
-    line-height: 1.6;
+    padding: 1.75rem 2rem;
   }
 }

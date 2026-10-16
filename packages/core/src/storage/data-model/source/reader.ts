@@ -1242,7 +1242,16 @@ export function diagnoseStorageSource(
         }
     if (ready)
       try {
-        const data = source.layout === "legacy" ? [] : registry.plan(source.present);
+        // Источник без dataVersion (legacy): версии выхода объявляет физический шаг.
+        const present = physical?.produces
+          ? new Map(
+              Object.entries(physical.produces).map(([kind, version]) => [
+                kind,
+                new Set([version]),
+              ]),
+            )
+          : source.present;
+        const data = registry.plan(present);
         steps = {
           physical,
           data,

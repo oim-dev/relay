@@ -3,6 +3,7 @@ import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
 import { subscribeWorkspace } from "infra/workspace-events";
 import { getProductEntities, getProductEntity } from "../adapters/product-entities.adapter";
+import { ProductNotFoundError } from "../errors/product-errors";
 import type { ProductEntitiesQuery, ProductEntities } from "../types/product-entity.type";
 
 /** Каталог целей; null не запускает запрос скрытого выбора. */
@@ -33,6 +34,8 @@ export const useProductEntity = (projectId: string, ref: string | null) => {
     stableRef === null ? null : ["product-entity", projectId, stableRef],
     () => getProductEntity(projectId, stableRef!),
     {
+      /* Отсутствующая запись не появится от повтора: показывается сразу. */
+      shouldRetryOnError: (error) => !(error instanceof ProductNotFoundError),
       onSuccess: (entity) => {
         if (stableRef === entity.id) return;
         void cache.mutate(["product-entity", projectId, entity.id], entity, false);

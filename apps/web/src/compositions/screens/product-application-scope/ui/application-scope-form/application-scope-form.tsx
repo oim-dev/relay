@@ -260,7 +260,7 @@ export const ApplicationScopeForm = (props: ApplicationScopeFormProps) => {
         autoClose: 2500,
         title: "Состав реализации сохранён",
         message: "Состав реализации сохранён. Общая готовность продукта пересчитана.",
-        color: "teal",
+        color: "success",
         closeButtonProps: { "aria-label": "Закрыть уведомление" },
       });
       navigate(backTo, { replace: true });
@@ -314,24 +314,22 @@ export const ApplicationScopeForm = (props: ApplicationScopeFormProps) => {
       onSubmit={form.onSubmit(handleSubmit, handleInvalid)}
       className={clsx(styles.root, className)}
     >
-      {hasRestoredDraft && (
-        <Alert color="gray">Восстановлен черновик состава и описаний этой вкладки.</Alert>
-      )}
+      {hasRestoredDraft && <Alert>Восстановлен черновик состава и описаний этой вкладки.</Alert>}
       {hasConflict && (
-        <Alert color="orange" title="Данные продукта изменились">
+        <Alert color="warning" title="Данные продукта изменились" role="alert">
           Ваш ввод сохранён. Выберите, с какой версией продолжить.
           <Group gap="xs" mt="sm">
             <Button size="xs" variant="default" onClick={handleKeepDraft}>
               Оставить мой ввод
             </Button>
-            <Button size="xs" variant="subtle" color="gray" onClick={handleUseCurrent}>
+            <Button size="xs" variant="subtle" onClick={handleUseCurrent}>
               Загрузить актуальную версию
             </Button>
           </Group>
         </Alert>
       )}
       {!canPersist && (
-        <Alert color="orange" role="alert">
+        <Alert color="warning" role="alert">
           Не удалось сохранить черновик в браузере. Сохраните изменения перед закрытием страницы.
         </Alert>
       )}
@@ -378,7 +376,7 @@ export const ApplicationScopeForm = (props: ApplicationScopeFormProps) => {
         </div>
       </fieldset>
       {hasSaveError && (
-        <Alert color="red" role="alert" title="Не удалось сохранить">
+        <Alert color="danger" role="alert" title="Не удалось сохранить">
           {saveError}
         </Alert>
       )}

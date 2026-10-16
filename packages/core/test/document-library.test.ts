@@ -220,7 +220,11 @@ test("библиотека: повторяемая миграция прежне
       .migrated,
     false,
   );
-  assert.deepEqual(await engine.get({ ref: saved.key }), before);
+  // Переход document v1 → v2 явно записывает формат и теги; текст, ID и ревизия прежние.
+  assert.deepEqual(await engine.get({ ref: saved.key }), {
+    ...before,
+    data: { ...before.data, documentFormat: "markdown", tags: [] },
+  });
   assert.equal(
     JSON.parse(
       await readFile(
@@ -229,5 +233,14 @@ test("библиотека: повторяемая миграция прежне
       ),
     ).schemaVersion,
     3,
+  );
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        join(repository.root, "../entities/documents", `${saved.ref.id}.json`),
+        "utf8",
+      ),
+    ).dataVersion,
+    2,
   );
 });

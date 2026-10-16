@@ -41,6 +41,22 @@ test("проверка содержания выдаёт страницы пре
   assert.deepEqual(await service.state(), state);
 });
 
+type ProductState = { version: string; records: { fields: { kind: string } }[] };
+/** Снимок без производной версии: она зависит от содержания и меняется вместе с ним. */
+const withoutVersion = ({ version: _version, ...state }: ProductState) => state;
+/**
+ * Ожидание после явной миграции: document v1 → v2 записывает прежним документам
+ * Markdown-формат и пустые теги; остальное содержание, ID и ревизии не меняются.
+ */
+const migratedState = (state: ProductState) => ({
+  ...withoutVersion(state),
+  records: state.records.map((record) =>
+    record.fields.kind === "document"
+      ? { ...record, fields: { documentFormat: "markdown", tags: [], ...record.fields } }
+      : record,
+  ),
+});
+
 test("хранение продукта: Markdown по строкам, миграция без потери текста, ревизий и повторов", async (t) => {
   const app = await fixture(t);
   const service = new ProductQueries(app.workspace);
@@ -147,7 +163,7 @@ test("хранение продукта: Markdown по строкам, мигр�
       .migrated,
     true,
   );
-  assert.deepEqual(await service.state(), before);
+  assert.deepEqual(withoutVersion(await service.state()), migratedState(before));
   assert.deepEqual(
     (await repository.all()).find((record) => record.id === saved.id),
     original,
@@ -168,7 +184,7 @@ test("хранение продукта: Markdown по строкам, мигр�
       .migrated,
     true,
   );
-  assert.deepEqual(await service.state(), before);
+  assert.deepEqual(withoutVersion(await service.state()), migratedState(before));
   // Дубликат не игнорируется и не перезаписывается миграцией.
   await writeLegacyMigrationFixture(app.workspace);
   await mkdir(repository.root, { recursive: true });

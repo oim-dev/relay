@@ -1,18 +1,22 @@
+/*
+ * Карточка задачи — строка-плитка на тонированной колонке. Подъём тенью только при наведении
+ * и у перетаскиваемой копии; место вставки повторяет геометрию карточки пунктиром.
+ */
 .root {
   position: relative;
   flex-shrink: 0;
   width: 100%;
   min-width: 0;
-  padding: 12px 14px 14px;
-  border: 1px solid var(--tasks-border);
-  border-radius: 12px;
-  background: var(--tasks-surface);
+  padding: var(--tasks-space-3) var(--tasks-space-4) var(--tasks-space-4);
+  border: 1px solid var(--tasks-tile-border);
+  border-radius: var(--tasks-radius-compact);
+  background-color: var(--tasks-tile);
   color: var(--tasks-ink);
   box-shadow: var(--tasks-card-shadow);
   cursor: pointer;
   transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+    border-color var(--tasks-duration-control) var(--tasks-easing-standard),
+    box-shadow var(--tasks-duration-control) var(--tasks-easing-standard);
 
   &:hover {
     border-color: var(--tasks-selected-border);
@@ -27,21 +31,20 @@
   &._placeholder {
     border-style: dashed;
     border-color: var(--tasks-selected-border);
-    background: color-mix(in srgb, var(--tasks-selected) 60%, transparent);
+    background-color: var(--tasks-subtle);
     box-shadow: none;
     cursor: grabbing;
 
+    /* Прозрачность, а не visibility: ручка остаётся в фокусе клавиатурного переноса. */
     & > * {
-      visibility: hidden;
+      opacity: 0;
     }
   }
 
   &._overlay {
     height: 100%;
     border-color: var(--tasks-selected-border);
-    box-shadow:
-      0 14px 36px -8px light-dark(#00000030, #00000080),
-      0 3px 8px light-dark(#00000012, #00000040);
+    box-shadow: var(--tasks-raised-shadow);
     cursor: grabbing;
     pointer-events: none;
   }
@@ -49,53 +52,47 @@
   @media (prefers-reduced-motion: reduce) {
     transition: none;
   }
+
+  @media (--forced-colors) {
+    border-color: CanvasText;
+  }
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--tasks-space-2);
   min-width: 0;
-  height: 24px;
+  height: 1.5rem;
 }
 
 .key {
   overflow: hidden;
   color: var(--tasks-muted);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: var(--mantine-font-size-xs);
   font-weight: 600;
+  line-height: 1rem;
   letter-spacing: 0.03em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Ручка переноса: на мыши видна при наведении и фокусе, на touch — всегда. */
 .handle {
-  flex-shrink: 0;
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
   touch-action: none;
   cursor: grab;
   opacity: 0.6;
 
-  &::before {
-    content: "";
-    position: absolute;
-    inset: -10px;
-  }
-
   &:focus-visible {
-    outline: none;
     opacity: 1;
   }
 
   @media (hover: hover) and (pointer: fine) {
     opacity: 0;
-
-    &::before {
-      inset: 0;
-    }
 
     :where(article:hover, article:focus-within, article[data-overlay]) & {
       opacity: 0.7;
@@ -103,26 +100,36 @@
   }
 }
 
+/* Название раскрывает всю карточку для указателя; до трёх строк, полный текст — в подсказке. */
 .title {
   display: -webkit-box;
   width: 100%;
-  margin-top: 6px;
+  margin-top: 0.375rem;
   padding: 0;
+  overflow: hidden;
   color: var(--tasks-ink);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 600;
+  font-size: var(--tasks-font-size-record-title);
+  font-weight: var(--tasks-font-weight-record-title);
+  line-height: var(--tasks-line-height-record-title);
   text-align: left;
   overflow-wrap: anywhere;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
-  overflow: hidden;
+
+  /*
+   * На touch область ручки переноса (44px) выходит за шапку высотой 24px на 10px вниз;
+   * отступ названия больше этого выхода, и касание верхнего края названия открывает
+   * задачу, а не попадает в ручку. На desktop отступ прежний.
+   */
+  @media (pointer: coarse) {
+    margin-top: calc((var(--tasks-touch-target) - 1.5rem) / 2 + 1px);
+  }
 
   &::after {
-    content: "";
     position: absolute;
     inset: 0;
-    border-radius: 12px;
+    border-radius: var(--tasks-radius-compact);
+    content: "";
   }
 
   &._untitled {
@@ -138,41 +145,26 @@
 .context {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
   min-width: 0;
-  margin-top: 12px;
+  margin-top: var(--tasks-space-3);
 }
 
+/* Цель реализации: вид (фича или сценарий) передают значок и подпись, а не цвет. */
 .target {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
   min-width: 0;
-  padding: 4px 7px;
-  border-radius: 6px;
-  background: var(--tasks-subtle);
+  padding: var(--tasks-space-1) var(--tasks-space-2);
+  border-radius: var(--tasks-radius-control);
+  background-color: var(--tasks-subtle);
   color: var(--tasks-muted);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1rem;
 
   & > svg {
     flex-shrink: 0;
-  }
-
-  &._feature {
-    background: light-dark(
-      var(--mantine-color-violet-light),
-      color-mix(in srgb, var(--mantine-color-violet-3) 18%, var(--tasks-surface))
-    );
-    color: light-dark(var(--mantine-color-violet-9), var(--mantine-color-violet-2));
-  }
-
-  &._scenario {
-    background: light-dark(
-      var(--mantine-color-teal-light),
-      color-mix(in srgb, var(--mantine-color-teal-3) 18%, var(--tasks-surface))
-    );
-    color: light-dark(var(--mantine-color-teal-9), var(--mantine-color-teal-2));
   }
 }
 
@@ -189,19 +181,19 @@
 .more {
   flex-shrink: 0;
   color: var(--tasks-muted);
-  font-size: 11px;
-  line-height: 24px;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.5rem;
   font-variant-numeric: tabular-nums;
 }
 
 .acceptance {
   display: grid;
-  gap: 7px;
-  margin-top: 16px;
+  gap: 0.375rem;
+  margin-top: var(--tasks-space-4);
   color: var(--tasks-muted);
 
   &._accepted {
-    color: light-dark(var(--mantine-color-teal-9), var(--mantine-color-teal-2));
+    color: var(--tasks-success);
   }
 }
 
@@ -209,20 +201,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  line-height: 16px;
+  gap: var(--tasks-space-2);
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1rem;
 }
 
 .criteriaLabel {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
 }
 
 .count {
-  white-space: nowrap;
   font-weight: 600;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
@@ -235,38 +227,28 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 10px;
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid var(--tasks-border);
+  gap: var(--tasks-space-2);
+  margin-top: var(--tasks-space-3);
+  padding-top: var(--tasks-space-3);
+  border-top: 1px solid var(--tasks-tile-border);
 }
 
 .blocker {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   max-width: 100%;
-  padding: 3px 6px;
-  border-radius: 5px;
-  background: var(--mantine-color-red-light);
-  color: light-dark(var(--mantine-color-red-9), var(--mantine-color-red-2));
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 500;
 }
 
 .relations {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  align-items: center;
+  gap: 0.375rem var(--tasks-space-3);
 }
 
 .relation {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--tasks-space-1);
   color: var(--tasks-muted);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1rem;
 }

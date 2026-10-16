@@ -15,6 +15,7 @@ import {
   Route,
 } from "lucide-react";
 import { isDefined, isNonEmptyArray } from "shared/value-predicates";
+import { StatusBadge } from "ui/status-badge";
 import type { TaskCardProps, TaskCardPreviewProps } from "./types/task-card-props.type";
 import styles from "./styles/task-card.module.css";
 
@@ -99,10 +100,10 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
   const hasTarget = isNonEmptyArray(task.productLinks);
   const moreTargets = task.productLinks.length - 1;
   const hasMoreTargets = moreTargets > 0;
-  const targetTone = target?.requirementKind;
-  const TargetIcon = targetTone === "scenario" ? Route : targetTone === "feature" ? Puzzle : Layers;
+  const targetKind = target?.requirementKind;
+  const TargetIcon = targetKind === "scenario" ? Route : targetKind === "feature" ? Puzzle : Layers;
   const targetLabel =
-    targetTone === "scenario" ? "Сценарий" : targetTone === "feature" ? "Фича" : "Реализует";
+    targetKind === "scenario" ? "Сценарий" : targetKind === "feature" ? "Фича" : "Реализует";
   const targetTitle =
     target?.title || (targetState === "loading" ? "Загружаем цель…" : "Цель недоступна");
   const targetHint = `${target?.label ?? targetLabel}: ${targetTitle}${target?.isActive === false ? " · Участие снято" : ""}`;
@@ -111,7 +112,6 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
   const isAccepted = hasCriteria && task.acceptance.completed === task.acceptance.total;
   const criteriaValue = hasCriteria ? (task.acceptance.completed / task.acceptance.total) * 100 : 0;
   const criteriaLabel = `Критерии приёмки: ${task.acceptance.completed} из ${task.acceptance.total}`;
-  const criteriaColor = isAccepted ? "teal" : "gray";
   const hasDependencies = isNonEmptyArray(task.dependencies);
   const hasRelated = isNonEmptyArray(task.related);
   const hasParent = isDefined(task.parentId);
@@ -129,6 +129,8 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
   const blockerLabel = `Ожидает ${blockersCount} ${taskWord}`;
   const hasHiddenContent = isOverlay || isPlaceholder;
   const isTooltipDisabled = hasHiddenContent;
+  // Место вставки остаётся доступной карточкой: в нём сохраняется фокус ручки переноса.
+  const isAriaHidden = isOverlay || undefined;
   const rootClassName = clsx(
     styles.root,
     className,
@@ -136,11 +138,6 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
     isPlaceholder && styles._placeholder,
   );
   const titleClassName = clsx(styles.title, isUntitled && styles._untitled);
-  const targetClassName = clsx(
-    styles.target,
-    targetTone === "feature" && styles._feature,
-    targetTone === "scenario" && styles._scenario,
-  );
   const acceptanceClassName = clsx(styles.acceptance, isAccepted && styles._accepted);
   return (
     <article
@@ -150,7 +147,7 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
       data-task-id={task.id}
       data-overlay={isOverlay || undefined}
       data-dragging={isPlaceholder}
-      aria-hidden={hasHiddenContent || undefined}
+      aria-hidden={isAriaHidden}
       inert={isOverlay || undefined}
     >
       <div className={styles.header}>
@@ -166,7 +163,9 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
           aria-label={`Перенести ${task.key}`}
           className={styles.handle}
           data-drag-handle
-          disabled={isDisabled}
+          // Во время сохранения перенос недоступен (aria-disabled от dnd-kit), но ручка
+          // остаётся фокусируемой: на ней после переноса находится фокус клавиатуры.
+          data-disabled={isDisabled || undefined}
           onMouseDown={(event) => {
             event.stopPropagation();
             handleProps?.onMouseDown?.(event);
@@ -186,6 +185,7 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
         <UnstyledButton
           className={titleClassName}
           aria-label={`Открыть ${task.key}: ${title}`}
+          data-open-task
           onClick={() => onOpen?.(task.id)}
           onMouseDown={onMouseDown}
         >
@@ -194,7 +194,7 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
       </Tooltip>
       {hasTarget && (
         <div className={styles.context}>
-          <span className={targetClassName} title={targetHint}>
+          <span className={styles.target} title={targetHint}>
             <TargetIcon size={14} aria-hidden="true" />
             <span className={styles.targetText}>
               <span className={styles.targetKind}>{targetLabel} · </span>
@@ -220,22 +220,19 @@ export const TaskCardPreview = (props: TaskCardPreviewProps) => {
               <span className={styles.total}> / {task.acceptance.total}</span>
             </span>
           </div>
-          <Progress
-            value={criteriaValue}
-            size={3}
-            radius="xl"
-            color={criteriaColor}
-            aria-label={criteriaLabel}
-          />
+          <Progress variant="accent" value={criteriaValue} aria-label={criteriaLabel} />
         </div>
       )}
       {hasFooter && (
         <div className={styles.footer}>
           {task.blocked && (
-            <span className={styles.blocker}>
-              <LockKeyhole size={12} aria-hidden="true" />
+            <StatusBadge
+              tone="danger"
+              icon={<LockKeyhole size={12} aria-hidden="true" />}
+              className={styles.blocker}
+            >
               {blockerLabel}
-            </span>
+            </StatusBadge>
           )}
           {hasRelations && (
             <div className={styles.relations}>

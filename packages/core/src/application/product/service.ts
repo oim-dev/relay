@@ -23,6 +23,7 @@ import {
 import { readEntityCatalog, assertEntityKeyAvailable, resolveEntity } from "../entities/catalog.js";
 import { defaultDocumentSections } from "@relay/contracts/entities";
 import { saveDocumentWithLinks } from "../documents/link-workflow.js";
+import { documentFormatOf, normalizeDocumentTags } from "../../domain/document-library.js";
 import { syncProductRelations } from "../entities/owned-relations.js";
 import { productValidationSchema } from "@relay/contracts/product-query";
 import type { ProductValidation } from "@relay/contracts/product-query";
@@ -341,6 +342,7 @@ export class ProductService {
             ),
             "INVALID_REFERENCE",
             "Новая связь требует активного контракта",
+            4,
           );
         }
       }
@@ -355,7 +357,27 @@ export class ProductService {
           pinned: fields.pinned ?? prior?.pinned ?? false,
           sectionId: fields.sectionId === undefined ? (prior?.sectionId ?? null) : fields.sectionId,
           relations: fields.relations ?? prior?.relations ?? [],
+          // Сохранение без формата и адреса (MCP, прежний REST) не превращает ссылку в Markdown.
+          documentFormat: fields.documentFormat ?? documentFormatOf(prior ?? {}),
+          ...(fields.url === undefined &&
+          (fields.documentFormat ?? documentFormatOf(prior ?? {})) === "link" &&
+          prior?.url !== undefined
+            ? { url: prior.url }
+            : {}),
+          tags: normalizeDocumentTags(fields.tags ?? prior?.tags ?? []),
         };
+        invariant(
+          fields.documentFormat === "link"
+            ? fields.url !== undefined
+            : fields.url === undefined && fields.body.trim().length > 0,
+          "VALIDATION_ERROR",
+          fields.documentFormat === "link"
+            ? "Для материала-ссылки нужен абсолютный адрес http или https"
+            : fields.url === undefined
+              ? "Markdown не должен быть пустым"
+              : "Адрес задаётся только для материала-ссылки",
+          2,
+        );
         const sections =
           this.workspace.config.projectSettings?.documentSections ?? defaultDocumentSections;
         const sectionId = fields.sectionId;
@@ -364,6 +386,7 @@ export class ProductService {
             sections.some((section) => section.id === sectionId),
             "INVALID_REFERENCE",
             "Раздел библиотеки не найден",
+            4,
           );
         for (const relation of fields.relations ?? []) {
           // Прежний адрес этапа плана — только чтение: сохранённая связь остаётся с тем же
@@ -386,6 +409,7 @@ export class ProductService {
             target.ref.id !== id || target.ref.kind !== "document",
             "INVALID_REFERENCE",
             "Документ нельзя связать с самим собой",
+            4,
           );
           invariant(
             target.active ||
@@ -394,6 +418,7 @@ export class ProductService {
               ),
             "INVALID_REFERENCE",
             "Новая связь требует активной сущности",
+            4,
           );
           invariant(
             !fields.links.some(
@@ -404,6 +429,7 @@ export class ProductService {
             ),
             "INVALID_REFERENCE",
             "Повтор прежней связи документа",
+            4,
           );
         }
       }

@@ -16,12 +16,8 @@ export type {
 export { getFeatureStatus } from "./helpers/get-feature-status";
 export { getRelatedDocuments } from "./helpers/get-related-documents";
 export { getContributionTitle } from "./helpers/get-contribution-title";
-export {
-  PRODUCT_STATUS_OPTIONS,
-  DEMO_MODE_OPTIONS,
-  APPLICATION_TYPES,
-} from "./config/product-demo.config";
-export { DEMO_MODE_SCHEMA, PRODUCT_STATUS_SCHEMA } from "./config/product-demo.schema";
+export { PRODUCT_STATUS_OPTIONS, APPLICATION_TYPES } from "./config/product-demo.config";
+export { PRODUCT_STATUS_SCHEMA } from "./config/product-demo.schema";
 export type {
   ProductSnapshot,
   ProductFeature,

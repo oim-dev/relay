@@ -193,6 +193,10 @@ Local-сервер на такой базе стартует, если теку�
 | `POST /entities/link-task`       | Предметная связь задач; `LinkEntityTask` → `EntitySaved`                             |
 | `GET /entities/deletion-preview` | Полный каскад; `EntityDeletionQuery` → `EntityDeletionPreview`                       |
 | `POST /entities/delete`          | Подтвердить каскад; `DeleteEntity` → `EntityDeleted`                                 |
+| `GET /entities/document-facets`  | Счётчики библиотеки; `DocumentFacetsQuery` → `DocumentFacets`                        |
+| `GET /entities/documents`        | Материалы сущности; `EntityDocumentsQuery` → `EntityDocumentsPage`                   |
+| `POST /entities/document-bulk`   | Массовое изменение документов; `DocumentBulk` → `DocumentBulkResult`                 |
+| `POST /entities/relate-document` | Одна связь документа; `EntityDocumentRelationChange` → `EntitySaved`                 |
 
 Чтение поддерживает одиннадцать основных видов, но создание — только `product`,
 `feature`, `scenario`, `application`, `implementation`, `task`, `document`.
@@ -366,11 +370,34 @@ query-параметров. Смысл показателей, подборок 
 Содержание документа создавайте/меняйте через generic
 entities или `product/records`, читайте полное содержание через `entities/get`.
 Для библиотеки используйте `GET /entities?kind=document` с `section`, `documentKind`,
-`status`, `pinned`, `archived`, `q`, `sort`. `section=none` — без раздела.
+`documentFormat`, `tags`, `unattached`, `status`, `pinned`, `archived`, `q`, `sort`.
+`section=none` — без раздела; `tags` повторяется в query (`tags=a&tags=b`, выбор по всем
+тегам без учёта регистра), одиночное значение принимается как массив из одного элемента.
+Карточка `document` содержит `format`, `url` (для ссылки) и `tags`; полные данные
+документа всегда содержат `documentFormat` и `tags`. Документы прежнего профиля Server
+не дополняет: до явной локальной миграции (переход `document-v1-to-v2` записывает
+`markdown` и `[]`) запросы получают `409 STORAGE_MIGRATION_REQUIRED`.
 Ответ может содержать `libraryCounts`, а не только видимую страницу.
 Версия каталога документов имеет вид `documents-v1:<sha256>` и защищает текущие
 корни индекса, без чтения всех тел документов. Старое продолжение с прежней версией
-отклоняется с `ENTITIES_CHANGED`: начните каталог с первой страницы.
+отклоняется с `ENTITIES_CHANGED`: начните каталог с первой страницы. Полные счётчики
+по разделам, тегам, форматам, типам, состояниям и представлениям даёт
+`GET /entities/document-facets` с теми же фильтрами; область каждой оси описана в схеме.
+
+`POST /entities/document-bulk` применяет одно действие (`move`, `addTags`, `removeTags`,
+`setStatus`, `pin`) к 1–100 документам, каждый под своей `ifRevision`. Ответ 200 содержит
+результат каждого элемента (`applied`, `unchanged`, `conflict` с актуальной ревизией,
+`not_found`, `invalid`, `error`): отказ элемента не откатывает остальные, повторов нет.
+Ошибка формы всего запроса — 400 `VALIDATION_ERROR`. SSE `changed` отправляется,
+если сохранён хотя бы один документ.
+
+`POST /entities/relate-document` прикрепляет (`attach`), меняет (`update`, `nextType`,
+`description`) или открепляет (`detach`) одну связь документа с проверкой `ifRevision`;
+прочие `relations` и `links` сохраняются. Ошибки: `ALREADY_EXISTS` и `REVISION_CONFLICT` — 409,
+`RELATION_NOT_FOUND` и неизвестная цель — 404. `GET /entities/documents?ref=...` возвращает
+документы, прикреплённые непосредственно к сущности любого из одиннадцати видов,
+с источником связи (`relations` или совместимые `links`) и страницей `offset`/`limit`/`version`.
+Операции объявлены возможностью `relay-document-materials-v1` в `GET /context`.
 
 `documentStatus`, `pinned`, `sectionId` и `relations` меняются в данных документа.
 Каждый элемент `relations` содержит `target: {kind,id}`, `type: references|documents`

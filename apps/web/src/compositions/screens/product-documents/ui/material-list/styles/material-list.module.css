@@ -1,0 +1,37 @@
+.sort {
+  width: 12rem;
+}
+
+.selectAll {
+  padding-inline: 0.875rem;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.list {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  min-width: 0;
+  scroll-margin-block: 6rem;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0.375rem 0;
+}
+
+.shown {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-sm);
+}

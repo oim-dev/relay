@@ -11,11 +11,16 @@ import {
   Tooltip,
   useComputedColorScheme,
 } from "@mantine/core";
+import { useReducedMotion } from "@mantine/hooks";
 import { Focus, LocateFixed, Maximize, Minus, Plus, RotateCcw } from "lucide-react";
 import { isDefined, isNonEmptyArray } from "shared/value-predicates";
 import { useContextLayout } from "./hooks/use-context-layout.hook";
 import { buildContextFlow } from "./helpers/build-context-flow";
-import { CONTEXT_ARIA_LABELS, CONTEXT_NODE_SIZE } from "./config/context-canvas.config";
+import {
+  CONTEXT_ARIA_LABELS,
+  CONTEXT_CAMERA_INSET,
+  CONTEXT_NODE_SIZE,
+} from "./config/context-canvas.config";
 import { ContextNode } from "./ui/context-node/context-node";
 import { ContextEdge } from "./ui/context-edge/context-edge";
 import { ContextPortsSync } from "./ui/context-ports-sync/context-ports-sync";
@@ -61,6 +66,8 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
     ContextFlowEdge
   > | null>(null);
   const hasCentered = useRef(false);
+  const revealedNodeId = useRef(selectedNodeId);
+  const shouldReduceMotion = useReducedMotion();
   const flow = useMemo(
     () =>
       buildContextFlow(
@@ -135,6 +142,34 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
     });
     return () => cancelAnimationFrame(frame);
   }, [instance, layout.isPending, layout.layout.nodes, root, handleCenter]);
+
+  /*
+   * Выбранная карточка, частично скрытая краем полотна, панелью камеры или легендой,
+   * сдвигается в видимую область на минимальное расстояние без смены масштаба.
+   */
+  useEffect(() => {
+    if (!hasCentered.current || !isDefined(instance) || selectedNodeId === null) return;
+    if (revealedNodeId.current === selectedNodeId) return;
+    const position = layout.layout.nodes.get(selectedNodeId)?.position;
+    const canvas = canvasRef.current;
+    if (!isDefined(position) || canvas === null) return;
+    revealedNodeId.current = selectedNodeId;
+    const viewport = instance.getViewport();
+    const left = position.x * viewport.zoom + viewport.x;
+    const top = position.y * viewport.zoom + viewport.y;
+    const width = CONTEXT_NODE_SIZE.width * viewport.zoom;
+    const height = CONTEXT_NODE_SIZE.height * viewport.zoom;
+    const maxLeft = canvas.clientWidth - CONTEXT_CAMERA_INSET.right - width;
+    const maxTop = canvas.clientHeight - CONTEXT_CAMERA_INSET.bottom - height;
+    // Если карточка не помещается целиком, видимым остаётся её начало: ключ и заголовок.
+    const nextLeft = Math.max(CONTEXT_CAMERA_INSET.left, Math.min(left, maxLeft));
+    const nextTop = Math.max(CONTEXT_CAMERA_INSET.top, Math.min(top, maxTop));
+    if (nextLeft === left && nextTop === top) return;
+    void instance.setViewport(
+      { x: viewport.x + nextLeft - left, y: viewport.y + nextTop - top, zoom: viewport.zoom },
+      { duration: shouldReduceMotion ? 0 : 200 },
+    );
+  }, [instance, layout.layout.nodes, selectedNodeId, shouldReduceMotion]);
 
   /**
    * Разрешает только локальную геометрию и выбор; удаление и подключение отсутствуют.
@@ -218,7 +253,7 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
                 disabled={isCameraDisabled}
                 onClick={handleCenter}
               >
-                <Focus size={18} />
+                <Focus size={18} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
             <Tooltip
@@ -232,7 +267,7 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
                 disabled={!canFocusSelection}
                 onClick={handleFocus}
               >
-                <LocateFixed size={18} />
+                <LocateFixed size={18} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Вписать в экран" events={{ hover: true, focus: true, touch: false }}>
@@ -243,7 +278,7 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
                 disabled={isCameraDisabled}
                 onClick={() => void instance?.fitView({ padding: 0.18, maxZoom: 1 })}
               >
-                <Maximize size={18} />
+                <Maximize size={18} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
             <ActionIcon
@@ -253,7 +288,7 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
               disabled={isCameraDisabled}
               onClick={() => void instance?.zoomIn()}
             >
-              <Plus size={18} />
+              <Plus size={18} aria-hidden="true" />
             </ActionIcon>
             <ActionIcon
               variant="default"
@@ -262,7 +297,7 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
               disabled={isCameraDisabled}
               onClick={() => void instance?.zoomOut()}
             >
-              <Minus size={18} />
+              <Minus size={18} aria-hidden="true" />
             </ActionIcon>
             <Tooltip
               label="Восстановить раскладку"
@@ -275,7 +310,7 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
                 disabled={isCameraDisabled}
                 onClick={layout.onRetry}
               >
-                <RotateCcw size={18} />
+                <RotateCcw size={18} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
           </Group>
@@ -289,9 +324,9 @@ export const ContextCanvas = (props: ContextCanvasProps) => {
         )}
         {hasError && (
           <Panel position="top-right">
-            <Alert color="red" title="Ошибка раскладки" maw={320}>
+            <Alert color="danger" title="Ошибка раскладки" maw={320}>
               {layout.error}
-              <Button variant="subtle" size="xs" onClick={layout.onRetry}>
+              <Button variant="subtle" color="gray" size="xs" mt="xs" onClick={layout.onRetry}>
                 Повторить раскладку
               </Button>
             </Alert>

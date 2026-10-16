@@ -11,11 +11,11 @@
   padding: 0;
   list-style: none;
   color: var(--tasks-muted);
-  font-size: 0.8125rem;
+  font-size: var(--mantine-font-size-sm);
 
   & li {
     padding: 0.1875rem 0.625rem;
-    border-radius: 999px;
+    border-radius: var(--tasks-radius-pill);
     background: var(--tasks-tile);
     white-space: nowrap;
   }

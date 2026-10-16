@@ -1,0 +1,34 @@
+/*
+ * Экран на общей подложке: панели стоят прямо на ней через зазор --tasks-panel-gap.
+ * Горизонтальные поля задаёт каркас; здесь — ширина, вертикальный ритм и режим.
+ * Шире --tasks-page-max-width экран центрируется в доступной области, как прежняя сцена.
+ * В колонке каркаса (flex-колонка на высоту окна) экран растягивается на остаток высоты;
+ * вне flex-родителя (галерея, вложенные примеры) высота равна содержимому.
+ */
+.root {
+  display: grid;
+  flex: 1 0 auto;
+  align-content: start;
+  gap: var(--tasks-panel-gap);
+  width: 100%;
+  min-width: 0;
+  max-width: var(--tasks-page-max-width);
+  margin-inline: auto;
+  padding: var(--tasks-space-1) 0 var(--tasks-space-10);
+
+  /*
+   * Рабочее поле от 768px заполняет остаток высоты колонки каркаса. contain: size убирает
+   * вклад содержимого в высоту: экран не растёт за окно, колонки и граф прокручиваются
+   * внутри. Нижнее поле равно полю рабочей области.
+   */
+  &[data-layout="workspace"] {
+    @media (--md) {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 36rem;
+      padding-bottom: var(--tasks-workspace-gutter);
+      contain: size;
+    }
+  }
+}

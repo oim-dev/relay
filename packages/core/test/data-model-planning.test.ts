@@ -228,7 +228,9 @@ function run(input: State): Run {
   for (const record of state.records.values()) {
     assert.notEqual(planningV1ToV2.requires[record.kind], record.dataVersion, address(record));
     registry.validateRecord(record);
-    assert.equal(record.dataVersion, registry.target(record.kind), address(record));
+    // Владельцы вне шага (например, document v1 → v2) получают свои версии другими переходами.
+    if (record.kind in planningV1ToV2.produces)
+      assert.equal(record.dataVersion, registry.target(record.kind), address(record));
   }
   return { state, removed, written };
 }

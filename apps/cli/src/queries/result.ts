@@ -22,6 +22,11 @@ export interface Result {
   page?: CliPage;
   /** Человекочитаемое представление не входит в JSON-контракт. */
   text?: string | ((options: TextOptions) => string);
+  /**
+   * Ненулевой код выхода при полном выводе результата, например частичный отказ
+   * массовой операции. Ошибки без результата по-прежнему выбрасываются как AppError.
+   */
+  exitCode?: number;
 }
 
 export type OutputFormat = "json" | "text";

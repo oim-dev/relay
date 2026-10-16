@@ -1,0 +1,11 @@
+/*
+ * Галерея открывается вне каркаса проекта и стоит на той же общей подложке документа.
+ * Поле у края окна — как у рабочей области каркаса; PageStage горизонтальных полей не задаёт.
+ */
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding-inline: var(--tasks-workspace-gutter);
+  padding-top: var(--tasks-space-4);
+}

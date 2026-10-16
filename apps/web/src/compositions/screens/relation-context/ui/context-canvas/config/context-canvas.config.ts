@@ -1,6 +1,12 @@
 /** Геометрия карточки для ELK и React Flow без повторного измерения. */
 export const CONTEXT_NODE_SIZE = { width: 300, height: 176 };
 
+/**
+ * Поля полотна, в которые камера вписывает выбранную карточку: сверху — панель
+ * управления камерой, снизу — легенда, по бокам — небольшой зазор от рамки.
+ */
+export const CONTEXT_CAMERA_INSET = { top: 72, right: 16, bottom: 56, left: 16 };
+
 /** Русские инструкции встроенного клавиатурного управления React Flow. */
 export const CONTEXT_ARIA_LABELS = {
   "node.a11yDescription.default":

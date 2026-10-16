@@ -27,6 +27,7 @@ import {
   searchEntitySummary,
 } from "./query.js";
 import type { ParsedEntitiesQuery } from "./query.js";
+import { selectedTags } from "./document-library.js";
 
 /** Сохраняет документный фильтр/guard/excerpt. При q тела уже прочитаны reader-ом
  * библиотеки в этой сессии; дополнительных EntityEngine.get или API-вызовов нет. */
@@ -68,11 +69,11 @@ export async function readIndexedEntityList(workspace: Workspace, query: ParsedE
     parent: "task",
     target: undefined,
   };
-  const resolved: Record<string, string> = {};
+  const resolved: Record<string, { kind: string; id: string }> = {};
   for (const name of Object.keys(expected) as (keyof typeof expected)[]) {
     const value = query[name as keyof ParsedEntitiesQuery];
     if (typeof value === "string")
-      resolved[name] = (await resolveEntityCard(session, value, expected[name])).ref.id;
+      resolved[name] = (await resolveEntityCard(session, value, expected[name])).ref;
   }
   let cards: EntityCard[];
   if (query.refs !== undefined) {
@@ -98,6 +99,9 @@ export async function readIndexedEntityList(workspace: Workspace, query: ParsedE
         ? "implementation"
         : query.section !== undefined ||
             query.documentKind !== undefined ||
+            query.documentFormat !== undefined ||
+            query.unattached !== undefined ||
+            selectedTags(query.tags).length > 0 ||
             query.pinned !== undefined ||
             query.archived === "true"
           ? "document"

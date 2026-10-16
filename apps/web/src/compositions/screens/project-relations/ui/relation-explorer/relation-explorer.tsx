@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Button, Group, Pagination, SegmentedControl, Stack, Text } from "@mantine/core";
+import { Button, Group, Pagination, SegmentedControl, Stack, Text } from "@mantine/core";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { relationAddress } from "domains/relations";
 import { isEmptyArray } from "shared/value-predicates";
@@ -84,7 +84,7 @@ export const RelationExplorer = ({
     <div className={styles.root}>
       <Group justify="space-between" gap="sm">
         <SegmentedControl
-          size="xs"
+          size="sm"
           aria-label="Направление прямых связей"
           value={direction}
           onChange={setDirection}
@@ -104,7 +104,7 @@ export const RelationExplorer = ({
         </Text>
       )}
       {isEmpty && (
-        <div className={styles.empty}>
+        <div className={styles.empty} role="status">
           <Text fw={600}>Связей пока нет</Text>
           <Text size="sm" c="dimmed">
             Добавьте связь, чтобы показать место этой сущности в проекте.
@@ -124,9 +124,7 @@ export const RelationExplorer = ({
             <Text component="h3" size="sm" fw={600}>
               {group.label}
             </Text>
-            <Badge variant="light" color="gray" size="sm">
-              {group.entries.length}
-            </Badge>
+            <span className={styles.count}>{group.entries.length}</span>
             <Text size="xs" c="dimmed" ml="auto">
               {group.directionLabel}
             </Text>

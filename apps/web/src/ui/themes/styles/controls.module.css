@@ -1,0 +1,205 @@
+/*
+ * Общие правила контролов Mantine, подключённые через Styles API в config/theme.config.ts.
+ * Потребители не передают эти классы сами.
+ */
+
+/*
+ * Компактные кнопки-иконки — ActionIcon и CloseButton (включая крестик Modal, Drawer, Alert,
+ * Notification, кнопку очистки поля Input.ClearButton и удаление плашки Pill) — на touch
+ * получают область нажатия 44×44px: прозрачный псевдоэлемент поверх кнопки. Визуал и размер
+ * на desktop не меняются, фокус-кольцо рисует outline самой кнопки. Соседние области не
+ * перекрываются за счёт геометрии: зазоров между кнопками-иконками и размеров плашек ниже.
+ */
+.iconAction,
+.closeButton {
+  @media (pointer: coarse) {
+    &::after {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--tasks-touch-target));
+      height: max(100%, var(--tasks-touch-target));
+      transform: translate(-50%, -50%);
+      content: "";
+    }
+  }
+}
+
+/*
+ * Соседние кнопки-иконки на touch разведены так, чтобы их области 44px не пересекались:
+ * зазор не меньше 44px минус размер кнопки. В Group его часть уже даёт gap (--group-gap),
+ * в другом контейнере зазор целиком добавляет отступ. Касание края одной кнопки не
+ * попадает в соседнюю; на desktop расстояние не меняется. Запас 1px здесь и ниже
+ * покрывает округление дробных координат при hit-testing псевдоэлемента. Контекст
+ * обёрнут в :where — явный отступ потребителя (например, margin-left: auto) не теряется.
+ */
+:where(.iconAction) + .iconAction {
+  @media (pointer: coarse) {
+    margin-inline-start: max(0px, calc(var(--tasks-touch-target) - var(--ai-size) + 1px));
+  }
+}
+
+:where(.group > .iconAction) + .iconAction {
+  @media (pointer: coarse) {
+    margin-inline-start: max(
+      0px,
+      calc(var(--tasks-touch-target) - var(--ai-size) + 1px - var(--group-gap, 0px))
+    );
+  }
+}
+
+/*
+ * Рядом с другим элементом Group (полем, кнопкой, подписью) область ActionIcon выходит
+ * за кнопку на (44px − размер) / 2 с каждой стороны. Если gap группы меньше, недостающее
+ * добавляет отступ с этой стороны — касание края поля не попадает в кнопку.
+ */
+:where(.group > :not(.iconAction)) + .iconAction {
+  @media (pointer: coarse) {
+    margin-inline-start: max(
+      0px,
+      calc((var(--tasks-touch-target) - var(--ai-size)) / 2 + 1px - var(--group-gap, 0px))
+    );
+  }
+}
+
+.iconAction:where(.group > :has(+ :not(.iconAction))) {
+  @media (pointer: coarse) {
+    margin-inline-end: max(
+      0px,
+      calc((var(--tasks-touch-target) - var(--ai-size)) / 2 + 1px - var(--group-gap, 0px))
+    );
+  }
+}
+
+/*
+ * Плашки Pill (TagsInput, MultiSelect) на touch крупнее: высота 32px, крестик удаления
+ * 32×32px, зазор между плашками и до поля ввода 12px. Область крестика 44px выходит
+ * на 6px за плашку — в пределах половины зазора, поэтому не заходит ни в соседнюю
+ * плашку, ни в её крестик, ни в поле ввода. Внутрь своей плашки область заходит
+ * только на подпись, которая не является контролом. Отступ в конце списка плашек
+ * отделяет крайний крестик от области кнопки очистки поля («Снять все теги»), которая
+ * заходит в содержимое поля на несколько пикселей. На desktop размеры прежние.
+ */
+.pill {
+  @media (pointer: coarse) {
+    /* Высота компактного контрола; зазор — разница с областью нажатия: 44 − 32 = 12px. */
+    --pill-height-xs: var(--tasks-control-height-compact);
+    --pill-height-sm: var(--tasks-control-height-compact);
+    --pill-height-md: var(--tasks-control-height-compact);
+    --pill-height-lg: var(--tasks-control-height-compact);
+  }
+}
+
+.pillGroup {
+  @media (pointer: coarse) {
+    --tasks-pill-gap: calc(var(--tasks-touch-target) - var(--tasks-control-height-compact));
+    --pg-gap-xs: var(--tasks-pill-gap);
+    --pg-gap-sm: var(--tasks-pill-gap);
+    --pg-gap-md: var(--tasks-pill-gap);
+    --pg-gap-lg: var(--tasks-pill-gap);
+    --pg-gap-xl: var(--tasks-pill-gap);
+
+    padding-inline-end: var(--tasks-pill-gap);
+  }
+}
+
+/* Значок крестика не растёт вместе с кнопкой: остаётся соразмерным подписи плашки. */
+.pillRemove {
+  @media (pointer: coarse) {
+    --cb-icon-size: 1rem;
+
+    min-width: var(--tasks-control-height-compact);
+  }
+}
+
+/*
+ * Mantine обрезает содержимое ActionIcon (overflow: hidden) ради анимации загрузки,
+ * поэтому на touch вне загрузки обрезка снимается: иначе псевдо-область не принимает касание.
+ *
+ * Состояния, которые нельзя передать одним цветом: открытое всплывающее окно — меню,
+ * Popover, Drawer (aria-haspopup и aria-expanded) — заливка наведения и контур
+ * selected-border, текущее место (aria-current) — контур цвета текущего пункта. Оба контура
+ * не ниже 3:1 к подложке и к панели card. Переключатель встроенной области (без
+ * aria-haspopup) так не отмечается: его состояние видно по самой раскрытой области.
+ * data-tasks-preview="hover" фиксирует наведение в инертном образце.
+ */
+.iconAction {
+  &[data-tasks-preview="hover"] {
+    background-color: var(--ai-hover);
+    color: var(--ai-hover-color, var(--ai-color));
+  }
+
+  &[aria-haspopup]:not([aria-haspopup="false"])[aria-expanded="true"] {
+    background-color: var(--ai-hover);
+    box-shadow: inset 0 0 0 1px var(--tasks-selected-border);
+    color: var(--ai-hover-color, var(--ai-color));
+  }
+
+  &[aria-current="page"] {
+    box-shadow: inset 0 0 0 1px var(--tasks-nav-current-ink);
+  }
+
+  @media (--forced-colors) {
+    &[aria-haspopup]:not([aria-haspopup="false"])[aria-expanded="true"],
+    &[aria-current="page"] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    &:not([data-loading]) {
+      overflow: visible;
+    }
+  }
+}
+
+/* Граница поля — значимая граница контрола: не ниже 3:1 к поверхности в обеих схемах. */
+.field {
+  &:where([data-variant="default"]):not([data-error], :focus, :focus-within) {
+    --input-bd: var(--tasks-field-border);
+  }
+
+  /* Фокус поля — кольцо 2px (рамка и тень) цвета фокуса, а не только смена цвета рамки. */
+  &:focus,
+  &:focus-within {
+    box-shadow: 0 0 0 1px var(--tasks-focus-ring);
+  }
+}
+
+/* Описание и ошибка поля — значимые подписи: не меньше 12px при любом размере поля. */
+.fieldNote {
+  font-size: max(var(--mantine-font-size-xs), var(--input-description-size, 0px));
+}
+
+.fieldError {
+  font-size: max(var(--mantine-font-size-xs), var(--input-error-size, 0px));
+}
+
+.checkbox {
+  &:not(:checked, :disabled, [data-indeterminate], [data-error]) {
+    border-color: var(--tasks-field-border);
+  }
+}
+
+.menuItem {
+  @media (pointer: coarse) {
+    min-height: var(--tasks-touch-target);
+  }
+}
+
+.option {
+  &[data-combobox-selected] {
+    color: var(--tasks-action-primary-text);
+  }
+}
+
+/* Ссылка Anchor: тот же акцент и подчёркивание, что у ссылки в Markdown. */
+.anchor {
+  text-decoration-thickness: from-font;
+  text-underline-offset: 0.2em;
+
+  &:hover {
+    text-decoration-thickness: 2px;
+  }
+}

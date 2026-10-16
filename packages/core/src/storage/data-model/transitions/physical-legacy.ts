@@ -1599,5 +1599,18 @@ export const physicalLegacy: PhysicalTransition = Object.freeze({
     "Прежние репозитории (c1c353f…5c7265b) → формат 4: записи, комментарии ленты, связи графа и привязки; квитанции и журналы удаляются",
   from: "legacy" as const,
   to: "unified-4" as const,
+  // Все записи legacy выходят в dataVersion 1; дальнейшие версии получают предметные переходы.
+  produces: Object.freeze({
+    project: 1,
+    product: 1,
+    feature: 1,
+    scenario: 1,
+    application: 1,
+    implementation: 1,
+    scope: 1,
+    board: 1,
+    task: 1,
+    document: 1,
+  }),
   read: (io: PhysicalSourceIo, owned: () => void) => readLegacySnapshot(io, owned),
 });

@@ -141,7 +141,6 @@ export const RelationEditor = (props: RelationEditorProps) => {
           )}
           <Checkbox
             label="Указать свой тип отношения"
-            size="xs"
             checked={isCustomType}
             onChange={(event) => {
               setCustomType(event.currentTarget.checked);
@@ -169,9 +168,9 @@ export const RelationEditor = (props: RelationEditorProps) => {
             статусы сущностей автоматически.
           </Text>
           {hasError && (
-            <Alert color="red" title="Связь не подтверждена" role="alert">
+            <Alert color="danger" title="Связь не подтверждена" role="alert">
               {error}
-              <Button variant="subtle" onClick={() => void handleRefresh()}>
+              <Button variant="subtle" color="gray" mt="xs" onClick={() => void handleRefresh()}>
                 Обновить версию, сохранив ввод
               </Button>
             </Alert>

@@ -52,6 +52,12 @@ export class BoardTaskError extends Error {
     super(message, options);
   }
 }
+/**
+ * Задачи с таким адресом нет в проекте: её удалили или адрес неверен; повтор чтения не поможет.
+ */
+export class BoardTaskNotFoundError extends BoardTaskError {}
+/** Коды Server, которыми отклоняется чтение отсутствующей задачи. */
+const NOT_FOUND_CODES = new Set(["NOT_FOUND", "ENTITY_NOT_FOUND"]);
 const failure = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 /**
  * Читает страницу стабильного снимка обсуждения задачи.
@@ -289,8 +295,21 @@ export const getBoardTaskSlice = async (
     }
   }
 };
-export const getBoardTask = (project: string, reference: string): Promise<BoardTask> =>
-  request(() => getProjectApi(project).kanban.getBoardTask({ reference }), BOARD_TASK_SCHEMA);
+/**
+ * Читает полную задачу; отсутствующая задача отклоняется предметной BoardTaskNotFoundError.
+ */
+export const getBoardTask = async (project: string, reference: string): Promise<BoardTask> => {
+  try {
+    return await request(
+      () => getProjectApi(project).kanban.getBoardTask({ reference }),
+      BOARD_TASK_SCHEMA,
+    );
+  } catch (error) {
+    if (error instanceof BoardTaskError && NOT_FOUND_CODES.has(error.code))
+      throw new BoardTaskNotFoundError(error.message, error.code);
+    throw error;
+  }
+};
 export const getTaskLinks = (
   project: string,
   reference: string,

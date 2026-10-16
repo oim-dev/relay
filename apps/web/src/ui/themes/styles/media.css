@@ -3,3 +3,6 @@
 @custom-media --lg (min-width: 64rem);
 @custom-media --xl (min-width: 75rem);
 @custom-media --2xl (min-width: 90rem);
+
+/* Режим высокой контрастности: декор убирается, границы и фокус — системными цветами. */
+@custom-media --forced-colors (forced-colors: active);

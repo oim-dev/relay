@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { InvalidArgumentError } from "commander";
 import type { Command } from "commander";
+import { defaultDocumentSections } from "@relay/contracts/entities";
 import type { EntitySaved } from "@relay/contracts/entities";
+import { documentBulkSchema } from "@relay/contracts/entities/document-catalog";
+import { parse } from "@relay/core/domain/validation";
 import { invariant } from "@relay/core/shared/errors";
 import { commandGroup, registerCommand } from "../command.js";
 import { author } from "../context.js";
@@ -13,12 +17,39 @@ import {
   readTextFields,
   commandInvocation,
 } from "../command-kit.js";
-import { revisionOption } from "./product.js";
+import { collectTag, revisionOption } from "./product.js";
 import { entitySavedText, entityReadArgs } from "../presentation/entities.js";
 import { renderMarkdown } from "../presentation/markdown.js";
 import { cardText, listText } from "../presentation/common.js";
+import {
+  documentBulkText,
+  documentFacetsText,
+  entityDocumentsText,
+} from "../presentation/documents.js";
 
 type PageOptions = { limit?: number; cursor?: string };
+
+/**
+ * Названия разделов только для text: отдельное чтение PROJECT, JSON остаётся с ID.
+ * Неудачное чтение не скрывает основной результат — показываются ID.
+ */
+export async function documentSectionNames(
+  context: CommandContext,
+): Promise<Map<string, string> | undefined> {
+  if (context.output.format === "json") return undefined;
+  try {
+    const project = await context.backend.entities.get({ ref: "PROJECT", kind: "project" });
+    if (project.data.kind !== "project") return undefined;
+    return new Map(
+      (project.data.documentSections ?? defaultDocumentSections).map((section) => [
+        section.id,
+        section.name,
+      ]),
+    );
+  } catch {
+    return undefined;
+  }
+}
 type WriteOptions = { ifRevision: number; requestId?: string };
 function saved(context: CommandContext, data: EntitySaved, actionTitle?: string) {
   const readCommand = commandInvocation(
@@ -145,7 +176,10 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
           ? "Прикрепить документ или изменить пояснение"
           : "Снять выбранное прикрепление",
       details:
-        "Одно изменение документа с исходной ревизией. Остальные отношения и области сохраняются. --legacy выбирает прежние продуктовые области без пояснений; по умолчанию адресное отношение documents.",
+        "Одно изменение документа с исходной ревизией; цель разрешает Core. Остальные отношения и области сохраняются. --legacy выбирает прежние продуктовые области без пояснений; по умолчанию адресное отношение documents." +
+        (action === "unlink"
+          ? " Связь с прежним адресом этапа (plan-stage:<id>) снимается по сохранённой цели."
+          : " Прежний адрес этапа (plan-stage:<id>) получает ENTITY_RELOCATED с новым адресом."),
       examples: [
         [
           `npx @oim-dev/relay-cli document ${action} DOC-1 --target FEATURE-1 --if-revision 1 --actor agent`,
@@ -221,7 +255,6 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
       },
     });
 }
-
 export function registerDocumentSections(parent: Command, runtime: Runtime) {
   const group = commandGroup(parent, {
     name: "section",
@@ -350,4 +383,261 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
         );
       },
     });
+}
+
+type CatalogFilters = {
+  q?: string;
+  target?: string;
+  section?: string;
+  tag?: string[];
+  documentFormat?: string;
+  documentKind?: string;
+  status?: string;
+  pinned?: string;
+  archived?: string;
+  unattached?: string;
+};
+const bulkStatuses = "applied, unchanged, conflict, not_found, invalid, error";
+const bulkExitRule =
+  "Код выхода: 0 — у всех элементов applied или unchanged; 1 — частичный или полный отказ (хотя бы один conflict, not_found, invalid или error), при этом полный поэлементный результат всё равно печатается в stdout (в JSON — ok:true и data.items). Ошибка самого запроса (неверные параметры, подключение) — обычная ошибка с её кодом без результата.";
+
+/** ref@revision: ревизия после последнего @, ключи и ID не содержат @. */
+function bulkItem(value: string, previous: { ref: string; ifRevision: number }[] = []) {
+  const at = value.lastIndexOf("@");
+  const ref = at > 0 ? value.slice(0, at) : "";
+  const revision = at > 0 ? value.slice(at + 1) : "";
+  if (!ref || !/^\d+$/.test(revision) || !Number.isSafeInteger(Number(revision)))
+    throw new InvalidArgumentError(
+      "Ожидается <ключ или ID>@<ревизия>, например DOC-1@3; ревизию берите из document get или list",
+    );
+  return [...previous, { ref, ifRevision: Number(revision) }];
+}
+
+/** Каталог библиотеки: счётчики, массовые операции и обратное чтение материалов сущности. */
+export function registerDocumentCatalog(group: Command, runtime: Runtime) {
+  registerCommand<CatalogFilters>(group, runtime, {
+    name: "facets",
+    description: "Счётчики каталога по разделам, тегам, форматам, типам и состояниям",
+    details:
+      "Считает по полным данным проекта, а не по странице списка. Фильтры те же, что у document list. Каждая ось считается по всем фильтрам, кроме собственного (состояния — без --status и --archived); счётчик тега — размер выборки после добавления этого тега. Представления (все, закреплённые, черновики, без раздела, без прикреплений, архив) учитывают только --q, --target, --tag, --document-format и --document-kind; все, кроме архива, исключают архивные документы. Версия совпадает с version списка. Только чтение.",
+    examples: [
+      ["npx @oim-dev/relay-cli document facets", "Счётчики всей библиотеки"],
+      [
+        "npx @oim-dev/relay-cli document facets --tag API --section architecture --format json",
+        "Счётчики выборки для навигации агента",
+      ],
+    ],
+    configure: (command) =>
+      command
+        .option("--q <text>", "Поиск по ключу, названию, описанию, содержанию, адресу и тегам")
+        .option("--target <ref>", "Прикрепление к сущности")
+        .option("--section <id>", "Раздел; none — без раздела")
+        .option("--tag <tag>", "Тег; повторите флаг — нужны все выбранные теги", collectTag)
+        .option("--document-format <format>", "Формат: markdown/link")
+        .option("--document-kind <kind>", "Тип документа")
+        .option("--status <state>", "Состояние: draft/active/archived")
+        .option("--pinned <value>", "Закрепление: true/false")
+        .option("--archived <value>", "Архив: true/false")
+        .option("--unattached <value>", "Без прикреплений: true/false"),
+    async run(context, input) {
+      const { tag, ...rest } = input.options;
+      const query = { ...rest, ...(tag === undefined ? {} : { tags: tag }) };
+      const data = await context.backend.entities.documentFacets(
+        query as Parameters<typeof context.backend.entities.documentFacets>[0],
+      );
+      const list = [
+        "document",
+        "list",
+        ...Object.entries(input.options).flatMap(([name, value]) =>
+          value === undefined
+            ? []
+            : (Array.isArray(value) ? value : [value]).flatMap((item) => [
+                `--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`,
+                String(item),
+              ]),
+        ),
+      ];
+      const sections = await documentSectionNames(context);
+      return {
+        data,
+        text: (options) =>
+          documentFacetsText(
+            data,
+            query,
+            options,
+            [{ label: "Список выборки", command: commandInvocation(context, list) }],
+            sections,
+          ),
+      };
+    },
+  });
+
+  const bulk = commandGroup(group, {
+    name: "bulk",
+    description: "Массовые изменения выбранных документов",
+    details: `Одно действие для 1–100 документов. Каждый документ передаётся как --item <ключ или ID>@<прочитанная ревизия> и записывается отдельно под своей ревизией: набор не атомарен, отказ одного не откатывает сохранённые, автоматических повторов нет. Прикрепления не меняются. Статусы элементов: ${bulkStatuses}. ${bulkExitRule} После частичного отказа перечитайте только документы с отказом; при conflict сверьте актуальное содержание, а не подставляйте новую ревизию.`,
+    examples: [
+      [
+        "npx @oim-dev/relay-cli document bulk status --item DOC-1@3 --item DOC-2@1 --document-status archived --actor agent",
+        "Архивировать два документа",
+      ],
+    ],
+  });
+  const operations = {
+    move: {
+      description: "Переместить в раздел или оставить без раздела",
+      example: "--section-id architecture",
+      configure: (command: Command) =>
+        command
+          .option("--section-id <id>", "ID существующего раздела")
+          .option("--clear-section", "Оставить без раздела"),
+    },
+    "add-tags": {
+      description: "Добавить теги к существующим",
+      example: "--tag API --tag Решения",
+      configure: (command: Command) =>
+        command.requiredOption(
+          "--tag <tag>",
+          "Тег; повторяйте флаг. Повтор без учёта регистра не дублируется; больше 20 тегов — invalid",
+          collectTag,
+        ),
+    },
+    "remove-tags": {
+      description: "Снять теги без учёта регистра",
+      example: "--tag Устарело",
+      configure: (command: Command) =>
+        command.requiredOption("--tag <tag>", "Тег; повторяйте флаг", collectTag),
+    },
+    status: {
+      description: "Изменить состояние: draft/active/archived",
+      example: "--document-status archived",
+      configure: (command: Command) =>
+        command.requiredOption("--document-status <state>", "Состояние: draft/active/archived"),
+    },
+    pin: {
+      description: "Закрепить или открепить",
+      example: "--pinned true",
+      configure: (command: Command) =>
+        command.requiredOption("--pinned <value>", "true — закрепить, false — открепить"),
+    },
+  } as const;
+  for (const [name, operation] of Object.entries(operations) as [
+    keyof typeof operations,
+    (typeof operations)[keyof typeof operations],
+  ][])
+    registerCommand<{
+      item: { ref: string; ifRevision: number }[];
+      requestId?: string;
+      sectionId?: string;
+      clearSection?: boolean;
+      tag?: string[];
+      documentStatus?: string;
+      pinned?: string;
+    }>(bulk, runtime, {
+      name,
+      description: operation.description,
+      details: `Каждый --item — <ключ или ID>@<ревизия>; от 1 до 100 без повторов. Результат по каждому элементу в порядке запроса: ${bulkStatuses}; при conflict показана актуальная ревизия. ${bulkExitRule}`,
+      examples: [
+        [
+          `npx @oim-dev/relay-cli document bulk ${name} --item DOC-1@3 --item DOC-2@1 ${operation.example} --actor agent`,
+          operation.description,
+        ],
+      ],
+      configure(command) {
+        command.requiredOption(
+          "--item <ref@revision>",
+          "Документ и прочитанная ревизия, например DOC-1@3; повторяйте флаг",
+          bulkItem,
+        );
+        operation.configure(command);
+        command.option("--request-id <id>", "Корреляция, не гарантия безопасного повтора");
+      },
+      async run(context, input) {
+        const options = input.options;
+        if (name === "move")
+          invariant(
+            (options.sectionId !== undefined) !== Boolean(options.clearSection),
+            "INVALID_ARGUMENT",
+            "Укажите ровно один параметр: --section-id или --clear-section",
+          );
+        if (name === "pin")
+          invariant(
+            options.pinned === "true" || options.pinned === "false",
+            "INVALID_ARGUMENT",
+            "Укажите --pinned true или false",
+          );
+        const command = parse(
+          documentBulkSchema,
+          {
+            items: options.item,
+            operation:
+              name === "move"
+                ? { type: "move", sectionId: options.clearSection ? null : options.sectionId }
+                : name === "add-tags"
+                  ? { type: "addTags", tags: options.tag }
+                  : name === "remove-tags"
+                    ? { type: "removeTags", tags: options.tag }
+                    : name === "status"
+                      ? { type: "setStatus", documentStatus: options.documentStatus }
+                      : { type: "pin", pinned: options.pinned === "true" },
+            requestId: options.requestId ?? randomUUID(),
+          },
+          "массовое изменение документов",
+        );
+        const data = await context.backend.entities.documentBulk(command, author(context));
+        // Перечитать можно только найденный документ; not_found не получает команды.
+        const readCommands = Object.fromEntries(
+          data.items.flatMap((item) =>
+            item.key ? [[item.ref, commandInvocation(context, ["document", "get", item.key])]] : [],
+          ),
+        );
+        return {
+          data,
+          ...(data.failed > 0 ? { exitCode: 1 } : {}),
+          text: (textOptions) =>
+            documentBulkText(data, `${name} (${operation.description})`, textOptions, readCommands),
+        };
+      },
+    });
+
+  registerCommand<{ archived?: string; limit?: number; cursor?: string }>(group, runtime, {
+    name: "materials <ref>",
+    arguments: { ref: "Ключ, ID или kind:ID сущности любого из 11 видов проекта" },
+    description: "Материалы, прикреплённые к сущности",
+    details:
+      "Обратное чтение: какие документы прикреплены напрямую к выбранной сущности (project, product, feature, scenario, application, implementation, board, task, document, work-plan, release). Материалы родителя не попадают к детям и наоборот. Для каждого документа показаны все его связи с этой сущностью: тип, полное пояснение и источник — адресное отношение relations или совместимая область links. Архивные документы по умолчанию включены с отметкой; --archived false исключает их, true — только архив. Порядок: закреплённые, затем по названию. Продолжение проверяет версию каталога.",
+    examples: [
+      ["npx @oim-dev/relay-cli document materials FEATURE-1", "Что читать по фиче"],
+      [
+        "npx @oim-dev/relay-cli document materials PROJECT --archived false --format json",
+        "Действующие материалы проекта для агента",
+      ],
+    ],
+    configure: (command) =>
+      paging(command).option(
+        "--archived <value>",
+        "Архив: true — только архив, false — без архива; по умолчанию все",
+      ),
+    async run(context, input) {
+      const ref = input.argument();
+      const command = ["document", "materials", ref];
+      const filters =
+        input.options.archived === undefined ? {} : { archived: input.options.archived };
+      const query = offsetQuery(context, input.options, command, filters);
+      const data = await context.backend.entities.entityDocuments({
+        ref,
+        ...(filters as { archived?: "true" | "false" }),
+        ...query,
+      });
+      const readCommands = data.items.map((item) =>
+        commandInvocation(context, ["document", "get", item.document.key]),
+      );
+      const sections = await documentSectionNames(context);
+      return {
+        data,
+        page: pageResult(context, command, filters, query, data),
+        text: (options) => entityDocumentsText(data, options, readCommands, sections),
+      };
+    },
+  });
 }

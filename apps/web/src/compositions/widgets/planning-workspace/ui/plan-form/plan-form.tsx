@@ -93,7 +93,6 @@ export const PlanForm = (props: PlanFormProps) => {
       title={title}
       size="lg"
       closeButtonProps={{ "aria-label": "Свернуть редактор плана" }}
-      classNames={{ title: styles.modalTitle, body: styles.modalBody }}
     >
       <form
         className={styles.root}
@@ -101,7 +100,7 @@ export const PlanForm = (props: PlanFormProps) => {
         onSubmit={form.onSubmit(handleSubmit, handleValidationError)}
       >
         {hasDraftError && (
-          <Alert color="orange" title="Проверьте черновик">
+          <Alert color="warning" title="Проверьте черновик">
             {draftError}
             <Button
               mt="sm"
@@ -149,7 +148,7 @@ export const PlanForm = (props: PlanFormProps) => {
           </Stack>
         </fieldset>
         {hasError && (
-          <Alert color="red" title="Не удалось сохранить">
+          <Alert color="danger" title="Не удалось сохранить">
             {error}
             <Button
               size="xs"

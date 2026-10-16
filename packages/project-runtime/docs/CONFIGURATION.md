@@ -207,6 +207,9 @@ npx @oim-dev/relay-server --open
 закрепляет клиент за возвращённым `projectId`. Возможности отдельных операций
 проверяются до их вызова: `relay-full-context-v1` — полный контекст графа,
 `relay-overview-metrics-v1` — детализация метрик обзора `product.overviewMetric`,
+`relay-document-materials-v1` — `entities.documentFacets`, `documentBulk`,
+`relateDocument` и `entityDocuments`, а также поля `documentFormat`/`url`/`tags`
+и фильтры `documentFormat`/`tags`/`unattached`;
 `relay-document-library-v1` — страницы прикреплений/разделов и адресные изменения
 `documents.links/sections/changeRelation/changeSection`;
 `relay-product-queries-v1` — validate/lint/overviewMap, participation/replaceParticipation

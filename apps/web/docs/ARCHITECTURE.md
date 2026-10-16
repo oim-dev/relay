@@ -24,11 +24,21 @@ Web — браузерная React SPA, представляющая данны�
   [page-breadcrumbs](../src/compositions/widgets/page-breadcrumbs),
   [planning-workspace](../src/compositions/widgets/planning-workspace),
   [entity-documents](../src/compositions/widgets/entity-documents),
+  [document-relations](../src/compositions/widgets/document-relations) — «Где используется»
+  в карточке материала: прямые связи по видам сущностей и изменение одной связи через `relate`,
   [entity-delete](../src/compositions/widgets/entity-delete).
 - `domains` — предметные адаптеры, модели, операции и lifecycle чтения: project,
   workspace, product, product-overview, boards, board-tasks, entities, documents, relations, planning, releases.
 - `infra` — технические механизмы HTTP, SWR-конфигурации, SSE, browser storage.
-- `ui` — общие визуальные возможности: темы, Markdown, состояния страниц, канбан DnD.
+- `ui` — общие визуальные возможности без знания проектов, маршрутов и статусов:
+  тема [themes](../src/ui/themes) с общей подложкой приложения, геометрия экрана
+  [page-stage](../src/ui/page-stage) без собственной заливки (`layout`
+  default или workspace), шапка [page-header](../src/ui/page-header), панель
+  [section-panel](../src/ui/section-panel) (в том числе `titleRef` для фокуса), строка
+  [record-row](../src/ui/record-row), бейдж [status-badge](../src/ui/status-badge), фильтр
+  [filter-chips](../src/ui/filter-chips), состояние [state-panel](../src/ui/state-panel),
+  Markdown и канбан DnD. Подписи, переходы и маппинг статуса на тон задаёт владелец.
+  API и правила выбора — в [дизайн-системе](DESIGN_SYSTEM.md#общие-ui-юниты).
 - `shared` — чистые значения и преобразования без сети, storage и браузерного lifecycle.
 
 Полные правила доступны после [подготовки dev-навыков](DEVELOPMENT.md#источники-инструкций-и-создание-компонентов):
@@ -52,66 +62,24 @@ Provider принадлежит своему механизму, а не мес�
 к прежнему UI, не автономный мок. Его использование не означает, что планы и релизы
 хранятся в демонстрационном состоянии: они используют собственные домены.
 
-## Тема и цветовые роли
+## Тема и визуальные роли
 
-Цвета принадлежат юниту [ui/themes](../src/ui/themes) и устроены в два слоя:
+Тема принадлежит юниту [ui/themes](../src/ui/themes): палитры и шкалы Mantine — в
+`config/theme.config.ts`, цветовые роли `--tasks-*` обеих схем вычисляет
+`cssVariablesResolver` в `config/color-roles.config.ts`, геометрия, типографика и
+движение — CSS-токены `styles/variables.css`. `app` подключает только `ThemeProvider`.
+Компоненты используют роли и токены, а не оттенки палитр, hex или `--mantine-color-*`.
+Порядок слоёв, декор с отдельной сплошной основой, общие UI-юниты, шаблоны экранов,
+галерея и допустимые исключения описаны в [дизайн-системе](DESIGN_SYSTEM.md).
 
-1. Примитивные палитры — только в [theme.config.ts](../src/ui/themes/config/theme.config.ts)
-   как палитры Mantine: нейтральные `gray` и `dark`, акцент `ultramarine` (`#3e5bff`
-   в светлой теме, оттенок 4 — в тёмной), положительное состояние `jade`, прежняя `teal`.
-   Предупреждение, ошибка и информация используют стандартные палитры Mantine `orange`,
-   `red`, `blue`; колонка «К выполнению» — `grape`, градиент главной карточки — `cyan`.
-   Hex-значения не повторяются в CSS.
-2. Семантические роли `--tasks-*` — в [variables.css](../src/ui/themes/styles/variables.css):
-   каждая связывает оттенки палитр со светлой и тёмной схемой через `light-dark()`.
-   Группы ролей: поверхности (`canvas`, `chrome`, `surface`, `surface-quiet`, `raised`,
-   `subtle`, `border`, `border-strong`), уровни экрана-дашборда от дальнего к ближнему
-   (`backdrop` — серая область экрана, `stage` — светлая сцена с содержимым, `card` —
-   тонированная карточка блока, `tile`, `tile-hover`, `tile-border` — светлый подблок,
-   `tile-translucent` — полупрозрачный подблок поверх градиента;
-   `card-feature` — градиент главной карточки), текст (`ink`, `muted`, `soft`), инверсная
-   поверхность (`inverse-surface`, `inverse`, `inverse-muted`, `inverse-accent`), акцент
-   (`accent`, `accent-hover`, `accent-ink`, `accent-subtle`, `accent-contrast`) и
-   выделенный показатель (`highlight`, `highlight-hover`, `highlight-ink` — ссылки
-   на акцент; `icon-chip-highlight`, `icon-chip-hatch`, `icon-chip-inverse` — подложки
-   иконок показателей), состояния `success`/`warning`/`danger`/`info` с парами `-surface` и
-   `-border`, `focus-ring` и `selection`, роли диаграмм (`column-*` для шести колонок,
-   `column-cancelled-fill` — бледная заливка отменённых, `completed`, `blocked`,
-   `chart-track`, `chart-grid`), прогресс (`progress`, `progress-track`), декоративная
-   штриховка показателя (`hatch` — нейтральные полупрозрачные полосы, `hatch-surface` —
-   основа под ними) и тени (`card-shadow`, `card-hover`, `raised-shadow`). Прежние имена
-   сохранены, включая `surface-quiet`, которую сейчас не использует ни один экран;
-   `--tasks-warning-ink` — совместимый псевдоним `--tasks-warning`. Роли-градиенты и
-   штриховки (`card-feature`, `hatch`) содержат значение `background`, а не цвет.
-
-Акцентные полосы прогресса и величин оформляются одним способом — вариантом
-`<Progress variant="accent">` Mantine. Вариант подключён в `theme.config.ts` через
-`classNames` и описан в [progress.module.css](../src/ui/themes/styles/progress.module.css):
-толщина, скругление, дорожка `progress-track` и заливка `progress`. Экраны не держат
-собственных копий этих стилей; остальные `Progress` приложения сохраняют прежний вид.
-
-CSS Modules и свойства компонентов используют только роли `--tasks-*`, без hex/rgb/hsl,
-выбора палитры вида `color="orange"` и прямых `--mantine-color-*` по смыслу статуса.
-Локальная CSS-переменная компонента допустима как ссылка на роль, например
-`--stage-color: var(--tasks-column-done)`. Прозрачность и смешения (`color-mix()`,
-alpha) задаются только в теме отдельной ролью в `variables.css`, например
-`--tasks-icon-chip-hatch` или `--tasks-tile-translucent`; компонент ссылается на роль.
-Геометрия диаграмм задаётся inline: доля высоты столбца — переменной `--share`, длина
-полосы — значением `Progress`. Экран «Обзор» соблюдает это
-правило полностью; часть старых экранов ещё выбирает палитры Mantine напрямую.
-
-Чтобы добавить цвет, добавьте роль в `variables.css` со значениями для обеих схем,
-при необходимости — новую палитру в `theme.config.ts`, проверьте контраст (текст ≥4.5:1,
-крупный текст и значимые индикаторы ≥3:1, в том числе на градиентах и штриховках)
-и используйте роль в компоненте. Палитра `ultramarine` в CSS используется только
-в `--tasks-accent`; производные роли (`accent-hover`, `accent-ink`, `accent-subtle`,
-`inverse-accent`, `selection`, `progress`, `progress-track`, `card-feature`, `highlight*`,
-`column-in-progress`) смешиваются из него в теме. Колонка «В работе» окрашена акцентом,
-как выделенный показатель «В работе»; бейджи статуса старых экранов берут то же имя
-палитры из `TASK_COLUMNS`. Смена акцента — правка одной роли `--tasks-accent` или палитры
-`ultramarine` без изменения компонентов.
-Акцент не является единственным признаком ошибки: ошибки используют `danger`, текст
-и значок.
+Предметный смысл не переходит в общий UI. Тон бейджа статуса задаёт домен-владелец
+статуса: `DOCUMENT_STATUS_TONES` (documents), `PLAN_STATUS_TONES` и `PLANNING_TASK_TONES`
+(planning), `RELEASE_STATUS_TONES` (releases), `tone` колонок `KANBAN_COLUMNS`/`TASK_COLUMNS`
+(board-tasks), `getEntityStatusTone` (entities). Отсутствие записи — предметная ошибка
+домена: `DocumentNotFoundError` у материалов и `ProductNotFoundError` у записей продукта
+(`PRODUCT_RECORD_NOT_FOUND`, `ENTITY_NOT_FOUND`); экран показывает отсутствие с возвратом,
+а не повтор чтения. Состав релиза показывает статус плана и его фактическое выполнение
+раздельно: `ReleasePlanItem.isReady` берётся из `plan.ready` сервера, а не считается в Web.
 
 ## Путь данных и предметного действия
 
@@ -263,6 +231,25 @@ Polling нет; replay пропущенных событий нет — посл
 показывается отдельно как ошибка хранилища. При смене проекта меняется ключ кеша и подписка,
 поэтому поздний ответ прежнего проекта не попадает в обзор нового. После HTTP-отказа,
 закрывающего `EventSource`, повторное подключение идёт с задержкой 1 → 2 → 4 с (не более 4 с).
+
+Каталог библиотеки читает `useMaterialCatalog` домена [documents](../src/domains/documents):
+порции по 40 через `useSWRInfinite`, каждая следующая — в версии предыдущей; число порций
+задаёт адрес экрана (`pages`), SSE перечитывает все показанные порции с первой.
+`ENTITIES_CHANGED` и `REVISION_CONFLICT` становятся `DocumentConflictError`: выдачу
+перечитывают, быстрые действия (`updateMaterialProperties`) не повторяются автоматически.
+`ENTITY_NOT_FOUND` становится `DocumentNotFoundError` (подкласс `DocumentAccessError`):
+экран показывает отсутствие материала, а не повтор чтения.
+Записи материалов (`useMaterialMutations`: сохранение, свойства, массовое действие, одна связь)
+после любого исхода сообщают локальный сигнал домена и перечитывают ключи проекта, поэтому
+каталог, счётчики (`useMaterialFacets`), карточка и блоки `useEntityMaterials` согласованы
+и без SSE; поток проекта по-прежнему обновляет их после изменений других клиентов.
+
+Выборщик «Добавить из библиотеки» определяет «уже прикреплён» по `useEntityMaterialRelations`:
+полному набору типов связей материалов вне архива с сущностью, прочитанному до конца порциями
+по 100 в версии первой (`ceil(N / 100)` запросов на N прикреплений; при `ENTITIES_CHANGED`
+чтение начинается заново не более трёх раз). Частичный набор не публикуется: пока набор не
+прочитан или после ошибки состояние неизвестно и выбор недоступен. При закрытии окна кеш
+набора сбрасывается, чтобы повторное открытие не показало прошлое состояние.
 
 У списков сохраняются фильтры, запрошенный объём и предусмотренная API версия продолжения.
 [read-api-pages](../src/infra/tasks-api/helpers/read-api-pages.ts) не означает загрузку

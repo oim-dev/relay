@@ -82,6 +82,14 @@ async function tree(root: string): Promise<Record<string, string>> {
   return result;
 }
 
+test("shellCommand: ANSI-C quoting переносим для Bash 3.2 macOS и ksh93", () => {
+  // `\uXXXX` Bash 3.2 оставляет буквально, а `\xHH` ksh93 продолжает следующими hex-цифрами.
+  assert.equal(
+    shellCommand(["a\tb\nc\r", "\u0001af\u007f", "\u0085 ", "' \\"]),
+    "$'a\\tb\\nc\\r' $'\\001af\\177' $'\\302\\205\\342\\200\\250' ''\\'' \\'",
+  );
+});
+
 test("STR-02: буквальная подстановка и несколько команд до shell quoting, JSON не локализован", async (t) => {
   const app = await fixture(t);
   const root = await tempDirectory(t);

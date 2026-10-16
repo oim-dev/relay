@@ -6,8 +6,6 @@ export type ProductRequirementParams = {
   targetId: string;
   /** Вид проектного требования. */
   kind: "feature" | "scenario";
-  /** Читаемый ключ требования. */
-  entityKey?: string;
   /** Полное описание в Markdown. */
   description: string;
   /** Название родительского контекста. */

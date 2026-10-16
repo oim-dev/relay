@@ -14,8 +14,17 @@ export type MarkdownFieldParams = {
   error?: ReactNode;
   /** Подсказка по содержанию. */
   placeholder?: string;
+  /** Обязательное поле: звёздочка у подписи и aria-required у редактора, как required у Mantine Input. */
+  required?: boolean;
+  /** Звёздочка без aria-required; по умолчанию совпадает с required, как у Mantine Input. */
+  withAsterisk?: boolean;
   /** Блокировка на время сохранения. */
   disabled?: boolean;
+  /**
+   * Путь поля из getInputProps Mantine form. Ставится на редактируемую область,
+   * поэтому form.getInputNode(path)?.focus() переводит фокус в редактор.
+   */
+  "data-path"?: string;
   /** Минимальная высота в строках; по умолчанию четыре. */
   minRows?: number;
 };

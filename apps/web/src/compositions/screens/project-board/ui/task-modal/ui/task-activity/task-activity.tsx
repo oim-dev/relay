@@ -65,12 +65,16 @@ export const TaskActivity = (props: TaskActivityProps) => {
           </Button>
         )}
         {hasError && (
-          <Alert color="red" title="Не удалось прочитать ленту">
+          <Alert color="danger" title="Не удалось прочитать ленту">
             {errorMessage}
           </Alert>
         )}
         {query.isLoading && <Loader size="sm" aria-label="Загрузка ленты" />}
-        {isEmpty && <Text c="dimmed">{emptyMessage}</Text>}
+        {isEmpty && (
+          <Text size="sm" c="dimmed">
+            {emptyMessage}
+          </Text>
+        )}
         <ActivityFeed
           entries={activityItems}
           projectId={projectId}
@@ -89,7 +93,7 @@ export const TaskActivity = (props: TaskActivityProps) => {
               onClick={() => void handleRefresh()}
               loading={query.isValidating}
             >
-              <RefreshCw size={15} />
+              <RefreshCw size={16} aria-hidden="true" />
             </ActionIcon>
           </Tooltip>
         </Group>
