@@ -348,7 +348,10 @@ export function registerProduct(program: Command, runtime: Runtime): void {
               command
                 .option("--target <ref>", "Прикрепление к сущности")
                 .option("--section <id>", "Раздел; none — без раздела")
-                .option("--document-kind <kind>", "Тип документа")
+                .option(
+                  "--document-kind <kind>",
+                  "Тип: specification/description/rules/instruction/proposal/decision/research",
+                )
                 .option("--pinned <value>", "Закрепление: true/false")
                 .option("--archived <value>", "Архив: true/false");
           },
@@ -380,7 +383,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
         "Сохраните ревизию для следующего изменения. " +
         {
           product:
-            "Незаполненный паспорт имеет ревизию 0. product overview — сводка, product progress — готовность и причины.",
+            "Незаполненный паспорт имеет ревизию 0. overview — сводка проекта, product progress — готовность и причины.",
           feature:
             "Сценарии: scenario list --feature <ref>. Реализации: implementation list --feature <ref>. Задачи: task list --product-target <ref>. Готовность: feature progress <ref>.",
           scenario:
@@ -491,7 +494,7 @@ export function registerProduct(program: Command, runtime: Runtime): void {
             : {}),
           ...(kind === "product"
             ? {
-                overview: commandInvocation(context, ["product", "overview"]),
+                overview: commandInvocation(context, ["overview"]),
                 documents: commandInvocation(context, ["document", "list", "--target", data.key]),
               }
             : {}),
@@ -509,7 +512,10 @@ export function registerProduct(program: Command, runtime: Runtime): void {
         ...(action === "update" && !singleton ? { arguments: { ref: "Ключ или ID записи" } } : {}),
         description: action === "create" ? "Создать запись" : "Изменить только указанные поля",
         details:
-          `Полное описание оформляйте разделами и списками в Markdown, достаточно подробно для исполнения и проверки без чата. ${contentHints[kind]}. Правила берите из требований; неизвестное уточняйте, не выдумывайте. Markdown принимается текстом, из файла или stdin. Источники одного поля несовместимы. После потери ответа сначала прочитайте запись; автоматического повтора нет.` +
+          `Полное описание оформляйте разделами и списками в Markdown, достаточно подробно для исполнения и проверки без чата. ${contentHints[kind]}. Правила берите из требований; неизвестное уточняйте, не выдумывайте. Markdown принимается текстом, из файла или stdin. Источники одного поля несовместимы; во всём вызове допустим один stdin. Автор обязателен: --actor или RELAY_ACTOR. После потери ответа сначала прочитайте запись; автоматического повтора нет.` +
+          (action === "update"
+            ? ` Передайте хотя бы одно изменяемое поле и ревизию из ${kind} get. Непереданные поля сохраняются.`
+            : "") +
           (kind === "implementation" && action === "create"
             ? " Для снятого участия той же пары приложение/цель Core возвращает прежний ID, но заменяет название, описание и совместимую отметку переданными значениями; без --status применяется none. Для возврата участия с сохранением содержания используйте application participation list/replace с прочитанными ревизией состава и версией продукта."
             : "") +
@@ -577,8 +583,13 @@ export function registerProduct(program: Command, runtime: Runtime): void {
         ? { key: "Новый читаемый ключ, не название" }
         : { ref: "Ключ или ID", key: "Новый читаемый ключ, не название" },
       description: "Изменить ключ с сохранением ID и алиасов",
-      details: "Название меняется через update --name (у реализации --title).",
-      examples: [[`npx @oim-dev/relay-cli ${kind} rename --help`, "Правила переименования"]],
+      details: `Передайте автора и прочитанную ревизию из ${kind} get. Меняется только публичный ключ, постоянный ID сохраняется; прежний ключ остаётся алиасом. Коллизии и устаревшая ревизия отклоняются. Название меняется через update ${kind === "implementation" ? "--title" : "--name"}.`,
+      examples: [
+        [
+          `npx @oim-dev/relay-cli ${kind} rename${singleton ? "" : ` ${examples[kind]}`} ${singleton ? "PRODUCT-MAIN" : `${examples[kind]}-MAIN`} --actor agent --if-revision 1`,
+          "Сменить ключ; замените адреса и ревизию данными прочитанной записи",
+        ],
+      ],
       configure: revisionOption,
       async run(context, input) {
         const record = await subject(

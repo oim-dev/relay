@@ -21,7 +21,7 @@ function projection(command: Command) {
   return command.addOption(
     new Option(
       "--projection <mode>",
-      "Квитанция: full — прежний каталог, compact — только изменённая регистрация. JSON по умолчанию full, text — compact",
+      "Ответ: compact — только изменённая регистрация (по умолчанию в тексте), full — полный каталог",
     ).choices(["full", "compact"]),
   );
 }
@@ -74,9 +74,9 @@ export function registerProjects(program: Command, runtime: Runtime) {
         operation === "list"
           ? "--server-url, RELAY_SERVER_URL или конфиг задают подключение без выбора проекта. Поддерживаются workspace и local Server с relay-project-catalog-v1. По сети передаётся только страница, Server проверяет отпечаток полного каталога. При изменении начните заново; исторического снимка нет. Старый Server требует обновления, скрытого полного чтения нет."
           : operation === "add"
-            ? "Подключение: --server-url, RELAY_SERVER_URL или конфиг. Пути относятся к Server: path — относительно серверного реестра, --project-config — относительно path (без path — реестра). --replace явно разрешает замену. Данные не создаются и не переносятся. JSON сохраняет полный каталог; --projection compact явно выбирает краткую квитанцию. Text использует compact, требующий relay-project-catalog-v1; --projection full явно выбирает прежний маршрут."
+            ? "Подключение: --server-url, RELAY_SERVER_URL или конфиг. Пути относятся к Server: path — относительно серверного реестра, --project-config — относительно path (без path — реестра). --replace явно разрешает замену. Данные не создаются и не переносятся. По умолчанию текст показывает краткую квитанцию compact, требующую relay-project-catalog-v1; --projection full явно выбирает полный каталог."
             : operation === "remove"
-              ? "Удаляется только регистрация, данные проекта сохраняются. Подключение: --server-url, RELAY_SERVER_URL или конфиг. Требуется workspace Server. JSON по умолчанию возвращает полный каталог; --projection compact — только квитанцию. Text использует compact с relay-project-catalog-v1; --projection full явно выбирает прежний маршрут."
+              ? "Удаляется только регистрация, данные проекта сохраняются. Подключение: --server-url, RELAY_SERVER_URL или конфиг. Требуется workspace Server. По умолчанию текст показывает краткую квитанцию compact с relay-project-catalog-v1; --projection full явно выбирает полный каталог."
               : "Создаёт локальный пустой relay.workspace.json. --config задаёт путь реестра. Проектный префикс и --project недопустимы.",
       examples: [
         [

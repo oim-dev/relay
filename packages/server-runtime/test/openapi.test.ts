@@ -430,7 +430,21 @@ for (const scoped of [false, true])
       planIds: [plan.data.id],
       requestId: "overview-release",
     });
+    const workSession = await request("POST", "/api/v1/work-history/sessions/start", undefined, {
+      title: "Сессия для схемы обзора",
+      description: "ПОЛНЫЙ МАТЕРИАЛ СЕССИИ",
+      requestId: "overview-session",
+    });
     const overview = await request("GET", "/api/v1/product/overview");
+    assert.equal(overview.data.snapshot.sessions.latest.id, workSession.data.session.id);
+    assert.equal(overview.data.snapshot.sessions.latest.lastEvent.kind, "run-started");
+    assert.equal(overview.data.snapshot.sessions.latest.status, "open");
+    assert.ok(
+      overview.data.snapshot.sessions.unfinished.items.some(
+        (session: { id: string }) => session.id === workSession.data.session.id,
+      ),
+    );
+    assert.ok(!JSON.stringify(overview.data.snapshot.sessions).includes("ПОЛНЫЙ МАТЕРИАЛ СЕССИИ"));
     assert.equal(overview.data.snapshot.plans.total, 1);
     assert.equal(overview.data.snapshot.releases.total, 1);
     assert.ok(overview.data.snapshot.tasks.total > 0);
@@ -479,7 +493,7 @@ for (const scoped of [false, true])
     });
     const metricSchema = document.components!.schemas!.ProductOverviewMetricPage as SchemaObject;
     assert.equal(metricSchema.oneOf?.length, 9);
-    assert.equal(visited.size, 59);
+    assert.equal(visited.size, 60);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
     assert(!("$ref" in sse) && sse.content?.["text/event-stream"]);
     const updateSchema = document.components!.schemas!.UpdateBoardTask as SchemaObject;

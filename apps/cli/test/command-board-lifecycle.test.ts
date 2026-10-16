@@ -92,7 +92,7 @@ test("board: help удаления без проекта и запрет сам�
     "application create",
     "application update --name",
     "application delete-preview/delete",
-    "product overview --metric board-work",
+    "overview --metric board-work",
   ])
     assert.ok(board.includes(fragment), board);
   for (const kind of ["application", "feature", "scenario", "implementation", "task"])

@@ -74,7 +74,6 @@ function registerMaintenance(group: Command, runtime: Runtime): void {
       "Диагностика начинается с минимального чтения конфигурации и manifest; текущая схема проекта не требуется, поэтому команда работает и для базы старой версии. Не создаёт базу, не выполняет recovery, reindex, миграцию или очистку; временный замок удаляется. Статусы: current и migration-required — exit 0; recovery-required, unsupported и invalid — ненулевой exit с машинной причиной и полным отчётом в details. Только локально: в HTTP-режиме LOCAL_REQUIRED без запроса к Server.",
     examples: [
       [`${PREFIX} storage status`, "Проверить состояние базы проекта"],
-      [`${PREFIX} --format json storage status`, "Получить машинный отчёт storageStatusSchema"],
       [
         "npx @oim-dev/relay-cli --local --config relay.workspace.json --project web storage status",
         "Проверить проект, выбранный из workspace-реестра",
@@ -99,8 +98,8 @@ function registerMaintenance(group: Command, runtime: Runtime): void {
     examples: [
       [`${PREFIX} storage migrate --dry-run`, "Проверить точный план без изменения базы"],
       [
-        `${PREFIX} storage migrate --backup-dir /backups/relay-project --if-plan PLAN_FINGERPRINT`,
-        "Перенести базу по проверенному плану с резервной копией",
+        `${PREFIX} storage migrate --backup-dir /backups/relay-project --if-plan ${"0123456789abcdef".repeat(4)}`,
+        "Перенести базу с резервной копией; замените 64-значный отпечаток значением planFingerprint из --dry-run",
       ],
     ],
     configure: (command) =>

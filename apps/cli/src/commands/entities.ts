@@ -30,7 +30,7 @@ export function registerEntities(program: Command, runtime: Runtime): void {
     configure: (command) =>
       paging(command)
         .option("--q <text>", "Поиск; альтернатива позиционному тексту")
-        .option("--kind <kind>", "Вид сущности")
+        .option("--kind <kind>", `Вид сущности: ${entityKindSchema.options.join("/")}`)
         .option(
           "--refs <refs...>",
           "Выбранные ключи или ID",
@@ -46,10 +46,16 @@ export function registerEntities(program: Command, runtime: Runtime): void {
         )
         .option("--target <ref>", "Явная цель")
         .option("--parent <ref>", "Родитель задачи")
-        .option("--status <status>", "Предметное состояние")
+        .option(
+          "--status <status>",
+          "Состояние выбранного вида; значения и поля — inspect type <kind>",
+        )
         .option("--active <value>", "Только реализации с участием true/false")
         .option("--section <id>", "Только документы раздела; none — документы без раздела")
-        .option("--document-kind <kind>", "Тип документа")
+        .option(
+          "--document-kind <kind>",
+          "Тип: specification/description/rules/instruction/proposal/decision/research",
+        )
         .option("--pinned <value>", "Закрепление: true/false")
         .option("--archived <value>", "Архив: true/false")
         .option("--sort <field>", "Сортировка: key/title/updated"),
@@ -108,7 +114,7 @@ export function registerEntities(program: Command, runtime: Runtime): void {
   });
   registerCommand(group, runtime, {
     name: "type <kind>",
-    arguments: { kind: "Вид сущности" },
+    arguments: { kind: `Вид сущности: ${entityKindSchema.options.join("/")}` },
     description: "Прочитать поля и действия вида",
     details: "Отсутствующая схема означает отсутствие соответствующей общей операции.",
     examples: [["npx @oim-dev/relay-cli inspect type document", "Изучить документ"]],
@@ -136,7 +142,8 @@ export function registerEntities(program: Command, runtime: Runtime): void {
     description: "Разрешить постоянный адрес",
     details: "При неоднозначности уточните вид.",
     examples: [["npx @oim-dev/relay-cli inspect resolve FEATURE-1", "Получить ID"]],
-    configure: (command) => command.option("--kind <kind>", "Ожидаемый вид"),
+    configure: (command) =>
+      command.option("--kind <kind>", `Ожидаемый вид: ${entityKindSchema.options.join("/")}`),
     async run(context, input) {
       const data = await context.backend.entities.resolve({
         ref: input.argument(),
@@ -152,7 +159,10 @@ export function registerEntities(program: Command, runtime: Runtime): void {
   for (const action of ["keys", "key-spaces"] as const)
     registerCommand<PageOptions>(group, runtime, {
       name: `${action} <${action === "keys" ? "ref" : "kind"}>`,
-      arguments: action === "keys" ? { ref: "Ключ или ID" } : { kind: "Вид сущности" },
+      arguments:
+        action === "keys"
+          ? { ref: "Ключ или ID" }
+          : { kind: `Вид сущности: ${entityKindSchema.options.join("/")}` },
       description:
         action === "keys" ? "Прочитать текущий ключ и алиасы" : "Прочитать пространства нумерации",
       details: "Постраничное чтение согласованного снимка.",

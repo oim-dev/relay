@@ -1,4 +1,5 @@
 import type {
+  AgentRun,
   AgentRunSummary,
   WorkCheckpoint,
   WorkContext,
@@ -23,7 +24,7 @@ import { safeText } from "./safe.js";
 import type { TextOptions } from "./theme.js";
 
 type Invoke = (tokens: string[]) => string;
-const statusLabels = {
+export const statusLabels = {
   pending: "Ожидает участия",
   open: "Открыта",
   paused: "Приостановлена",
@@ -36,7 +37,7 @@ const kindLabels = {
   result: "Результат",
   cancel: "Отмена намерения",
 };
-const eventLabels = {
+export const eventLabels = {
   "session-created": "Создана ветка",
   "session-forked": "Ответвление",
   "session-closed": "Закрыта ветка",
@@ -71,27 +72,26 @@ const sessionFields = (session: WorkSessionSummary): OutputField[] => [
   ],
 ];
 const assignmentSections = (session: WorkSession, options: TextOptions): OutputSection[] => [
-  md("Поручение — полный Markdown", session.description, options),
-  md(
-    session.status === "cancelled" ? "Причина отмены — полный Markdown" : "Итог — полный Markdown",
-    session.result,
-    options,
-  ),
+  md("Поручение", session.description, options),
+  md(session.status === "cancelled" ? "Причина отмены" : "Итог", session.result, options),
 ];
-const runFields = (run: AgentRunSummary): OutputField[] => [
-  ["Участие", run.key, "opaque"],
+const runFields = (
+  run: AgentRunSummary,
+  boundaries = { start: true, end: true },
+): OutputField[] => [
   ["run.id для --run", run.id, "opaque"],
-  ["Агент / автор участия", run.actor],
-  ["Пользователь — имя", run.operator?.name ?? "не указан"],
-  ["Пользователь — email", run.operator?.email ?? "не указан"],
-  ["Источник атрибуции", run.operator?.source ?? "не указан"],
-  ["Git-ветка клиента", run.git?.branch ?? "не указана", "opaque"],
-  ["Git HEAD клиента", run.git?.commit ?? "не указан", "opaque"],
+  [
+    "Пользователь",
+    [run.operator?.name, run.operator?.email].filter(Boolean).join(" · ") || "не указан",
+  ],
+  ["Источник атрибуции", run.operator?.source],
+  ["Git-ветка клиента", run.git?.branch, "opaque"],
+  ["Git HEAD клиента", run.git?.commit, "opaque"],
   ["Клиент", run.client],
   ["Внешняя сессия клиента", run.sourceSessionId, "opaque"],
-  ["Начало (ISO, часовой пояс)", run.startedAt, "opaque"],
-  ["Окончание (ISO, часовой пояс)", run.endedAt, "opaque"],
-  ["Причина окончания", run.endReason ? endLabels[run.endReason] : null],
+  ["Начало", boundaries.start ? run.startedAt : null, "opaque"],
+  ["Окончание", boundaries.end ? run.endedAt : null, "opaque"],
+  ["Причина окончания", boundaries.end && run.endReason ? endLabels[run.endReason] : null],
   ["Предыдущее run.id", run.predecessorRunId, "opaque"],
 ];
 const sessionCommands = (session: WorkSessionSummary, invoke: Invoke) => [
@@ -111,11 +111,9 @@ const sessionCommands = (session: WorkSessionSummary, invoke: Invoke) => [
 ];
 
 const countFields = (counts: WorkSessionCounts): OutputField[] => [
-  ["Участий этой ветки (всего)", counts.runs],
-  ["Точек этой ветки (всего)", counts.checkpoints],
+  ["Участий / точек", `${counts.runs} / ${counts.checkpoints}`],
   ["Открытых намерений", counts.openIntents],
-  ["Прямых дочерних веток", counts.children],
-  ["Незавершённых прямых детей", counts.unfinishedChildren],
+  ["Детей / незавершённых", `${counts.children} / ${counts.unfinishedChildren}`],
 ];
 function acceptanceFields(
   session: WorkSessionSummary,
@@ -124,7 +122,7 @@ function acceptanceFields(
   if (acceptance)
     return [
       ["Принятие результата", `Принят в ${acceptance.checkpointKey}`, "opaque"],
-      ["Принят (ISO, часовой пояс)", acceptance.at, "opaque"],
+      ["Принят", acceptance.at, "opaque"],
     ];
   return session.parentSessionId && session.status === "completed"
     ? [["Принятие результата", "Ожидает принятия родителем"]]
@@ -151,7 +149,39 @@ function latestRunFields(run: AgentRunSummary | null): OutputField[] {
 }
 
 export function sessionText(data: WorkSessionDetail, options: TextOptions, invoke: Invoke): string {
-  const { session, counts, currentRun } = data;
+  const run = data.currentRun ?? data.latestRun;
+  return sessionCard(
+    data,
+    options,
+    invoke,
+    run
+      ? [
+          {
+            title: data.currentRun ? "Текущее участие" : "Последнее участие",
+            body: cardText(
+              {
+                title: run.actor,
+                opaqueKey: run.key,
+                fields: runFields(run),
+                sections: data.currentRun
+                  ? [md("Причина подключения", data.currentRun.reason, options)]
+                  : [],
+              },
+              options,
+            ),
+          },
+        ]
+      : [],
+  );
+}
+
+function sessionCard(
+  data: WorkSessionDetail,
+  options: TextOptions,
+  invoke: Invoke,
+  runs: OutputSection[],
+): string {
+  const { session, counts } = data;
   return cardText(
     {
       title: session.title,
@@ -159,44 +189,14 @@ export function sessionText(data: WorkSessionDetail, options: TextOptions, invok
       fields: [
         ...sessionFields(session),
         ["ID ветки", session.id, "opaque"],
-        ["Создана (ISO, часовой пояс)", session.createdAt, "opaque"],
-        ["Изменена (ISO, часовой пояс)", session.updatedAt, "opaque"],
-        ["Закрыта (ISO, часовой пояс)", session.closedAt, "opaque"],
+        ["Создана", session.createdAt, "opaque"],
+        ["Изменена", session.updatedAt, "opaque"],
+        ["Закрыта", session.closedAt, "opaque"],
+        ["Текущее run.id", session.currentRunId ?? "нет", "opaque"],
         ...countFields(counts),
         ...acceptanceFields(session, data.acceptance),
       ],
-      sections: [
-        ...assignmentSections(session, options),
-        {
-          title: "Текущее участие — не проверка присутствия online",
-          body: currentRun
-            ? cardText(
-                {
-                  title: currentRun.actor,
-                  opaqueKey: currentRun.key,
-                  fields: runFields(currentRun),
-                  sections: [md("Причина подключения", currentRun.reason, options)],
-                },
-                options,
-              )
-            : "Текущего участия нет.",
-        },
-        ...(!currentRun && data.latestRun
-          ? [
-              {
-                title: "Последнее сохранённое участие — обзор, не текущее владение",
-                body: cardText(
-                  {
-                    title: data.latestRun.actor,
-                    opaqueKey: data.latestRun.key,
-                    fields: runFields(data.latestRun),
-                  },
-                  options,
-                ),
-              },
-            ]
-          : []),
-      ],
+      sections: [...assignmentSections(session, options), ...runs],
       commands: sessionCommands(session, invoke),
     },
     options,
@@ -358,26 +358,21 @@ function checkpointFields(data: WorkCheckpoint): OutputField[] {
     ["Ветка", sessionRef(data.sessionId), "opaque"],
     ["run.id автора", data.runId, "opaque"],
     ["Автор записи", data.createdBy],
-    ["Время (ISO, часовой пояс)", data.createdAt, "opaque"],
+    ["Время", data.createdAt, "opaque"],
     ["Номер в ветке", data.sequence],
-    [
-      "Исходное намерение",
-      data.intentId ? checkpointRef(data.intentId) : "Эта точка открывает намерение",
-      "opaque",
-    ],
-    ["Явно принятых результатов детей", data.acceptedSessionIds.length],
+    ["Исходное намерение", data.intentId ? checkpointRef(data.intentId) : null, "opaque"],
   ];
 }
 function checkpointSections(data: WorkCheckpoint, options: TextOptions): OutputSection[] {
   return [
     md("Аннотация", data.summary, options),
-    md("Материал — полный Markdown", data.body, options),
+    md("Материал", data.body, options),
     md("Сделано", data.done, options),
     md("Остаток и блокеры", data.remaining, options),
     md("Следующее действие", data.nextStep, options),
     md("Проверки и фактические результаты", data.checks, options),
     {
-      title: "Сохранённые подписи ссылок — не снимки содержания целей",
+      title: "Сохранённые подписи ссылок",
       body: data.references.length
         ? data.references
             .map(
@@ -385,13 +380,13 @@ function checkpointSections(data: WorkCheckpoint, options: TextOptions): OutputS
                 `${safeText(key ?? `${ref.kind}:${ref.id}`)} — ${safeText(title)}\n  ${safeText(`${ref.kind}:${ref.id}`)}`,
             )
             .join("\n")
-        : "Ссылки не заданы.",
+        : "",
     },
     {
-      title: "Явно принятые результаты дочерних веток",
+      title: `Явно принятые результаты дочерних веток: ${data.acceptedSessionIds.length}`,
       body: data.acceptedSessionIds.length
         ? data.acceptedSessionIds.map((id) => safeText(sessionRef(id))).join("\n")
-        : "Эта точка не принимает результаты детей.",
+        : "",
     },
   ];
 }
@@ -426,36 +421,117 @@ export function checkpointText(data: WorkCheckpoint, options: TextOptions, invok
   );
 }
 
-function eventText(item: WorkHistoryItem, options: TextOptions, full: boolean): string {
-  const fields: OutputField[] =
-    item.kind === "checkpoint"
-      ? []
-      : [
-          ["Время (ISO, часовой пояс)", item.at, "opaque"],
-          ["Ветка хронологии", sessionRef(item.sessionId), "opaque"],
-          ["Номер в ветке", item.sequence],
-        ];
+type PageRun = AgentRunSummary | AgentRun;
+
+function pageRuns(items: WorkHistoryItem[], detail?: WorkSessionDetail): Map<string, PageRun> {
+  const runs = new Map<string, PageRun>();
+  if (detail?.latestRun) runs.set(detail.latestRun.id, detail.latestRun);
+  if (detail?.currentRun) runs.set(detail.currentRun.id, detail.currentRun);
+  for (const item of items) {
+    if (item.kind === "run-started" || item.kind === "run-ended") runs.set(item.run.id, item.run);
+  }
+  return runs;
+}
+
+function runEndSection(run: AgentRun, options: TextOptions, session?: WorkSession): OutputSection {
+  // Только материал закрытия этой же ветки: совпадение чужих Markdown не основание для свёртки.
+  const repeatsResult =
+    session &&
+    run.sessionId === session.id &&
+    (run.endReason === "completed" || run.endReason === "cancelled") &&
+    run.endedAt === session.closedAt &&
+    run.endSummary === session.result &&
+    session.result;
+  return repeatsResult
+    ? {
+        title: "Материал окончания участия",
+        body: `Итог ${safeText(session.key)} — в карточке ветки выше (тот же текст).`,
+      }
+    : md("Материал окончания участия", run.endSummary ?? "", options);
+}
+
+function runsSection(
+  runs: Map<string, PageRun>,
+  items: WorkHistoryItem[],
+  options: TextOptions,
+  detail?: WorkSessionDetail,
+): OutputSection {
+  const starts = new Set<string>();
+  const ends = new Set<string>();
+  for (const item of items) {
+    if (item.kind === "run-started") starts.add(item.run.id);
+    if (item.kind === "run-ended") ends.add(item.run.id);
+  }
+  return {
+    title: "Участия — сведения на момент чтения",
+    body: [...runs.values()]
+      .map((run) =>
+        cardText(
+          {
+            title: run.actor,
+            opaqueKey: run.key,
+            fields: [
+              ...runFields(run, { start: !starts.has(run.id), end: !ends.has(run.id) }),
+              ["Ветка", detail ? null : sessionRef(run.sessionId), "opaque"],
+              [
+                "Последнее участие",
+                detail?.latestRun?.id === run.id && !detail.currentRun ? "да" : null,
+              ],
+            ],
+            // Если граница участия вне страницы, его выбранные материалы остаются в словаре.
+            sections:
+              detail && "reason" in run
+                ? [
+                    ...(!starts.has(run.id)
+                      ? [md("Причина подключения", run.reason, options)]
+                      : []),
+                    ...(!ends.has(run.id) ? [runEndSection(run, options, detail.session)] : []),
+                  ]
+                : [],
+          },
+          options,
+        ),
+      )
+      .join("\n\n"),
+  };
+}
+
+function eventText(
+  item: WorkHistoryItem,
+  options: TextOptions,
+  runs: Map<string, PageRun>,
+  session?: WorkSession,
+): string {
+  const fields: OutputField[] = session ? [] : [["Ветка", sessionRef(item.sessionId), "opaque"]];
   const sections: OutputSection[] = [];
   let title = eventLabels[item.kind];
   let opaqueKey: string | undefined;
   if (item.kind === "checkpoint") {
     const cp = item.checkpoint;
     opaqueKey = cp.key;
-    title = `${kindLabels[cp.kind]} — ${cp.title}`;
-    fields.push(...checkpointFields(cp));
-    if (full) sections.push(...checkpointSections(cp, options));
+    title = `${kindLabels[cp.kind]} (${cp.kind}) — ${cp.title}`;
+    fields.push(
+      ["run.id автора", cp.runId, "opaque"],
+      ["Автор", runs.get(cp.runId)?.actor === cp.createdBy ? null : cp.createdBy],
+      ["Намерение", cp.intentId ? checkpointRef(cp.intentId) : null, "opaque"],
+      ["Принято детей", session ? null : cp.acceptedSessionIds.length || null],
+    );
+    if (session) sections.push(...checkpointSections(cp, options));
     else if (cp.summary) sections.push(md("Аннотация", cp.summary, options));
   } else if (item.kind === "run-started" || item.kind === "run-ended") {
-    fields.push(...runFields(item.run));
-    if (full)
+    fields.push(["run.id", item.run.id, "opaque"]);
+    if (item.kind === "run-ended")
+      fields.push(["Причина окончания", item.run.endReason ? endLabels[item.run.endReason] : null]);
+    if (session)
       sections.push(
-        md("Причина подключения", item.run.reason, options),
-        md("Материал окончания участия", item.run.endSummary ?? "", options),
+        item.kind === "run-started"
+          ? md("Причина подключения", item.run.reason, options)
+          : runEndSection(item.run, options, session),
       );
   } else if (item.kind === "session-forked") {
     opaqueKey = item.childSession.key;
+    title = `${eventLabels[item.kind]} — ${item.childSession.title}`;
     fields.push(
-      ["Поручение дочерней ветки", item.childSession.title],
       ["run.id создателя", item.childSession.createdByRunId, "opaque"],
       [
         "Исходное намерение",
@@ -464,23 +540,43 @@ function eventText(item: WorkHistoryItem, options: TextOptions, full: boolean): 
           : null,
         "opaque",
       ],
-      ["Автор", "Не указан в этой точке; см. запись участия"],
       ["Текущее состояние ребёнка", statusLabels[item.childSession.status]],
     );
-    if (full) sections.push(...assignmentSections(item.childSession, options));
+    if (session)
+      sections.push(
+        md("Поручение ребёнка", item.childSession.description, options),
+        md(
+          item.childSession.status === "cancelled"
+            ? "Причина отмены ребёнка — текущая"
+            : "Итог ребёнка — текущий",
+          item.childSession.result,
+          options,
+        ),
+      );
   } else if (item.kind === "session-created" || item.kind === "session-closed") {
-    opaqueKey = item.session.key;
-    fields.push(
-      ["Поручение ветки", item.session.title],
-      ["Текущее состояние", statusLabels[item.session.status]],
-      ["Автор / run", "Не указаны в этой точке; см. начало / окончание участия"],
-    );
-    if (full) sections.push(...assignmentSections(item.session, options));
+    if (session)
+      fields.push([
+        item.kind === "session-created" ? "Поручение" : "Итог",
+        "В карточке ветки выше",
+      ]);
+    else {
+      opaqueKey = item.session.key;
+      title = `${eventLabels[item.kind]} — ${item.session.title}`;
+      fields.push(["Текущее состояние", statusLabels[item.session.status]]);
+    }
   }
-  return cardText(
-    { title: `${title} (${item.kind})`, ...(opaqueKey ? { opaqueKey } : {}), fields, sections },
-    options,
-  );
+  return [
+    safeText(`#${item.sequence} · ${item.at}`),
+    cardText(
+      {
+        title: item.kind === "checkpoint" ? title : `${title} (${item.kind})`,
+        ...(opaqueKey ? { opaqueKey } : {}),
+        fields,
+        sections,
+      },
+      options,
+    ),
+  ].join("\n");
 }
 
 export function historyText(
@@ -490,6 +586,7 @@ export function historyText(
   invoke: Invoke,
 ): string {
   const checkpoint = data.items.find((item) => item.kind === "checkpoint");
+  const runs = pageRuns(data.items);
   return cardText(
     {
       title: "Хронология работы — обзор выбранной страницы",
@@ -503,10 +600,11 @@ export function historyText(
         ["Фильтр типа", query.kind],
       ],
       sections: [
+        runsSection(runs, data.items, options),
         {
-          title: "Сохранённые события; карточки веток отражают текущее состояние",
+          title: "События; состояния карточек — текущие",
           body: data.items.length
-            ? data.items.map((item) => eventText(item, options, false)).join("\n\n───\n\n")
+            ? data.items.map((item) => eventText(item, options, runs)).join("\n\n")
             : "На этой странице событий нет.",
         },
       ],
@@ -538,8 +636,9 @@ export function sessionContextText(
   options: TextOptions,
   invoke: Invoke,
 ): string {
+  const runs = pageRuns(data.history.items, data);
   return [
-    sessionText(data, options, invoke),
+    sessionCard(data, options, invoke, [runsSection(runs, data.history.items, options, data)]),
     cardText(
       {
         title: "Полные материалы выбранной страницы — только эта ветка, desc, без потомков",
@@ -547,7 +646,9 @@ export function sessionContextText(
           {
             title: `На странице событий: ${data.history.items.length}; всего в истории ветки: ${data.history.total}`,
             body: data.history.items.length
-              ? data.history.items.map((item) => eventText(item, options, true)).join("\n\n───\n\n")
+              ? data.history.items
+                  .map((item) => eventText(item, options, runs, data.session))
+                  .join("\n\n")
               : "На этой странице событий нет.",
           },
         ],

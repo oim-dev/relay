@@ -137,14 +137,20 @@ async function hints(t: TestContext, cwd: string) {
 test("PROD help: state/context/view/snapshot доступны без проекта", async (t) => {
   const cwd = await tempDirectory(t);
   for (const name of ["state", "context", "overview", "lint"]) {
-    const result = await invokeRaw(cwd, ["product", name, "--help"]);
+    const result = await invokeRaw(cwd, [
+      ...(name === "overview" ? [] : ["product"]),
+      name,
+      "--help",
+    ]);
     assert.equal(result.code, 0, result.stdout + result.stderr);
     assert.equal(result.stderr, "");
     assert.match(result.stdout, /Примеры:/);
     if (name === "overview") {
       assert.match(result.stdout, /--snapshot/);
       assert.match(result.stdout, /--view/);
-      assert.match(result.stdout, /compact.*full или\s+map/);
+      assert.match(result.stdout, /compact — сводка \(по умолчанию\)/);
+      assert.match(result.stdout, /full —\s+с подборками/);
+      assert.match(result.stdout, /map — только карта/);
     }
   }
 });
@@ -152,9 +158,7 @@ test("PROD help: state/context/view/snapshot доступны без проек�
 test("PROD-01…06 local: снимок, адреса, контекст, полнота и компактное представление", async (t) => {
   const app = await prepared(t);
   const executeHint = await hints(t, app.root);
-  const overview = successful(
-    await app.run<ProductOverviewView>(["product", "overview", "--limit", 1]),
-  );
+  const overview = successful(await app.run<ProductOverviewView>(["overview", "--limit", 1]));
   assert.equal(overview.data.total, 5);
   assert.equal(overview.meta?.page?.count, 1);
   assert.equal(overview.data.snapshot.tasks.total, 1);
@@ -232,7 +236,6 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
 
   const map = successful(
     await app.run<ProductOverviewMapPage>([
-      "product",
       "overview",
       "--view",
       "map",
@@ -256,7 +259,7 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
   assert.equal(new Set(all.map((item) => item.id)).size, 5);
   assert.equal(all.find((item) => item.kind === "scope")?.subject.key, app.application.key);
   const directMap = successful(
-    await app.run<ProductOverviewMapPage>(["product", "overview", "--view", "map"]),
+    await app.run<ProductOverviewMapPage>(["overview", "--view", "map"]),
   );
   const mapHints = directMap.meta as { commands: { command: string }[] };
   const participation = mapHints.commands.find((entry) =>
@@ -275,8 +278,8 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
       assert.match(out.stdout, /не\s+полный\s+граф/);
       assert.doesNotMatch(out.stdout, /\u001b/);
     }
-    const compact = await invokeRaw(app.root, ["product", "overview"], { env });
-    const full = await invokeRaw(app.root, ["product", "overview", "--view", "full"], { env });
+    const compact = await invokeRaw(app.root, ["overview"], { env });
+    const full = await invokeRaw(app.root, ["overview", "--view", "full"], { env });
     assert.equal(compact.code, 0, compact.stdout);
     assert.equal(full.code, 0, full.stdout);
     assert.ok(
@@ -289,7 +292,7 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
     assert.doesNotMatch(compact.stdout, /^npx /m);
     assert.doesNotMatch(compact.stdout, /Показано:|Конец списка|Проверить поиск/);
     assert.match(full.stdout, /Требует внимания/);
-    const mapText = await invokeRaw(app.root, ["product", "overview", "--view", "map"], { env });
+    const mapText = await invokeRaw(app.root, ["overview", "--view", "map"], { env });
     assert.equal(mapText.code, 0, mapText.stdout);
     assert.match(mapText.stdout, /WEB/);
     assert.doesNotMatch(mapText.stdout, /application participation list WEB/);
@@ -315,14 +318,13 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
       );
   }
   const compactJson = successful(
-    await app.run<ProductOverviewView>(["product", "overview", "--view", "compact", "--limit", 1]),
+    await app.run<ProductOverviewView>(["overview", "--view", "compact", "--limit", 1]),
   );
   assert.deepEqual(compactJson.data.snapshot, overview.data.snapshot);
   assert.equal(compactJson.data.total, overview.data.total);
   const oldHumanPage = await invokeRaw(app.root, [
     "--config",
     app.config,
-    "product",
     "overview",
     "--cursor",
     overview.meta!.page!.nextCursor!,
@@ -330,26 +332,18 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
   assert.equal(oldHumanPage.code, 0, oldHumanPage.stdout);
   assert.doesNotMatch(oldHumanPage.stdout, /Требует внимания|Задач всего/);
   failed(
-    await app.run(["product", "overview", "--metric", "board-work", "--view", "map"]),
+    await app.run(["overview", "--metric", "board-work", "--view", "map"]),
     "INVALID_ARGUMENT",
   );
-  failed(await app.run(["product", "overview", "--view", "invalid"]), "INVALID_ARGUMENT");
+  failed(await app.run(["overview", "--view", "invalid"]), "INVALID_ARGUMENT");
   failed(
-    await app.run([
-      "product",
-      "overview",
-      "--view",
-      "full",
-      "--cursor",
-      map.meta!.page!.nextCursor!,
-    ]),
+    await app.run(["overview", "--view", "full", "--cursor", map.meta!.page!.nextCursor!]),
     "INVALID_CURSOR",
   );
 
   const lintFirst = successful(await app.run<ProductLintPage>(["product", "lint", "--limit", 1]));
   const metricFirst = successful(
     await app.run([
-      "product",
       "overview",
       "--metric",
       "board-work",
@@ -361,7 +355,6 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
   );
   failed(
     await app.run([
-      "product",
       "overview",
       "--snapshot",
       "другой-срез",
@@ -382,18 +375,18 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
     ]),
   );
   failed(
-    await app.run(["product", "overview", "--cursor", overview.meta!.page!.nextCursor!]),
+    await app.run(["overview", "--cursor", overview.meta!.page!.nextCursor!]),
     "VERSION_CONFLICT",
     4,
   );
   failed(
-    await app.run(["product", "overview", "--cursor", map.meta!.page!.nextCursor!]),
+    await app.run(["overview", "--cursor", map.meta!.page!.nextCursor!]),
     "VERSION_CONFLICT",
     4,
   );
   const staleHint = await executeHint(metricCommand);
   failed(
-    await app.run(["product", "overview", "--cursor", metricFirst.meta!.page!.nextCursor!]),
+    await app.run(["overview", "--cursor", metricFirst.meta!.page!.nextCursor!]),
     "VERSION_CONFLICT",
     4,
   );
@@ -415,7 +408,7 @@ test("PROD-01…06 local: снимок, адреса, контекст, полн
     "VERSION_CONFLICT",
     4,
   );
-  successful(await app.run(["product", "overview"]));
+  successful(await app.run(["overview"]));
   successful(await app.run(["product", "lint"]));
 });
 
@@ -423,15 +416,12 @@ test("PROD recovery: VERSION_CONFLICT сохраняет JSON и даёт исп
   const app = await prepared(t);
   // Другая cwd доказывает сохранение явного config, а не случайное чтение той же базы.
   const executeHint = await hints(t, await tempDirectory(t));
-  const overview = successful(
-    await app.run<ProductOverviewView>(["product", "overview", "--limit", 1]),
-  );
+  const overview = successful(await app.run<ProductOverviewView>(["overview", "--limit", 1]));
   const map = successful(
-    await app.run<ProductOverviewMapPage>(["product", "overview", "--view", "map", "--limit", 1]),
+    await app.run<ProductOverviewMapPage>(["overview", "--view", "map", "--limit", 1]),
   );
   const metric = successful(
     await app.run([
-      "product",
       "overview",
       "--metric",
       "board-work",
@@ -473,33 +463,26 @@ test("PROD recovery: VERSION_CONFLICT сохраняет JSON и даёт исп
   };
   const cases = [
     {
-      args: ["product", "overview", "--cursor", overview.meta!.page!.nextCursor!],
-      restart: "product overview",
+      args: ["overview", "--cursor", overview.meta!.page!.nextCursor!],
+      restart: "overview",
     },
     {
-      args: ["product", "overview", "--cursor", map.meta!.page!.nextCursor!],
-      restart: "product overview",
+      args: ["overview", "--cursor", map.meta!.page!.nextCursor!],
+      restart: "overview",
       original: await expectedFailure(() =>
         core.overviewMap({ offset: 1, limit: 1, version: map.data.snapshotVersion }),
       ),
     },
     {
-      args: ["product", "overview", "--cursor", metric.meta!.page!.nextCursor!],
-      restart: "product overview",
+      args: ["overview", "--cursor", metric.meta!.page!.nextCursor!],
+      restart: "overview",
       original: await expectedFailure(() =>
         core.overviewMetric({ metric: "board-work", version: overview.data.snapshotVersion }),
       ),
     },
     {
-      args: [
-        "product",
-        "overview",
-        "--metric",
-        "board-work",
-        "--snapshot",
-        overview.data.snapshotVersion,
-      ],
-      restart: "product overview",
+      args: ["overview", "--metric", "board-work", "--snapshot", overview.data.snapshotVersion],
+      restart: "overview",
       original: await expectedFailure(() =>
         core.overviewMetric({ metric: "board-work", version: overview.data.snapshotVersion }),
       ),
@@ -666,15 +649,16 @@ test("PROD-05: пустой обзор компактен, полный режи
   const root = await tempDirectory(t);
   successful(await invoke(root, ["init"]));
   for (const width of [40, 100]) {
-    const compact = await invokeRaw(root, ["product", "overview"], {
+    const compact = await invokeRaw(root, ["overview"], {
       env: { COLUMNS: String(width) },
     });
-    const full = await invokeRaw(root, ["product", "overview", "--view", "full"], {
+    const full = await invokeRaw(root, ["overview", "--view", "full"], {
       env: { COLUMNS: String(width) },
     });
     assert.equal(compact.code, 0, compact.stdout);
     assert.equal(full.code, 0, full.stdout);
-    assert.match(compact.stdout, /Продукт без паспорта/);
+    assert.match(compact.stdout, /^Проект · /);
+    assert.match(compact.stdout, /Паспорт ещё не создан/);
     assert.match(compact.stdout, /Задач всего: 0/);
     assert.doesNotMatch(compact.stdout, /^npx /m);
     assert.match(compact.stdout, /Срез:/);
@@ -692,9 +676,7 @@ test("PROD-05: пустой обзор компактен, полный режи
       }),
     );
   }
-  const map = successful(
-    await invoke<ProductOverviewMapPage>(root, ["product", "overview", "--view", "map"]),
-  );
+  const map = successful(await invoke<ProductOverviewMapPage>(root, ["overview", "--view", "map"]));
   assert.equal(map.data.total, 0);
   assert.equal(map.meta?.page?.count, 0);
   assert.equal(map.meta?.page?.nextCursor, null);
@@ -718,7 +700,7 @@ test("PROD HTTP: предметные операции не получают sta
   for (const args of [
     ["product", "validate"],
     ["product", "lint", "--id", app.implementation.key],
-    ["product", "overview", "--view", "map", "--limit", 1],
+    ["overview", "--view", "map", "--limit", 1],
   ]) {
     calls.length = 0;
     const local = successful(await app.run(args));
@@ -738,15 +720,13 @@ test("PROD HTTP: предметные операции не получают sta
     ["product", "context", "--id", app.application.key],
   ])
     assert.deepEqual(successful(await remote(args)).data, successful(await app.run(args)).data);
-  const overview = successful(
-    await remote<ProductOverviewView>(["product", "overview", "--limit", 1]),
-  );
+  const overview = successful(await remote<ProductOverviewView>(["overview", "--limit", 1]));
   const map = successful(
-    await remote<ProductOverviewMapPage>(["product", "overview", "--view", "map", "--limit", 1]),
+    await remote<ProductOverviewMapPage>(["overview", "--view", "map", "--limit", 1]),
   );
   const lint = successful(await remote<ProductLintPage>(["product", "lint", "--limit", 1]));
   failed(
-    await app.run(["--local", "product", "overview", "--cursor", map.meta!.page!.nextCursor!]),
+    await app.run(["--local", "overview", "--cursor", map.meta!.page!.nextCursor!]),
     "INVALID_CURSOR",
   );
   const executeHint = await hints(t, app.root);
@@ -765,7 +745,7 @@ test("PROD HTTP: предметные операции не получают sta
     ]),
   );
   for (const cursor of [overview.meta!.page!.nextCursor!, map.meta!.page!.nextCursor!])
-    failed(await remote(["product", "overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
+    failed(await remote(["overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
   const stale = await executeHint(overview.data.commands.metrics["review-obligations-met"]);
   assert.equal(stale.code, 4, stale.stdout);
   assert.equal(stale.body.error.code, "VERSION_CONFLICT");

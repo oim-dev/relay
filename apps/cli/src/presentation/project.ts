@@ -118,7 +118,7 @@ export function configText(
         {
           title: "Вывод CLI",
           body: wrap(
-            `По умолчанию текст; JSON только через --format json. Лимит страницы по умолчанию: ${config.output.defaultLimit}.\noutput.format и output.maxBytes не управляют выводом CLI. Цветного ANSI нет.`,
+            `Лимит страницы по умолчанию: ${config.output.defaultLimit}.\noutput.format и output.maxBytes не управляют выводом CLI. Обычный вывод — читаемый текст без цветного ANSI.`,
             options.width,
           ),
         },

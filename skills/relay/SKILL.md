@@ -215,11 +215,11 @@ npx @oim-dev/relay-cli project get
 `implementation`, `document`, `board`, `task`, `plan`, `release`, `session`, `checkpoint`.
 Для критериев, комментариев и этапов есть подгруппы: `task criterion`, `task comment`, `plan stage`.
 
-После выбора рабочей ветки используй `product overview` — срез проекта с командами полного чтения.
+Самостоятельный `overview` показывает срез проекта, последнюю и незавершённые сессии; workspace: `overview --project <имя>` или `<проект> overview`.
 `list` и `search` помогают найти ключ; полное содержание читай отдельно. `product get` и `project get` — без ключа:
 
 ```bash
-npx @oim-dev/relay-cli product overview
+npx @oim-dev/relay-cli overview
 npx @oim-dev/relay-cli product get
 npx @oim-dev/relay-cli feature list
 npx @oim-dev/relay-cli task create --help

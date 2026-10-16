@@ -13,6 +13,8 @@ import type {
   WorkTreeTotals,
 } from "@relay/contracts/work-history";
 import type { z } from "zod";
+import { OVERVIEW_SESSIONS_LIMIT } from "@relay/contracts/overview-sessions";
+import type { OverviewSession, OverviewSessions } from "@relay/contracts/overview-sessions";
 import type {
   workHistoryQuerySchema,
   workOpenIntentsQuerySchema,
@@ -23,7 +25,7 @@ import { invariant } from "../../shared/errors.js";
 import { WorkHistoryRepository } from "../../storage/work-history.js";
 import type { CheckpointCard } from "../../storage/work-history.js";
 
-export const unfinished = (session: WorkSessionSummary) =>
+export const unfinished = (session: Pick<WorkSessionSummary, "status">) =>
   !["completed", "cancelled"].includes(session.status);
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 type Page = { offset: number; limit: number; version?: string | undefined };
@@ -338,6 +340,21 @@ export class WorkHistoryReader {
           ? this.nodes(root).map((item) => item.session.id)
           : [root],
     );
+    const selected = this.events(ids)
+      .filter((event) => !query.kind || event.kind === query.kind)
+      .sort(
+        (a, b) =>
+          compare(a.at, b.at) ||
+          compare(a.sessionId, b.sessionId) ||
+          a.sequence - b.sequence ||
+          compare(a.id, b.id),
+      );
+    if (query.order === "desc") selected.reverse();
+    return this.historyPage(selected, query, operation, root);
+  }
+
+  /** Общая хронология из компактных индексов, без чтения Markdown. */
+  private events(ids: ReadonlySet<string>): Event[] {
     const events: Event[] = [];
     for (const session of this.sessions) {
       if (ids.has(session.id)) {
@@ -408,16 +425,66 @@ export class WorkHistoryReader {
           at: checkpoint.createdAt,
           recordId: checkpoint.id,
         });
-    const selected = events
-      .filter((event) => !query.kind || event.kind === query.kind)
-      .sort(
-        (a, b) =>
-          compare(a.at, b.at) ||
-          compare(a.sessionId, b.sessionId) ||
-          a.sequence - b.sequence ||
-          compare(a.id, b.id),
+    return events;
+  }
+
+  /** Сводка проекта использует тот же набор событий, что и полная история. */
+  projectOverview(): { snapshot: OverviewSessions; version: string } {
+    const latest = new Map<string, Event>();
+    for (const event of this.events(new Set(this.sessionMap.keys()))) {
+      const previous = latest.get(event.sessionId);
+      if (
+        !previous ||
+        compare(event.at, previous.at) > 0 ||
+        (event.at === previous.at && event.sequence > previous.sequence)
+      )
+        latest.set(event.sessionId, event);
+    }
+    const entries: OverviewSession[] = this.sessions.map((session) => {
+      const event = latest.get(session.id)!;
+      const parent = session.parentSessionId ? this.sessionMap.get(session.parentSessionId) : null;
+      invariant(
+        parent !== undefined,
+        "STORAGE_INDEX_CORRUPT",
+        "Родитель сессии отсутствует в индексе",
+        5,
       );
-    if (query.order === "desc") selected.reverse();
+      return {
+        id: session.id,
+        key: session.key,
+        title: session.title,
+        status: session.status,
+        parent: parent ? { id: parent.id, key: parent.key } : null,
+        lastEvent: { kind: event.kind, at: event.at, sequence: event.sequence },
+      };
+    });
+    entries.sort((a, b) => compare(b.lastEvent.at, a.lastEvent.at) || compare(b.id, a.id));
+    const open = entries.filter(unfinished);
+    const items = open.slice(0, OVERVIEW_SESSIONS_LIMIT);
+    return {
+      snapshot: {
+        total: entries.length,
+        latest: entries[0] ?? null,
+        unfinished: {
+          total: open.length,
+          shown: items.length,
+          hasMore: open.length > items.length,
+          items,
+        },
+      },
+      // Guard учитывает и невидимые ветки/материалы, а не только первую подборку.
+      version: createHash("sha256")
+        .update(JSON.stringify([this.sessions, this.runs, this.checkpoints]))
+        .digest("hex"),
+    };
+  }
+
+  private async historyPage(
+    selected: Event[],
+    query: z.output<typeof workHistoryQuerySchema>,
+    operation: string,
+    root: string | undefined,
+  ): Promise<WorkHistoryPage> {
     // Событие start возвращает текущее участие, fork — текущую карточку ребёнка.
     // Guard поэтому учитывает именно возвращаемые владельцы, а не один список event ID.
     const sessions = new Map(this.sessions.map((item) => [item.id, item]));

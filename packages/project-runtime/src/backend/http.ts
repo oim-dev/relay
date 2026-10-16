@@ -218,6 +218,13 @@ function decodeOverview(value: unknown, url: string) {
       5,
       { url },
     );
+  if (typeof snapshot === "object" && snapshot !== null && !("sessions" in snapshot))
+    throw new AppError(
+      "SERVER_INCOMPATIBLE",
+      "Сервер Relay вернул обзор проекта без сведений о сессиях (snapshot.sessions). Обновите и перезапустите Relay Server той же версии, что и клиент.",
+      5,
+      { url },
+    );
   return decode(productOverviewSchema, value);
 }
 

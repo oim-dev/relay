@@ -19,6 +19,7 @@ import wrapAnsi from "wrap-ansi";
 import { wrap, section } from "./layout.js";
 import { renderMarkdown } from "./markdown.js";
 import { safeText, previewText, diagnosticValueText } from "./text.js";
+import { overviewSessionsText } from "./overview-sessions.js";
 import type {
   ProductEntity,
   ProductEntitySummary,
@@ -241,6 +242,7 @@ export type ProductOverviewCommands = {
   documents: string;
   pinnedDocuments: string;
   sections: string;
+  unfinishedSessions: string;
   /** Полное постраничное чтение каждой метрики оператора, кроме требующей блокер. */
   metrics: Record<Exclude<ProductOverviewMetric, "blocker-affected">, string>;
   /** Полный состав затронутых задач для каждого блокера из подборки, по его постоянному ID. */
@@ -836,11 +838,11 @@ export function productOverviewCompactText(
   const passport = s.passport;
   const columns = s.tasks.byColumn;
   const lines = [
-    `Проект: ${s.project.name} (${s.project.slug})`,
+    `Адрес проекта: ${s.project.slug}`,
     `Срез получен: ${data.generatedAt}`,
     passport.state === "missing"
       ? "Паспорт ещё не создан."
-      : `Паспорт: ${passport.key ?? passport.id} · ревизия ${passport.revision}`,
+      : `Паспорт: ${passport.key ?? passport.id} · ${passport.name} · ревизия ${passport.revision}`,
     ...(passport.state === "filled" ? [`Назначение: ${passport.summary}`] : []),
     `Задач всего: ${s.tasks.total} · фактически выполнено ${s.tasks.completed} · в done с открытыми обязательствами ${s.tasks.doneWithOpenObligations}`,
     `Колонки: inbox ${columns.inbox} · ready ${columns.ready} · in-progress ${columns["in-progress"]} · review ${columns.review} · done ${columns.done} · cancelled ${columns.cancelled}`,
@@ -886,9 +888,9 @@ export function productOverviewCompactText(
       : []),
     { label: "Продуктовая готовность и причины", command: data.commands.progress },
   ];
-  return cardText(
+  const overview = cardText(
     {
-      title: passport.state === "missing" ? "Продукт без паспорта" : `Продукт · ${passport.name}`,
+      title: `Проект · ${s.project.name}`,
       fields: [["Срез", data.snapshotVersion, "opaque"]],
       sections: [
         ...(passport.state === "no-summary" && passport.excerpt.text
@@ -905,6 +907,10 @@ export function productOverviewCompactText(
     },
     options,
   );
+  return [
+    overview,
+    overviewSessionsText(s.sessions, options, false, data.commands.unfinishedSessions),
+  ].join("\n\n");
 }
 
 /** Новая карта содержит адреса приложения/реализации от Core, не угадывает scope по имени. */
@@ -1012,15 +1018,15 @@ export function productOverviewText(
 
   const head = cardText(
     {
-      title: passport.title,
+      title: `Проект · ${snapshot.project.name}`,
       fields: [
-        ["Проект", `${snapshot.project.name} (${snapshot.project.slug})`],
+        ["Адрес проекта", snapshot.project.slug],
         ["ID проекта", snapshot.project.id ?? "не назначен"],
         ["Срез получен", data.generatedAt],
         ["Срез", data.snapshotVersion, "opaque"],
         ...passport.fields,
       ],
-      sections: [{ title: "Паспорт", body: passport.body }],
+      sections: [{ title: passport.title, body: passport.body }],
     },
     options,
   );
@@ -1237,6 +1243,7 @@ export function productOverviewText(
     head,
     summary,
     overlap,
+    overviewSessionsText(snapshot.sessions, options, true, commands.unfinishedSessions),
     attention,
     operatorWorkText(data, options),
     planning,

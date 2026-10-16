@@ -34,7 +34,7 @@ type Detail = {
 const markdown =
   "## Назначение\n\nПолная память 🧭.\n\n```text\n  сохранить отступ\n```\n\nКонец паспорта.\n";
 
-test("product: восемь singleton-листьев и сохранение паспорта", async (t) => {
+test("product и overview: предметные чтения и сохранение паспорта", async (t) => {
   const app = await fixture(t);
   const read = async () => successful(await app.run<Detail>(["product", "get"])).data;
   let record = await read();
@@ -124,19 +124,12 @@ test("product: восемь singleton-листьев и сохранение п�
       successful(
         await app.run(["feature", "create", "--name", name, "--description", "Назначение"]),
       );
-    const page = successful(
-      await app.run<{ items: unknown[] }>(["product", "overview", "--limit", 1]),
-    );
+    const page = successful(await app.run<{ items: unknown[] }>(["overview", "--limit", 1]));
     assert.equal(page.data.items.length, 1);
     assert.equal(page.meta?.page?.consistency, "snapshot");
     assert.ok(page.meta?.page?.nextCursor);
     const next = successful(
-      await app.run<{ items: unknown[] }>([
-        "product",
-        "overview",
-        "--cursor",
-        page.meta!.page!.nextCursor!,
-      ]),
+      await app.run<{ items: unknown[] }>(["overview", "--cursor", page.meta!.page!.nextCursor!]),
     );
     assert.notDeepEqual(next.data.items, page.data.items);
     successful(
@@ -149,12 +142,7 @@ test("product: восемь singleton-листьев и сохранение п�
         "Назначение",
       ]),
     );
-    const conflict = await app.run([
-      "product",
-      "overview",
-      "--cursor",
-      page.meta!.page!.nextCursor!,
-    ]);
+    const conflict = await app.run(["overview", "--cursor", page.meta!.page!.nextCursor!]);
     failed(conflict, "VERSION_CONFLICT", 4);
   });
   await t.test("validate: структурная проверка, не запись", async () => {
@@ -370,12 +358,12 @@ test("product: HTTP create/update и последующее local/HTTP чтен�
   );
   for (const args of [
     ["product", "get"],
-    ["product", "overview"],
+    ["overview"],
     ["product", "validate"],
     ["product", "progress"],
   ]) {
     const normalize = (data: unknown) =>
-      args[1] === "overview" ? comparable(data as Overview) : data;
+      args[0] === "overview" ? comparable(data as Overview) : data;
     assert.deepEqual(
       normalize(successful(await remote(args)).data),
       normalize(successful(await app.run(["--local", ...args])).data),
@@ -668,9 +656,9 @@ async function filledProject(app: Awaited<ReturnType<typeof fixture>>) {
   return { design, review, blocked, docs, active };
 }
 
-test("product overview: пустой проект — нули, состояния и выполнимые подсказки", async (t) => {
+test("overview: пустой проект — нули, состояния и выполнимые подсказки", async (t) => {
   const app = await fixture(t);
-  const result = successful(await app.run<Overview>(["product", "overview"]));
+  const result = successful(await app.run<Overview>(["overview"]));
   const { snapshot } = result.data;
   assert.match(result.data.snapshotVersion, /^[a-f0-9]{64}$/);
   assert.equal(snapshot.passport.state, "missing");
@@ -688,7 +676,7 @@ test("product overview: пустой проект — нули, состояни
     assert.deepEqual(preview, { total: 0, shown: 0, hasMore: false, items: [] });
   assert.equal(result.data.total, 0);
   assert.equal(result.meta?.page?.nextCursor, null);
-  const human = await invokeRaw(app.root, ["product", "overview", "--view", "full"], {
+  const human = await invokeRaw(app.root, ["overview", "--view", "full"], {
     env: { COLUMNS: "40", FORCE_COLOR: "1" },
   });
   assert.equal(human.code, 0, human.stdout);
@@ -712,14 +700,14 @@ test("product overview: пустой проект — нули, состояни
   assert.equal(JSON.parse(await run(result.data.commands.passport!)).ok, true);
 });
 
-test("product overview: срез проекта, подборки, страницы карты, подсказки local/HTTP", async (t) => {
+test("overview: срез проекта, подборки, страницы карты, подсказки local/HTTP", async (t) => {
   const app = await fixture(t);
   const keys = await filledProject(app);
-  const full = successful(await app.run<Overview>(["product", "overview"]));
+  const full = successful(await app.run<Overview>(["overview"]));
   const { snapshot } = full.data;
 
   await t.test("totals и колонки не зависят от --limit", async () => {
-    const small = successful(await app.run<Overview>(["product", "overview", "--limit", 1]));
+    const small = successful(await app.run<Overview>(["overview", "--limit", 1]));
     assert.deepEqual(small.data.snapshot, snapshot);
     assert.equal(small.data.snapshotVersion, full.data.snapshotVersion);
     assert.equal(small.data.version, full.data.version);
@@ -769,13 +757,9 @@ test("product overview: срез проекта, подборки, страни�
 
   await t.test("human: порядок разделов, причины, «показано N из M», без ANSI", async () => {
     for (const width of [40, 120]) {
-      const human = await invokeRaw(
-        app.root,
-        ["product", "overview", "--view", "full", "--limit", 2],
-        {
-          env: { COLUMNS: String(width), FORCE_COLOR: "1" },
-        },
-      );
+      const human = await invokeRaw(app.root, ["overview", "--view", "full", "--limit", 2], {
+        env: { COLUMNS: String(width), FORCE_COLOR: "1" },
+      });
       assert.equal(human.code, 0, human.stdout);
       assert.equal(human.stderr, "");
       const out = human.stdout;
@@ -821,7 +805,7 @@ test("product overview: срез проекта, подборки, страни�
       for (const line of out.split("\n").filter((line) => line.startsWith("npx ")))
         assert.match(
           line,
-          /(product|task|plan|release|document|board) [a-z-]+( --[a-z-]+ [^ ]+)*$|--cursor [A-Za-z0-9_-]+$/,
+          /(?:(product|task|plan|release|document|board) [a-z-]+|overview)( --[a-z-]+ [^ ]+)*$|--cursor [A-Za-z0-9_-]+$/,
         );
     }
   });
@@ -860,16 +844,16 @@ test("product overview: срез проекта, подборки, страни�
       "sections",
     ])
       await total(commands[name]!);
-    const page = successful(await app.run<Overview>(["product", "overview", "--limit", 3]));
+    const page = successful(await app.run<Overview>(["overview", "--limit", 3]));
     const next = JSON.parse(await run(page.meta!.page!.nextCommand!));
     assert.equal(next.ok, true);
     assert.equal(next.data.items.length, 3);
   });
 
   await t.test("cursor защищён snapshotVersion: изменение только задачи", async () => {
-    const page = successful(await app.run<Overview>(["product", "overview", "--limit", 2]));
+    const page = successful(await app.run<Overview>(["overview", "--limit", 2]));
     const cursor = page.meta!.page!.nextCursor!;
-    const next = successful(await app.run<Overview>(["product", "overview", "--cursor", cursor]));
+    const next = successful(await app.run<Overview>(["overview", "--cursor", cursor]));
     assert.equal(next.data.items.length, 2);
     const revision = successful(await app.run<{ revision: number }>(["task", "get", keys.docs]))
       .data.revision;
@@ -884,14 +868,14 @@ test("product overview: срез проекта, подборки, страни�
         revision,
       ]),
     );
-    const after = successful(await app.run<Overview>(["product", "overview", "--limit", 2]));
+    const after = successful(await app.run<Overview>(["overview", "--limit", 2]));
     assert.equal(
       after.data.version,
       page.data.version,
       "старая версия состава не меняется от задачи",
     );
     assert.notEqual(after.data.snapshotVersion, page.data.snapshotVersion);
-    failed(await app.run(["product", "overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
+    failed(await app.run(["overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
   });
 
   await t.test(
@@ -899,11 +883,9 @@ test("product overview: срез проекта, подборки, страни�
     async () => {
       const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
       fixtureCleanup(t, () => server.close());
-      const local = successful(
-        await app.run<Overview>(["--local", "product", "overview", "--limit", 4]),
-      );
+      const local = successful(await app.run<Overview>(["--local", "overview", "--limit", 4]));
       const remote = successful(
-        await app.run<Overview>(["--server-url", server.url, "product", "overview", "--limit", 4]),
+        await app.run<Overview>(["--server-url", server.url, "overview", "--limit", 4]),
       );
       assert.deepEqual(comparable(remote.data), comparable(local.data));
       assert.equal(remote.meta?.page?.total, local.meta?.page?.total);
@@ -915,7 +897,7 @@ test("product overview: срез проекта, подборки, страни�
       }
       const human = await invokeRaw(
         app.root,
-        ["--server-url", server.url, "product", "overview", "--view", "full"],
+        ["--server-url", server.url, "overview", "--view", "full"],
         {
           env: { COLUMNS: "60" },
         },
@@ -924,10 +906,7 @@ test("product overview: срез проекта, подборки, страни�
       assert.match(human.stdout, /В работе · показано 5 из 7/);
       assert.doesNotMatch(human.stdout, /\u001b/);
       const cursor = remote.meta!.page!.nextCursor!;
-      failed(
-        await app.run(["--local", "product", "overview", "--cursor", cursor]),
-        "INVALID_CURSOR",
-      );
+      failed(await app.run(["--local", "overview", "--cursor", cursor]), "INVALID_CURSOR");
     },
   );
 });
@@ -1054,9 +1033,7 @@ async function operatorProject(app: App) {
 /** Все страницы метрики по nextCursor CLI; каждая страница сообщает тот же total. */
 async function allPages(app: App, args: Array<string | number>, limit: number) {
   const pages: MetricView[] = [];
-  let page = successful(
-    await app.run<MetricView>(["product", "overview", ...args, "--limit", limit]),
-  );
+  let page = successful(await app.run<MetricView>(["overview", ...args, "--limit", limit]));
   for (;;) {
     pages.push(page.data);
     assert.ok(page.data.items.length <= limit);
@@ -1064,7 +1041,7 @@ async function allPages(app: App, args: Array<string | number>, limit: number) {
     const cursor = page.meta?.page?.nextCursor;
     if (!cursor) break;
     assert.ok(pages.length < 50, "продолжение не завершается");
-    page = successful(await app.run<MetricView>(["product", "overview", "--cursor", cursor]));
+    page = successful(await app.run<MetricView>(["overview", "--cursor", cursor]));
   }
   return pages;
 }
@@ -1074,10 +1051,10 @@ const metricKey = (item: object) =>
 const byId = (left: { id: string }, right: { id: string }) =>
   left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 
-test("product overview: показатели оператора, детализация --metric, продолжение и local/HTTP", async (t) => {
+test("overview: показатели оператора, детализация --metric, продолжение и local/HTTP", async (t) => {
   const app = await quotedFixture(t);
   const keys = await operatorProject(app);
-  const full = successful(await app.run<OverviewWithOperator>(["product", "overview"]));
+  const full = successful(await app.run<OverviewWithOperator>(["overview"]));
   const operator = full.data.snapshot.operator;
   const preview = (entry: { total: number; items: object[] }) => [
     entry.total,
@@ -1142,7 +1119,7 @@ test("product overview: показатели оператора, детализ�
 
   await t.test("human: компактные блоки и подписи по смыслу, без ANSI", async () => {
     for (const width of [40, 120]) {
-      const human = await invokeRaw(app.root, ["product", "overview", "--view", "full"], {
+      const human = await invokeRaw(app.root, ["overview", "--view", "full"], {
         env: { COLUMNS: String(width), FORCE_COLOR: "1" },
       });
       assert.equal(human.code, 0, human.stdout);
@@ -1247,7 +1224,7 @@ test("product overview: показатели оператора, детализ�
     for (const [metric, command] of Object.entries(commands.metrics as Record<string, string>)) {
       assert.match(
         command,
-        /^npx @oim-dev\/relay-cli --config '.*проект с '\\''кавычкой'\\''.*' --format json product overview --metric [a-z-]+ --snapshot [a-f0-9]{64}$/,
+        /^npx @oim-dev\/relay-cli --config '.*проект с '\\''кавычкой'\\''.*' --format json overview --metric [a-z-]+ --snapshot [a-f0-9]{64}$/,
       );
       assert.ok(command.endsWith(`--snapshot ${full.data.snapshotVersion}`), command);
       const body = JSON.parse(await run(command));
@@ -1274,13 +1251,7 @@ test("product overview: показатели оператора, детализ�
     assert.equal(JSON.parse(await run(affected.commands.blocker!)).data.key, keys.A);
     assert.equal(JSON.parse(await run(affected.commands.overview)).ok, true);
     const first = successful(
-      await app.run<MetricView>([
-        "product",
-        "overview",
-        ...metricArgs("blocker-affected"),
-        "--limit",
-        1,
-      ]),
+      await app.run<MetricView>(["overview", ...metricArgs("blocker-affected"), "--limit", 1]),
     );
     const next = JSON.parse(await run(first.meta!.page!.nextCommand!));
     assert.equal(next.data.items.length, 1);
@@ -1290,7 +1261,7 @@ test("product overview: показатели оператора, детализ�
   await t.test("human детализации: смысл, список, общее продолжение", async () => {
     const human = await invokeRaw(
       app.root,
-      ["product", "overview", "--metric", "blocker-affected", "--blocker", keys.A, "--limit", 1],
+      ["overview", "--metric", "blocker-affected", "--blocker", keys.A, "--limit", 1],
       { env: { COLUMNS: "40", FORCE_COLOR: "1" } },
     );
     assert.equal(human.code, 0, human.stdout);
@@ -1301,16 +1272,11 @@ test("product overview: показатели оператора, детализ�
       "Всего: 2",
       "связь с блокером: зависимость",
       "Есть продолжение",
-      "product overview --metric blocker-affected --blocker",
+      "overview --metric blocker-affected --blocker",
     ])
       assert.ok(out.includes(text), `${text}\n${human.stdout}`);
     assert.doesNotMatch(human.stdout, /\u001b|"data":/);
-    const met = await invokeRaw(app.root, [
-      "product",
-      "overview",
-      "--metric",
-      "review-obligations-met",
-    ]);
+    const met = await invokeRaw(app.root, ["overview", "--metric", "review-obligations-met"]);
     assert.match(
       met.stdout.replace(/\s+/g, " "),
       /Обязательства выполнены: можно рассмотреть завершение .*Это не внешняя проверка результата/,
@@ -1319,48 +1285,30 @@ test("product overview: показатели оператора, детализ�
   });
 
   await t.test("ошибки: метрика, блокер, курсор чужого контекста, изменение среза", async () => {
-    failed(await app.run(["product", "overview", "--metric", "nope"]), "UNKNOWN_METRIC");
+    failed(await app.run(["overview", "--metric", "nope"]), "UNKNOWN_METRIC");
+    failed(await app.run(["overview", "--metric", "blocker-affected"]), "INVALID_ARGUMENT");
     failed(
-      await app.run(["product", "overview", "--metric", "blocker-affected"]),
+      await app.run(["overview", "--metric", "board-work", "--blocker", keys.A]),
       "INVALID_ARGUMENT",
     );
+    failed(await app.run(["overview", "--blocker", keys.A]), "INVALID_ARGUMENT");
     failed(
-      await app.run(["product", "overview", "--metric", "board-work", "--blocker", keys.A]),
-      "INVALID_ARGUMENT",
-    );
-    failed(await app.run(["product", "overview", "--blocker", keys.A]), "INVALID_ARGUMENT");
-    failed(
-      await app.run([
-        "product",
-        "overview",
-        "--metric",
-        "blocker-affected",
-        "--blocker",
-        "PRODUCT-999",
-      ]),
+      await app.run(["overview", "--metric", "blocker-affected", "--blocker", "PRODUCT-999"]),
       "NOT_FOUND",
       3,
     );
     const page = successful(
-      await app.run<MetricView>([
-        "product",
-        "overview",
-        "--metric",
-        "unplanned-work",
-        "--limit",
-        1,
-      ]),
+      await app.run<MetricView>(["overview", "--metric", "unplanned-work", "--limit", 1]),
     );
     const cursor = page.meta!.page!.nextCursor!;
     failed(
-      await app.run(["product", "overview", "--metric", "board-work", "--cursor", cursor]),
+      await app.run(["overview", "--metric", "board-work", "--cursor", cursor]),
       "INVALID_CURSOR",
     );
-    const map = successful(await app.run<Overview>(["product", "overview", "--limit", 1]));
+    const map = successful(await app.run<Overview>(["overview", "--limit", 1]));
     if (map.meta?.page?.nextCursor)
       failed(
         await app.run([
-          "product",
           "overview",
           "--metric",
           "unplanned-work",
@@ -1370,22 +1318,13 @@ test("product overview: показатели оператора, детализ�
         "INVALID_CURSOR",
       );
     // Один --cursor восстанавливает метрику, лимит и проект.
-    const continued = successful(
-      await app.run<MetricView>(["product", "overview", "--cursor", cursor]),
-    );
+    const continued = successful(await app.run<MetricView>(["overview", "--cursor", cursor]));
     assert.deepEqual([continued.data.metric, continued.data.items.length], ["unplanned-work", 1]);
     const affected = successful(
-      await app.run<MetricView>([
-        "product",
-        "overview",
-        ...metricArgs("blocker-affected"),
-        "--limit",
-        1,
-      ]),
+      await app.run<MetricView>(["overview", ...metricArgs("blocker-affected"), "--limit", 1]),
     );
     failed(
       await app.run([
-        "product",
         "overview",
         "--metric",
         "blocker-affected",
@@ -1409,23 +1348,21 @@ test("product overview: показатели оператора, детализ�
         revision,
       ]),
     );
-    failed(await app.run(["product", "overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
+    failed(await app.run(["overview", "--cursor", cursor]), "VERSION_CONFLICT", 4);
   });
 
   await t.test("HTTP: те же данные всех метрик, команды сохраняют сервер", async () => {
     const server = await startServer({ cwd: app.root, actor: "human", port: 0 });
     fixtureCleanup(t, () => server.close());
-    const local = successful(
-      await app.run<OverviewWithOperator>(["--local", "product", "overview"]),
-    );
+    const local = successful(await app.run<OverviewWithOperator>(["--local", "overview"]));
     const remote = successful(
-      await app.run<OverviewWithOperator>(["--server-url", server.url, "product", "overview"]),
+      await app.run<OverviewWithOperator>(["--server-url", server.url, "overview"]),
     );
     assert.deepEqual(remote.data.snapshot.operator, local.data.snapshot.operator);
     const comparablePage = ({ generatedAt: _g, commands: _c, ...rest }: MetricView) => rest;
     const run = await hintRunner(t);
     for (const metric of productOverviewMetrics) {
-      const args = ["product", "overview", ...metricArgs(metric), "--limit", 1];
+      const args = ["overview", ...metricArgs(metric), "--limit", 1];
       const localPage = successful(await app.run<MetricView>(["--local", ...args]));
       const remotePage = successful(
         await app.run<MetricView>(["--server-url", server.url, ...args]),
@@ -1439,7 +1376,6 @@ test("product overview: показатели оператора, детализ�
       const localNext = successful(
         await app.run<MetricView>([
           "--local",
-          "product",
           "overview",
           "--cursor",
           localPage.meta!.page!.nextCursor!,
@@ -1447,13 +1383,7 @@ test("product overview: показатели оператора, детализ�
       );
       assert.deepEqual(comparablePage(next.data), comparablePage(localNext.data), metric);
       failed(
-        await app.run([
-          "--local",
-          "product",
-          "overview",
-          "--cursor",
-          remotePage.meta!.page!.nextCursor!,
-        ]),
+        await app.run(["--local", "overview", "--cursor", remotePage.meta!.page!.nextCursor!]),
         "INVALID_CURSOR",
       );
     }
@@ -1466,20 +1396,19 @@ test("product overview: показатели оператора, детализ�
     }
     const human = await invokeRaw(
       app.root,
-      ["--server-url", server.url, "product", "overview", "--metric", "board-work"],
+      ["--server-url", server.url, "overview", "--metric", "board-work"],
       { env: { COLUMNS: "60" } },
     );
     assert.equal(human.code, 0, human.stdout);
     assert.match(human.stdout, /PRODUCT — Продукт · незавершено 8/);
     failed(
-      await app.run(["--server-url", server.url, "product", "overview", "--metric", "nope"]),
+      await app.run(["--server-url", server.url, "overview", "--metric", "nope"]),
       "UNKNOWN_METRIC",
     );
     failed(
       await app.run([
         "--server-url",
         server.url,
-        "product",
         "overview",
         "--metric",
         "blocker-affected",

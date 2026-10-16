@@ -405,6 +405,199 @@ test(
 
 for (const transport of ["local", "HTTP"] as const) {
   test(
+    `work history ${transport}: компактный context сохраняет полные материалы, события и границы страниц`,
+    { timeout: 120_000 },
+    async (t) => {
+      const { root } = await fixture(t);
+      const server = transport === "HTTP" ? await httpServer(t, root) : undefined;
+      const prefix = server ? ["--server-url", server.url] : ["--local"];
+      const run = <T>(args: Array<string | number>) => invoke<T>(root, [...prefix, ...args]);
+      const save = async (args: Array<string | number>) =>
+        successful(await run<WorkHistoryMutation>(args)).data;
+      const assignment = markdown + "ПОРУЧЕНИЕ-ЦЕЛИКОМ";
+      const reason = markdown + "ПОДКЛЮЧЕНИЕ-ЦЕЛИКОМ";
+      const pause = markdown + "ПАУЗА-ЦЕЛИКОМ";
+      const resume = markdown + "ВОЗОБНОВЛЕНИЕ-ЦЕЛИКОМ";
+      const result = markdown + "ИТОГ-ЦЕЛИКОМ";
+      const body = markdown + "МАТЕРИАЛ-ДВУХ-РАЗНЫХ-ТОЧЕК";
+      const nextStep =
+        "npx @oim-dev/relay-cli session intents S-user-text\n\n  Это пользовательский Markdown.  \n";
+      const start = await save([
+        "session",
+        "start",
+        "--title",
+        "Восстановление",
+        "--description",
+        assignment,
+        "--reason",
+        reason,
+      ]);
+      let session = start.session;
+      const owner = () => ["--if-revision", session.revision, "--run", session.currentRunId!];
+      const intent = await save([
+        "checkpoint",
+        "open",
+        session.key,
+        ...owner(),
+        "--title",
+        "Проверить",
+        "--body",
+        body,
+        "--next-step",
+        nextStep,
+      ]);
+      session = intent.session;
+      session = (await save(["session", "pause", session.key, ...owner(), "--reason", pause]))
+        .session;
+      const resumed = await save([
+        "session",
+        "resume",
+        session.key,
+        "--if-revision",
+        session.revision,
+        "--reason",
+        resume,
+      ]);
+      session = resumed.session;
+      const completed = await save([
+        "checkpoint",
+        "complete",
+        intent.checkpoint!.key,
+        ...owner(),
+        "--title",
+        "Проверено",
+        "--body",
+        body,
+      ]);
+      session = completed.session;
+      session = (await save(["session", "complete", session.key, ...owner(), "--result", result]))
+        .session;
+      const args = ["session", "context", session.key, "--limit", "100"];
+      const before = successful(await run<WorkContext>(args));
+      const occurrences = (text: string, fragment: string) => text.split(fragment).length - 1;
+      for (const width of [24, 40, 100, 160]) {
+        const output = human(
+          await invokeRaw(root, [...prefix, ...args], {
+            env: { COLUMNS: String(width), FORCE_COLOR: "3" },
+          }),
+          [assignment, reason, pause, resume, result, body, nextStep],
+        );
+        for (const material of [assignment, reason, pause, resume, result])
+          assert.equal(
+            occurrences(output, material),
+            1,
+            `Материал повторён: ${material.slice(-30)}`,
+          );
+        assert.equal(
+          occurrences(output, body),
+          2,
+          "Разные checkpoints не дедуплицируются по совпадению текста",
+        );
+        for (const savedRun of [start.run!, resumed.run!]) {
+          assert.equal(occurrences(output, savedRun.key), 1, "Одна карточка каждого участия");
+          assert.ok(output.includes(savedRun.id));
+        }
+        for (const event of before.data.history.items)
+          assert.equal(
+            occurrences(output, `#${event.sequence} · ${event.at}`),
+            1,
+            "Каждое событие и время сохранены",
+          );
+        assert.doesNotMatch(
+          output,
+          /Ссылки не заданы|Эта точка не принимает|Явно принятых результатов детей: 0|полный Markdown|не проверка присутствия online/,
+        );
+        assert.equal(
+          occurrences(output, "не указан"),
+          2,
+          "Неизвестный пользователь обозначен один раз на участие",
+        );
+        assert.equal(occurrences(output, "Показано:"), 1, "Единственный footer страницы");
+      }
+      assert.deepEqual(
+        successful(await run<WorkContext>(args)),
+        before,
+        "Рендер не изменяет JSON или состояние",
+      );
+      human(await invokeRaw(root, [...prefix, "session", "get", session.key]), [
+        assignment,
+        result,
+        session.revision.toString(),
+        resumed.run!.id,
+      ]);
+      human(await invokeRaw(root, [...prefix, "checkpoint", "get", intent.checkpoint!.key]), [
+        body,
+        nextStep,
+        start.run!.id,
+      ]);
+
+      // Маленькие страницы разрывают пары start/end. Материалы выбранного run не теряются.
+      let cursor: string | undefined;
+      const seen: string[] = [];
+      do {
+        const pageArgs = [
+          "session",
+          "context",
+          session.key,
+          ...(cursor ? ["--cursor", cursor] : ["--limit", "2"]),
+        ];
+        const page = successful(await run<WorkContext>(pageArgs));
+        const output = human(await invokeRaw(root, [...prefix, ...pageArgs]), [assignment, result]);
+        assert.equal(occurrences(output, result), 1);
+        for (const event of page.data.history.items) {
+          seen.push(event.id);
+          assert.ok(output.includes(`#${event.sequence} · ${event.at}`));
+          if (event.kind === "run-started" || event.kind === "run-ended") {
+            assert.ok(
+              output.includes(event.run.reason),
+              "Подключение вне страницы остаётся доступным",
+            );
+            assert.ok(
+              output.includes(event.run.endSummary!),
+              "Окончание вне страницы остаётся доступным",
+            );
+          }
+        }
+        if (page.meta!.page!.nextCursor) {
+          const commands = hints(output.slice(output.lastIndexOf("\nПоказано:")));
+          assert.equal(commands.length, 1);
+          const followed = await executeHint(root, commands[0]!);
+          assert.equal(followed.stderr, "");
+          assert.ok(followed.stdout.includes(session.key));
+        }
+        cursor = page.meta!.page!.nextCursor ?? undefined;
+      } while (cursor);
+      assert.deepEqual(
+        seen,
+        before.data.history.items.map((event) => event.id),
+      );
+
+      const history = human(
+        await invokeRaw(root, [...prefix, "session", "history", session.key, "--limit", "100"]),
+        [start.run!.key, resumed.run!.key],
+      );
+      assert.equal(occurrences(history, start.run!.key), 1);
+      assert.equal(occurrences(history, resumed.run!.key), 1);
+      assert.ok(!history.includes(result), "Обзор history не раскрывает полный итог");
+      const old = human(
+        await invokeRaw(root, [
+          ...prefix,
+          "session",
+          "history",
+          session.key,
+          "--kind",
+          "checkpoint",
+        ]),
+        [intent.checkpoint!.key, start.run!.id, "test-agent"],
+      );
+      assert.ok(
+        !old.includes(body),
+        "Фильтр checkpoints остаётся обзором с авторством без lifecycle",
+      );
+    },
+  );
+
+  test(
     `work history ${transport}: полный цикл, вложенные ветки, принятие, Markdown, страницы и смена участия`,
     { timeout: 240_000 },
     async (t) => {
@@ -953,6 +1146,10 @@ for (const transport of ["local", "HTTP"] as const) {
       human(await text(["session", "context", parent.key, "--limit", 100]), [
         markdown,
         "Полные материалы выбранной",
+        child.id,
+        parentResult.checkpoint!.key,
+        "Явно принятые результаты",
+        "PROJECT",
       ]);
       const projectHistory = successful(
         await run<WorkHistoryPage>(["session", "history", "--limit", 100]),

@@ -1,6 +1,18 @@
 import { z } from "zod";
 import { entityRefSchema } from "./entities.js";
 import {
+  workHistoryIdSchema,
+  workSessionKeySchema,
+  workSessionStatusSchema,
+  workHistoryEventKindSchema,
+} from "./work-history-primitives.js";
+export {
+  workHistoryIdSchema,
+  workSessionKeySchema,
+  workSessionStatusSchema,
+  workHistoryEventKindSchema,
+} from "./work-history-primitives.js";
+import {
   actorSchema,
   entityReferenceSchema,
   requestIdSchema,
@@ -12,12 +24,6 @@ import {
 export const WORK_HISTORY_CAPABILITY = "relay-work-history-v1" as const;
 export const WORK_HISTORY_OWNER_KINDS = ["work-session", "agent-run", "work-checkpoint"] as const;
 
-export const workSessionKeySchema = z
-  .string()
-  .regex(/^S-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/)
-  .describe(
-    "Собственный адрес ветки: S- и безопасный случайный token; прежние числовые ключи допустимы",
-  );
 export const agentRunKeySchema = z
   .string()
   .regex(/^RUN-[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/)
@@ -59,10 +65,6 @@ export const workGitSchema = z
   })
   .describe("Снимок Git-контекста клиента; сервер и Core не читают собственный Git вместо клиента");
 
-export const workHistoryIdSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/)
-  .describe("Постоянный ID записи истории в выбранном проекте");
 const sequenceSchema = z.number().int().positive().describe("Номер точки хронологии ветки");
 const countSchema = z.number().int().nonnegative().describe("Полное число записей");
 const revisionSchema = z.number().int().positive().describe("Ревизия логической ветки работы");
@@ -83,9 +85,6 @@ const checkpointRefSchema = entityReferenceSchema.describe(
   "Ключ CP-token, ID или адрес work-checkpoint:ID точки",
 );
 
-export const workSessionStatusSchema = z
-  .enum(["pending", "open", "paused", "completed", "cancelled"])
-  .describe("Ветка ожидает агента, открыта, приостановлена, завершена или отменена");
 export const agentRunEndReasonSchema = z
   .enum(["completed", "paused", "transferred", "cancelled"])
   .describe("Причина окончания участия: завершение, пауза, передача или отмена");
@@ -440,18 +439,6 @@ export const workOpenIntentsPageSchema = z
     "Страница открытых намерений; result/cancel исключают intent из выборки, progress не закрывает его",
   );
 
-export const workHistoryEventKindSchema = z
-  .enum([
-    "session-created",
-    "session-forked",
-    "session-closed",
-    "run-started",
-    "run-ended",
-    "checkpoint",
-  ])
-  .describe(
-    "Производная точка хронологии из сохранённых веток, участий и checkpoints; отдельного event-store нет",
-  );
 const historyItemShape = {
   id: z
     .string()

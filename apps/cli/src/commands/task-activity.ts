@@ -90,7 +90,8 @@ export function registerTaskActivity(parent: Command, runtime: Runtime): void {
     name: "get <reference> <entryId>",
     description: "Прочитать полное содержание записи",
     arguments: { reference: "ID или ключ задачи", entryId: "Номер записи из списка" },
-    details: "Markdown рендерится для человека; --format json возвращает точный машинный ответ.",
+    details:
+      "Полный Markdown сообщения, автор, роль и время публикации. Номер записи возьмите из task comment list той же задачи. Комментарии неизменяемы: исправление публикуется новым сообщением через task comment add.",
     examples: [["npx @oim-dev/relay-cli task comment get PRODUCT-1 1", "Прочитать запись"]],
     run: async (context, input) => {
       const data = await context.backend.boardTasks.getComment(input.argument(), input.argument(1));

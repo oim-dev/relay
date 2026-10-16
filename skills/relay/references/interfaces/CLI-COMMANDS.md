@@ -181,6 +181,21 @@
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--projection <mode>` | Квитанция: full — прежний каталог, compact — только изменённая регистрация. JSON по умолчанию full, text — compact Значения: full, compact. |
 
+## overview
+
+**Синтаксис:** `npx @oim-dev/relay-cli overview [options]`.
+
+Обзор текущего состояния выбранного проекта
+
+| Параметр                | Назначение                                                                                                                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--limit <count>`       | Размер страницы, от 1 до 100                                                                                                                                                                         |
+| `--cursor <cursor>`     | Курсор из предыдущего ответа; фильтры должны совпадать                                                                                                                                               |
+| `--view <mode>`         | Представление: compact (text по умолчанию), full или map; JSON compact/full остаётся полным                                                                                                          |
+| `--snapshot <snapshot>` | Отпечаток snapshotVersion прочитанного обзора; не версия CLI и не история                                                                                                                            |
+| `--metric <metric>`     | Полный список показателя: review-obligations-met, review-obligations-open, blocker-impact, blocker-affected, unplanned-work, board-work, open-plans-complete, ready-releases, plans-outside-releases |
+| `--blocker <task>`      | ID или ключ задачи-блокера; только с --metric blocker-affected                                                                                                                                       |
+
 ## product get
 
 **Синтаксис:** `npx @oim-dev/relay-cli product get [options]`.
@@ -261,21 +276,6 @@
 | --------------------- | --------------------------------------------------------- |
 | `--id <ref>`          | ID, ключ или алиас продуктовой записи, включая реализацию |
 | `--application <ref>` | Ограничить реализации ID, ключом или алиасом приложения   |
-
-## product overview
-
-**Синтаксис:** `npx @oim-dev/relay-cli product overview [options]`.
-
-Обзор состояния продукта и проекта
-
-| Параметр                | Назначение                                                                                                                                                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--limit <count>`       | Размер страницы, от 1 до 100                                                                                                                                                                         |
-| `--cursor <cursor>`     | Курсор из предыдущего ответа; фильтры должны совпадать                                                                                                                                               |
-| `--view <mode>`         | Представление: compact (text по умолчанию), full или map; JSON compact/full остаётся полным                                                                                                          |
-| `--snapshot <snapshot>` | Отпечаток snapshotVersion прочитанного обзора; не версия CLI и не история                                                                                                                            |
-| `--metric <metric>`     | Полный список показателя: review-obligations-met, review-obligations-open, blocker-impact, blocker-affected, unplanned-work, board-work, open-plans-complete, ready-releases, plans-outside-releases |
-| `--blocker <task>`      | ID или ключ задачи-блокера; только с --metric blocker-affected                                                                                                                                       |
 
 ## product validate
 

@@ -315,7 +315,7 @@ export function boardsText(
             },
             {
               label: "Работа по доскам и счётчики",
-              command: invoke(["product", "overview", "--metric", "board-work"]),
+              command: invoke(["overview", "--metric", "board-work"]),
             },
           ]
         : [],

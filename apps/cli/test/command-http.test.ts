@@ -465,7 +465,7 @@ test("HTTP cursor восстанавливает фильтры, не перен
   assert.equal(selected.data.key, "PROJECT");
 });
 
-test("HTTP product overview: cursor по snapshotVersion, отказ сервера не выдаётся нулями", async (t) => {
+test("HTTP overview: cursor по snapshotVersion, отказ сервера не выдаётся нулями", async (t) => {
   const app = await fixture(t);
   for (const name of ["Одна", "Две", "Три"])
     successful(await app.run(["feature", "create", "--name", name, "--description", "Текст"]));
@@ -474,16 +474,15 @@ test("HTTP product overview: cursor по snapshotVersion, отказ серве�
   ).data.key;
   const server = await httpServer(t, app.root);
   const first = successful(
-    await app.run<any>(["--server-url", server.url, "product", "overview", "--limit", 1]),
+    await app.run<any>(["--server-url", server.url, "overview", "--limit", 1]),
   );
   assert.match(first.data.snapshotVersion, /^[a-f0-9]{64}$/);
   assert.equal(first.data.snapshot.plans.byStatus.draft, 1);
   assert.match(first.data.commands.plans, new RegExp(`--server-url ${server.url} .*plan list$`));
   const cursor = first.meta!.page!.nextCursor!;
   assert.equal(
-    successful(
-      await app.run<any>(["--server-url", server.url, "product", "overview", "--cursor", cursor]),
-    ).data.items.length,
+    successful(await app.run<any>(["--server-url", server.url, "overview", "--cursor", cursor]))
+      .data.items.length,
     1,
   );
   const revision = successful(await app.run<any>(["plan", "get", plan])).data.revision;
@@ -501,12 +500,12 @@ test("HTTP product overview: cursor по snapshotVersion, отказ серве�
     ]),
   );
   const after = successful(
-    await app.run<any>(["--server-url", server.url, "product", "overview", "--limit", 1]),
+    await app.run<any>(["--server-url", server.url, "overview", "--limit", 1]),
   );
   assert.equal(after.data.version, first.data.version);
   assert.notEqual(after.data.snapshotVersion, first.data.snapshotVersion);
   failed(
-    await app.run(["--server-url", server.url, "product", "overview", "--cursor", cursor]),
+    await app.run(["--server-url", server.url, "overview", "--cursor", cursor]),
     "VERSION_CONFLICT",
     4,
   );
@@ -519,12 +518,12 @@ test("HTTP product overview: cursor по snapshotVersion, отказ серве�
       }),
     );
   });
-  const human = await invokeRaw(app.root, ["--server-url", denied.url, "product", "overview"]);
+  const human = await invokeRaw(app.root, ["--server-url", denied.url, "overview"]);
   assert.equal(human.code, 5, human.stdout);
   assert.doesNotMatch(human.stdout, /Задач всего|Сводка|: 0/);
 });
 
-test("HTTP product overview --metric: продолжение, VERSION_CONFLICT и прежний сервер без capability", async (t) => {
+test("HTTP overview --metric: продолжение, VERSION_CONFLICT и прежний сервер без capability", async (t) => {
   const app = await fixture(t);
   const blocker = successful(
     await app.run<{ key: string }>(["task", "create", "--board", "product", "--title", "Блокер"]),
@@ -546,7 +545,7 @@ test("HTTP product overview --metric: продолжение, VERSION_CONFLICT �
     );
   const server = await httpServer(t, app.root);
   const remote = (...args: Array<string | number>) =>
-    app.run<any>(["--server-url", server.url, "product", "overview", ...args]);
+    app.run<any>(["--server-url", server.url, "overview", ...args]);
   const overview = successful(await remote()).data;
   assert.equal(overview.snapshot.operator.unplannedWork.total, 3);
   const [impact] = overview.snapshot.operator.blockerImpact.items;
@@ -602,10 +601,10 @@ test("HTTP product overview --metric: продолжение, VERSION_CONFLICT �
     response.writeHead(upstream.status, { "content-type": "application/json" });
     response.end(JSON.stringify(parsed));
   });
-  successful(await app.run(["--server-url", legacy.url, "product", "overview"]));
+  successful(await app.run(["--server-url", legacy.url, "overview"]));
   requests.length = 0;
   failed(
-    await app.run(["--server-url", legacy.url, "product", "overview", "--metric", "board-work"]),
+    await app.run(["--server-url", legacy.url, "overview", "--metric", "board-work"]),
     "SERVER_INCOMPATIBLE",
     5,
   );
@@ -616,7 +615,6 @@ test("HTTP product overview --metric: продолжение, VERSION_CONFLICT �
   const human = await invokeRaw(app.root, [
     "--server-url",
     legacy.url,
-    "product",
     "overview",
     "--metric",
     "board-work",

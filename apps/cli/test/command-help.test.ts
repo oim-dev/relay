@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { test } from "node:test";
+import { CommanderError } from "commander";
+import { commandPath } from "../src/command.js";
 import { formatHelpExample } from "../src/help-example.js";
-import { commandTree, renderHelp } from "./helpers/help.js";
+import { createProgram } from "../src/program.js";
+import { commandTree, helpRuntime, renderHelp } from "./helpers/help.js";
 import { failed, invoke, invokeRaw, tempDirectory } from "./helpers/cli.js";
 
 test("help: все 165 листов и группы работают без config и не создают базу", async (t) => {
@@ -18,7 +21,17 @@ test("help: все 165 листов и группы работают без conf
     assert.match(result.stdout, /Примеры:/);
     assert.match(result.stdout, /[А-Яа-яЁё]/);
     assert.match(result.stdout, /npx @oim-dev\/relay-cli/);
-    assert.match(result.stdout, /--format/);
+    if (path.length === 0) {
+      assert.equal(result.stdout.match(/--format json/g)?.length, 1);
+      assert.match(result.stdout, /только читаемый текст по умолчанию/);
+      assert.match(result.stdout, /исключительно для отладки CLI или передачи данных в скрипты/);
+      assert.match(result.stdout, /Агенту запрещено переключаться на JSON при обычной работе/);
+    } else {
+      assert.doesNotMatch(result.stdout, /--format|машинный (ответ|срез)|JSON.*(ответ|DTO)/);
+    }
+    for (const option of command.options.filter((option) => option.mandatory)) {
+      assert.match(command.createHelp().optionDescription(option), /\(обязательно\)/);
+    }
     assert.match(result.stdout, /--actor/);
     assert.doesNotMatch(result.stdout, /\x1b|--color|--max-bytes|--offset|--snapshot-version/);
     if (command.commands.length) {
@@ -26,7 +39,39 @@ test("help: все 165 листов и группы работают без conf
     }
     const section = result.stdout.split("Примеры:").at(-1)!;
     // Убираем только пояснения help, не строки внутри quoted multiline значения.
-    examples.push(section.replace(/^  [А-Яа-яЁё].*$/gm, ""));
+    const script = section.replace(/^  [А-Яа-яЁё].*$/gm, "");
+    assert.doesNotMatch(script, /--format/);
+    examples.push(script);
+    const calls = exampleArguments(script);
+    let ownExample = false;
+    for (const call of calls) {
+      const program = createProgram(helpRuntime(root).io);
+      const stop = new Error("Остановить пример до открытия проекта");
+      let selected: string | undefined;
+      program.hook("preAction", (_parent, action) => {
+        selected = commandPath(action).replace("npx @oim-dev/relay-cli ", "");
+        throw stop;
+      });
+      // Префикс проекта разбирает runCli; здесь проверяем грамматику Commander без действий.
+      const args =
+        call[0] && !call[0].startsWith("-") && !program.commands.some((c) => c.name() === call[0])
+          ? ["--project", call[0], ...call.slice(1)]
+          : call;
+      try {
+        await program.parseAsync(args, { from: "user" });
+        assert.fail(`Пример не достиг команды: ${call.join(" ")}`);
+      } catch (error) {
+        if (error !== stop) {
+          assert.ok(
+            error instanceof CommanderError && error.code === "commander.helpDisplayed",
+            `${path.join(" ")}: ${call.join(" ")}\n${String(error)}`,
+          );
+        }
+      }
+      if (selected === path.join(" ")) ownExample = true;
+    }
+    if (!command.commands.length)
+      assert.ok(ownExample, `${path.join(" ")}: нужен пример действия, а не повторный --help`);
   }
   const syntax = spawnSync("bash", ["--noprofile", "--norc", "-n"], {
     input: examples.join("\n"),
@@ -44,6 +89,29 @@ test("help: все 165 листов и группы работают без conf
   assert.equal(child.stderr, "");
   assert.doesNotMatch(child.stdout, /\x1b/);
 });
+
+/** Bash разбирает только примеры; заглушка npx возвращает argv, не запускает пакет. */
+function exampleArguments(script: string): string[][] {
+  const result = spawnSync(
+    "bash",
+    ["--noprofile", "--norc", "-c", `PATH=; npx() { printf '%s\\0' "$#" "$@"; };\n${script}`],
+    { encoding: "utf8", timeout: 10_000 },
+  );
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  const tokens = result.stdout.split("\0");
+  assert.equal(tokens.pop(), "");
+  const calls: string[][] = [];
+  while (tokens.length) {
+    const count = Number(tokens.shift());
+    assert.ok(Number.isInteger(count) && count > 0 && count <= tokens.length);
+    const args = tokens.splice(0, count);
+    assert.equal(args.shift(), "@oim-dev/relay-cli");
+    calls.push(args);
+  }
+  assert.ok(calls.length);
+  return calls;
+}
 
 test("help: навигация доступна по запросу без проекта и не путает предметные виды", async (t) => {
   const root = await tempDirectory(t);
@@ -215,26 +283,31 @@ test("help: ошибки адресуют нужный уровень; удал�
   }
 });
 
-test("help: product overview объясняет compact/full/map, метрики, totals и версии", async (t) => {
+test("help: overview объясняет compact/full/map, метрики, totals и версии", async (t) => {
   const root = await tempDirectory(t);
-  const result = await renderHelp(root, ["product", "overview", "--help"]);
+  const tree = commandTree(root);
+  assert.ok(tree.some(({ path }) => path.join(" ") === "overview"));
+  assert.ok(!tree.some(({ path }) => path.join(" ") === "product overview"));
+  failed(await invoke(root, ["product", "overview"]), "INVALID_ARGUMENT");
+  const result = await renderHelp(root, ["overview", "--help"]);
   assert.equal(result.code, 0, result.stdout);
   const text = result.stdout.replace(/\s+/g, " ");
   for (const expected of [
+    /В workspace выберите --project <имя>/,
+    /frontend overview/,
     /шести колонкам/,
     /блокеры с причинами/,
     /По умолчанию text — компактная сводка без повторных карточек/,
     /--view full возвращает прежнее полное представление с подборками/,
-    /JSON в обоих режимах сохраняет полный DTO обзора/,
     /--view map явно выбирает самостоятельную серверную страницу карты без сводки/,
     /--limit и --cursor листают карту; итоги обзора от них не зависят/,
     /Подборки полного режима — до 5 элементов с точными totals/,
     /Компактная сводка text не является страницей списка/,
     /snapshotVersion/,
-    /поле data.version — версия продуктового состава, не snapshotVersion/,
+    /версия продуктового состава не заменяет snapshotVersion/,
     /Глобальный --version по-прежнему показывает версию CLI/,
     /не решает, какую задачу начинать или завершать/,
-    /product overview \\ --limit 20 \\ --format json/,
+    /overview \\ --view map \\ --snapshot SNAPSHOT \\ --limit 20/,
     // Детализация показателей оператора.
     /--metric <metric>/,
     /--blocker <task>/,
@@ -251,7 +324,7 @@ test("help: product overview объясняет compact/full/map, метрики
     /достаточно передать только --cursor/,
     /VERSION_CONFLICT \(exit 4\)/,
     /перечитайте overview без --cursor и --snapshot/,
-    /product overview \\ --metric review-obligations-met/,
+    /overview \\ --metric review-obligations-met/,
     /--metric blocker-affected \\ --blocker PRODUCT-1/,
   ])
     assert.match(text, expected);
