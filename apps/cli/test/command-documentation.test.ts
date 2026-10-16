@@ -200,18 +200,19 @@ test("documentation: установленный комплект skill сохр�
   const paths = (await filesBelow(installed)).filter((path: string) => path.endsWith(".md"));
   for (const path of [
     "SKILL.md",
-    "references/agent/ORCHESTRATOR.md",
-    "references/agent/WORKER.md",
-    "references/domain/TASKS.md",
-    "references/interfaces/CLI.md",
-    "references/interfaces/CLI-COMMANDS.md",
-    "references/guides/CONTENT.md",
+    "references/KNOWLEDGE.md",
+    "references/FEATURES.md",
+    "references/APPLICATIONS.md",
+    "references/TASKS.md",
+    "references/PLANNING.md",
+    "references/RELEASES.md",
+    "references/HISTORY.md",
   ])
     assert.ok(paths.includes(path), path);
   await checkDocumentation(installed, paths);
   const skill = await readFile(join(installed, "SKILL.md"), "utf8");
   assert.match(skill, /^---\nname: relay\ndescription: >-/);
-  assert.match(skill, /## Как заполнять содержание сущностей/);
+  assert.match(skill, /## Основной цикл работы над проектом/);
   assert.ok(!paths.some((path: string) => path.startsWith("scenarios/")));
   assert.ok(skill.split("\n").length <= 300);
 });
