@@ -1,0 +1,23 @@
+.root {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.6rem 0;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+
+  & div {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 0.4rem;
+  }
+  & dt {
+    color: var(--tasks-muted);
+  }
+  & dt::after {
+    content: ":";
+  }
+  & dd {
+    margin: 0;
+    color: var(--tasks-ink);
+  }
+}

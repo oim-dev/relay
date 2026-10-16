@@ -36,6 +36,7 @@ export async function workspaceConnection(runtime: Runtime, globals: GlobalOptio
             ],
             commands: [
               {
+                purpose: "recovery",
                 label: "Варианты подключения",
                 command: "npx @oim-dev/relay-cli workspace project list --help",
               },

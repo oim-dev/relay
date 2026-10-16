@@ -209,15 +209,16 @@ for (const mode of ["local", "HTTP"] as const)
         assert.equal(read.stderr, "");
         assert.ok(read.stdout.includes(item.ref), read.stdout);
         if (item.code === "TASK_ACCEPTANCE_INCOMPLETE") {
-          const exact = read.stdout
-            .split("\n")
-            .find(
-              (line) =>
-                line.startsWith("→ ") &&
-                line.includes(`task criterion get ${criteria.key} ${criterion}`),
-            );
-          assert.ok(exact, read.stdout);
-          const condition = await executeHint(exact.slice(2));
+          assert.ok(read.stdout.includes(criterion));
+          const condition = await invokeRaw(root, [
+            ...transport,
+            "task",
+            "criterion",
+            "get",
+            criteria.key,
+            criterion,
+          ]);
+          assert.equal(condition.code, 0, condition.stdout);
           assert.equal(condition.stderr, "");
           assert.match(condition.stdout, /Полное условие проверки/);
         }
@@ -389,7 +390,7 @@ test(
 );
 
 test(
-  "TASK-02/05: компактная навигация, независимые criterionId и граница содержания local/HTTP",
+  "TASK-02/05: вывод без меню, независимые criterionId и сохранение содержания local/HTTP",
   { timeout: 180_000 },
   async (t) => {
     const base = await tempDirectory(t);
@@ -474,16 +475,15 @@ test(
       ]) {
         const text = human(await invokeRaw(root, [...transport, ...list]));
         const hints = commands(text).filter((x) => !x.includes("--cursor"));
-        assert.equal(hints.length, 1, text);
-        successful(await invoke(root, tokens(hints[0]!)));
-        assert.equal(hints[0]!.includes("--local"), transport.includes("--local"));
-        assert.equal(hints[0]!.includes("--server-url"), transport.includes("--server-url"));
+        assert.equal(hints.length, 0, text);
       }
       const card = human(await invokeRaw(root, [...transport, "task", "get", saved.key]));
       for (const hint of commands(card)) successful(await invoke(root, tokens(hint)));
-      assert.match(card, /task progress/);
-      assert.match(card, /inspect graph list/);
-      assert.match(card, /plan task memberships/);
+      assert.deepEqual(commands(card), []);
+      const help = human(await invokeRaw(root, ["task", "get", "--help"]));
+      assert.match(help, /task progress/);
+      assert.match(help, /inspect graph list/);
+      assert.match(help, /plan task memberships/);
       assert.doesNotMatch(card, /Все связи/);
       const seen = new Set<string>();
       let cursor: string | null = null;
@@ -502,16 +502,16 @@ test(
         for (const reason of page.data.reasons.items) {
           if (!reason.criterionId) continue;
           seen.add(reason.criterionId);
-          const line = text
-            .split("\n")
-            .find(
-              (x) =>
-                x.startsWith("→ ") &&
-                x.includes(`task criterion get ${saved.key} ${reason.criterionId}`),
-            );
-          assert.ok(line, text);
+          assert.ok(text.includes(reason.criterionId), text);
           const opened = successful(
-            await invoke<{ criterion: { id: string } }>(root, tokens(line.slice(2))),
+            await invoke<{ criterion: { id: string } }>(root, [
+              ...transport,
+              "task",
+              "criterion",
+              "get",
+              saved.key,
+              reason.criterionId,
+            ]),
           ).data;
           assert.equal(opened.criterion.id, reason.criterionId);
         }
@@ -547,7 +547,7 @@ test(
         );
         const safeMarkdown = markdown.replaceAll("\u001b", "\\u001b");
         assert.ok(text.includes(safeMarkdown), text);
-        assert.ok(text.lastIndexOf("───\n") > text.indexOf("END-MARKDOWN"));
+        assert.equal(text.slice(text.indexOf("END-MARKDOWN") + "END-MARKDOWN".length).trim(), "");
         assert.ok(commands(text).every((x) => !x.includes("PRODUCT-999")));
       }
     }

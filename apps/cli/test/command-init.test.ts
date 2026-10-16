@@ -18,6 +18,7 @@ import {
   tempDirectory,
 } from "./helpers/cli.js";
 import { httpProxy, httpServer } from "./helpers/http.js";
+import { shellCommand } from "../src/command-kit.js";
 
 const hints = (text: string) =>
   text.split("\n").filter((line) => line.startsWith("npx @oim-dev/relay-cli"));
@@ -180,7 +181,7 @@ test("init: HTTP intent flag/env/config — отказ без файлов и с
   }
 });
 
-test("init: две буквальные подсказки, Unicode-каталог и long quoted config при 24/40/100", async (t) => {
+test("init: пути без навигационного меню, Unicode и long quoted config при 24/40/100", async (t) => {
   for (const mode of ["normal", "quoted", "env", "workspace", "workspace-selected"])
     for (const width of [24, 40, 100]) {
       await t.test(`${mode}/${width}`, async (t) => {
@@ -214,18 +215,14 @@ test("init: две буквальные подсказки, Unicode-катало
         assert.equal(result.stderr, "");
         assert.doesNotMatch(result.stdout, /\u001b|\[object Object\]/);
         const commands = hints(result.stdout);
-        assert.equal(commands.length, 2, result.stdout);
-        assert.match(commands[0]!, /config get$/);
-        assert.match(commands[1]!, /product create --help$/);
-        if (mode === "normal") {
-          assert.equal(commands[0], "npx @oim-dev/relay-cli config get");
-          assert.equal(commands[1], "npx @oim-dev/relay-cli product create --help");
-        }
-        if (mode.startsWith("workspace")) assert.match(commands[0]!, /--local --config/);
-        const read = JSON.parse(await replay(root, `${commands[0]} --format json`, env));
+        assert.equal(commands.length, 0, result.stdout);
+        assert.ok(result.stdout.includes(configPath));
+        const read = successful(
+          await invoke(root, ["--local", "--config", configPath, "config", "get"], { env }),
+        );
         assert.equal(read.ok, true);
-        assert.equal(read.meta.configPath, configPath);
-        assert.match(await replay(root, commands[1]!, env), /product create/);
+        assert.equal((read.meta as { configPath: string }).configPath, configPath);
+        assert.match((await invokeRaw(root, ["init", "--help"])).stdout, /product create --help/);
         const verification = result.stdout.slice(
           result.stdout.indexOf("Проверить созданный"),
           result.stdout.indexOf("Следующий шаг"),
@@ -338,7 +335,14 @@ test("init → slug: shared fix da5e951, local/HTTP, ID/секции/регис�
   assert.deepEqual(afterHttp.data.documentSections, before.data.documentSections);
   assert.equal(await readFile(registryPath, "utf8"), registryBefore);
   assert.deepEqual(successful(await invoke(root, ["project", "get"])).data, afterHttp);
-  assert.match(await replay(workspace, hints(saved.stdout)[0]!), /init-http/);
+  assert.deepEqual(hints(saved.stdout), []);
+  assert.match(
+    await replay(
+      workspace,
+      shellCommand(["npx", "@oim-dev/relay-cli", ...remote, "project", "get"]),
+    ),
+    /init-http/,
+  );
   const bytes = await tree(root);
   failed(
     await invoke(workspace, [
@@ -476,7 +480,8 @@ test("init: новый cwd внутри local-проекта без HTTP ост�
   const receipt = await invokeRaw(child, ["init"]);
   assert.equal(receipt.code, 0, receipt.stdout);
   assert.equal(receipt.stderr, "");
-  const read = JSON.parse(await replay(child, `${hints(receipt.stdout)[0]} --format json`));
+  assert.deepEqual(hints(receipt.stdout), []);
+  const read = JSON.parse(await replay(child, "npx @oim-dev/relay-cli config get --format json"));
   assert.equal(read.meta.configPath, join(child, ".relay/config.json"));
   const after = await tree(root);
   for (const [path, hash] of Object.entries(before)) assert.equal(after[path], hash, path);

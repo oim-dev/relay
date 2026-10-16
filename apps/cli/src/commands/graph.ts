@@ -64,7 +64,7 @@ export function registerGraph(program: Command, runtime: Runtime): void {
     examples: [
       ["npx @oim-dev/relay-cli inspect graph list", "Найти сущности и прочитать версию"],
       [
-        "npx @oim-dev/relay-cli inspect graph context SCENARIO-1 --format json",
+        "npx @oim-dev/relay-cli inspect graph context SCENARIO-1",
         "Восстановить цепочку для агента",
       ],
     ],
@@ -157,13 +157,9 @@ export function registerGraph(program: Command, runtime: Runtime): void {
     description: "Получить полный контекст сущности одним вызовом",
     arguments: { root: "Ключ, ID или kind:ID исходной сущности любого зарегистрированного вида" },
     details:
-      "Возвращает все узлы и рёбра достижимой компоненты в обоих направлениях, включая циклы и параллельные связи. Успешный ответ всегда полный. Глубина и страницы не применяются; ограничение Core возвращает ошибку, а не усечённый успех.",
+      "Возвращает все узлы и рёбра достижимой компоненты в обоих направлениях, включая циклы и параллельные связи. Успешный ответ всегда полный. Глубина и страницы не применяются; ограничение Core возвращает ошибку, а не усечённый успех. Полные тексты узлов читаются предметным get по виду и ключу. Пояснения отношений не включены: inspect graph list --root <начало ребра> --depth 1 --direction outgoing; найдите ID отношения и при необходимости продолжите страницы.",
     examples: [
       ["npx @oim-dev/relay-cli inspect graph context WEB-24", "Прочитать полное окружение задачи"],
-      [
-        "npx @oim-dev/relay-cli inspect graph context WEB-24 --format json",
-        "Получить структурированный граф для агента",
-      ],
     ],
     run: async (context, input) => {
       const data = await context.backend.graph.context({ root: input.argument() });
@@ -214,7 +210,15 @@ export function registerGraph(program: Command, runtime: Runtime): void {
         ? { arguments: { id: "ID явно установленного отношения" } }
         : {}),
       details:
-        "Диагностика и ремонт сохранённых связей. Требуется прочитанная версия графа и автор. После потери ответа перечитайте связи, затем решайте, нужно ли новое изменение; request-id служит только корреляции. Запись графа не меняет продуктовые линки и статусы.",
+        "Диагностика и ремонт сохранённых связей. Требуется прочитанная версия графа и автор. После потери ответа перечитайте связи, затем решайте, нужно ли новое изменение; request-id служит только корреляции. Запись графа не меняет продуктовые линки и статусы. " +
+        {
+          link: "Направление: --from → --to. Управляемые предметные связи изменяйте командами их владельца.",
+          update:
+            "Обязателен --description либо --description-file; пустая строка явно очищает пояснение. ID отношения возьмите из inspect graph list.",
+          unlink: "Удаляет только отношение с указанным ID из inspect graph list, не его сущности.",
+          apply:
+            'JSON-ввод — массив до 100 операций: add требует from/to/type, update — id/description, remove — id. Пример обновления: {"action":"update","id":"EDGE_ID","description":"Markdown"}; удаления: {"action":"remove","id":"EDGE_ID"}. Весь пакет сохраняется атомарно под одной исходной версией.',
+        }[action],
       examples: [
         [
           {

@@ -13,6 +13,7 @@ import { DocumentLibraryService } from "@relay/core/application/documents/librar
 import { ProgressService } from "@relay/core/application/progress/service";
 import { PlanningService } from "@relay/core/application/planning/service";
 import { ReleasesService } from "@relay/core/application/releases/service";
+import { WorkHistoryService } from "@relay/core/application/work-history/service";
 
 export async function createLocalBackend(
   cwd: string,
@@ -22,6 +23,7 @@ export async function createLocalBackend(
   const workspace = await openWorkspace(cwd, config, options);
   return {
     kind: "local",
+    workHistory: new WorkHistoryService(workspace),
     projectSettings: {
       get: () =>
         workspace.locked(async () => projectSettings(workspace.config, workspace.configPath)),

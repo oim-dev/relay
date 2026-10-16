@@ -35,6 +35,13 @@ pnpm run package:check:server
 и `package:check` определены в manifest; собственного lint нет. `start` требует готовый `dist`.
 Проверка упаковки — не команда публикации.
 
+`tsconfig.dev.json` проверяет в watch-режиме серверные runtime-исходники, Core,
+Contracts и server-runtime через `tasks-source`, без зависимости от `dist`.
+Интеграционные тесты и scripts проверяются полной `tsconfig.typecheck.json`, а не
+dev-watch: тестовый CLI helper импортирует клиентский HTTP Backend и SDK, не входящие
+в runtime-граф сервера. Строгие флаги компилятора одинаковы; исключение тестов из
+dev-watch не исключает их из пакетной типизации или выполнения `test`.
+
 ## Что проверять
 
 `test/server-command.test.ts`, `test/dev-server.test.ts`, `test/production-server.test.ts`

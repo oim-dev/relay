@@ -24,7 +24,7 @@ for (const [label, directory] of [
   ["TAB", "проект\tс табуляцией"],
   ["space/apostrophe/TAB/LF", "проект с 'кавычкой\tи\nпереносом"],
 ] as const)
-  test(`init: однострочная source-подсказка сохраняет точный путь с ${label}`, async (t) => {
+  test(`init: подсказка отказа сохраняет точный путь с ${label}`, async (t) => {
     const root = await tempDirectory(t);
     const configPath = join(root, directory, "config.json");
     const initialized = await invokeRaw(root, ["--config", configPath, "init"], {
@@ -33,11 +33,13 @@ for (const [label, directory] of [
     assert.equal(initialized.code, 0, initialized.stdout + initialized.stderr);
     assert.equal(initialized.stderr, "");
     assert.doesNotMatch(initialized.stdout, /\u001b/);
-    const lines = initialized.stdout
+    assert.doesNotMatch(initialized.stdout, /^npx /m);
+    const repeated = await invokeRaw(root, ["--config", configPath, "init"]);
+    assert.equal(repeated.code, 4);
+    const lines = repeated.stdout
       .split("\n")
       .filter((line) => line.trimStart().startsWith("npx @oim-dev/relay-cli"));
-    assert.equal(lines.length, 2, initialized.stdout);
-    assert.match(lines[1]!, /product create --help$/);
+    assert.equal(lines.length, 1, repeated.stdout);
     const hint = lines[0]!;
     assert.doesNotMatch(hint, /[\r\n]/);
     assert.match(hint, /config get\s*$/, "подсказка целиком помещается в одну физическую строку");
@@ -105,11 +107,8 @@ test("local: init, карточка, квитанция и обслуживан�
     assert.equal(result.code, 0, result.stdout);
     assert.equal(result.stderr, "");
     const hints = result.stdout.split("\n").filter((line) => line.startsWith("npx "));
-    assert.deepEqual(
-      hints,
-      expected.map((command) => `npx @oim-dev/relay-cli ${command}`),
-    );
-    // Выполняем выданную команду в том же проекте; npx заменён только тестовым входом CLI.
+    assert.deepEqual(hints, []);
+    // Статические маршруты доступны явно, без повторения в каждом ответе.
     for (const command of expected) {
       const next = await invokeRaw(root, command.split(" "));
       assert.equal(next.code, 0, next.stdout);
@@ -188,13 +187,7 @@ test("init / config get / project get/update: сохранность, ревиз
   assert.match(human.stdout, /Проект Ω/);
   assert.match(human.stdout, /PROJECT/);
   assert.doesNotMatch(human.stdout, /\u001b/);
-  const hint = human.stdout.split("\n").find((line) => line.includes("npx @oim-dev/relay-cli"));
-  assert.ok(
-    hint?.includes("--local") &&
-      hint.includes(configPath) &&
-      hint.includes("document section list"),
-    human.stdout,
-  );
+  assert.doesNotMatch(human.stdout, /^npx @oim-dev\/relay-cli /m);
 });
 
 test("inspect graph list/context и doctor graph link/update/unlink/apply: ключи, цикл, атомарность и страницы", async (t) => {
@@ -471,11 +464,7 @@ test("human graph link/update/apply/unlink/list: квитанции, напра�
     const after = await graph();
     assert.notEqual(after.version, before.version);
     assert.ok(human.stdout.includes(after.version), human.stdout);
-    const next = human.stdout.split("\n").find((line) => line.startsWith("npx @oim-dev/relay-cli"));
-    assert.ok(
-      next?.includes("inspect graph list") && next.includes("--local") && next.includes(configPath),
-      human.stdout,
-    );
+    assert.doesNotMatch(human.stdout, /^npx @oim-dev\/relay-cli /m);
     return { human, after };
   };
   const linked = await humanMutation(

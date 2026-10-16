@@ -208,21 +208,21 @@ test("metadata v1 содержит новые пути и watch обнаружи
   await assert.rejects(processBundle({ root: app.root, check: true }), /bundle-info/);
 });
 
-test("пакет переносит диагностический скрипт побайтно и замыкает HTTPS-ссылки", async (t) => {
+test("сборщик переносит вспомогательный скрипт побайтно и замыкает HTTPS-ссылки", async (t) => {
   const app = await fixture(t);
   await mkdir(join(app.source, "scripts"));
   const script = 'console.log("[это код](missing.md)");\n';
-  await writeFile(join(app.source, "scripts/diagnose.mjs"), script);
-  app.manifest.files["scripts/diagnose.mjs"] = "scripts/diagnose.mjs";
+  await writeFile(join(app.source, "scripts/helper.mjs"), script);
+  app.manifest.files["scripts/helper.mjs"] = "scripts/helper.mjs";
   app.manifest.externalRoots = ["packages/"];
   await app.saveManifest();
   await writeFile(
     join(app.source, "skill.md"),
     ENTRY +
-      "\n[API](https://github.com/oim-dev/relay/blob/main/docs/API.md#поля)\n[Код](../../core/src/index.ts)\n[Скрипт](scripts/diagnose.mjs)\n",
+      "\n[API](https://github.com/oim-dev/relay/blob/main/docs/API.md#поля)\n[Код](../../core/src/index.ts)\n[Скрипт](scripts/helper.mjs)\n",
   );
   const output = await prepareBundle(app.root, "relay");
-  assert.equal(output.get("scripts/diagnose.mjs"), script);
+  assert.equal(output.get("scripts/helper.mjs"), script);
   assert.match(output.get("SKILL.md"), /\(references\/API\.md#поля\)/);
   assert.match(
     output.get("SKILL.md"),
@@ -232,21 +232,31 @@ test("пакет переносит диагностический скрипт 
   await processBundle({ root: app.root, check: true });
 });
 
-test("полный пакет требует входы в библиотеку и покрытие, но не прямую карту всех материалов", async (t) => {
+test("сборка отклоняет возврат генерируемого справочника CLI", async (t) => {
   const app = await fixture(t);
-  await writeFile(join(app.root, "docs/CAPABILITIES.md"), "# Возможности\n");
-  app.manifest.documents["docs/CAPABILITIES.md"] = "references/CAPABILITIES.md";
-  delete app.manifest.aliases["docs/README.md"];
-  await writeFile(join(app.root, "docs/README.md"), "# Библиотека\n\n[API](API.md)\n");
-  app.manifest.documents["docs/README.md"] = "references/README.md";
+  app.manifest.generated = { "references/CLI-COMMANDS.md": "cli" };
   await app.saveManifest();
-  await assert.rejects(prepareBundle(app.root, "relay"), /отсутствует в карте/);
-  await writeFile(
-    join(app.source, "skill.md"),
-    ENTRY + "\n[Библиотека](references/README.md)\n[Покрытие](references/CAPABILITIES.md)\n",
-  );
-  await prepareBundle(app.root, "relay");
+  await assert.rejects(prepareBundle(app.root, "relay"), /Генерируемые справочники не входят/);
+});
+
+test("пересборка удаляет старую библиотеку в обоих выходах и сохраняет соседние файлы", async (t) => {
+  const app = await fixture(t);
   await processBundle({ root: app.root });
+  const expected = [...(await prepareBundle(app.root, "relay")).keys()].sort();
+  for (const output of ["skills/relay", playgroundPath]) {
+    await mkdir(join(app.root, output, "references/interfaces"), { recursive: true });
+    await writeFile(join(app.root, output, "references/interfaces/CLI.md"), "Старая библиотека\n");
+    await mkdir(join(app.root, output, "scripts"));
+    await writeFile(join(app.root, output, "scripts/old.mjs"), "// Старая диагностика\n");
+  }
+  const neighbor = join(app.root, "apps/playground/.agents/skills/other/notes.md");
+  await mkdir(join(app.root, "apps/playground/.agents/skills/other"));
+  await writeFile(neighbor, "Чужой материал\n");
+  await assert.rejects(processBundle({ root: app.root, check: true }), /Состав/);
+  await processBundle({ root: app.root });
+  for (const output of ["skills/relay", playgroundPath])
+    assert.deepEqual(await bundleFiles(join(app.root, output)), expected);
+  assert.equal(await readFile(neighbor, "utf8"), "Чужой материал\n");
   await processBundle({ root: app.root, check: true });
 });
 

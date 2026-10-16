@@ -412,33 +412,13 @@ test(
           limitedText.includes(`0/${fullCount.total}`),
           "Human-итог не подменён размером страницы",
         );
-        assert.ok(
-          text.includes("npx @oim-dev/relay-cli"),
-          "Причина должна вести к следующей операции",
-        );
-        const reasonCommands = text
-          .split("\n")
-          .filter((line) => line.startsWith("→ npx @oim-dev/relay-cli "));
-        assert.equal(
-          reasonCommands.length,
-          full.data.reasons.items.length,
-          "У каждой причины есть адресный следующий шаг",
-        );
-        const expectedCommands = full.data.reasons.items.map((reason) => {
-          const source = reason.source;
-          const reference = source.key ?? `${source.kind}:${source.id}`;
-          const self = source.kind === full.data.entity.kind && source.id === full.data.entity.id;
-          if (source.kind === "task" && reason.criterionId)
-            return `task criterion get ${reference} ${reason.criterionId}`;
-          if (self && source.kind === "work-plan") return `plan stage list ${reference}`;
-          if (self && source.kind === "release") return `release plans ${reference}`;
-          return `${source.kind === "work-plan" ? "plan" : source.kind} ${self ? "get" : "progress"}${source.kind === "product" ? "" : ` ${reference}`}`;
-        });
-        assert.deepEqual(
-          reasonCommands.map((line) => line.slice("→ npx @oim-dev/relay-cli ".length)).sort(),
-          expectedCommands.sort(),
-          "Сохранены адрес и число переходов каждой причины, включая criterionId; порядок композиции может отличаться",
-        );
+        assert.doesNotMatch(text, /npx @oim-dev\/relay-cli/);
+        for (const reason of full.data.reasons.items) {
+          assert.ok(
+            text.includes(reason.source.key ?? `${reason.source.kind}:${reason.source.id}`),
+          );
+          if (reason.criterionId) assert.ok(text.includes(reason.criterionId));
+        }
         for (const code of new Set(full.data.reasons.items.map((reason) => reason.code)))
           assert.equal(
             text.split("\n").filter((line) => line === code || line.startsWith(`${code} · `))
@@ -446,21 +426,6 @@ test(
             full.data.reasons.items.filter((reason) => reason.code === code).length,
             `Число причин ${code} не изменилось при объединении карточек`,
           );
-        const selfKind = entry.kind === "work-plan" ? "plan" : entry.kind;
-        for (const line of reasonCommands) {
-          const args = line
-            .slice(2)
-            .match(/'(?:[^']|'\\'')*'|[^\s]+/g)!
-            .slice(2)
-            .map((arg) => (arg.startsWith("'") ? arg.slice(1, -1).replaceAll("'\\''", "'") : arg));
-          const isSelfProgress = args.some(
-            (arg, index) =>
-              arg === selfKind &&
-              args[index + 1] === "progress" &&
-              (entry.kind === "product" || args[index + 2] === entry.key),
-          );
-          assert.equal(isSelfProgress, false, "Причина не отправляет снова в тот же прогресс");
-        }
         if (full.data.kind === "task") {
           assert.deepEqual(full.data.acceptance, { total: 3, completed: 0 });
           assert.equal(full.data.canComplete, false);

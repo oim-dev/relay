@@ -157,7 +157,7 @@ export function registerProject(program: Command, runtime: Runtime): void {
     name: "get",
     description: "Прочитать проект и его ревизию",
     details:
-      "Название, slug, ключ, ID и ревизия выбранного проекта. Text показывает число разделов; полный список с порядком — document section list. JSON сохраняет полную карточку, включая разделы.\nРевизия нужна для project update и project rename. Прикреплённые документы: document list --target PROJECT; полный контекст: inspect graph context PROJECT.",
+      "Название, slug, ключ, ID и ревизия выбранного проекта. Карточка показывает число разделов; полный список с порядком — document section list.\nРевизия нужна для project update и project rename. Прикреплённые документы: document list --target PROJECT; полный контекст: inspect graph context PROJECT.",
     examples: [["npx @oim-dev/relay-cli project get", "Прочитать перед изменением"]],
     async run(context) {
       const data = await context.backend.entities.get({ ref: "PROJECT", kind: "project" });
@@ -184,7 +184,7 @@ export function registerProject(program: Command, runtime: Runtime): void {
       name: "update",
       description: "Изменить имя или slug проекта",
       details:
-        "Передайте имя (--name/--name-file) и/или --slug и исходную ревизию из project get. Slug — адресный идентификатор, не текстовое содержание: 2–64 строчные латинские буквы/цифры с одиночными дефисами между частями; --slug-file нет.\nБез --slug сохраняется только имя, JSON — квитанция сущности. С --slug возвращаются настройки ProjectSettings (name, slug, revision, documentSections при наличии), не EntitySaved; --request-id в этом режиме не поддерживается. Непереданное имя и разделы сохраняются. Старый slug не становится алиасом.\nОписание не поддерживается. Публичный ключ меняется через project rename; ID и регистрация workspace неизменны. После конфликта или потери ответа перечитайте project get; скрытых повторов нет.",
+        "Передайте имя (--name/--name-file) и/или --slug и исходную ревизию из project get. Slug — адресный идентификатор, не текстовое содержание: 2–64 строчные латинские буквы/цифры с одиночными дефисами между частями; --slug-file нет.\nБез --slug сохраняется только имя. С --slug возвращаются сохранённые настройки; --request-id в этом режиме не поддерживается. Непереданное имя и разделы сохраняются. Старый slug не становится алиасом.\nОписание не поддерживается. Публичный ключ меняется через project rename; ID и регистрация workspace неизменны. После конфликта или потери ответа перечитайте project get; скрытых повторов нет.",
       examples: [
         [
           "npx @oim-dev/relay-cli project update --actor human --name 'Мой проект' --if-revision 1",
@@ -325,13 +325,7 @@ export function registerProject(program: Command, runtime: Runtime): void {
     description: "Проверить продукт, доски, задачи и связи",
     details:
       "Проверяет схемы и каталог действующих сущностей, связи задач и граф проекта.\nВыполняйте после ручного редактирования JSON и Git-слияния.\nОшибка целостности возвращает код завершения 5 и список нарушений.",
-    examples: [
-      ["npx @oim-dev/relay-cli doctor check", "Проверить проект"],
-      [
-        "npx @oim-dev/relay-cli doctor check --format json",
-        "Получить диагностику для автоматизации",
-      ],
-    ],
+    examples: [["npx @oim-dev/relay-cli doctor check", "Проверить проект"]],
     async run(context) {
       const data = await context.backend.validate();
       return {
@@ -366,17 +360,14 @@ export function registerProject(program: Command, runtime: Runtime): void {
     description: "Конфигурация подключения и пути проекта",
     details:
       "config get показывает актуальное представление конфигурации и пути. Предметное имя проекта меняется через project update, а не правкой проекции в конфиге. Совместимые статусы не задают фиксированные колонки досок.",
-    examples: [
-      ["npx @oim-dev/relay-cli config get", "Посмотреть настройки и пути"],
-      ["npx @oim-dev/relay-cli config get --format json", "Прочитать конфигурацию программно"],
-    ],
+    examples: [["npx @oim-dev/relay-cli config get", "Посмотреть настройки и пути"]],
   });
   registerCommand(config, runtime, {
     name: "get",
     createLegacyDirectories: false,
     description: "Показать конфиг, совместимые статусы и пути",
     details:
-      "Конфиг ищется вверх от текущего каталога; --config имеет приоритет. JSON сохраняет полный Config в data; meta.connection сообщает фактический транспорт, источник URL и клиентский конфиг. Пути проекта при HTTP относятся к серверу.\nЧтение не создаёт legacy-каталоги; штатное восстановление обычного WAL сохраняется. Совместимые поля статусов не изменяют колонки текущих задач.\nФормат CLI выбирается флагом --format; настройки output.format и output.maxBytes не применяются. Вывод CLI всегда бесцветный.",
+      "Конфиг ищется вверх от текущего каталога; --config имеет приоритет. Ответ показывает полную конфигурацию, фактический транспорт, источник URL и клиентский конфиг. Пути проекта при HTTP относятся к серверу.\nЧтение не создаёт legacy-каталоги; штатное восстановление обычного WAL сохраняется. Совместимые поля статусов не изменяют колонки текущих задач.\nНастройки output.format и output.maxBytes не управляют выводом CLI. Обычный вывод — читаемый бесцветный текст.",
     examples: [
       ["npx @oim-dev/relay-cli config get", "Показать настройки текущего проекта"],
       [

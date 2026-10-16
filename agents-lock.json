@@ -8,7 +8,7 @@
     },
     {
       "path": ".claude/agents/relay-cli-auditor.md",
-      "sha256": "06974c2006821650049f337778a5a09235731ccb6b2fce2b9299f2384608052e"
+      "sha256": "49eedfc06aca243c8756c56c8d7c9fbda71a2c242e5c331727940577d37109b8"
     },
     {
       "path": ".claude/agents/relay-cli.md",
@@ -52,7 +52,7 @@
     },
     {
       "path": ".codex/agents/relay-cli-auditor.toml",
-      "sha256": "88737b690a365ba0d958bb59293db437f1d49d1f11e2f5acf0e6e657a57147f2"
+      "sha256": "e1a275741a81a181c5825b93d11e759c871b49eae8b6f1958915c28dca9d4b08"
     },
     {
       "path": ".codex/agents/relay-cli.toml",
@@ -92,7 +92,7 @@
     },
     {
       "path": ".opencode/agents/relay-cli-auditor.md",
-      "sha256": "9d9776dd9c00f3db92d19ab28014a8eb8f026d2f7a48be1a4167b59049fd35c7"
+      "sha256": "08674936792e1eacd01e641cd64841e312b2d0f7a19be28df1e38185da251ac6"
     },
     {
       "path": ".opencode/agents/relay-cli.md",

@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { realpath } from "node:fs/promises";
 import type { ContextResponse, RelayProject, ServerContextResponse } from "@relay/contracts";
+import { WORK_HISTORY_CAPABILITY } from "@relay/contracts/work-history";
+import { WORK_HISTORY_GRAPH_CAPABILITY } from "@relay/contracts/work-history-graph";
 import {
   PROJECT_CATALOG_CAPABILITY,
   projectCatalogPageQuerySchema,
@@ -97,6 +99,8 @@ export class ProjectContext {
         "relay-release-refs-v1",
         "relay-entity-search-v2",
         PROJECT_CATALOG_CAPABILITY,
+        WORK_HISTORY_CAPABILITY,
+        WORK_HISTORY_GRAPH_CAPABILITY,
       ],
       projectId: this.projectId,
       configPath: workspace.configPath,

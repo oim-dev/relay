@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { EntitiesPage, EntityDetail, EntitySaved } from "@relay/contracts/entities";
-import { entitiesText } from "../src/presentation/entities.js";
+import { entitiesText, entityReadArgs } from "../src/presentation/entities.js";
+import { shellCommand } from "../src/command-kit.js";
 import {
   binary,
   cliEnv,
@@ -245,7 +246,7 @@ test("IMP-02: FI/SI-фильтр привязан к курсору, не к т�
   );
 });
 
-test("D-03: mixed 11 видов и 20 строк — рабочий get рядом с записью вместо нижнего блока", async (t) => {
+test("D-03: mixed 11 видов и 20 строк — адреса без команды у каждой записи", async (t) => {
   const f = await fixture(t);
   const create = async (kind: string, args: string[]) =>
     successful(await f.run<EntitySaved>([kind, "create", ...args])).data;
@@ -343,29 +344,31 @@ test("D-03: mixed 11 видов и 20 строк — рабочий get рядо
       const commands = human.stdout
         .split("\n")
         .filter((line) => line.startsWith("npx @oim-dev/relay-cli "));
-      assert.equal(commands.length, size);
+      assert.equal(commands.length, 0);
+      const reads = page.items.map((item) =>
+        shellCommand(["npx", "@oim-dev/relay-cli", ...entityReadArgs(item)]),
+      );
       const options = { color: false, width };
       const inline = entitiesText(page, { refs }, options, commands);
       const grouped =
         entitiesText(page, { refs }, options) +
         "\n\nПолное чтение найденных записей:\n" +
-        commands.join("\n");
+        reads.join("\n");
       assert.ok(human.stdout.startsWith(inline), human.stdout);
       assert.ok(Buffer.byteLength(inline) < Buffer.byteLength(grouped));
       for (let index = 0; index < page.items.length; index++) {
         const start = human.stdout.indexOf(`\n${page.items[index]!.key} —`);
-        const command = human.stdout.indexOf(commands[index]!);
         const next = page.items[index + 1]
           ? human.stdout.indexOf(`\n${page.items[index + 1]!.key} —`)
           : human.stdout.length;
-        assert.ok(start >= 0 && command > start && command < next, human.stdout);
+        assert.ok(start >= 0 && start < next, human.stdout);
       }
       t.diagnostic(
-        `mixed=${size} width=${width}: inline ${Buffer.byteLength(inline)} Б/${inline.split("\n").length} строк; прежний нижний блок ${Buffer.byteLength(grouped)} Б/${grouped.split("\n").length} строк (без общего footer обоих вариантов)`,
+        `mixed=${size} width=${width}: без меню ${Buffer.byteLength(inline)} Б/${inline.split("\n").length} строк; с командами ${Buffer.byteLength(grouped)} Б/${grouped.split("\n").length} строк (без общего footer обоих вариантов)`,
       );
       if (size === 11 && width === 100) {
         const launcher = `function npx() { test "$1" = '@oim-dev/relay-cli' || return 99; shift; "$NODE_BIN" ${cliNodeArgs.map((arg) => `'${arg}'`).join(" ")} "$CLI_BIN" "$@"; };\n`;
-        for (const command of commands) {
+        for (const command of reads) {
           const out = await promisify(execFile)("bash", ["-c", launcher + command], {
             cwd: f.root,
             env: cliEnv({ NODE_BIN: process.execPath, CLI_BIN: binary }),

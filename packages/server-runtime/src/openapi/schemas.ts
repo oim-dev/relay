@@ -3,6 +3,7 @@ import { workspaceCatalogSchemas } from "../modules/workspace/catalog-schemas.js
 import { planningTransportSchemas } from "../modules/planning/transport.js";
 import { releaseTransportSchemas } from "../modules/releases/transport.js";
 import { productTransportSchemas } from "../modules/product/transport.js";
+import { workHistoryTransportSchemas } from "../modules/work-history/transport.js";
 import { taskDependenciesQuerySchema, taskDependenciesPageSchema } from "@relay/contracts/progress";
 import { serverContextSchema } from "@relay/contracts/server-context";
 import {
@@ -158,6 +159,7 @@ const serverEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export const schemas = {
+  ...workHistoryTransportSchemas,
   ...workspaceCatalogSchemas,
   ...planningTransportSchemas,
   ...releaseTransportSchemas,

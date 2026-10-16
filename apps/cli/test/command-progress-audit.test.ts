@@ -11,10 +11,7 @@ import { httpServer } from "./helpers/http.js";
 const invocation = (args: readonly string[]) => `npx @oim-dev/relay-cli ${args.join(" ")}`;
 const compact = (text: string) => text.replace(/\s+/g, " ");
 function reasonMessages(data: Progress, text: string) {
-  assert.equal(
-    text.split("\n").filter((x) => x.startsWith("→ ")).length,
-    data.reasons.items.length,
-  );
+  assert.equal(text.split("\n").filter((x) => x.startsWith("→ ")).length, 0);
   for (const reason of data.reasons.items) {
     assert.ok(compact(text).includes(reason.code));
     assert.ok(text.includes(reason.source.key ?? `${reason.source.kind}:${reason.source.id}`));
@@ -375,11 +372,6 @@ test(
       ...plans.map((x) => x.key),
     ]);
     const server = await httpServer(t, root);
-    const parseHint = (line: string) =>
-      line
-        .match(/'(?:[^']|'\\'')*'|[^\s]+/g)!
-        .slice(2)
-        .map((x) => (x.startsWith("'") ? x.slice(1, -1).replaceAll("'\\''", "'") : x));
     let ready: ReleaseProgress | undefined;
     for (const transport of [["--local"], ["--server-url", server.url]]) {
       const blockedArgs = [...transport, "plan", "progress", blocked.key, "--limit", "1"];
@@ -414,8 +406,8 @@ test(
       assert.equal(
         fullText.stdout.split("\n").filter((x) => x.startsWith("npx ") && x.includes(" plan get "))
           .length,
-        1,
-        "Один get на вид, а не по команде на каждый план",
+        0,
+        "Список не повторяет справку get",
       );
       let cursor: string | null = null;
       const opened: string[] = [];
@@ -430,11 +422,9 @@ test(
         const hints = human.stdout
           .split("\n")
           .filter((x) => x.startsWith("npx ") && x.includes(" plan get "));
-        assert.equal(hints.length, 1, human.stdout);
+        assert.equal(hints.length, 0, human.stdout);
         const plan = page.data.plans.items[0]!;
-        assert.ok(hints[0]!.includes(`plan get ${plan.key}`));
-        if (transport.includes("--server-url")) assert.ok(hints[0]!.includes(server.url));
-        const detail = await invokeRaw(root, parseHint(hints[0]!));
+        const detail = await invokeRaw(root, [...transport, "plan", "get", plan.key!]);
         assert.equal(detail.code, 0, detail.stdout + detail.stderr);
         assert.equal(detail.stderr, "");
         assert.ok(

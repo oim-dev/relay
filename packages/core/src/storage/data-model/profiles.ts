@@ -60,12 +60,25 @@ export const PROFILE_2: DataModelProfile = Object.freeze({
   }),
 });
 
+/** История работы: три технических владельца v1, без изменения прежних предметных данных. */
+export const PROFILE_3: DataModelProfile = Object.freeze({
+  ...base,
+  version: 3,
+  owners: Object.freeze({
+    ...PROFILE_2.owners,
+    "work-session": 1,
+    "agent-run": 1,
+    "work-checkpoint": 1,
+  }),
+});
+
 /** Поддерживаемые профили по возрастанию; последний — текущий. */
 export const DATA_MODEL_PROFILES: readonly DataModelProfile[] = Object.freeze([
   PROFILE_1,
   PROFILE_2,
+  PROFILE_3,
 ]);
-export const CURRENT_DATA_MODEL = 2;
+export const CURRENT_DATA_MODEL = 3;
 /** Профиль, который распознаётся по отсутствию поля dataModelVersion в manifest формата 4. */
 export const UNMARKED_DATA_MODEL = 1;
 

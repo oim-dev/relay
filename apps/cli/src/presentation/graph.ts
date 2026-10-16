@@ -30,12 +30,11 @@ export interface GraphNavigation {
 function nodesText(
   nodes: readonly GraphNode[],
   options: TextOptions,
-  navigation: GraphNavigation,
+  _navigation: GraphNavigation,
 ): string {
   return (
     nodes
       .map((node) => {
-        const descriptions = navigation.descriptions?.(node.ref);
         return [
           listText(
             {
@@ -53,12 +52,6 @@ function nodesText(
             },
             options,
           ),
-          ...(navigation.read ? [`Чтение:\n${commandText(navigation.read(node), options)}`] : []),
-          ...(descriptions
-            ? [
-                `${wrap("Пояснения исходящих отношений (ограниченный обзор):", options.width)}\n${commandText(descriptions, options)}`,
-              ]
-            : []),
         ].join("\n");
       })
       .join("\n\n") ||
@@ -125,7 +118,7 @@ export function fullContextText(
         {
           title: "Границы чтения",
           body: wrap(
-            "Без фильтров, ограничения глубины и страниц. Карточки контекста не заменяют полные тексты требований, документов и задач: прочитайте нужные записи адресно. Направление каждого отношения сохранено; достижимость не означает готовность или выполнение.",
+            "Вся достижимая компонента без фильтров и страниц. Полные тексты сущностей не включены.",
             options.width,
           ),
         },
@@ -136,10 +129,7 @@ export function fullContextText(
         { title: "Сохранённые отношения", body: relationshipsText(context.edges, labels, options) },
         {
           title: "Пояснения отношений",
-          body: wrap(
-            "Ответ context не содержит пояснений отношений. Выберите начало нужного ребра и выполните предложенный у этого узла list: глубина 1, исходящий обход. Найдите ID отношения среди результатов, при необходимости продолжите страницы. Это ограниченный обзор, не адресное чтение одного ребра. Стрелка в списке отношений обозначает сохранённое направление ребра.",
-            options.width,
-          ),
+          body: wrap("Пояснения отношений не включены.", options.width),
         },
       ],
       commands,

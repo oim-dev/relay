@@ -6,9 +6,6 @@
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts",
-    "test/**/*.mjs",
-    "scripts/**/*.mjs",
     "../../packages/core/src/**/*.ts",
     "../../packages/contracts/src/**/*.ts",
     "../../packages/server-runtime/src/**/*.ts"

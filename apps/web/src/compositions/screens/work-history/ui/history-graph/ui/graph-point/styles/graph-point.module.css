@@ -1,0 +1,76 @@
+.root {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  width: 44px;
+  min-height: 44px;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--tasks-ink);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+
+  &:hover,
+  &[data-selected="true"] {
+    background: var(--tasks-selection);
+  }
+
+  &[data-highlighted="true"],
+  &[data-selected="true"] {
+    outline: 2px solid var(--graph-color);
+    outline-offset: 3px;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 3px;
+    background: transparent;
+  }
+}
+.anchor {
+  pointer-events: auto;
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+.marker {
+  flex: 0 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--graph-color);
+  border-radius: 50%;
+  color: var(--graph-color);
+  background: var(--tasks-surface);
+}
+.endMarker {
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--tasks-warning-border);
+  border-radius: 50%;
+  color: var(--tasks-warning-ink);
+  background: var(--tasks-warning-surface);
+}
+.tooltip {
+  width: min(380px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  padding: var(--mantine-spacing-md);
+  border: 1px solid var(--tasks-border-strong);
+  background: var(--tasks-raised);
+  color: var(--tasks-ink);
+  box-shadow: var(--tasks-raised-shadow);
+}

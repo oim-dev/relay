@@ -58,7 +58,7 @@ test("feature: шесть листьев, текстовый ввод и snapsho
       ])
         assert.ok(out.stdout.includes(text), out.stdout);
       assert.match(out.stdout, /ревизия/i);
-      assert.match(out.stdout, /npx @oim-dev\/relay-cli/);
+      assert.doesNotMatch(out.stdout, /^npx @oim-dev\/relay-cli /m);
       assert.doesNotMatch(out.stdout, /\u001b|"data":|\\n/);
       for (const line of out.stdout.split("\n")) {
         if (line.includes("npx @oim-dev/relay-cli")) continue;

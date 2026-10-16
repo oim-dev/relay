@@ -1,0 +1,34 @@
+.root {
+  position: absolute;
+  width: 44px;
+  min-height: 44px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--tasks-muted);
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--tasks-focus-ring);
+    outline-offset: 3px;
+  }
+}
+.marker {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px dashed var(--graph-color);
+  border-radius: 50%;
+  background: var(--tasks-surface);
+}
+.tooltip {
+  max-width: min(320px, calc(100vw - 24px));
+  background: var(--tasks-raised);
+  color: var(--tasks-ink);
+  border: 1px solid var(--tasks-border-strong);
+}

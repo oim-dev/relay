@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { writeLegacyMigrationFixture } from "./helpers/legacy-migration-fixture.js";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fixture } from "./helpers/workspace.js";
 import { EntityEngine } from "@relay/core/application/entities/service";
 import { ProductQueries } from "@relay/core/application/product/queries";
@@ -75,6 +77,7 @@ test("фича → пустой паспорт → проект: связи за
   const context = await graph.context({ root: feature.key });
   assert.equal(context.nodes.length, 3);
   assert.equal(context.edges.length, 2);
+  for (const edge of context.edges) assert.match(edge.id, /^[A-Za-z0-9]{8}$/);
   assert.ok(hasEdge(context, feature.ref, "part-of", product.ref));
   assert.ok(hasEdge(context, product.ref, "part-of", project.ref));
   assert.deepEqual((await graph.context({ root: project.key })).edges, context.edges);
@@ -222,6 +225,60 @@ const hasEdge = (graph: FullContext, from: EntityRef, type: string, to: EntityRe
       edge.to.kind === to.kind &&
       edge.to.id === to.id,
   );
+
+test("Прежний UUID связи сохраняется при изменении сущности и создании новых коротких связей", async (t) => {
+  const { workspace } = await fixture(t);
+  const engine = new EntityEngine(workspace);
+  const feature = await engine.create(
+    {
+      requestId: "feature",
+      data: { kind: "feature", name: "Фича", summary: "", description: "Требование" },
+    },
+    "agent",
+  );
+  const path = join(workspace.dataRoot, "relations/features", `${feature.ref.id}.json`);
+  const relations = JSON.parse(await readFile(path, "utf8"));
+  const legacyId = "11111111-2222-4333-8444-555555555555";
+  assert.equal(relations.entries.length, 1);
+  relations.entries[0].edge.id = legacyId;
+  const legacyBytes = JSON.stringify(relations);
+  await writeFile(path, legacyBytes);
+  const storage = new StorageService(workspace);
+  await storage.reindex();
+
+  await engine.update(
+    {
+      ref: feature.key,
+      ifRevision: feature.revision,
+      requestId: "update",
+      changes: { kind: "feature", description: "Уточнённое требование" },
+    },
+    "agent",
+  );
+  const scenario = await engine.create(
+    {
+      requestId: "scenario",
+      data: {
+        kind: "scenario",
+        featureId: feature.ref.id,
+        name: "Сценарий",
+        description: "Описание сценария",
+      },
+    },
+    "agent",
+  );
+  const graph = new GraphService(workspace);
+  const context = await graph.context({ root: scenario.key });
+  assert.ok(context.edges.some((edge) => edge.id === legacyId));
+  assert.ok(context.edges.some((edge) => edge.from.id === scenario.ref.id));
+  for (const edge of context.edges)
+    if (edge.id !== legacyId) assert.match(edge.id, /^[A-Za-z0-9]{8}$/);
+  await storage.reconcileRelations({ requestId: "reconcile" }, "agent");
+  await storage.reindex();
+  const reopened = new GraphService(await openWorkspace(workspace.root));
+  assert.deepEqual((await reopened.context({ root: scenario.key })).edges, context.edges);
+  assert.equal(await readFile(path, "utf8"), legacyBytes);
+});
 
 test("документ связывает все девять видов; контекст не обрывается на проекте, доске или документе", async (t) => {
   const { engine, feature, scenario, application, fi, si, graph } = await setup(t);

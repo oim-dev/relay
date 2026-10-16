@@ -59,7 +59,7 @@ export function createCommand(parent: Command, definition: CommandHelp): Command
   for (const argument of command.registeredArguments)
     argument.description = definition.arguments?.[argument.name()] ?? argument.description;
   command.allowExcessArguments(false);
-  command.configureHelp({ showGlobalOptions: true });
+  command.configureHelp({ ...parent.configureHelp(), showGlobalOptions: true });
   definition.configure?.(command);
   addCommandHelp(command, definition);
   return command;

@@ -129,7 +129,7 @@ for (const mode of ["local", "http"] as const)
       assert.equal(text.code, 0, text.stdout + text.stderr);
       assert.equal(text.stderr, "");
       assert.match(text.stdout, /Проекция:\s*compact/);
-      assert.match(text.stdout, /release get REL-/);
+      assert.doesNotMatch(text.stdout, /release get REL-/);
       assert.doesNotMatch(text.stdout, /Подробное содержание/);
       const release = releases[0]!;
       for (const base of [

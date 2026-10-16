@@ -194,27 +194,41 @@ test(
       ]),
     ).data;
     const list = human(await raw(["plan", "list"]));
-    const detail = await readHint(list, "plan get");
+    assert.doesNotMatch(list, /^npx /m);
+    const detail = human(await raw(["plan", "get", p.key]));
     assert.ok(detail.includes(markdown));
     assert.match(detail, /Заблокировано:\s*1/);
     assert.match(detail, /На проверке:\s*0/);
-    const stages = await readHint(detail, "plan stage list");
-    const stage = await readHint(stages, "plan stage get");
+    const stages = human(await raw(["plan", "stage", "list", p.key]));
+    assert.ok(stages.includes(s.stageId));
+    const stage = human(await raw(["plan", "stage", "get", p.key, s.stageId]));
     assert.ok(stage.includes(markdown));
-    const tasks = await readHint(stage, "plan stage task list");
+    const tasks = human(await raw(["plan", "stage", "task", "list", p.key, s.stageId]));
     assert.match(tasks, /Заблокирована:\s*Да/);
     assert.match(tasks, /Готова к работе:\s*Да/);
-    await readHint(tasks, "task get");
-    await readHint(tasks, "task progress");
-    await readHint(detail, "inspect graph list");
-    const candidates = await readHint(tasks, "plan task candidates");
+    human(await raw(["task", "get", blocked.key]));
+    human(await raw(["task", "progress", blocked.key]));
+    human(await raw(["inspect", "graph", "list", "--root", p.key]));
+    const candidates = human(
+      await raw([
+        "plan",
+        "task",
+        "candidates",
+        "--plan",
+        p.key,
+        "--stage",
+        s.stageId,
+        "--available-only",
+        "true",
+      ]),
+    );
     assert.match(candidates, /Только доступные:\s*true/);
     assert.ok(candidates.includes(s.stageId));
     assert.match(candidates, /Этап:\s*Отдельный этап/);
-    const memberships = await readHint(candidates, "plan task memberships");
+    const memberships = human(await raw(["plan", "task", "memberships", blocked.key]));
     if (memberships.includes(p.key)) {
       assert.ok(memberships.includes("План — не название этапа"));
-      await readHint(memberships, "plan stage get");
+      human(await raw(["plan", "stage", "get", p.key, s.stageId]));
     }
     const query = ["plan", "task", "candidates", "--available-only", "false", "--limit", 1];
     const first = successful(await run<Page<{ key: string }>>(query));
@@ -293,7 +307,7 @@ test(
     assert.match(closed, /Состояние плана:\s*Отменён/);
     assert.match(closed, /Участие:\s*Закрытый план/);
     assert.ok(closed.includes("План — не название этапа"));
-    await readHint(closed, "plan stage get");
+    human(await raw(["plan", "stage", "get", p.key, s.stageId]));
     const empty = human(await raw(["plan", "list", "--q", "НЕСУЩЕСТВУЮЩИЙ"]));
     assert.match(empty, /записей нет/);
     assert.doesNotMatch(empty, /npx @oim-dev\/relay-cli plan get/);
@@ -304,7 +318,7 @@ test(
   },
 );
 
-test("PLAN-02/03: 20 строк дают один пример; HTTP details и JSON ошибки не переписываются", (t) => {
+test("PLAN-02/03: 20 строк без повторной справки; HTTP details и JSON ошибки не переписываются", (t) => {
   for (const width of [40, 100]) {
     const text = planListText(
       "Планы работ",
@@ -329,12 +343,12 @@ test("PLAN-02/03: 20 строк дают один пример; HTTP details и 
         },
       ],
     );
-    assert.equal(text.split("\n").filter((line) => line.startsWith("npx ")).length, 1);
+    assert.equal(text.split("\n").filter((line) => line.startsWith("npx ")).length, 0);
     assert.equal((text.match(/Заблокировано:\s*20/g) ?? []).length, 20);
     assert.ok(text.includes("PLN-20"));
     assert.doesNotMatch(text, /\u001b/);
     t.diagnostic(
-      `Макет 20 планов, width=${width}: ${Buffer.byteLength(text)} байт UTF-8, ${text.split("\n").length} строк, одна команда чтения; без footer страницы.`,
+      `Макет 20 планов, width=${width}: ${Buffer.byteLength(text)} байт UTF-8, ${text.split("\n").length} строк, без меню и footer страницы.`,
     );
   }
   const details = {

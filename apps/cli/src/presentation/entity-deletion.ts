@@ -55,6 +55,7 @@ export function deletionPreviewText(
       ],
       commands: [
         {
+          purpose: "confirmation",
           label: actorAvailable
             ? "Данные не изменены. Только после проверки всего каскада: подтвердить удаление (без восстановления)"
             : "Данные не изменены. Для удаления укажите --actor или RELAY_ACTOR; условия подтверждения:",

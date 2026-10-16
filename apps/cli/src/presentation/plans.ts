@@ -185,7 +185,11 @@ export function planPresentedError(error: unknown, context: PlanFailureContext):
             : [{ title: "Подробности", body: diagnosticValueText(error.details) }]),
           { title: "Следующий шаг", body: wrap(advice, options.width) },
         ],
-        commands: reads.map(({ label, args }) => ({ label, command: invoke(args) })),
+        commands: reads.map(({ label, args }) => ({
+          label,
+          command: invoke(args),
+          purpose: "recovery",
+        })),
       },
       options,
     ),

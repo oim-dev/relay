@@ -38,7 +38,7 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
     arguments: { ref: "Ключ или ID документа" },
     description: "Прочитать отношения и прежние продуктовые области",
     details:
-      "Собственные прикрепления документа: relations и links показаны отдельно, пояснения полностью. Это не все входящие рёбра: связи других записей читайте через inspect graph list --root. Подсказка чтения даётся для первой цели каждого вида на странице; для другой замените ключ или ID.",
+      "Собственные прикрепления документа: relations и links показаны отдельно, пояснения полностью. Это не все входящие рёбра: связи других записей читайте через inspect graph list --root <ref>. Полная цель — <вид> get <ключ или ID из строки>; для project и product аргумент не нужен, для work-plan используйте plan get.",
     examples: [["npx @oim-dev/relay-cli document links DOC-1", "Прочитать прикрепления"]],
     configure: paging,
     async run(context, input) {
@@ -145,7 +145,10 @@ export function registerDocumentRelations(group: Command, runtime: Runtime) {
           ? "Прикрепить документ или изменить пояснение"
           : "Снять выбранное прикрепление",
       details:
-        "Одно изменение документа с исходной ревизией. Остальные отношения и области сохраняются. --legacy выбирает прежние продуктовые области без пояснений; по умолчанию адресное отношение documents.",
+        "Одно изменение документа с исходной ревизией из document get. Остальные отношения и области сохраняются. По умолчанию documents — документ описывает цель; references — цель ссылается на документ. --legacy выбирает прежние продуктовые области и несовместим с --relation и пояснением. " +
+        (action === "link"
+          ? "Повторное прикрепление позволяет изменить пояснение; --clear-description очищает его и несовместим с --description/--description-file."
+          : "Снимается только выбранный тип отношения к цели; сами документ и цель сохраняются."),
       examples: [
         [
           `npx @oim-dev/relay-cli document ${action} DOC-1 --target FEATURE-1 --if-revision 1 --actor agent`,
@@ -234,7 +237,8 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
   registerCommand<PageOptions>(group, runtime, {
     name: "list",
     description: "Прочитать разделы в их порядке",
-    details: "Сохраните ревизию проекта для изменения разделов.",
+    details:
+      "Сохраните ревизию проекта для изменения разделов. Документы выбранного раздела — document list --section <id>; документы без раздела — document list --section none. Полный документ — document get <ключ>.",
     examples: [["npx @oim-dev/relay-cli document section list", "Прочитать разделы"]],
     configure: paging,
     async run(context, input) {
@@ -289,7 +293,9 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
       WriteOptions & { name?: string; nameFile?: string; before?: string; last?: boolean }
     >(group, runtime, {
       name: `${action} <id>`,
-      arguments: { id: "Постоянный ID раздела" },
+      arguments: {
+        id: action === "create" ? "Новый постоянный ID раздела" : "ID из document section list",
+      },
       description: {
         create: "Создать раздел",
         update: "Переименовать раздел",
@@ -297,9 +303,21 @@ export function registerDocumentSections(parent: Command, runtime: Runtime) {
         remove: "Удалить раздел, сохранив документы",
       }[action],
       details:
-        "Передайте прочитанную ревизию проекта из document section list. Остальные разделы сохраняются; при конфликте операция не повторяется. Для create/update обязателен --name либо --name-file (UTF-8 файл; - означает stdin). Источники несовместимы; ввод читается до записи.",
+        "Передайте автора и прочитанную ревизию проекта из document section list. Остальные разделы сохраняются; при конфликте операция не повторяется. " +
+        {
+          create:
+            "Добавляет новый раздел в конец. Обязателен --name либо --name-file (UTF-8 файл; - означает stdin). Источники несовместимы; ввод читается до записи.",
+          update:
+            "Меняет имя, сохраняя ID и порядок. Обязателен --name либо --name-file (UTF-8 файл; - означает stdin). Источники несовместимы; ввод читается до записи.",
+          move: "Укажите ровно один параметр: --before <id другого раздела> или --last. Перемещение перед самим собой или неизвестным разделом отклоняется.",
+          remove:
+            "Удаляет только раздел. Его документы сохраняются без раздела; найти их можно через document list --section none.",
+        }[action],
       examples: [
-        [`npx @oim-dev/relay-cli document section ${action} --help`, "Параметры изменения"],
+        [
+          `npx @oim-dev/relay-cli document section ${action} guides${action === "create" || action === "update" ? " --name 'Руководства'" : action === "move" ? " --last" : ""} --actor agent --if-revision 1`,
+          "Изменить раздел; замените ID и ревизию проекта прочитанными значениями",
+        ],
       ],
       configure(command) {
         revisionOption(command);

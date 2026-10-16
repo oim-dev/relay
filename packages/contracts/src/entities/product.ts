@@ -13,6 +13,7 @@ import { documentKindSchema, documentMetadataShape } from "./document-library.js
 import { boardTaskReferenceSchema, kanbanColumnSchema } from "./board-task.js";
 import { planStatusSchema, planningCountsSchema } from "../planning.js";
 import { releaseReadinessSchema, releaseStatusSchema } from "../releases.js";
+import { overviewSessionsSchema } from "../overview-sessions.js";
 
 export const productIdSchema = z
   .string()
@@ -439,7 +440,7 @@ const overviewReleaseSchema = z
   .describe("Релиз проекта; не относится к отдельному приложению");
 
 /** Дополнительное пояснение продолжения у подборок метрик оператора. */
-const metricContinuation = "полный список читайте детализацией метрики product overview";
+const metricContinuation = "полный список читайте детализацией метрики обзора проекта";
 
 const overviewTaskBoardSchema = z
   .strictObject({
@@ -820,6 +821,7 @@ export const productOverviewSnapshotSchema = z
       })
       .describe("Релизы проекта"),
     operator: productOverviewOperatorSchema,
+    sessions: overviewSessionsSchema,
   })
   .describe("Согласованный срез проекта из одного чтения");
 
@@ -850,7 +852,7 @@ export const productOverviewSchema = z
       .string()
       .regex(/^[a-f0-9]{64}$/)
       .describe(
-        "Отпечаток всех данных среза: проект, паспорт, продукт, доски, задачи и критерии, документы, планы, релизы; не зависит от generatedAt",
+        "Отпечаток всех данных среза: проект, паспорт, продукт, доски, задачи и критерии, документы, планы, релизы, сессии и история работы; не зависит от generatedAt",
       ),
     generatedAt: timestampSchema.describe("Время формирования ответа; не входит в snapshotVersion"),
     snapshot: productOverviewSnapshotSchema,

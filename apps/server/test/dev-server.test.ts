@@ -107,6 +107,53 @@ for (const configuration of ["default", "relative"] as const)
           "packages/server-runtime/src/bootstrap.ts",
         ].map((path) => pathToFileURL(join(root, path)).href),
       );
+      const compiler = join(root, "apps/server/node_modules/typescript/bin/tsc");
+      const config = JSON.parse(
+        (
+          await execute(process.execPath, [compiler, "-p", "tsconfig.dev.json", "--showConfig"], {
+            cwd: join(root, "apps/server"),
+          })
+        ).stdout,
+      );
+      for (const flag of [
+        "strict",
+        "noUnusedLocals",
+        "noUnusedParameters",
+        "exactOptionalPropertyTypes",
+        "noUncheckedIndexedAccess",
+        "noEmit",
+      ])
+        assert.equal(config.compilerOptions[flag], true, `Dev сохраняет ${flag}`);
+      assert.equal(
+        config.files.some(
+          (path: string) => path.startsWith("./test/") || path.startsWith("./scripts/"),
+        ),
+        false,
+      );
+      const checkedFiles = (
+        await execute(process.execPath, [compiler, "-p", "tsconfig.dev.json", "--listFilesOnly"], {
+          cwd: join(root, "apps/server"),
+        })
+      ).stdout
+        .split(/\r?\n/)
+        .map((path) => path.replaceAll("\\", "/"));
+      assert.equal(
+        checkedFiles.some((path) => path.includes("/packages/rest-sdk/src/")),
+        false,
+        "Dev runtime не втягивает SDK через интеграционные тесты CLI",
+      );
+      for (const owner of [
+        "apps/server",
+        "packages/core",
+        "packages/contracts",
+        "packages/server-runtime",
+      ])
+        assert(
+          checkedFiles.some((path) =>
+            path.startsWith(join(root, owner, "src").replaceAll("\\", "/") + "/"),
+          ),
+          owner,
+        );
       const workspace = configuration === "default" ? "apps/playground" : "custom tasks";
       await initialize(join(root, workspace), "tasks");
       const apiPrefix = "/api/v1";
