@@ -66,20 +66,11 @@
   background: var(--tasks-warning-surface);
 }
 .tooltip {
-  max-width: min(320px, calc(100vw - 24px));
-  padding: 0.8rem;
+  width: min(380px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  padding: var(--mantine-spacing-md);
   border: 1px solid var(--tasks-border-strong);
   background: var(--tasks-raised);
   color: var(--tasks-ink);
   box-shadow: var(--tasks-raised-shadow);
-}
-.preview {
-  display: grid;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
-  & p {
-    margin: 0.25rem 0 0;
-    white-space: pre-wrap;
-  }
 }

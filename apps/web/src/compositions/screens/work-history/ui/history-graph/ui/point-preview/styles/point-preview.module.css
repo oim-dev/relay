@@ -1,0 +1,134 @@
+.root {
+  display: grid;
+  gap: var(--mantine-spacing-md);
+  min-width: 0;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.agent {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+}
+
+.agentIcon {
+  display: grid;
+  flex: 0 0 36px;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--mantine-radius-md);
+  color: var(--tasks-accent-ink);
+  background: var(--tasks-accent-subtle);
+}
+
+.identity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.agentName {
+  font-weight: 650;
+}
+
+.client {
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.eventKind {
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--tasks-subtle);
+  color: var(--tasks-muted);
+  font-weight: 550;
+}
+
+.time {
+  color: var(--tasks-muted);
+}
+
+.material {
+  display: grid;
+  min-width: 0;
+  gap: var(--mantine-spacing-xs);
+}
+
+.title {
+  font-size: var(--mantine-font-size-md);
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--tasks-muted);
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.intent {
+  color: var(--tasks-accent-ink);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.continuation {
+  display: grid;
+  gap: 4px;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border: 1px solid var(--tasks-warning-border);
+  border-radius: var(--mantine-radius-sm);
+  color: var(--tasks-warning-ink);
+  background: var(--tasks-warning-surface);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.context {
+  display: grid;
+  gap: var(--mantine-spacing-sm);
+  padding-top: var(--mantine-spacing-sm);
+  border-top: 1px solid var(--tasks-border);
+}
+
+.work {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.workTitle {
+  margin: 0;
+}
+
+.operator {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+}
+
+.caption {
+  margin: 0;
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.hint {
+  color: var(--tasks-muted);
+  font-size: var(--mantine-font-size-xs);
+}

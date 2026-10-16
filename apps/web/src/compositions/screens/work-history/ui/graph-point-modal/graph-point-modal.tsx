@@ -1,4 +1,5 @@
 import { Button, Modal } from "@mantine/core";
+import { useEffect, useRef } from "react";
 import { useMediaQuery } from "@mantine/hooks";
 import { Link } from "react-router-dom";
 import { useProjectBasePath } from "domains/project";
@@ -12,6 +13,7 @@ import {
 import { MarkdownView } from "ui/markdown-view";
 import { isDefined, isNonEmptyArray } from "shared/value-predicates";
 import { getPointMaterials } from "./helpers/point-materials";
+import { BranchPoints } from "compositions/screens/work-history/ui/graph-point-modal/ui/branch-points";
 import type { GraphPointModalProps } from "./types/graph-point-modal-props.type";
 import styles from "./styles/graph-point-modal.module.css";
 
@@ -28,6 +30,14 @@ export const GraphPointModal = (props: GraphPointModalProps) => {
   const isMobile = useMediaQuery("(max-width: 47.99em)");
   const base = useProjectBasePath();
   const detail = query.data;
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const loadedPointId = detail?.point.id;
+  useEffect(() => {
+    if (loadedPointId === undefined) return;
+    contentRef.current?.scrollTo({ top: 0 });
+    titleRef.current?.focus({ preventScroll: true });
+  }, [loadedPointId]);
   const hasError = isDefined(query.error);
   const title = detail?.point.title ?? "Открываем точку";
   const presentation =
@@ -80,13 +90,13 @@ export const GraphPointModal = (props: GraphPointModalProps) => {
       classNames={{ content: styles.root }}
     >
       <Modal.Overlay />
-      <Modal.Content>
+      <Modal.Content ref={contentRef}>
         <Modal.Header role="presentation">
           <Modal.Title>{kindLabel}</Modal.Title>
           <Modal.CloseButton aria-label="Закрыть материал точки" />
         </Modal.Header>
         <Modal.Body>
-          <h2 className={styles.title} tabIndex={-1} data-autofocus>
+          <h2 ref={titleRef} className={styles.title} tabIndex={-1} data-autofocus>
             {title}
           </h2>
           {query.isLoading && <p role="status">Читаем полный материал…</p>}
@@ -115,6 +125,13 @@ export const GraphPointModal = (props: GraphPointModalProps) => {
                 </p>
               )}
               {hasSummary && <p className={styles.summary}>{summary}</p>}
+              <BranchPoints
+                key={detail.session.id}
+                projectId={projectId}
+                sessionId={detail.session.id}
+                selectedPointId={detail.point.id}
+                onSelectPoint={onSelectPoint}
+              />
               {fields.map((field) => (
                 <section key={field.label} className={styles.material}>
                   <h3>{field.label}</h3>

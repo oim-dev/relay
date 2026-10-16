@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import {
   agentRunSchema,
@@ -11,6 +10,7 @@ import {
 import type { AgentRun, WorkCheckpoint, WorkSession } from "@relay/contracts/work-history";
 import { parse } from "../domain/validation.js";
 import { invariant } from "../shared/errors.js";
+import { shortId } from "../shared/ids.js";
 import type { StorageSession } from "./entity-store/store.js";
 import type { EntityRecord } from "./entity-store/registry.js";
 
@@ -186,18 +186,24 @@ export class WorkHistoryRepository {
   }
 
   async identity(kind: Kind) {
-    // 128 случайных бит: независимые копии Git не делят счётчик и не переиспользуют S-1.
-    const id = randomBytes(16).toString("hex");
     const prefix = kind === "work-session" ? "S" : kind === "agent-run" ? "RUN" : "CP";
-    const key = `${prefix}-${id}`;
+    // Общий короткий ID; занятые ID и собственные ключи проверяются под замком записи.
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const id = shortId();
+      const key = `${prefix}-${id}`;
+      if (
+        (await this.storage.indexGet("records", `${kind}:${id}`)) === undefined &&
+        (await this.storage.indexGet(indexes[kind], id)) === undefined &&
+        (await this.storage.indexGet("work-history-addresses", `${kind}:${key}`)) === undefined
+      )
+        return { id, key };
+    }
     invariant(
-      (await this.storage.indexGet(indexes[kind], id)) === undefined &&
-        (await this.storage.indexGet("work-history-addresses", `${kind}:${key}`)) === undefined,
+      false,
       "WORK_HISTORY_KEY_CONFLICT",
-      "Случайный адрес истории уже занят; запись не выполнена",
+      "Не удалось выделить свободный адрес истории; запись не выполнена",
       4,
     );
-    return { id, key };
   }
 
   async put<K extends Kind>(kind: K, data: Data[K], actor: string, previous?: EntityRecord) {

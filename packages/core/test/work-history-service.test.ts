@@ -44,7 +44,7 @@ test("История: root → child → grandchild; готовность реб
     { title: "Корень", description: markdown, requestId: "root" },
     "lead",
   );
-  assert.match(root.session.id, /^[a-f0-9]{32}$/);
+  assert.match(root.session.id, /^[A-Za-z0-9]{8}$/);
   assert.equal(root.session.key, `S-${root.session.id}`);
   assert.equal(root.run?.key, `RUN-${root.run!.id}`);
   root = await service.openCheckpoint({ ...owner(root), ...material }, "lead");
@@ -691,7 +691,8 @@ test("Независимые копии: случайные адреса, объ
     [left.run!, right.run!],
     [left.checkpoint!, right.checkpoint!],
   ]) {
-    assert.match(a!.id, /^[a-f0-9]{32}$/);
+    assert.match(a!.id, /^[A-Za-z0-9]{8}$/);
+    assert.match(b!.id, /^[A-Za-z0-9]{8}$/);
     assert.notEqual(a!.id, b!.id);
     assert.notEqual(a!.key, b!.key);
   }
@@ -713,6 +714,105 @@ test("Независимые копии: случайные адреса, объ
     assert.deepEqual(await merged.checkpoint({ ref: state.checkpoint!.key }), state.checkpoint);
     assert.deepEqual((await merged.get({ ref: state.session.key })).session, state.session);
   }
+});
+
+test("Прежние длинные адреса истории сохраняются рядом с новыми короткими ID", async (t) => {
+  const { workspace, root, service } = await fixture(t);
+  let sequence = 0;
+  const legacyIdentity = t.mock.method(
+    WorkHistoryRepository.prototype,
+    "identity",
+    async (kind: Parameters<WorkHistoryRepository["identity"]>[0]) => {
+      const id = (++sequence).toString(16).padStart(32, "0");
+      const prefix = kind === "work-session" ? "S" : kind === "agent-run" ? "RUN" : "CP";
+      return { id, key: `${prefix}-${id}` };
+    },
+  );
+  let state = await service.start(
+    { title: "Прежняя ветка", description: markdown, requestId: "legacy" },
+    "first",
+  );
+  state = await service.openCheckpoint({ ...owner(state), ...material }, "first");
+  legacyIdentity.mock.restore();
+  const oldSession = state.session;
+  const oldRun = state.run!;
+  const oldIntent = state.checkpoint!;
+  const oldPath = join(workspace.dataRoot, "entities/work-checkpoints", `${oldIntent.id}.json`);
+  const oldBytes = await readFile(oldPath, "utf8");
+
+  state = await service.takeover(
+    {
+      ref: oldSession.key,
+      ifRevision: oldSession.revision,
+      reason: "Продолжить",
+      requestId: "new",
+    },
+    "second",
+  );
+  assert.match(state.run!.id, /^[A-Za-z0-9]{8}$/);
+  assert.equal(state.run!.predecessorRunId, oldRun.id);
+  assert.equal(state.run!.sessionId, oldSession.id);
+  state = await service.fork(
+    { ...owner(state), ref: oldIntent.key, title: "Новый ребёнок" },
+    "second",
+  );
+  assert.match(state.childSession!.id, /^[A-Za-z0-9]{8}$/);
+  assert.equal(state.childSession!.parentSessionId, oldSession.id);
+  assert.equal(state.childSession!.originCheckpointId, oldIntent.id);
+  assert.equal(state.childSession!.createdByRunId, state.run!.id);
+  state = await service.saveCheckpoint(
+    { ...owner(state), ref: oldIntent.id, ...material },
+    "second",
+  );
+  assert.match(state.checkpoint!.id, /^[A-Za-z0-9]{8}$/);
+  assert.equal(state.checkpoint!.intentId, oldIntent.id);
+  assert.equal(state.checkpoint!.sessionId, oldSession.id);
+  assert.equal(state.checkpoint!.runId, state.run!.id);
+
+  await new StorageService(workspace).reindex();
+  const reopened = new WorkHistoryService(await openWorkspace(root));
+  assert.deepEqual(await reopened.checkpoint({ ref: oldIntent.key }), oldIntent);
+  assert.deepEqual(await reopened.checkpoint({ ref: state.checkpoint!.key }), state.checkpoint);
+  assert.deepEqual((await reopened.get({ ref: oldSession.id })).session, state.session);
+  assert.equal(state.session.id, oldSession.id);
+  assert.equal(state.session.key, oldSession.key);
+  assert.equal(await readFile(oldPath, "utf8"), oldBytes);
+  assert.equal((await validateWorkspace(workspace)).valid, true);
+});
+
+test("Короткий адрес истории обходит занятый ID и ключ; число попыток ограничено", async (t) => {
+  const { workspace } = await fixture(t);
+  await workspace.locked(async () => {
+    const storage = workspace.storageSession!;
+    const repository = new WorkHistoryRepository(storage);
+    const indexGet = storage.indexGet.bind(storage);
+    for (const [kind, index, prefix] of [
+      ["work-session", "records", "S"],
+      ["agent-run", "work-history-runs", "RUN"],
+      ["work-checkpoint", "work-history-addresses", "CP"],
+    ] as const) {
+      let rejected: string | undefined;
+      const occupied = t.mock.method(storage, "indexGet", async (name: string, key: string) => {
+        if (name === index && rejected === undefined) {
+          rejected = key;
+          return true;
+        }
+        return indexGet(name, key);
+      });
+      const identity = await repository.identity(kind);
+      occupied.mock.restore();
+      assert.match(identity.id, /^[A-Za-z0-9]{8}$/);
+      assert.equal(identity.key, `${prefix}-${identity.id}`);
+      assert.ok(rejected);
+      assert.ok(
+        ![identity.id, `${kind}:${identity.id}`, `${kind}:${identity.key}`].includes(rejected),
+      );
+    }
+    const exhausted = t.mock.method(storage, "indexGet", async () => true);
+    await assert.rejects(repository.identity("work-session"), code("WORK_HISTORY_KEY_CONFLICT"));
+    assert.equal(exhausted.mock.callCount(), 100);
+    exhausted.mock.restore();
+  });
 });
 
 test("Отказ до WAL не оставляет ребёнка; потерянный индекс не выдаётся за пустую историю", async (t) => {

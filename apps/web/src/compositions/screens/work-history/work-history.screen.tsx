@@ -98,7 +98,7 @@ export const WorkHistoryScreen = () => {
       />
       {hasPoint && (
         <GraphPointModal
-          key={`${projectId}:${pointRef}`}
+          key={`point-modal:${projectId}`}
           projectId={projectId}
           pointRef={pointRef}
           onClose={handleClosePoint}

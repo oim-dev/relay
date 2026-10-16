@@ -11,7 +11,8 @@ import {
   Play,
   X,
 } from "lucide-react";
-import { WorkAuthorAvatar, getWorkPointPresentation, formatWorkTime } from "domains/work-history";
+import { getWorkPointPresentation, formatWorkTime } from "domains/work-history";
+import { PointPreview } from "compositions/screens/work-history/ui/history-graph/ui/point-preview";
 import type { GraphPointProps } from "./types/graph-point-props.type";
 import styles from "./styles/graph-point.module.css";
 
@@ -50,19 +51,11 @@ export const GraphPoint = (props: GraphPointProps) => {
   const Icon = icons[presentation.marker];
   const OpenEndIcon = branch.status === "paused" ? Pause : Hourglass;
   const operatorName = run?.operator?.name ?? "Пользователь не указан";
-  const agentName = run?.actor ?? "Агент не указан";
   const timeLabel = formatWorkTime(point.at);
   const title = point.title;
   const label = presentation.label;
   const isCheckpoint = point.kind === "checkpoint";
-  const hasAvatar =
-    isCheckpoint || point.kind === "run-started" || point.kind === "session-created";
-  const hasMarker = !hasAvatar;
-  const isOpenIntent = point.kind === "checkpoint" && point.intentState === "open";
-  const summary = point.summary.length > 280 ? `${point.summary.slice(0, 280)}…` : point.summary;
-  const hasSummary = summary !== "";
   const openEndId = isOpenEnd ? point.id : undefined;
-  const avatarSize = 40;
   const continuationLabel =
     branch.status === "pending"
       ? "Ожидает подключения агента"
@@ -71,7 +64,9 @@ export const GraphPoint = (props: GraphPointProps) => {
         : "Не завершено · точка продолжения";
   const tooltipDateLabel = isOpenEnd ? "Последняя сохранённая точка" : "Сохранено";
   const endLabel = isOpenEnd ? ` ${continuationLabel}.` : "";
-  const ariaLabel = `${roleLabel}. ${label}: ${title}. Ветка: ${branch.title}.${endLabel} ${operatorName}. ${tooltipDateLabel}: ${timeLabel}`;
+  const agentName = run?.actor ?? "Агент не указан";
+  const ariaLabel = `${agentName}. ${roleLabel}. ${label}: ${title}. Работа: ${branch.title}.${endLabel} Оператор: ${operatorName}. ${tooltipDateLabel}: ${timeLabel}`;
+  const previewContinuation = isOpenEnd ? continuationLabel : null;
   const pointStyle: CSSProperties & { "--graph-color": string } = {
     left: row.x - 22,
     top: row.y - 22,
@@ -82,26 +77,26 @@ export const GraphPoint = (props: GraphPointProps) => {
       withinPortal
       withArrow
       multiline
+      interactive
       position="right-start"
+      radius="md"
+      offset={12}
+      middlewares={{
+        flip: { fallbackAxisSideDirection: "end", padding: 12 },
+        shift: { crossAxis: true, padding: 12 },
+      }}
       openDelay={160}
       events={{ hover: true, focus: true, touch: false }}
       classNames={{ tooltip: styles.tooltip }}
       label={
-        <div className={styles.preview}>
-          <strong>{point.title}</strong>
-          <span>{roleLabel}</span>
-          <span>{label}</span>
-          <span>Ветка: {branch.title}</span>
-          {isOpenEnd && <strong>{continuationLabel}</strong>}
-          {isOpenIntent && <span>Намерение открыто</span>}
-          {isOutsidePage && <span>Последняя точка ветки вне загруженной страницы</span>}
-          <span>
-            {tooltipDateLabel}: {timeLabel}
-          </span>
-          <span>{operatorName}</span>
-          <span>Агент: {agentName}</span>
-          {hasSummary && <p>{summary}</p>}
-        </div>
+        <PointPreview
+          point={point}
+          run={run}
+          workTitle={branch.title}
+          eventLabel={label}
+          continuationLabel={previewContinuation}
+          isOutsidePage={isOutsidePage}
+        />
       }
     >
       <button
@@ -121,12 +116,9 @@ export const GraphPoint = (props: GraphPointProps) => {
         onClick={(event) => onSelectPoint(point.id, event.currentTarget)}
       >
         <span className={styles.anchor}>
-          {hasAvatar && <WorkAuthorAvatar operator={run?.operator ?? null} size={avatarSize} />}
-          {hasMarker && (
-            <span className={styles.marker}>
-              <Icon size={16} aria-hidden="true" />
-            </span>
-          )}
+          <span className={styles.marker}>
+            <Icon size={16} aria-hidden="true" />
+          </span>
           {isOpenEnd && (
             <span className={styles.endMarker}>
               <OpenEndIcon size={12} aria-hidden="true" />

@@ -9,39 +9,19 @@ import type {
   WorkHistoryGraphPointDetail,
 } from "@relay/contracts/work-history-graph";
 import { getProjectApi } from "infra/tasks-api";
-import { toWorkHistoryError, WorkHistoryError } from "../errors/work-history.error";
+import { WorkHistoryError } from "../errors/work-history.error";
+import { readWorkData } from "../helpers/read-work-data";
 
 const CONTEXT_SCHEMA = z.object({ capabilities: z.array(z.string()).optional() });
+
 /** Одна порция содержит только компактные точки, не Markdown соседних работ. */
 const GRAPH_PAGE_SIZE = 50;
-
-/**
- * Проверяет предметный ответ источника до помещения в SWR.
- */
-const readGraphData = async <T>(
-  schema: z.ZodType<T>,
-  read: () => Promise<{ data: unknown }>,
-): Promise<T> => {
-  let body: unknown;
-  try {
-    body = (await read()).data;
-  } catch (error) {
-    throw toWorkHistoryError(error);
-  }
-  const parsed = schema.safeParse(body);
-  if (!parsed.success)
-    throw new WorkHistoryError(
-      "INVALID_RESPONSE",
-      "Сервер вернул несовместимый граф истории. Обновите Server и Web вместе.",
-    );
-  return parsed.data;
-};
 
 /**
  * Отличает отсутствие новой возможности от пустого графа.
  */
 export const getWorkGraphSupport = async (projectId: string): Promise<boolean> => {
-  const context = await readGraphData(CONTEXT_SCHEMA, () =>
+  const context = await readWorkData(CONTEXT_SCHEMA, () =>
     getProjectApi(projectId).context.getContext(),
   );
   return context.capabilities?.includes(WORK_HISTORY_GRAPH_CAPABILITY) ?? false;
@@ -55,7 +35,7 @@ export const getWorkGraphPage = async (
   offset: number,
   version?: string,
 ): Promise<WorkHistoryGraphPage> => {
-  const page = await readGraphData(workHistoryGraphPageSchema, () =>
+  const page = await readWorkData(workHistoryGraphPageSchema, () =>
     getProjectApi(projectId).workHistory.getWorkHistoryGraph({
       offset,
       limit: GRAPH_PAGE_SIZE,
@@ -83,6 +63,6 @@ export const getWorkGraphPoint = (
   projectId: string,
   ref: string,
 ): Promise<WorkHistoryGraphPointDetail> =>
-  readGraphData(workHistoryGraphPointDetailSchema, () =>
+  readWorkData(workHistoryGraphPointDetailSchema, () =>
     getProjectApi(projectId).workHistory.getWorkHistoryGraphPoint({ ref: encodeURIComponent(ref) }),
   );
