@@ -43,16 +43,6 @@
   font-weight: 600;
 }
 
-.summary {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--tasks-muted);
-  font-size: var(--mantine-font-size-xs);
-  white-space: pre-wrap;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
 .current {
   color: var(--tasks-accent-ink);
   font-size: var(--mantine-font-size-xs);

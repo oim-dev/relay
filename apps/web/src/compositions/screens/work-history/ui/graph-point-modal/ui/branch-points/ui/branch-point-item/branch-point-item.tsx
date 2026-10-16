@@ -12,7 +12,6 @@ import styles from "./styles/branch-point-item.module.css";
 export const BranchPointItem = (props: BranchPointItemProps) => {
   const { point, isCurrent, onSelectPoint, className, ...rootAttrs } = props;
   const timeLabel = formatWorkTime(point.at);
-  const hasSummary = point.summary.trim() !== "";
   const current = isCurrent ? "true" : undefined;
 
   return (
@@ -21,16 +20,13 @@ export const BranchPointItem = (props: BranchPointItemProps) => {
       type="button"
       className={clsx(styles.root, className)}
       aria-current={current}
-      onClick={() => {
-        if (!isCurrent) onSelectPoint(point.id);
-      }}
+      onClick={() => onSelectPoint(point.id)}
     >
       <span className={styles.meta}>
         <span>{point.label}</span>
         <time dateTime={point.at}>{timeLabel}</time>
       </span>
       <strong className={styles.title}>{point.title}</strong>
-      {hasSummary && <span className={styles.summary}>{point.summary}</span>}
       {isCurrent && <span className={styles.current}>Открыт сейчас</span>}
     </button>
   );

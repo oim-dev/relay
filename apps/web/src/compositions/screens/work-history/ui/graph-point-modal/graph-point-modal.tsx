@@ -1,37 +1,37 @@
-import { Button, Modal } from "@mantine/core";
-import { useEffect, useRef } from "react";
+import { Button, Modal, Skeleton } from "@mantine/core";
+import { useEffect, useId, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { useMediaQuery } from "@mantine/hooks";
-import { Link } from "react-router-dom";
-import { useProjectBasePath } from "domains/project";
-import {
-  useWorkGraphPoint,
-  getWorkPointPresentation,
-  formatWorkTime,
-  RunAttribution,
-  WorkAuthorAvatar,
-} from "domains/work-history";
-import { MarkdownView } from "ui/markdown-view";
-import { isDefined, isNonEmptyArray } from "shared/value-predicates";
-import { getPointMaterials } from "./helpers/point-materials";
+import { Bot, ChevronDown, ChevronUp } from "lucide-react";
+import { useWorkGraphPoint } from "domains/work-history";
+import { isDefined } from "shared/value-predicates";
 import { BranchPoints } from "compositions/screens/work-history/ui/graph-point-modal/ui/branch-points";
+import { PointReport } from "compositions/screens/work-history/ui/graph-point-modal/ui/point-report";
+import { PointContext } from "compositions/screens/work-history/ui/graph-point-modal/ui/point-context";
 import type { GraphPointModalProps } from "./types/graph-point-modal-props.type";
 import styles from "./styles/graph-point-modal.module.css";
 
 /**
- * Открывает полные материалы одной выбранной точки по отдельному чтению.
+ * Координирует чтение материалов и переключение точек в одном устойчивом окне.
  *
  * Используется для:
- *  - централизованного просмотра Markdown и адресов checkpoint или lifecycle
- *  - мобильного полноэкранного чтения без изменения масштаба и области графа
+ *  - одноколоночного чтения больших материалов с компактной навигацией
+ *  - сохранения списка ветки при загрузке выбранной точки
  */
 export const GraphPointModal = (props: GraphPointModalProps) => {
   const { projectId, pointRef, onClose, onSelectPoint } = props;
   const query = useWorkGraphPoint(projectId, pointRef);
   const isMobile = useMediaQuery("(max-width: 47.99em)");
-  const base = useProjectBasePath();
   const detail = query.data;
   const titleRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const navigationButtonRef = useRef<HTMLButtonElement>(null);
+  const navigationId = useId();
+  const [isNavigationOpen, setIsNavigationOpen] = useState(false);
+  const [hasOpenedNavigation, setHasOpenedNavigation] = useState(false);
+  const [navigationSessionId, setNavigationSessionId] = useState<string | null>(null);
+  const sessionId = detail?.session.id ?? navigationSessionId;
+  const selectedPointId = detail?.point.id ?? pointRef;
   const loadedPointId = detail?.point.id;
   useEffect(() => {
     if (loadedPointId === undefined) return;
@@ -39,163 +39,125 @@ export const GraphPointModal = (props: GraphPointModalProps) => {
     titleRef.current?.focus({ preventScroll: true });
   }, [loadedPointId]);
   const hasError = isDefined(query.error);
-  const title = detail?.point.title ?? "Открываем точку";
-  const presentation =
-    detail === undefined
-      ? null
-      : getWorkPointPresentation(detail.point, detail.run, detail.session);
-  const kindLabel = presentation?.label ?? "Материалы точки";
-  const timeLabel = detail === undefined ? "" : formatWorkTime(detail.point.at);
-  const fields = detail === undefined ? [] : getPointMaterials(detail);
-  const checkpoint = detail?.checkpoint;
-  const summary = checkpoint?.summary ?? "";
-  const hasSummary = summary.trim() !== "";
-  const references = (checkpoint?.references ?? []).map((reference) => ({
-    ...reference,
-    id: `${reference.ref.kind}:${reference.ref.id}`,
-    href: `${base}/relations?root=${encodeURIComponent(`${reference.ref.kind}:${reference.ref.id}`)}`,
-  }));
-  const acceptedIds = checkpoint?.acceptedSessionIds ?? [];
-  const hasReferences = isNonEmptyArray(references);
-  const hasAcceptance = isNonEmptyArray(acceptedIds);
-  const intentId =
-    checkpoint?.intentId ??
-    (detail?.point.kind === "session-created" ? detail.session.originCheckpointId : null);
-  const hasIntent = intentId !== null;
-  const hasAssignment =
-    detail !== undefined &&
-    detail.point.kind !== "session-created" &&
-    detail.session.description.trim() !== "";
-  const identifiers =
-    detail === undefined
-      ? []
-      : [
-          { label: "Адрес точки", value: detail.point.id },
-          { label: "Ветка", value: detail.session.key },
-          { label: "ID ветки", value: detail.session.id },
-          { label: "Ключ checkpoint", value: detail.checkpoint?.key ?? "" },
-          { label: "Участие автора", value: detail.run?.key ?? "" },
-          { label: "Предыдущее участие", value: detail.previousRun?.key ?? "" },
-          { label: "Клиент", value: detail.run?.client ?? "" },
-          { label: "Внешняя сессия", value: detail.run?.sourceSessionId ?? "" },
-        ].filter((field) => field.value !== "");
+  const canNavigate = isDefined(sessionId);
+  const mountedSessionId = hasOpenedNavigation ? sessionId : null;
+  const NavigationIcon = isNavigationOpen ? ChevronUp : ChevronDown;
+  const agentName = detail?.run?.actor ?? "Агент не указан";
+  const windowTitle = isDefined(detail) ? agentName : "История работы";
+  const windowLabel = isDefined(detail) ? `История работы · Агент: ${agentName}` : "История работы";
+  const workTitle = isDefined(detail) ? `Работа: ${detail.session.title}` : "";
+
+  /**
+   * Загружает список при первом открытии и затем сохраняет его экземпляр скрытым.
+   */
+  const handleToggleNavigation = (): void => {
+    setHasOpenedNavigation(true);
+    setIsNavigationOpen((opened) => !opened);
+  };
+
+  /**
+   * Удерживает контекст навигации, пока отдельный запрос разрешает новую точку.
+   */
+  const handleSelectPoint = (ref: string): void => {
+    setNavigationSessionId(sessionId);
+    setIsNavigationOpen(false);
+    if (ref === detail?.point.id) {
+      contentRef.current?.scrollTo({ top: 0 });
+      titleRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    navigationButtonRef.current?.focus({ preventScroll: true });
+    onSelectPoint(ref);
+  };
+
+  /**
+   * Первое Escape закрывает выбор точки и возвращает фокус на его кнопку.
+   */
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== "Escape" || event.nativeEvent.isComposing || !isNavigationOpen) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsNavigationOpen(false);
+    navigationButtonRef.current?.focus({ preventScroll: true });
+  };
   return (
     <Modal.Root
       opened
       centered
-      size="lg"
+      size="65rem"
+      xOffset="1.5rem"
+      yOffset="1.5rem"
       fullScreen={isMobile}
+      closeOnEscape={!isNavigationOpen}
       onClose={onClose}
       returnFocus={false}
-      classNames={{ content: styles.root }}
+      classNames={{ content: styles.root, header: styles.header, body: styles.body }}
     >
       <Modal.Overlay />
-      <Modal.Content ref={contentRef}>
+      <Modal.Content onKeyDownCapture={handleKeyDown}>
         <Modal.Header role="presentation">
-          <Modal.Title>{kindLabel}</Modal.Title>
-          <Modal.CloseButton aria-label="Закрыть материал точки" />
+          <Modal.Title className={styles.windowTitle} aria-label={windowLabel}>
+            <span className={styles.agentIcon}>
+              <Bot size={20} aria-hidden />
+            </span>
+            <span>{windowTitle}</span>
+          </Modal.Title>
+          <Button
+            ref={navigationButtonRef}
+            variant="subtle"
+            className={styles.navigationButton}
+            rightSection={<NavigationIcon size={16} aria-hidden />}
+            aria-expanded={isNavigationOpen}
+            aria-controls={navigationId}
+            disabled={!canNavigate}
+            onClick={handleToggleNavigation}
+          >
+            Точки ветки
+          </Button>
+          <Modal.CloseButton className={styles.closeButton} aria-label="Закрыть материал точки" />
+          <p className={styles.workTitle}>{workTitle}</p>
         </Modal.Header>
-        <Modal.Body>
-          <h2 ref={titleRef} className={styles.title} tabIndex={-1} data-autofocus>
-            {title}
-          </h2>
-          {query.isLoading && <p role="status">Читаем полный материал…</p>}
+        <div id={navigationId} hidden={!isNavigationOpen} className={styles.navigation}>
+          {isDefined(mountedSessionId) && (
+            <BranchPoints
+              key={mountedSessionId}
+              projectId={projectId}
+              sessionId={mountedSessionId}
+              selectedPointId={selectedPointId}
+              onSelectPoint={handleSelectPoint}
+            />
+          )}
+        </div>
+        <Modal.Body ref={contentRef}>
+          {query.isLoading && (
+            <div className={styles.pending} role="status">
+              <p>Читаем материал точки…</p>
+              <Skeleton height={30} width="70%" animate={false} />
+              <Skeleton height={44} width="45%" animate={false} />
+              <Skeleton height={160} animate={false} />
+            </div>
+          )}
           {hasError && (
-            <div role="alert">
+            <div role="alert" className={styles.error}>
               <p>{query.error?.message}</p>
-              <Button variant="default" onClick={() => void query.mutate().catch(() => undefined)}>
+              <Button
+                variant="default"
+                mih={44}
+                onClick={() => void query.mutate().catch(() => undefined)}
+              >
                 Повторить чтение точки
               </Button>
             </div>
           )}
           {isDefined(detail) && (
-            <div className={styles.content}>
-              <p className={styles.meta}>
-                {timeLabel} · {detail.session.title}
-              </p>
-              <div className={styles.author}>
-                <WorkAuthorAvatar operator={detail.run?.operator ?? null} size={44} />
-                <RunAttribution run={detail.run} />
-              </div>
-              {isDefined(detail.previousRun) && (
-                <p className={styles.meta}>
-                  Предыдущее участие: {detail.previousRun.actor} ·{" "}
-                  {detail.previousRun.operator?.name ?? "Пользователь не указан"}. Передача
-                  сохраняет прежнего автора.
-                </p>
-              )}
-              {hasSummary && <p className={styles.summary}>{summary}</p>}
-              <BranchPoints
-                key={detail.session.id}
-                projectId={projectId}
-                sessionId={detail.session.id}
-                selectedPointId={detail.point.id}
-                onSelectPoint={onSelectPoint}
+            <>
+              <PointReport detail={detail} titleRef={titleRef} />
+              <PointContext
+                key={detail.point.id}
+                detail={detail}
+                onSelectPoint={handleSelectPoint}
               />
-              {fields.map((field) => (
-                <section key={field.label} className={styles.material}>
-                  <h3>{field.label}</h3>
-                  <MarkdownView text={field.text} headingStartLevel={4} />
-                </section>
-              ))}
-              {hasIntent && (
-                <Button variant="subtle" onClick={() => onSelectPoint(`${intentId}:checkpoint`)}>
-                  Открыть исходное намерение
-                </Button>
-              )}
-              {hasAcceptance && (
-                <section className={styles.material}>
-                  <h3>Явно принятые результаты</h3>
-                  <ul>
-                    {acceptedIds.map((id) => (
-                      <li key={id}>
-                        <Button variant="subtle" onClick={() => onSelectPoint(`${id}:closed`)}>
-                          Открыть результат дочерней ветки
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-              {hasReferences && (
-                <section className={styles.material}>
-                  <h3>Прикреплённые материалы</h3>
-                  <ul>
-                    {references.map((reference) => (
-                      <li key={reference.id}>
-                        <Link to={reference.href}>
-                          {reference.key ?? reference.id} · {reference.title}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className={styles.meta}>
-                    Сохранённые подписи ссылок; переход открывает текущий контекст сущности.
-                  </p>
-                </section>
-              )}
-              {hasAssignment && (
-                <details className={styles.details}>
-                  <summary>Поручение ветки</summary>
-                  <MarkdownView text={detail.session.description} headingStartLevel={3} />
-                </details>
-              )}
-              <details className={styles.details}>
-                <summary>Адреса и подключение</summary>
-                <div className={styles.identifiers}>
-                  {identifiers.map((field) => (
-                    <label key={field.label}>
-                      {field.label}
-                      <input
-                        readOnly
-                        value={field.value}
-                        onFocus={(event) => event.currentTarget.select()}
-                      />
-                    </label>
-                  ))}
-                </div>
-              </details>
-            </div>
+            </>
           )}
         </Modal.Body>
       </Modal.Content>

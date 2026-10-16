@@ -1,4 +1,5 @@
 import type { WorkGraphPointDetail } from "domains/work-history";
+import { getPointReadingGuide } from "./point-reading-guide";
 
 /** Заполненный смысловой Markdown-раздел выбранной точки. */
 export type PointMaterial = {
@@ -13,9 +14,10 @@ export type PointMaterial = {
  */
 export const getPointMaterials = (detail: WorkGraphPointDetail): PointMaterial[] => {
   const { point, session, checkpoint, run } = detail;
+  const { materialLabel } = getPointReadingGuide(detail);
   if (checkpoint !== null)
     return [
-      { label: "Материал", text: checkpoint.body },
+      { label: materialLabel, text: checkpoint.body },
       { label: "Сделано", text: checkpoint.done },
       { label: "Остаток и блокеры", text: checkpoint.remaining },
       { label: "Следующий шаг", text: checkpoint.nextStep },
@@ -24,26 +26,9 @@ export const getPointMaterials = (detail: WorkGraphPointDetail): PointMaterial[]
   if (point.kind === "session-created")
     return session.description.trim() === ""
       ? []
-      : [{ label: "Поручение", text: session.description }];
+      : [{ label: materialLabel, text: session.description }];
   if (point.kind === "session-closed")
-    return session.result.trim() === ""
-      ? []
-      : [
-          {
-            label: session.status === "cancelled" ? "Причина отмены" : "Итог работы",
-            text: session.result,
-          },
-        ];
+    return session.result.trim() === "" ? [] : [{ label: materialLabel, text: session.result }];
   const text = point.kind === "run-started" ? (run?.reason ?? "") : (run?.endSummary ?? "");
-  return text.trim() === ""
-    ? []
-    : [
-        {
-          label:
-            point.kind === "run-started"
-              ? "Причина подключения или передачи"
-              : "Материал окончания участия",
-          text,
-        },
-      ];
+  return text.trim() === "" ? [] : [{ label: materialLabel, text }];
 };

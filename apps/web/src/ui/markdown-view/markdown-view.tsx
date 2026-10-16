@@ -6,6 +6,7 @@ import { MarkdownLink } from "ui/markdown-link";
 import { MarkdownCheckbox } from "./ui/markdown-checkbox/markdown-checkbox";
 import { getHeadingTags } from "./helpers/get-heading-tags";
 import { remarkHeadingHierarchy } from "./helpers/remark-heading-hierarchy";
+import { rehypeFocusableBlocks } from "./helpers/rehype-focusable-blocks";
 import type { MarkdownViewProps } from "./types/markdown-view-props.type";
 import styles from "./styles/markdown-view.module.css";
 
@@ -22,11 +23,15 @@ export const MarkdownView = (props: MarkdownViewProps) => {
     emptyText = "Пока не заполнено",
     headingOffset = 0,
     headingStartLevel,
+    focusableBlocks = false,
     className,
     ...rootAttrs
   } = props;
   const rootClassName = clsx(styles.root, compact && styles._compact, className);
   const remarkPlugins: NonNullable<Options["remarkPlugins"]> = [remarkGfm];
+  const rehypePlugins: NonNullable<Options["rehypePlugins"]> = focusableBlocks
+    ? [rehypeFocusableBlocks]
+    : [];
   if (headingStartLevel !== undefined)
     remarkPlugins.push([remarkHeadingHierarchy, headingStartLevel]);
   const effectiveOffset = headingStartLevel === undefined ? headingOffset : 0;
@@ -40,6 +45,7 @@ export const MarkdownView = (props: MarkdownViewProps) => {
     <div {...rootAttrs} className={rootClassName}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
         components={{
           input: MarkdownCheckbox,
           a: MarkdownLink,

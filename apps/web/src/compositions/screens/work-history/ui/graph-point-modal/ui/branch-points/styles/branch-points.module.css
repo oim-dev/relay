@@ -1,11 +1,7 @@
 .root {
   display: grid;
   gap: var(--mantine-spacing-xs);
-  margin-block: var(--mantine-spacing-lg);
-  padding: var(--mantine-spacing-sm);
-  border: 1px solid var(--tasks-border);
-  border-radius: var(--mantine-radius-md);
-  background: var(--tasks-surface-quiet);
+  padding: 0.75rem 1rem;
 }
 
 .heading {
@@ -52,9 +48,6 @@
 }
 
 .scrollArea {
-  max-height: 18rem;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
   padding: 3px;
 
   &:focus-visible {
@@ -65,7 +58,7 @@
 
 .list {
   display: grid;
-  gap: var(--mantine-spacing-xs);
+  gap: 0.25rem;
   margin: 0;
   padding: 0;
   list-style: none;

@@ -12,6 +12,8 @@ export type MarkdownViewParams = {
   headingOffset?: 0 | 1 | 2 | 3 | 4 | 5;
   /** Начальный уровень первого реального заголовка; нормализует иерархию без пропусков, имеет приоритет над headingOffset. */
   headingStartLevel?: 1 | 2 | 3 | 4 | 5 | 6;
+  /** Разрешает фокус на таблицах и блоках кода для клавиатурной прокрутки широких материалов. */
+  focusableBlocks?: boolean;
 };
 /** Атрибуты корневого элемента. */
 type RootAttrs = Omit<ComponentPropsWithoutRef<"div">, "children">;

@@ -43,7 +43,7 @@ export const BranchPoints = (props: BranchPointsProps) => {
         </h3>
         <span className={styles.count}>{countLabel}</span>
       </div>
-      <p className={styles.description}>Только эта ветка · сначала новые</p>
+      <p className={styles.description}>Сначала новые</p>
       {isCurrentOutsidePage && (
         <p className={styles.description}>Открытая точка находится в более ранней части списка.</p>
       )}
@@ -53,7 +53,13 @@ export const BranchPoints = (props: BranchPointsProps) => {
       {hasError && (
         <div role="alert" className={styles.error}>
           <p>{query.error?.message}</p>
-          <Button variant="default" size="xs" onClick={query.refresh} disabled={query.isRefreshing}>
+          <Button
+            variant="default"
+            size="xs"
+            mih={44}
+            onClick={query.refresh}
+            disabled={query.isRefreshing}
+          >
             Перечитать точки ветки
           </Button>
         </div>
@@ -75,7 +81,13 @@ export const BranchPoints = (props: BranchPointsProps) => {
         </div>
       )}
       {query.hasMore && (
-        <Button variant="default" size="xs" onClick={query.loadMore} disabled={isMoreDisabled}>
+        <Button
+          variant="default"
+          size="xs"
+          mih={44}
+          onClick={query.loadMore}
+          disabled={isMoreDisabled}
+        >
           Более ранние точки ветки
         </Button>
       )}
