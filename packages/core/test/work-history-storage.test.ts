@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentRun, WorkCheckpoint, WorkSession } from "@relay/contracts/work-history";
 import { workCheckpointSchema } from "@relay/contracts/work-history";
@@ -134,7 +135,7 @@ const command = (requestId: string) => ({
   request: {},
 });
 async function directory(t: TestContext) {
-  const dir = await mkdtemp("/tmp/opencode/relay-work-history-storage-");
+  const dir = await mkdtemp(join(tmpdir(), "relay-work-history-storage-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   return dir;
 }

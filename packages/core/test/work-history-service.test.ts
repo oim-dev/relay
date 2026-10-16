@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { constants } from "node:fs";
 import { copyFile, cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as contract from "@relay/contracts/work-history";
 import { WorkHistoryService } from "../src/application/work-history/service.js";
@@ -21,7 +22,7 @@ import { failWal } from "./helpers/wal.js";
 
 const markdown = "\n# Полный материал 🧪\r\n\n  Пробелы\t  \n```ts\nconst x = 1\n```\n\n";
 async function fixture(t: TestContext) {
-  const root = await mkdtemp("/tmp/opencode/relay-work-history-");
+  const root = await mkdtemp(join(tmpdir(), "relay-work-history-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
   return { root, workspace, service: new WorkHistoryService(workspace) };
@@ -676,7 +677,7 @@ test("Атрибуция человека: snapshot подключения, на
 
 test("Независимые копии: случайные адреса, объединение файлов, явный reindex и doctor без потерь", async (t) => {
   const { workspace, root, service } = await fixture(t);
-  const copy = await mkdtemp("/tmp/opencode/relay-work-history-copy-");
+  const copy = await mkdtemp(join(tmpdir(), "relay-work-history-copy-"));
   t.after(() => rm(copy, { recursive: true, force: true }));
   await cp(join(root, ".relay"), join(copy, ".relay"), { recursive: true });
   const otherWorkspace = await openWorkspace(copy);

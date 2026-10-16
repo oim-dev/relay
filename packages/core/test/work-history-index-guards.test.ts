@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
@@ -20,7 +21,7 @@ const owner = (state: WorkHistoryMutation) => ({
   requestId: "operation",
 });
 async function fixture(t: TestContext) {
-  const root = await mkdtemp("/tmp/opencode/relay-work-history-index-guards-");
+  const root = await mkdtemp(join(tmpdir(), "relay-work-history-index-guards-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
   const service = new WorkHistoryService(workspace);
@@ -180,7 +181,7 @@ for (const damage of ["same-size-card-replacement", "missing-single-address"]) {
 }
 
 test("История: пустые целые индексы допускают неизвестный адрес, но не выдумывают запись", async (t) => {
-  const root = await mkdtemp("/tmp/opencode/relay-work-history-index-empty-");
+  const root = await mkdtemp(join(tmpdir(), "relay-work-history-index-empty-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
   const service = new WorkHistoryService(workspace);

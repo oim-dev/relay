@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { test } from "node:test";
@@ -32,7 +33,7 @@ const cpId = (id: string) => `${id}:checkpoint`;
 const created = (id: string) => `${id}:created`;
 const closed = (id: string) => `${id}:closed`;
 async function fixture(t: TestContext) {
-  const root = await mkdtemp("/tmp/opencode/relay-work-history-graph-");
+  const root = await mkdtemp(join(tmpdir(), "relay-work-history-graph-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
   return {
