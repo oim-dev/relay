@@ -40,7 +40,7 @@ npx @oim-dev/relay-cli init
 npx @oim-dev/relay-cli overview
 ```
 
-Результат: `.relay/config.json`, хранилище и системные доски `product`/`infrastructure`.
+Результат: `.relay/config.json`, хранилище и продуктовая доска `product`.
 Init не заменяет данные. Для проверки не создавайте служебную задачу: чтений достаточно.
 Пустой паспорт — нормальное начальное состояние.
 

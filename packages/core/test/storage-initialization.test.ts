@@ -12,6 +12,7 @@ import { EntityDeletionService } from "../src/application/entities/deletion.js";
 import { PlanningService } from "../src/application/planning/service.js";
 import { ReleasesService } from "../src/application/releases/service.js";
 import { migrationBackupDir } from "./helpers/migration-bases.js";
+import { seedInfrastructureBoard } from "./helpers/workspace.js";
 
 test("100 смен статуса задачи: размер и число файлов стабильны, все владельцы и tombstone без аудита", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "relay-status-growth-"));
@@ -90,6 +91,7 @@ test("init/read/reindex не создают общего журнала; пра�
   const root = await mkdtemp(join(tmpdir(), "relay-without-audit-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
+  await seedInfrastructureBoard(workspace);
   const tasks = new BoardTasksService(workspace);
   const first = await tasks.create({ board: "product", requestId: "first" }, "agent");
   const second = await tasks.create({ board: "product", requestId: "second" }, "agent");

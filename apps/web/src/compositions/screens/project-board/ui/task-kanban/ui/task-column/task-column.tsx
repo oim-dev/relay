@@ -107,7 +107,7 @@ export const TaskColumn = (props: TaskColumnProps) => {
           <Plus size={16} />
         </ActionIcon>
       </Group>
-      <div className={styles.scroll}>
+      <div className={styles.content}>
         {isInitialLoading && <Skeleton height={108} radius="md" />}
         <Stack gap="sm">
           <SortableContext

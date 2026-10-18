@@ -191,7 +191,7 @@ async function metricWorkspace(t: TestContext) {
       "agent",
     );
   const blocker = await tasks.create(
-    { board: "infrastructure", title: "Блокер", requestId: "blocker" },
+    { board: "product", title: "Блокер", requestId: "blocker" },
     "agent",
   );
   const blocked = await tasks.create(

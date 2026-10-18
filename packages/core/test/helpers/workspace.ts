@@ -10,15 +10,38 @@ import type { BoardTaskRecord } from "@relay/core/domain/board-task";
 import { publishTaskCommentSchema } from "@relay/contracts/entities/task-comments";
 import type { PublishTaskComment } from "@relay/contracts/entities/task-comments";
 import { activityHash } from "@relay/core/storage/task-activity";
+import { BoardRepository } from "@relay/core/storage/boards";
 
-export async function fixture(t: TestContext) {
+/** Подготовленный проект с прежней инфраструктурной доской; для проверки init передайте false. */
+export async function fixture(t: TestContext, infrastructure = true) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "tasks-core-")));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
+  if (infrastructure) await seedInfrastructureBoard(workspace);
   return {
     root,
     workspace,
   };
+}
+
+/** Совместимость с проектами, созданными до отмены автоматической инфраструктурной доски. */
+export async function seedInfrastructureBoard(workspace: Workspace) {
+  await workspace.locked((owned) =>
+    new BoardRepository(workspace).ensure(
+      {
+        version: 1,
+        id: "Infra001",
+        slug: "infrastructure",
+        prefix: "INFRA",
+        kind: "infrastructure",
+        applicationId: null,
+        revision: 1,
+        createdAt: "2026-09-26T00:00:00.000Z",
+        createdBy: "relay",
+      },
+      owned,
+    ),
+  );
 }
 
 /** Старый формат создаётся только явными данными теста, без production mutation. */

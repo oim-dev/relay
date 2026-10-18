@@ -18,6 +18,7 @@ import {
   cliNodeArgs,
   fixture,
   fixtureCleanup,
+  seedInfrastructureBoard,
   successful,
   failed,
   invoke,
@@ -924,6 +925,7 @@ async function quotedFixture(t: TestContext): Promise<App> {
   const root = join(await tempDirectory(t), "проект с 'кавычкой'");
   await mkdir(root);
   successful(await invoke(root, ["init"]));
+  await seedInfrastructureBoard(root);
   return {
     root,
     run: (args, options) =>

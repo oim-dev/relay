@@ -63,7 +63,7 @@ test("A13: status текущей базы не меняет ни одного б
   assert.equal(status.current.dataModel, 3);
   assert.deepEqual(status.current.envelope, [3]);
   assert.equal(status.current.owners.project?.versions["1"]?.live, 1);
-  assert.equal(status.current.owners.board?.versions["1"]?.live, 2);
+  assert.equal(status.current.owners.board?.versions["1"]?.live, 1);
   assert.equal(status.pending, null);
   assert.deepEqual(status.blockers, []);
   assert.deepEqual(diagnosis.steps, { physical: null, data: [], marker: false });

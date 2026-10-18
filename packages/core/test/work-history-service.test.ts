@@ -265,7 +265,7 @@ test("Точный Markdown, сохранённые подписи ссылок 
     "author",
   );
   const task = await engine.create(
-    { requestId: "task", data: { kind: "task", board: "BOARD-INFRA", title: "Задача" } },
+    { requestId: "task", data: { kind: "task", board: "BOARD-PRODUCT", title: "Задача" } },
     "author",
   );
   const planning = new PlanningService(workspace);

@@ -2,6 +2,24 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fixture } from "./helpers/server.js";
 
+test("HTTP нового проекта: только продуктовая доска и доступный обзор", async (t) => {
+  const { app } = await fixture(t, false, false);
+  const boards = await app.inject("/api/v1/boards");
+  assert.equal(boards.statusCode, 200, boards.body);
+  assert.deepEqual(
+    boards.json().data.items.map((entry: { slug: string }) => entry.slug),
+    ["product"],
+  );
+  assert.equal((await app.inject("/api/v1/boards/infrastructure")).statusCode, 404);
+  const overview = await app.inject("/api/v1/product/overview");
+  assert.equal(overview.statusCode, 200, overview.body);
+  assert.deepEqual(overview.json().data.snapshot.boards.byKind, {
+    product: 1,
+    application: 0,
+    infrastructure: 0,
+  });
+});
+
 test("HTTP досок: slug, страницы, создание приложения, повтор, конфликты и изоляция", async (t) => {
   const { app } = await fixture(t);
   const projectId = (await app.inject("/api/v1/context")).json().data.projectId;
