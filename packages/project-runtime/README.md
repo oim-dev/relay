@@ -75,7 +75,9 @@ pnpm --filter @relay/project-runtime run test:git-storage
 
 `build` очищает `dist` и запускает TypeScript. Собственного lint-скрипта нет.
 `test:git-storage` проверяет Git-сценарии на исходниках с coverage модулей синхронизации
-и Core-снимков. Пороги: 90% строк, 80% ветвей и 90% функций. Этот script дополнительно
+и Core-снимков. Включает `git-storage.test.ts` и `git-worktree.test.ts`: реальный worktree,
+появление/смену origin, перенос прежних баз, изоляцию истории кода и fetch дольше 30 секунд.
+Пороги: 90% строк, 80% ветвей и 90% функций. Этот script дополнительно
 входит в обязательную фазу `libraries` локального `check` и PR workflow; обычный `test`
 по-прежнему запускает все тестовые файлы на собранных зависимостях.
 При изменении Backend сверяйте local и HTTP вместе; `test/config.test.ts` не покрывает

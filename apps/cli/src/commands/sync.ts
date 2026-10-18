@@ -1,7 +1,8 @@
 import { join, resolve } from "node:path";
 import { Option, type Command } from "commander";
 import { invariant } from "@relay/core/shared/errors";
-import { managedRoot } from "@relay/project-runtime/git-storage/bootstrap";
+import { managedRoot, migrateToWorktree } from "@relay/project-runtime/git-storage/bootstrap";
+import { currentOrigin } from "@relay/project-runtime/git-storage/remote";
 import { marker, readState } from "@relay/project-runtime/git-storage/state";
 import {
   conflicts,
@@ -27,39 +28,47 @@ export function registerSync(program: Command, runtime: Runtime) {
       "Работает с локальной служебной копией в ~/.relay. База текущего Git-проекта определяется автоматически; без настроенного HTTP дополнительные флаги подключения не нужны. Статус и материалы доступны при SYNC_CONFLICT. now отправляет согласованный снимок без ожидания debounce. Решение конфликта требует его исходный ID; обычные предметные команды заблокированы до успешной публикации решения.",
     examples: [["npx @oim-dev/relay-cli sync status", "Проверить состояние синхронизации"]],
   });
-  for (const name of ["status", "now", "conflicts", "resolve"] as const) {
+  for (const name of ["status", "now", "conflicts", "resolve", "migrate"] as const) {
     const description = {
       status: "Прочитать состояние отправки и блокировки",
       now: "Получить origin и отправить текущий снимок",
       conflicts: "Прочитать причины и версии конфликтующих файлов",
       resolve: "Разрешить конфликт по файлам или выбрать полный снимок",
+      migrate: "Перенести существующую базу в Git worktree проекта",
     }[name];
     const command = createCommand(group, {
       name,
       description,
       details:
-        name === "resolve"
-          ? "Передайте --decisions-file с объектом путь → {take: local|remote} либо {value: полный JSON записи}; '-' читает stdin. Остальные однозначные изменения сохраняются. Для каждого конфликтующего файла нужно решение. Вместо файла --take выбирает весь снимок базы, включая неконфликтующие изменения: сначала изучите sync conflicts. Выбранный снимок проверяется Core. --if-conflict берётся из актуального списка; изменение origin отклоняет старое решение. Отправка не использует force-push."
-          : name === "conflicts"
-            ? "Показывает ID, причины, пути и полное сохранённое содержание B/L/R конфликтующих файлов. $integrity обозначает нарушение предметной целостности; в этом случае показываются все файлы. Markdown в диагностике отражён в дисковом JSON без потери содержания."
-            : "База текущего Git-проекта определяется автоматически. --local нужен для отключения настроенного HTTP; --config — для явного выбора другой базы. Выбор через --project не поддерживается: для зарегистрированной Git-базы запускайте команду из её проекта либо укажите прямой --config. Статус не означает публикацию ещё ожидающих данных. now выполняет сетевую проверку, объединение и публикацию; предметные команды не повторяются.",
+        name === "migrate"
+          ? "Запускайте из исходного Git-проекта. --from-config выбирает файловую базу или прежнюю самостоятельную Git-копию. Перенос сохраняет projectId, записи и исходную базу как резервную копию; прежняя Git-история также сохраняется. Остановите писателей исходной базы на время перехода. Если на origin другая база, перенос отклоняется. Обычный CLI после переноса выбирает worktree; явный --config по-прежнему позволяет открыть сохранённую исходную копию."
+          : name === "resolve"
+            ? "Передайте --decisions-file с объектом путь → {take: local|remote} либо {value: полный JSON записи}; '-' читает stdin. Остальные однозначные изменения сохраняются. Для каждого конфликтующего файла нужно решение. Вместо файла --take выбирает весь снимок базы, включая неконфликтующие изменения: сначала изучите sync conflicts. Выбранный снимок проверяется Core. --if-conflict берётся из актуального списка; изменение origin отклоняет старое решение. Отправка не использует force-push."
+            : name === "conflicts"
+              ? "Показывает ID, причины, пути и полное сохранённое содержание B/L/R конфликтующих файлов. $integrity обозначает нарушение предметной целостности; в этом случае показываются все файлы. Markdown в диагностике отражён в дисковом JSON без потери содержания."
+              : "База текущего Git-проекта определяется автоматически. --local нужен для отключения настроенного HTTP; --config — для явного выбора другой базы. Выбор через --project не поддерживается: для зарегистрированной Git-базы запускайте команду из её проекта либо укажите прямой --config. Статус не означает публикацию ещё ожидающих данных. now выполняет сетевую проверку, объединение и публикацию; предметные команды не повторяются.",
       examples: [
         [
-          `npx @oim-dev/relay-cli sync ${name}${name === "resolve" ? " --if-conflict conflict-id --take local" : ""}`,
+          `npx @oim-dev/relay-cli sync ${name}${name === "resolve" ? " --if-conflict conflict-id --take local" : name === "migrate" ? " --from-config .relay/config.json" : ""}`,
           description,
         ],
       ],
       configure: (entry) =>
-        name === "resolve"
-          ? entry
-              .requiredOption("--if-conflict <id>", "ID прочитанного конфликта")
-              .addOption(
-                new Option("--take <side>", "Полный снимок: local или remote")
-                  .choices(["local", "remote"])
-                  .conflicts("decisionsFile"),
-              )
-              .option("--decisions-file <path>", "Решения по путям в JSON; '-' читает stdin")
-          : entry,
+        name === "migrate"
+          ? entry.requiredOption(
+              "--from-config <path>",
+              "Конфигурация исходной базы, которую нужно сохранить в worktree",
+            )
+          : name === "resolve"
+            ? entry
+                .requiredOption("--if-conflict <id>", "ID прочитанного конфликта")
+                .addOption(
+                  new Option("--take <side>", "Полный снимок: local или remote")
+                    .choices(["local", "remote"])
+                    .conflicts("decisionsFile"),
+                )
+                .option("--decisions-file <path>", "Решения по путям в JSON; '-' читает stdin")
+            : entry,
     });
     command.action(async () => {
       const globals = command.optsWithGlobals<GlobalOptions>();
@@ -103,6 +112,50 @@ export function registerSync(program: Command, runtime: Runtime) {
         "Для управления Git-синхронизацией при настроенном HTTP укажите --local.",
         2,
       );
+      if (name === "migrate") {
+        const source = await readInitializationConfiguration(
+          runtime.cwd,
+          command.opts<{ fromConfig: string }>().fromConfig,
+        );
+        invariant(
+          source.kind === "project",
+          "LOCAL_REQUIRED",
+          "Перенос принимает config базы, не реестр workspace",
+          2,
+        );
+        invariant(
+          globals.local || !source.value.server.url,
+          "LOCAL_REQUIRED",
+          "Для управления Git-синхронизацией при настроенном HTTP укажите --local.",
+          2,
+        );
+        const configPath = await migrateToWorktree(
+          runtime.cwd,
+          command.opts<{ fromConfig: string }>().fromConfig,
+          runtime.env.RELAY_HOME === undefined
+            ? undefined
+            : resolve(runtime.cwd, runtime.env.RELAY_HOME),
+        );
+        printResult(
+          runtime.stdout,
+          {
+            data: { configPath },
+            text: (options) =>
+              cardText(
+                {
+                  title: "База перенесена в Git worktree",
+                  fields: [
+                    ["Конфигурация", configPath, "opaque"],
+                    ["Исходная база", "сохранена как резервная копия"],
+                  ],
+                },
+                options,
+              ),
+          },
+          outputOptions(runtime, globals),
+        );
+        return;
+      }
       let config = globals.config ?? runtime.env.RELAY_CONFIG;
       if (!config) {
         const source = await readInitializationConfiguration(runtime.cwd).catch(
@@ -126,7 +179,18 @@ export function registerSync(program: Command, runtime: Runtime) {
           ? undefined
           : resolve(runtime.cwd, runtime.env.RELAY_HOME),
       );
+      const selected = await readInitializationConfiguration(
+        runtime.cwd,
+        config ?? join(root, "config.json"),
+      );
+      invariant(
+        selected.kind === "project" && (globals.local || !selected.value.server.url),
+        "LOCAL_REQUIRED",
+        "Для управления Git-синхронизацией при настроенном HTTP укажите --local.",
+        2,
+      );
       const info = await marker(root);
+      const origin = await currentOrigin(root);
       const prefix = localInvocation(
         runtime,
         globals,
@@ -200,7 +264,7 @@ export function registerSync(program: Command, runtime: Runtime) {
       printResult(
         runtime.stdout,
         {
-          data: { ...data, identity: info?.identity, root },
+          data: { ...data, identity: info?.identity, origin: origin?.origin ?? null, root },
           text: (options) =>
             cardText(
               {
@@ -208,11 +272,14 @@ export function registerSync(program: Command, runtime: Runtime) {
                   ? "Синхронизация: конфликт"
                   : data.error
                     ? "Синхронизация требует внимания"
-                    : data.firstDirty === null
-                      ? "Синхронизация: нет ожидающей отправки"
-                      : "Синхронизация: ожидается отправка",
+                    : !origin
+                      ? "Синхронизация: локальная база, origin не настроен"
+                      : data.firstDirty === null
+                        ? "Синхронизация: нет ожидающей отправки"
+                        : "Синхронизация: ожидается отправка",
                 fields: [
-                  ["Репозиторий", info?.identity],
+                  ["Репозиторий", info?.version === 2 ? info.sourceRoot : info?.identity],
+                  ["Origin", origin?.origin ?? "не настроен", "opaque"],
                   ["База", root, "opaque"],
                   ["Последняя удалённая версия", data.remote, "opaque"],
                   [

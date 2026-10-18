@@ -121,6 +121,12 @@ test("план CI покрывает все фактические workspace tes
 test("Git-хранилище: новые тесты, coverage и worker входят в обязательные фазы CI", async () => {
   for (const [phase, directory, name, file] of [
     ["libraries", "packages/project-runtime", "@relay/project-runtime", "test/git-storage.test.ts"],
+    [
+      "libraries",
+      "packages/project-runtime",
+      "@relay/project-runtime",
+      "test/git-worktree.test.ts",
+    ],
     ["server", "packages/server-runtime", "@relay/server-runtime", "test/git-storage.test.ts"],
     ["cli", "apps/cli", "@oim-dev/relay-cli", "test/command-sync.test.ts"],
   ]) {
@@ -154,6 +160,7 @@ test("Git-хранилище: новые тесты, coverage и worker вход
     "--test-coverage-branches=80",
     "--test-coverage-functions=90",
     "test/git-storage.test.ts",
+    "test/git-worktree.test.ts",
   ])
     assert(coverage.includes(flag), `Потеряна проверка ${flag}`);
   assert.doesNotMatch(coverage, /\b(?:build|turbo)\b|--test-(?:only|name-pattern|skip-pattern)/);

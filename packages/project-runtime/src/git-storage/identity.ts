@@ -13,6 +13,14 @@ export interface RepositoryIdentity {
   hash: string;
   origin: string;
 }
+export interface RepositoryContext {
+  identity: string;
+  name: string;
+  hash: string;
+  root: string;
+  commonDir: string;
+  origin?: string;
+}
 const knownHosts = new Set(["github.com", "gitlab.com", "bitbucket.org"]);
 
 function urlPath(source: string) {
@@ -125,7 +133,7 @@ export function normalizeOrigin(source: string, cwd = process.cwd()): Repository
   return { identity, name, hash, origin };
 }
 
-export async function discoverRepository(cwd: string): Promise<RepositoryIdentity | undefined> {
+export async function discoverRepository(cwd: string): Promise<RepositoryContext | undefined> {
   // Прежний файловый режим не требует установленного Git. Только реальный Git-контекст
   // разрешает запуск процесса и автоматическое подключение внешней базы.
   let directory = resolve(cwd);
@@ -142,7 +150,31 @@ export async function discoverRepository(cwd: string): Promise<RepositoryIdentit
     4,
   );
   const root = top.stdout.toString("utf8").trim();
-  const remote = await git(root, ["remote", "get-url", "origin"], { allowFailure: true });
+  const common = await git(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  const commonDir = await realpath(common.stdout.toString("utf8").trim());
+  const trees = await git(root, ["worktree", "list", "--porcelain", "-z"]);
+  const main = trees.stdout
+    .toString("utf8")
+    .split("\0")
+    .find((field) => field.startsWith("worktree "));
+  const sourceRoot = main ? main.slice("worktree ".length) : root;
+  const origin = await repositoryOrigin(sourceRoot);
+  const identity = `git:${pathToFileURL(commonDir).href}`;
+  return {
+    identity,
+    name: origin?.name ?? basename(sourceRoot),
+    hash: createHash("sha256").update(identity).digest("hex").slice(0, 32),
+    root: sourceRoot,
+    commonDir,
+    ...(origin ? { origin: origin.origin } : {}),
+  };
+}
+
+/** Относительный remote принадлежит основному checkout, а не внешнему каталогу базы. */
+export async function repositoryOrigin(
+  sourceRoot: string,
+): Promise<RepositoryIdentity | undefined> {
+  const remote = await git(sourceRoot, ["remote", "get-url", "origin"], { allowFailure: true });
   if (remote.code === 2) return undefined;
   invariant(
     !remote.code,
@@ -151,25 +183,16 @@ export async function discoverRepository(cwd: string): Promise<RepositoryIdentit
     4,
   );
   const address = remote.stdout.toString("utf8").trim();
-  let relativeTo = root;
-  if (!isAbsolute(address) && !address.includes("://") && !/^([^/@:]+@)?([^/:]+):/.test(address)) {
-    const trees = await git(root, ["worktree", "list", "--porcelain", "-z"]);
-    const main = trees.stdout
-      .toString("utf8")
-      .split("\0")
-      .find((field) => field.startsWith("worktree "));
-    if (main) relativeTo = main.slice("worktree ".length);
-  }
-  const normalized = normalizeOrigin(address, relativeTo);
+  const normalized = normalizeOrigin(address, sourceRoot);
   if (isAbsolute(normalized.origin)) {
     const canonical = await realpath(normalized.origin).catch(() => normalized.origin);
-    return normalizeOrigin(canonical, root);
+    return normalizeOrigin(canonical, sourceRoot);
   }
   return normalized;
 }
 
 export function repositoryDirectory(
-  repository: RepositoryIdentity,
+  repository: Pick<RepositoryContext, "name" | "hash">,
   home = join(homedir(), ".relay"),
 ) {
   return join(resolve(home), `${repository.name}-${repository.hash}`);

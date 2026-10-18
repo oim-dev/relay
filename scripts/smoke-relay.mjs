@@ -31,6 +31,12 @@ const environment = {
 };
 let client;
 
+async function gitDirectory(root) {
+  return (
+    await exec("git", ["rev-parse", "--absolute-git-dir"], { cwd: root, env: environment })
+  ).stdout.trim();
+}
+
 /** Detached worker может завершаться после закрытия Server/CLI; его база ещё используется. */
 async function waitForManagedWorkers() {
   const exists = async (path) =>
@@ -40,8 +46,8 @@ async function waitForManagedWorkers() {
         if (error.code === "ENOENT") return false;
         throw error;
       });
-  const alive = async (root) => {
-    const file = join(root, ".git/relay-worker-pid.json");
+  const alive = async (directory) => {
+    const file = join(directory, "relay-worker-pid.json");
     if (!(await exists(file))) return false;
     const { pid } = JSON.parse(await readFile(file, "utf8"));
     assert(Number.isSafeInteger(pid) && pid > 0);
@@ -67,10 +73,11 @@ async function waitForManagedWorkers() {
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
       const root = join(home, entry.name),
         deadline = Date.now() + 30000;
+      const metadata = await gitDirectory(root);
       while (
-        (await exists(join(root, ".git/relay-worker/write.lock"))) ||
-        (await exists(join(root, ".git/relay-worker-start.json"))) ||
-        (await alive(root))
+        (await exists(join(metadata, "relay-worker/write.lock"))) ||
+        (await exists(join(metadata, "relay-worker-start.json"))) ||
+        (await alive(metadata))
       ) {
         assert(Date.now() < deadline, `Worker не завершился; сохранён тестовый каталог ${root}`);
         await delay(50);
@@ -287,9 +294,11 @@ try {
   await mkdir(gitProject);
   await exec("git", ["init", "--bare", gitOrigin], { cwd: temporary, env: environment });
   await exec("git", ["init", "--initial-branch", "dev"], { cwd: gitProject, env: environment });
-  await exec("git", ["remote", "add", "origin", gitOrigin], { cwd: gitProject, env: environment });
   const managed = await invoke(gitProject, ["init"]);
   const gitRoot = dirname(managed.configPath);
+  const gitMetadata = await gitDirectory(gitRoot);
+  assert((await readFile(join(gitRoot, ".git"), "utf8")).startsWith("gitdir: "));
+  assert.equal((await invoke(gitProject, ["sync", "status"])).origin, null);
   const gitTask = await invoke(gitProject, [
     "task",
     "create",
@@ -300,11 +309,13 @@ try {
     "--actor",
     "smoke",
   ]);
+  await exec("git", ["remote", "add", "origin", gitOrigin], { cwd: gitProject, env: environment });
+  await invoke(gitProject, ["task", "get", gitTask.ref.id]);
   const deadline = Date.now() + 20000;
   let synchronized = false;
   while (Date.now() < deadline) {
-    const state = JSON.parse(await readFile(join(gitRoot, ".git/relay-sync.json"), "utf8"));
-    if (state.generation > 0 && state.firstDirty === null && !state.error) {
+    const state = JSON.parse(await readFile(join(gitMetadata, "relay-sync.json"), "utf8"));
+    if (state.generation > 0 && state.remote && state.firstDirty === null && !state.error) {
       synchronized = true;
       break;
     }
@@ -312,9 +323,16 @@ try {
   }
   assert(synchronized, "Установленный worker должен отправить запись после выхода CLI");
   const restoredHome = join(temporary, "restored-home");
+  const restoredCode = join(temporary, "restored-code");
+  await mkdir(restoredCode);
+  await exec("git", ["init", "--initial-branch", "dev"], { cwd: restoredCode, env: environment });
+  await exec("git", ["remote", "add", "origin", gitOrigin], {
+    cwd: restoredCode,
+    env: environment,
+  });
   const gitServer = await startServerProcess(
     [installations.server.binary, "--port", "0", "--format", "json"],
-    gitProject,
+    restoredCode,
     { ...environment, RELAY_HOME: restoredHome },
   );
   processes.push(gitServer);

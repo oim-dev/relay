@@ -1,4 +1,5 @@
 import { basename, dirname, join, resolve } from "node:path";
+import { realpath } from "node:fs/promises";
 import { z } from "zod";
 import {
   configSchema,
@@ -10,7 +11,11 @@ import { parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { exists, readJson } from "@relay/core/storage/files";
 import { CONFIG_NAME, readWorkspaceConfig } from "@relay/core/storage/workspace";
-import { managedConfiguration, restoreManagedConfiguration } from "./git-storage/bootstrap.js";
+import {
+  managedConfiguration,
+  restoreManagedConfiguration,
+  registeredWorktree,
+} from "./git-storage/bootstrap.js";
 import { attachManagedStorage } from "./git-storage/access.js";
 
 export const REGISTRY_NAME = "relay.workspace.json";
@@ -78,7 +83,11 @@ export async function locateConfiguration(cwd: string, explicit?: string, regist
 
 /** Общий поиск и классификация файла; проектная база здесь не открывается. */
 async function readConfigurationFile(cwd: string, explicit?: string, registryOnly = false) {
-  const path = await locateConfiguration(cwd, explicit, registryOnly);
+  let path = await locateConfiguration(cwd, explicit, registryOnly);
+  if (explicit === undefined && !registryOnly) {
+    const binding = await registeredWorktree(cwd);
+    if (binding?.migratedFrom === (await realpath(path))) path = join(binding.root, "config.json");
+  }
   const value = await readJson(path);
   const localPath = basename(path) === "config.json" && basename(dirname(path)) === ".relay";
   if (

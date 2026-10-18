@@ -9,10 +9,10 @@ import { createProgram } from "../src/program.js";
 import { commandTree, helpRuntime, renderHelp } from "./helpers/help.js";
 import { failed, invoke, invokeRaw, tempDirectory } from "./helpers/cli.js";
 
-test("help: все 169 листов и группы работают без config и не создают базу", async (t) => {
+test("help: все 170 листов и группы работают без config и не создают базу", async (t) => {
   const root = await tempDirectory(t);
   const tree = commandTree(root);
-  assert.equal(tree.filter(({ command }) => !command.commands.length).length, 169);
+  assert.equal(tree.filter(({ command }) => !command.commands.length).length, 170);
   const examples: string[] = [];
   for (const { command, path } of tree) {
     const result = await renderHelp(root, [...path, "--help"]);

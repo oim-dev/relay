@@ -10,6 +10,9 @@ export interface GitOptions {
   maxBytes?: number;
 }
 
+export const LOCAL_GIT_TIMEOUT = 30_000;
+export const TRANSFER_GIT_TIMEOUT = 60 * 60_000;
+
 /** Git работает только с переданным каталогом, без унаследованного перенаправления индекса. */
 export async function git(cwd: string, args: string[], options: GitOptions = {}) {
   const maxBytes = options.maxBytes ?? 128 * 1024 * 1024;
@@ -82,14 +85,18 @@ export async function git(cwd: string, args: string[], options: GitOptions = {})
         /* Группа уже завершилась. */
       }
     };
-    const timer = setTimeout(() => {
-      failure = new AppError(
-        "SYNC_NETWORK_UNAVAILABLE",
-        "Git не завершился за отведённое время; локальные данные сохранены",
-        4,
-      );
-      terminate();
-    }, options.timeout ?? 30_000);
+    const timer = setTimeout(
+      () => {
+        failure = new AppError(
+          "SYNC_NETWORK_UNAVAILABLE",
+          "Git не завершился за отведённое время; локальные данные сохранены",
+          4,
+        );
+        terminate();
+      },
+      options.timeout ??
+        (["fetch", "push"].includes(args[0] ?? "") ? TRANSFER_GIT_TIMEOUT : LOCAL_GIT_TIMEOUT),
+    );
     const collect = (target: Buffer[], chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > maxBytes) {

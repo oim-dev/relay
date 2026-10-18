@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { join } from "node:path";
 import { readJson, atomicJson } from "@relay/core/storage/files";
 import { AppError } from "@relay/core/shared/errors";
 import {
@@ -7,17 +6,27 @@ import {
   syncStatePath,
   hasManagedMetadata,
   readSyncStateFile,
+  gitMetadataDirectory,
 } from "@relay/core/storage/access";
 
 export const DATA_BRANCH = "relay-data";
 const oid = z.string().regex(/^[a-f0-9]{40,64}$/);
-export const markerSchema = z.strictObject({
+const legacyMarkerSchema = z.strictObject({
   version: z.literal(1),
   identity: z.string().min(1),
   origin: z.string().min(1),
   projectId: z.string().min(1),
   branch: z.literal(DATA_BRANCH),
 });
+export const worktreeMarkerSchema = z.strictObject({
+  version: z.literal(2),
+  identity: z.string().min(1),
+  commonDir: z.string().min(1),
+  sourceRoot: z.string().min(1),
+  projectId: z.string().min(1),
+  branch: z.literal(DATA_BRANCH),
+});
+export const markerSchema = z.union([legacyMarkerSchema, worktreeMarkerSchema]);
 export type ManagedMarker = z.infer<typeof markerSchema>;
 export const conflictSchema = z.strictObject({
   id: z.string(),
@@ -38,6 +47,7 @@ export const stateSchema = z.strictObject({
   sendingGeneration: z.number().int().nonnegative().nullable(),
   lastFetch: z.number().nullable(),
   remote: oid.nullable(),
+  origin: z.string().nullable().default(null),
   error: z.object({ code: z.string(), message: z.string() }).nullable(),
   conflict: conflictSchema.nullable(),
   resolution: oid.nullable(),
@@ -53,6 +63,7 @@ export const initialState = (): SyncState => ({
   sendingGeneration: null,
   lastFetch: null,
   remote: null,
+  origin: null,
   error: null,
   conflict: null,
   resolution: null,
@@ -67,7 +78,7 @@ export const publicationSchema = z.strictObject({
 
 export async function marker(root: string): Promise<ManagedMarker | undefined> {
   if (!(await hasManagedMetadata(root))) return undefined;
-  const parsed = markerSchema.safeParse(await readJson(managedMarker(root)));
+  const parsed = markerSchema.safeParse(await readJson(await managedMarker(root)));
   if (!parsed.success)
     throw new AppError("SYNC_STATE_INVALID", "Метаданные Git-базы повреждены", 4);
   return parsed.data;
@@ -79,7 +90,11 @@ export async function readState(root: string): Promise<SyncState> {
   return parsed.data;
 }
 export async function saveState(root: string, state: SyncState): Promise<void> {
-  await atomicJson(syncStatePath(root), stateSchema.parse(state), join(root, ".git"));
+  await atomicJson(
+    await syncStatePath(root),
+    stateSchema.parse(state),
+    await gitMetadataDirectory(root),
+  );
 }
 export function pushDeadline(
   state: Pick<SyncState, "firstDirty" | "lastDirty">,

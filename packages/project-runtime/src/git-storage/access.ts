@@ -1,11 +1,13 @@
 import { realpath } from "node:fs/promises";
-import { join } from "node:path";
-import { registerWorkspaceAccess, withWorkspaceMaintenance } from "@relay/core/storage/access";
+import {
+  registerWorkspaceAccess,
+  withWorkspaceMaintenance,
+  managedPath,
+} from "@relay/core/storage/access";
 import { exists } from "@relay/core/storage/files";
 import { invariant } from "@relay/core/shared/errors";
 import { marker, readState, saveState } from "./state.js";
-import { normalizeOrigin } from "./identity.js";
-import { gitText } from "./git.js";
+import { discoverRepository } from "./identity.js";
 import { synchronize, recoverPublication, withSyncLock, withDataLock } from "./service.js";
 import { ensureWorker } from "./launcher.js";
 
@@ -13,14 +15,14 @@ export async function attachManagedStorage(path: string): Promise<boolean> {
   const info = await marker(path);
   if (!info) return false;
   const root = await realpath(path);
-  const origin = await gitText(root, ["remote", "get-url", "origin"]);
+  const repository = await discoverRepository(root);
   invariant(
-    normalizeOrigin(origin, root).identity === info.identity,
+    info.version === 1 || repository?.identity === info.identity,
     "SYNC_IDENTITY_MISMATCH",
-    "Origin служебной копии не соответствует сохранённой идентичности",
+    "Worktree не принадлежит зарегистрированному Git-хранилищу",
     4,
   );
-  if (await exists(join(root, ".git/relay-publication.json")))
+  if (await exists(await managedPath(root, "relay-publication.json")))
     await withWorkspaceMaintenance(() => withSyncLock(root, () => recoverPublication(root)));
   registerWorkspaceAccess(root, {
     async before(write) {

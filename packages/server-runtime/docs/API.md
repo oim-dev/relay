@@ -66,7 +66,9 @@ SSE — отдельный поток, не JSON-конверт успешног
 Внешняя Git-база сохраняет те же предметные маршруты. `SYNC_CONFLICT` возвращает 409
 и блокирует обычные чтения/записи до разрешения через локальный CLI; SSE передаёт
 `workspace-error` с тем же кодом. `SYNC_NETWORK_UNAVAILABLE` перед записью — 503:
-мутация не повторяется. Управление `sync status/now/conflicts/resolve` пока доступно
+мутация не повторяется. `SYNC_GIT_OWNER_MISSING`, `SYNC_ORIGIN_CHANGED` и
+`SYNC_WORKTREE_MIGRATION_REQUIRED` возвращают 409: сохранённые файлы не подменяются
+новой базой. Управление `sync status/now/conflicts/resolve/migrate` пока доступно
 только локально, отдельных REST-операций разрешения конфликта нет.
 
 Для POST/PUT/PATCH нужен `Content-Type: application/json`; лимит тела — 1 МиБ.

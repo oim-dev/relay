@@ -9,7 +9,7 @@ import { git, gitText } from "@relay/project-runtime/git-storage/git";
 import { readState } from "@relay/project-runtime/git-storage/state";
 import { synchronize, conflicts } from "@relay/project-runtime/git-storage/service";
 import { managedConfiguration } from "@relay/project-runtime/git-storage/bootstrap";
-import { withWorkspaceMaintenance } from "@relay/core/storage/access";
+import { withWorkspaceMaintenance, gitMetadataDirectory } from "@relay/core/storage/access";
 import { openWorkspace } from "@relay/core/storage/workspace";
 import { EntityEngine } from "@relay/core/application/entities/service";
 import { exists } from "@relay/core/storage/files";
@@ -46,13 +46,14 @@ test("Git CLI: блокировка, полный просмотр и адрес
   const config = await managedConfiguration(code, { home, create: true });
   assert(config);
   const root = dirname(config),
+    gitDir = await gitMetadataDirectory(root),
     engine = new EntityEngine(await openWorkspace(root, config));
   const options = { subprocess: true, env: { RELAY_HOME: home } };
   fixtureCleanup(t, () =>
     until(
       async () =>
-        !(await exists(join(root, ".git/relay-worker/write.lock"))) &&
-        !(await exists(join(root, ".git/relay-worker-start.json"))),
+        !(await exists(join(gitDir, "relay-worker/write.lock"))) &&
+        !(await exists(join(gitDir, "relay-worker-start.json"))),
       "Worker не завершился",
     ),
   );
@@ -72,7 +73,11 @@ test("Git CLI: блокировка, полный просмотр и адрес
     ),
   );
   await synchronize(root);
-  const peerConfig = await managedConfiguration(code, { home: join(directory, "peer") });
+  const peerCode = join(directory, "peer-code");
+  await mkdir(peerCode);
+  await git(peerCode, ["init"]);
+  await git(peerCode, ["remote", "add", "origin", origin]);
+  const peerConfig = await managedConfiguration(peerCode, { home: join(directory, "peer") });
   assert(peerConfig);
   const peer = new EntityEngine(await openWorkspace(dirname(peerConfig), peerConfig));
   for (const [target, body] of [
@@ -193,11 +198,12 @@ test("Git CLI: init вне кода, один пакет после серии �
   const options = { subprocess: true, env: { RELAY_HOME: join(directory, "home") } };
   const initial = successful(await invoke<{ configPath: string }>(code, ["init"], options));
   const root = dirname(initial.data.configPath);
+  const gitDir = await gitMetadataDirectory(root);
   fixtureCleanup(t, async () => {
     await until(
       async () =>
-        !(await exists(join(root, ".git/relay-worker/write.lock"))) &&
-        !(await exists(join(root, ".git/relay-worker-start.json"))),
+        !(await exists(join(gitDir, "relay-worker/write.lock"))) &&
+        !(await exists(join(gitDir, "relay-worker-start.json"))),
       "Фоновый процесс не завершился",
     );
   });
@@ -218,7 +224,7 @@ test("Git CLI: init вне кода, один пакет после серии �
     "Пакет не опубликован после выхода CLI",
   );
   assert.equal(Number(await gitText(origin, ["rev-list", "--count", "relay-data"])), start + 1);
-  const pid = JSON.parse(await readFile(join(root, ".git/relay-worker-pid.json"), "utf8")) as {
+  const pid = JSON.parse(await readFile(join(gitDir, "relay-worker-pid.json"), "utf8")) as {
     pid: number;
   };
   assert(pid.pid > 0);
@@ -228,8 +234,8 @@ test("Git CLI: init вне кода, один пакет после серии �
   for (let i = 0; i < 2; i++) successful(await invoke(code, ["project", "get"], options));
   await until(
     async () =>
-      !(await exists(join(root, ".git/relay-worker/write.lock"))) &&
-      !(await exists(join(root, ".git/relay-worker-start.json"))),
+      !(await exists(join(gitDir, "relay-worker/write.lock"))) &&
+      !(await exists(join(gitDir, "relay-worker-start.json"))),
     "Читающий worker не завершился",
   );
   assert.equal(Number(await gitText(origin, ["rev-list", "--count", "relay-data"])), start + 1);
@@ -282,4 +288,112 @@ test("Git CLI: отказ объясняет только нужный пара�
   assert.match(selected.stdout, /sync не принимает --project/);
   assert.match(selected.stdout, /из каталога нужного Git-проекта/);
   assert.doesNotMatch(selected.stdout, /--local/);
+});
+
+test("Git CLI: init без origin, добавление и смена origin продолжают ту же базу без флагов подключения", async (t) => {
+  const directory = await tempDirectory(t),
+    code = join(directory, "code");
+  await mkdir(code);
+  await git(code, ["init", "--initial-branch", "dev"]);
+  const options = { subprocess: true, env: { RELAY_HOME: join(directory, "home") } };
+  const initial = successful(await invoke<{ configPath: string }>(code, ["init"], options)).data;
+  const root = dirname(initial.configPath),
+    gitDir = await gitMetadataDirectory(root);
+  fixtureCleanup(t, () =>
+    until(
+      async () =>
+        !(await exists(join(gitDir, "relay-worker/write.lock"))) &&
+        !(await exists(join(gitDir, "relay-worker-start.json"))),
+      "Worker не завершился",
+    ),
+  );
+  const status = await invokeRaw(code, ["sync", "status"], options);
+  assert.equal(status.code, 0, status.stdout);
+  assert.match(status.stdout, /origin не настроен/);
+  const task = successful(
+    await invoke<{ ref: { id: string } }>(
+      code,
+      ["task", "create", "--board", "product", "--title", "До origin"],
+      options,
+    ),
+  ).data;
+  await until(
+    async () => (await readState(root)).firstDirty === null,
+    "Локальный коммит не завершён",
+  );
+  for (const [i, name] of ["origin-a.git", "origin-b.git"].entries()) {
+    const remote = join(directory, name);
+    await git(directory, ["init", "--bare", remote]);
+    await git(code, ["remote", i ? "set-url" : "add", "origin", remote]);
+    successful(await invoke(code, ["task", "get", task.ref.id], options));
+    await until(
+      async () =>
+        (await git(remote, ["rev-parse", "--verify", "relay-data"], { allowFailure: true }))
+          .code === 0,
+      "Worker не подключил новый origin",
+    );
+    const config = successful(await invoke<{ configPath: string }>(code, ["init"], options)).data;
+    assert.equal(config.configPath, initial.configPath);
+    assert.match(
+      await gitText(remote, ["show", `relay-data:entities/tasks/${task.ref.id}.json`]),
+      /До origin/,
+    );
+  }
+  assert.equal(await exists(join(code, ".relay")), false);
+});
+
+test("Git CLI: sync migrate переносит файловую базу, обычные команды продолжают работу без config", async (t) => {
+  const directory = await tempDirectory(t),
+    code = join(directory, "code");
+  await mkdir(code);
+  await git(code, ["init", "--initial-branch", "dev"]);
+  const options = { subprocess: true, env: { RELAY_HOME: join(directory, "home") } };
+  const oldConfig = join(code, ".relay/config.json");
+  successful(await invoke(code, ["init", "--config", oldConfig], options));
+  const task = successful(
+    await invoke<{ ref: { id: string } }>(
+      code,
+      ["task", "create", "--board", "product", "--title", "Существующая задача"],
+      options,
+    ),
+  ).data;
+  const before = await readFile(
+    join(dirname(oldConfig), "entities/tasks", `${task.ref.id}.json`),
+    "utf8",
+  );
+  const migrated = successful(
+    await invoke<{ configPath: string }>(
+      code,
+      ["sync", "migrate", "--from-config", ".relay/config.json"],
+      options,
+    ),
+  ).data;
+  assert.notEqual(migrated.configPath, oldConfig);
+  const gitDir = await gitMetadataDirectory(dirname(migrated.configPath));
+  fixtureCleanup(t, () =>
+    until(
+      async () =>
+        !(await exists(join(gitDir, "relay-worker/write.lock"))) &&
+        !(await exists(join(gitDir, "relay-worker-start.json"))),
+      "Worker не завершился",
+    ),
+  );
+  assert.equal(
+    await readFile(join(dirname(oldConfig), "entities/tasks", `${task.ref.id}.json`), "utf8"),
+    before,
+  );
+  const read = await invokeRaw(code, ["task", "get", task.ref.id], options);
+  assert.equal(read.code, 0, read.stdout);
+  assert.match(read.stdout, /Существующая задача/);
+  const status = successful(await invoke<{ root: string }>(code, ["sync", "status"], options)).data;
+  assert.equal(status.root, dirname(migrated.configPath));
+  const configured = JSON.parse(await readFile(migrated.configPath, "utf8"));
+  configured.server.url = "http://127.0.0.1:1";
+  await writeFile(migrated.configPath, JSON.stringify(configured));
+  for (const selectors of [[], ["--config", migrated.configPath]]) {
+    const blocked = await invokeRaw(code, [...selectors, "sync", "status"], options);
+    assert.equal(blocked.code, 2, blocked.stdout);
+    assert.match(blocked.stdout, /укажите --local/);
+    successful(await invoke(code, ["--local", ...selectors, "sync", "status"], options));
+  }
 });

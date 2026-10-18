@@ -9,7 +9,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { exists } from "@relay/core/storage/files";
 import { saveProjectSettings } from "@relay/core/application/project-settings/service";
 import { openWorkspace } from "@relay/core/storage/workspace";
-import { withWorkspaceMaintenance, assertWorkspaceAvailable } from "@relay/core/storage/access";
+import {
+  withWorkspaceMaintenance,
+  assertWorkspaceAvailable,
+  gitMetadataDirectory,
+} from "@relay/core/storage/access";
 import { AppError } from "@relay/core/shared/errors";
 import { withStorageLock } from "@relay/core/storage/lock";
 import { EntityEngine } from "@relay/core/application/entities/service";
@@ -92,7 +96,7 @@ test(
 
 test("Lifecycle: повреждённое или отсутствующее состояние блокирует базу без ремонта", async (t) => {
   const f = await fixture(t);
-  const path = join(f.root, ".git/relay-sync.json");
+  const path = join(f.gitDir, "relay-sync.json");
   for (const value of ["{broken", JSON.stringify({ version: 999 })]) {
     await writeFile(path, value);
     await assert.rejects(readState(f.root), { code: "SYNC_STATE_INVALID" });
@@ -115,12 +119,12 @@ test("Lifecycle: прямой Core не обходит runtime управляе�
 
 test("Lifecycle: второй worker не выполняет синхронизацию под чужой lease", async (t) => {
   const f = await fixture(t);
-  const directory = join(f.root, ".git/relay-worker");
+  const directory = join(f.gitDir, "relay-worker");
   await mkdir(directory, { recursive: true });
   const before = await readState(f.root);
   await withStorageLock(directory, () => runWorker(f.root), directory);
   assert.deepEqual(await readState(f.root), before);
-  assert.equal(await exists(join(f.root, ".git/relay-worker-pid.json")), false);
+  assert.equal(await exists(join(f.gitDir, "relay-worker-pid.json")), false);
 });
 
 test("Lifecycle: потеря сети сохраняет очередь; следующий worker публикует её после восстановления", async (t) => {
@@ -160,26 +164,26 @@ test("Lifecycle: потеря сети сохраняет очередь; сле
 test("Lifecycle: устаревшая reservation после сбоя запуска заменяется новым worker", async (t) => {
   const f = await fixture(t);
   await writeFile(
-    join(f.root, ".git/relay-worker-start.json"),
+    join(f.gitDir, "relay-worker-start.json"),
     JSON.stringify({ at: Date.now() - 10000 }),
   );
   await ensureWorker(f.root);
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
     if (
-      (await exists(join(f.root, ".git/relay-worker-pid.json"))) &&
-      !(await exists(join(f.root, ".git/relay-worker/write.lock"))) &&
-      !(await exists(join(f.root, ".git/relay-worker-start.json")))
+      (await exists(join(f.gitDir, "relay-worker-pid.json"))) &&
+      !(await exists(join(f.gitDir, "relay-worker/write.lock"))) &&
+      !(await exists(join(f.gitDir, "relay-worker-start.json")))
     )
       break;
     await delay(30);
   }
-  const worker = JSON.parse(await readFile(join(f.root, ".git/relay-worker-pid.json"), "utf8")) as {
+  const worker = JSON.parse(await readFile(join(f.gitDir, "relay-worker-pid.json"), "utf8")) as {
     pid: number;
   };
   assert.notEqual(worker.pid, process.pid);
-  assert.equal(await exists(join(f.root, ".git/relay-worker/write.lock")), false);
-  assert.equal(await exists(join(f.root, ".git/relay-worker-start.json")), false);
+  assert.equal(await exists(join(f.gitDir, "relay-worker/write.lock")), false);
+  assert.equal(await exists(join(f.gitDir, "relay-worker-start.json")), false);
 });
 
 async function fixture(t: TestContext) {
@@ -198,18 +202,34 @@ async function fixture(t: TestContext) {
   const workspace = await openWorkspace(root, config);
   const engine = new EntityEngine(workspace);
   const peer = async () => {
-    const config = await managedConfiguration(code, { home: join(directory, randomUUID()) });
+    const peerCode = join(directory, randomUUID());
+    await mkdir(peerCode);
+    await git(peerCode, ["init", "--initial-branch", "dev"]);
+    await git(peerCode, ["remote", "add", "origin", origin]);
+    const config = await managedConfiguration(peerCode, { home });
     assert(config);
     const workspace = await openWorkspace(dirname(config), config);
     return { root: dirname(config), workspace, engine: new EntityEngine(workspace) };
   };
-  return { directory, origin, code, home, root, config, workspace, engine, peer };
+  return {
+    directory,
+    origin,
+    code,
+    home,
+    root,
+    gitDir: await gitMetadataDirectory(root),
+    config,
+    workspace,
+    engine,
+    peer,
+  };
 }
 
 test("Git identity: отсутствие origin и повреждение Git-конфига различаются", async (t) => {
   const f = await fixture(t);
   await git(f.code, ["remote", "remove", "origin"]);
-  assert.equal(await discoverRepository(f.code), undefined);
+  assert.equal((await discoverRepository(f.code))?.origin, undefined);
+  assert.equal(await managedConfiguration(f.code, { home: f.home }), f.config);
   await writeFile(join(f.code, ".git/config"), "[broken");
   await assert.rejects(
     managedConfiguration(f.code, { home: join(f.directory, "another-home"), create: true }),
@@ -415,8 +435,8 @@ test("Настройки проекта проверяют origin до мута�
   const deadline = Date.now() + 10000;
   while (
     Date.now() < deadline &&
-    ((await exists(join(f.root, ".git/relay-worker/write.lock"))) ||
-      (await exists(join(f.root, ".git/relay-worker-start.json"))))
+    ((await exists(join(f.gitDir, "relay-worker/write.lock"))) ||
+      (await exists(join(f.gitDir, "relay-worker-start.json"))))
   )
     await delay(30);
 });
@@ -478,8 +498,8 @@ test(
     const deadline = Date.now() + 10000;
     while (
       Date.now() < deadline &&
-      ((await exists(join(f.root, ".git/relay-worker/write.lock"))) ||
-        (await exists(join(f.root, ".git/relay-worker-start.json"))))
+      ((await exists(join(f.gitDir, "relay-worker/write.lock"))) ||
+        (await exists(join(f.gitDir, "relay-worker-start.json"))))
     )
       await delay(30);
   },
@@ -502,14 +522,13 @@ test("Bootstrap: одновременные подключения получа�
   );
 });
 
-test("Внешняя копия переживает удаление клона кода; известный адрес восстанавливается по регистрации", async (t) => {
+test("Worktree сохраняет файлы при утрате владельца и запрещает обход общего Git-хранилища", async (t) => {
   const f = await fixture(t);
+  const before = await readFile(f.config, "utf8");
   await rm(f.code, { recursive: true });
-  await synchronize(f.root);
-  const id = f.workspace.config.projectId;
-  await rm(f.root, { recursive: true });
-  assert.equal(await restoreManagedConfiguration(f.config), true);
-  assert.equal((await openWorkspace(f.root, f.config)).config.projectId, id);
+  await assert.rejects(synchronize(f.root), { code: "SYNC_GIT_OWNER_MISSING" });
+  await assert.rejects(f.engine.get({ ref: "PROJECT" }), { code: "SYNC_GIT_OWNER_MISSING" });
+  assert.equal(await readFile(f.config, "utf8"), before);
 });
 
 test("Worktree с другим именем и каталогом разделяет идентичность относительного origin", async (t) => {
@@ -534,21 +553,25 @@ test("Bootstrap: отсутствие ветки отличается от не�
   const f = await fixture(t);
   const otherOrigin = join(f.directory, "empty.git");
   await git(f.directory, ["init", "--bare", otherOrigin]);
-  await git(f.code, ["remote", "set-url", "origin", otherOrigin]);
-  await assert.rejects(managedConfiguration(f.code, { home: f.home }), {
+  const otherCode = join(f.directory, "empty-code");
+  await mkdir(otherCode);
+  await git(otherCode, ["init"]);
+  await git(otherCode, ["remote", "add", "origin", otherOrigin]);
+  await assert.rejects(managedConfiguration(otherCode, { home: f.home }), {
     code: "RELAY_NOT_INITIALIZED",
   });
-  const identity = await discoverRepository(f.code);
+  const identity = await discoverRepository(otherCode);
   assert(identity);
   const occupied = repositoryDirectory(identity, f.home);
   await mkdir(occupied);
   await writeFile(join(occupied, "keep.txt"), "не удалять");
-  await assert.rejects(managedConfiguration(f.code, { home: f.home }), {
+  await assert.rejects(managedConfiguration(otherCode, { home: f.home }), {
     code: "SYNC_IDENTITY_MISMATCH",
   });
   assert.equal(await readFile(join(occupied, "keep.txt"), "utf8"), "не удалять");
-  await git(f.code, ["remote", "set-url", "origin", join(f.directory, "missing.git")]);
-  await assert.rejects(managedConfiguration(f.code, { home: f.home }), {
+  await rm(occupied, { recursive: true });
+  await git(otherCode, ["remote", "set-url", "origin", join(f.directory, "missing.git")]);
+  await assert.rejects(managedConfiguration(otherCode, { home: f.home }), {
     code: "SYNC_NETWORK_UNAVAILABLE",
   });
 });
@@ -776,7 +799,7 @@ test("Отказ снимка до WAL не оставляет блокирую�
   await assert.rejects(synchronize(f.root), { code: "STORAGE_LIMIT_EXCEEDED" });
   injected.mock.restore();
   assert.equal((await internal(() => captureSnapshot(f.workspace))).version, before.version);
-  assert.equal(await exists(join(f.root, ".git/relay-publication.json")), false);
+  assert.equal(await exists(join(f.gitDir, "relay-publication.json")), false);
   await withDataLock(f.root, () => assertWorkspaceAvailable(f.root));
   await synchronize(f.root);
   const saved = await internal(() => f.engine.get({ ref: doc.key }));
@@ -831,7 +854,7 @@ for (const failure of ["intent", "file", "published", "removed"] as const) {
       await gitText(f.root, ["rev-parse", "HEAD"]),
       await gitText(f.origin, ["rev-parse", "refs/heads/relay-data"]),
     );
-    await assert.rejects(readFile(join(f.root, ".git/relay-publication.json")), { code: "ENOENT" });
+    await assert.rejects(readFile(join(f.gitDir, "relay-publication.json")), { code: "ENOENT" });
   });
 }
 

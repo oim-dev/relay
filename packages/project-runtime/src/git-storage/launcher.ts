@@ -8,10 +8,17 @@ import { withStorageLock } from "@relay/core/storage/lock";
 import { AppError, isErrno } from "@relay/core/shared/errors";
 import { readState, saveState, pushDeadline, marker } from "./state.js";
 import { synchronize, withDataLock } from "./service.js";
+import { gitMetadataDirectory } from "@relay/core/storage/access";
 
-const reservation = (root: string) => join(root, ".git/relay-worker-start.json");
-const control = (root: string) => join(root, ".git/relay-control");
-const lease = (root: string) => join(root, ".git/relay-worker");
+export async function workerPaths(root: string) {
+  const directory = await gitMetadataDirectory(root);
+  return {
+    directory,
+    reservation: join(directory, "relay-worker-start.json"),
+    control: join(directory, "relay-control"),
+    lease: join(directory, "relay-worker"),
+  };
+}
 
 async function workerFile() {
   const source = import.meta.url.endsWith(".ts");
@@ -31,26 +38,27 @@ async function workerFile() {
 
 export async function ensureWorker(root: string): Promise<void> {
   if (!(await marker(root))) return;
-  await mkdir(control(root), { recursive: true });
+  const paths = await workerPaths(root);
+  await mkdir(paths.control, { recursive: true });
   await withStorageLock(
-    control(root),
+    paths.control,
     async () => {
       const state = await readState(root);
       if (state.conflict && !state.resolution) return;
-      const lock = await stat(join(lease(root), "write.lock")).catch((error: unknown) => {
+      const lock = await stat(join(paths.lease, "write.lock")).catch((error: unknown) => {
         if (isErrno(error, "ENOENT")) return undefined;
         throw error;
       });
       if (lock && Date.now() - lock.mtimeMs < 10_000) return;
-      if (await exists(reservation(root))) {
-        const start = (await readJson(reservation(root))) as { at?: number };
+      if (await exists(paths.reservation)) {
+        const start = (await readJson(paths.reservation)) as { at?: number };
         if (typeof start.at === "number" && Date.now() - start.at < 5000) return;
       }
       const worker = await workerFile();
       const args = worker.source
         ? ["--conditions=tasks-source", "--import", import.meta.resolve("tsx")]
         : [];
-      await atomicJson(reservation(root), { at: Date.now() }, join(root, ".git"));
+      await atomicJson(paths.reservation, { at: Date.now() }, paths.directory);
       await new Promise<void>((accept, reject) => {
         const child = spawn(process.execPath, [...args, worker.path, root], {
           cwd: root,
@@ -66,23 +74,24 @@ export async function ensureWorker(root: string): Promise<void> {
         });
       });
     },
-    control(root),
+    paths.control,
   );
 }
 
 /** Сеть и ожидание debounce принадлежат короткоживущему процессу, а не вызову CLI. */
 export async function runWorker(root: string): Promise<void> {
   if (!(await marker(root))) return;
-  await mkdir(lease(root), { recursive: true });
+  const paths = await workerPaths(root);
+  await mkdir(paths.lease, { recursive: true });
   let failed = false;
   try {
     await withStorageLock(
-      lease(root),
+      paths.lease,
       async () => {
         await atomicJson(
-          join(root, ".git/relay-worker-pid.json"),
+          join(paths.directory, "relay-worker-pid.json"),
           { pid: process.pid },
-          join(root, ".git"),
+          paths.directory,
         );
         const started = Date.now();
         while (Date.now() - started < 60_000) {
@@ -103,7 +112,7 @@ export async function runWorker(root: string): Promise<void> {
           await delay(Math.max(1, Math.min(500, deadline - Date.now())));
         }
       },
-      lease(root),
+      paths.lease,
       { wait: false },
     );
   } catch (error) {
@@ -122,11 +131,11 @@ export async function runWorker(root: string): Promise<void> {
     // Lease уже освобождён. Запрос, пришедший на границе выхода, будет замечен здесь
     // либо запустит преемника сам; ожидающая запись не исчезает вместе с процессом.
     if (await marker(root)) {
-      await mkdir(control(root), { recursive: true });
+      await mkdir(paths.control, { recursive: true });
       await withStorageLock(
-        control(root),
-        () => rm(reservation(root), { force: true }),
-        control(root),
+        paths.control,
+        () => rm(paths.reservation, { force: true }),
+        paths.control,
       );
     }
   }

@@ -9,6 +9,7 @@ import { readSnapshotFiles, persistentPath } from "@relay/core/application/stora
 import type { PersistentSnapshot } from "@relay/core/application/storage/snapshot";
 import { digest, jsonValue } from "@relay/core/storage/entity-store/format";
 import { git, gitText } from "./git.js";
+import { gitMetadataDirectory, managedPath } from "@relay/core/storage/access";
 
 export const IGNORE = ".indexes/\nruntime/\ntransactions/\n";
 
@@ -74,7 +75,7 @@ export async function writeSnapshot(root: string, files: PersistentSnapshot) {
 }
 
 export async function prepareSnapshot(root: string, files: PersistentSnapshot, projectId: string) {
-  const directory = await mkdtemp(join(root, ".git/relay-candidate-"));
+  const directory = await mkdtemp(await managedPath(root, "relay-candidate-"));
   try {
     await writeSnapshot(directory, files);
     const workspace = await openWorkspace(directory, join(directory, "config.json"));
@@ -94,9 +95,10 @@ export async function prepareSnapshot(root: string, files: PersistentSnapshot, p
 
 /** Изолированный индекс: ни файлы рабочей базы, ни индекс исходного проекта не меняются. */
 export async function commitSnapshot(root: string, files: PersistentSnapshot, parents: string[]) {
-  const directory = await mkdtemp(join(root, ".git/relay-tree-"));
-  const index = join(root, ".git", `relay-index-${randomUUID()}`);
-  const env = { GIT_WORK_TREE: directory, GIT_INDEX_FILE: index, GIT_DIR: join(root, ".git") };
+  const gitDir = await gitMetadataDirectory(root);
+  const directory = await mkdtemp(join(gitDir, "relay-tree-"));
+  const index = join(gitDir, `relay-index-${randomUUID()}`);
+  const env = { GIT_WORK_TREE: directory, GIT_INDEX_FILE: index, GIT_DIR: gitDir };
   try {
     await writeSnapshot(directory, files);
     await git(root, ["read-tree", "--empty"], { env });

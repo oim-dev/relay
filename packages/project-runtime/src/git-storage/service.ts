@@ -7,7 +7,11 @@ import { AppError, invariant } from "@relay/core/shared/errors";
 import { atomicJson, exists, readJson, syncDirectory } from "@relay/core/storage/files";
 import { withStorageLock } from "@relay/core/storage/lock";
 import { openWorkspace } from "@relay/core/storage/workspace";
-import { withWorkspaceMaintenance } from "@relay/core/storage/access";
+import {
+  withWorkspaceMaintenance,
+  managedPath,
+  gitMetadataDirectory,
+} from "@relay/core/storage/access";
 import {
   captureSnapshot,
   applySnapshot,
@@ -19,10 +23,12 @@ import type { PersistentSnapshot } from "@relay/core/application/storage/snapsho
 import { git, gitText } from "./git.js";
 import { marker, readState, saveState, publicationSchema, DATA_BRANCH } from "./state.js";
 import { snapshotAt, prepareSnapshot, commitSnapshot, mergeSnapshots } from "./snapshots.js";
+import { currentOrigin } from "./remote.js";
+import type { RepositoryIdentity } from "./identity.js";
 
 export async function withSyncLock<T>(root: string, operation: () => Promise<T>): Promise<T> {
   invariant(await marker(root), "SYNC_NOT_MANAGED", "Git-база удалена или больше недоступна", 4);
-  const directory = join(root, ".git/relay-sync-lock");
+  const directory = await managedPath(root, "relay-sync-lock");
   await mkdir(directory, { recursive: true });
   return withStorageLock(directory, operation, directory);
 }
@@ -32,15 +38,23 @@ export async function withDataLock<T>(root: string, operation: () => Promise<T>)
   return withStorageLock(root, operation, join(root, "runtime"));
 }
 
-async function fetchRemote(root: string) {
+async function fetchRemote(root: string, origin: RepositoryIdentity | undefined) {
+  if (!origin) return;
+  const found = await git(
+    root,
+    ["ls-remote", "--exit-code", "--heads", origin.origin, `refs/heads/${DATA_BRANCH}`],
+    { allowFailure: true },
+  );
+  if (found.code === 2) return;
+  invariant(
+    !found.code,
+    "SYNC_NETWORK_UNAVAILABLE",
+    "Не удалось проверить origin; локальные данные сохранены",
+    4,
+  );
   const result = await git(
     root,
-    [
-      "fetch",
-      "--no-tags",
-      "origin",
-      `refs/heads/${DATA_BRANCH}:refs/remotes/origin/${DATA_BRANCH}`,
-    ],
+    ["fetch", "--no-tags", origin.origin, `refs/heads/${DATA_BRANCH}:refs/relay/remote`],
     { allowFailure: true },
   );
   invariant(
@@ -49,7 +63,7 @@ async function fetchRemote(root: string) {
     "Не удалось получить служебную ветку origin; проверьте сеть и доступ. Локальные данные сохранены",
     4,
   );
-  return gitText(root, ["rev-parse", `refs/remotes/origin/${DATA_BRANCH}`]);
+  return gitText(root, ["rev-parse", "refs/relay/remote"]);
 }
 const head = (root: string) => gitText(root, ["rev-parse", "HEAD"]);
 const workspaceAt = (root: string) => openWorkspace(root, join(root, "config.json"));
@@ -69,19 +83,19 @@ async function finishPublication(root: string, oldHead: string, newHead: string)
     await git(root, ["update-ref", `refs/heads/${DATA_BRANCH}`, newHead, oldHead]);
   await git(root, ["read-tree", newHead]);
   const publication = publicationSchema.parse(
-    await readJson(join(root, ".git/relay-publication.json")),
+    await readJson(await managedPath(root, "relay-publication.json")),
   );
   if (publication.resolution) {
     const state = await readState(root);
     state.resolution = newHead;
     await saveState(root, state);
   }
-  await rm(join(root, ".git/relay-publication.json"), { force: true });
-  await syncDirectory(join(root, ".git"));
+  await rm(await managedPath(root, "relay-publication.json"), { force: true });
+  await syncDirectory(await gitMetadataDirectory(root));
 }
 
 export async function recoverPublication(root: string) {
-  const path = join(root, ".git/relay-publication.json");
+  const path = await managedPath(root, "relay-publication.json");
   if (!(await exists(path))) return;
   const record = publicationSchema.parse(await readJson(path));
   const info = await marker(root);
@@ -124,9 +138,9 @@ async function publishLocal(
     );
     await git(root, ["update-ref", "refs/relay/pending", newHead]);
     await atomicJson(
-      join(root, ".git/relay-publication.json"),
+      await managedPath(root, "relay-publication.json"),
       { oldHead, newHead, source, target: snapshotVersion(files), resolution },
-      join(root, ".git"),
+      await gitMetadataDirectory(root),
     );
     try {
       await applySnapshot(workspace, prepared, source);
@@ -137,8 +151,8 @@ async function publishLocal(
         !(await exists(join(root, "transactions/pending.json"))) &&
         snapshotVersion(await readSnapshotFiles(root)) === source
       ) {
-        await rm(join(root, ".git/relay-publication.json"), { force: true });
-        await syncDirectory(join(root, ".git"));
+        await rm(await managedPath(root, "relay-publication.json"), { force: true });
+        await syncDirectory(await gitMetadataDirectory(root));
       }
       throw error;
     }
@@ -180,14 +194,28 @@ async function block(
   );
 }
 
-async function send(root: string, commit: string, generation: number, request: number) {
+async function send(
+  root: string,
+  commit: string,
+  generation: number,
+  request: number,
+  origin: RepositoryIdentity,
+) {
+  invariant(
+    (await currentOrigin(root))?.identity === origin.identity,
+    "SYNC_ORIGIN_CHANGED",
+    "Origin изменился во время подготовки отправки; повторите sync now",
+    4,
+  );
   const sentVersion = snapshotVersion(await snapshotAt(root, commit));
-  const sent = await git(root, ["push", "origin", `${commit}:refs/heads/${DATA_BRANCH}`], {
+  const sent = await git(root, ["push", origin.origin, `${commit}:refs/heads/${DATA_BRANCH}`], {
     allowFailure: true,
   });
   let remote = commit;
   if (sent.code) {
-    remote = await withSyncLock(root, () => fetchRemote(root));
+    const received = await withSyncLock(root, () => fetchRemote(root, origin));
+    invariant(received, "SYNC_PUSH_REJECTED", "Origin отклонил создание служебной ветки", 4);
+    remote = received;
     const included = await git(root, ["merge-base", "--is-ancestor", commit, remote], {
       allowFailure: true,
     });
@@ -198,6 +226,12 @@ async function send(root: string, commit: string, generation: number, request: n
       4,
     );
   }
+  invariant(
+    (await currentOrigin(root))?.identity === origin.identity,
+    "SYNC_ORIGIN_CHANGED",
+    "Origin изменился во время отправки; результат нового подключения требует проверки",
+    4,
+  );
   await withDataLock(root, async () => {
     const state = await readState(root);
     if (
@@ -208,6 +242,7 @@ async function send(root: string, commit: string, generation: number, request: n
       state.lastDirty = null;
     } else if (state.firstDirty === null) state.firstDirty = state.lastDirty = Date.now();
     state.remote = remote;
+    state.origin = origin.identity;
     state.checked = Math.max(state.checked, request);
     state.error = null;
     if (state.resolution === commit) {
@@ -218,7 +253,7 @@ async function send(root: string, commit: string, generation: number, request: n
   });
 }
 
-type Outgoing = { commit: string; generation: number; request: number };
+type Outgoing = { commit: string; generation: number; request: number; origin: RepositoryIdentity };
 
 async function synchronizeOnce(
   root: string,
@@ -229,6 +264,7 @@ async function synchronizeOnce(
   const info = await marker(root);
   invariant(info, "SYNC_NOT_MANAGED", "Эта база не подключена к Git-синхронизации", 4);
   let state = await readState(root);
+  const origin = await currentOrigin(root);
   invariant(
     !state.conflict || state.resolution,
     "SYNC_CONFLICT",
@@ -238,17 +274,49 @@ async function synchronizeOnce(
   );
   if (
     !publish &&
+    state.origin === (origin?.identity ?? null) &&
     requestedAt !== undefined &&
     state.lastFetch !== null &&
     state.lastFetch >= requestedAt
   )
     return;
   const request = state.requested;
-  const remote = await fetchRemote(root);
+  const remote = await fetchRemote(root, origin);
   const workspace = await workspaceAt(root);
   const source = await captureSnapshot(workspace);
   const oldHead = await head(root);
   const localHead = await snapshotAt(root, oldHead);
+  if (!remote) {
+    const dirty = source.version !== snapshotVersion(localHead);
+    let nextHead = oldHead;
+    if (publish && dirty) {
+      const prepared = await prepareSnapshot(root, source.files, info.projectId);
+      nextHead = await commitSnapshot(root, source.files, [oldHead]);
+      await publishLocal(root, source.files, prepared, source.version, oldHead, nextHead);
+    }
+    const generation = await withDataLock(root, async () => {
+      const current = await readState(root);
+      invariant(
+        snapshotVersion(await readSnapshotFiles(root)) === source.version,
+        "SYNC_SNAPSHOT_CHANGED",
+        "База изменилась во время подготовки локального снимка",
+        4,
+      );
+      current.origin = origin?.identity ?? null;
+      current.remote = null;
+      current.lastFetch = origin ? Date.now() : null;
+      current.checked = Math.max(current.checked, request);
+      current.error = null;
+      if (publish) current.sendingGeneration = current.generation;
+      if (!origin && publish) current.firstDirty = current.lastDirty = null;
+      else if (origin && current.firstDirty === null)
+        current.firstDirty = current.lastDirty = Date.now();
+      await saveState(root, current);
+      return current.generation;
+    });
+    if (publish && origin) return { commit: nextHead, generation, request, origin };
+    return;
+  }
   const remoteFiles = await snapshotAt(root, remote);
   const remoteConfig = remoteFiles["config.json"] as Record<string, unknown>;
   invariant(
@@ -332,6 +400,7 @@ async function synchronizeOnce(
   await withDataLock(root, async () => {
     state = await readState(root);
     state.remote = remote;
+    state.origin = origin?.identity ?? null;
     state.lastFetch = Date.now();
     state.checked = Math.max(state.checked, request);
     state.error = null;
@@ -339,7 +408,8 @@ async function synchronizeOnce(
       state.firstDirty = state.lastDirty = Date.now();
     await saveState(root, state);
   });
-  if (publish && nextHead !== remote) return { commit: nextHead, generation, request };
+  if (publish && nextHead !== remote && origin)
+    return { commit: nextHead, generation, request, origin };
   else if (publish)
     await withDataLock(root, async () => {
       const current = await readState(root);
@@ -363,11 +433,12 @@ export async function synchronize(
           synchronizeOnce(root, options.publish ?? true, options.requestedAt),
         );
         if (outgoing) {
-          const directory = join(root, ".git/relay-push-lock");
+          const directory = await managedPath(root, "relay-push-lock");
           await mkdir(directory, { recursive: true });
           await withStorageLock(
             directory,
-            () => send(root, outgoing.commit, outgoing.generation, outgoing.request),
+            () =>
+              send(root, outgoing.commit, outgoing.generation, outgoing.request, outgoing.origin),
             directory,
           );
         }
@@ -431,7 +502,13 @@ export async function resolveConflict(root: string, conflictId: string, choice: 
         "Конфликт изменился; перечитайте его материалы",
         4,
       );
-      const remote = await fetchRemote(root);
+      const remote = await fetchRemote(root, await currentOrigin(root));
+      invariant(
+        remote,
+        "SYNC_ORIGIN_REQUIRED",
+        "Для разрешения опубликованного конфликта нужен origin с веткой relay-data",
+        4,
+      );
       if (remote !== conflict.remote) {
         const base = await gitText(root, ["merge-base", conflict.local, remote]);
         try {

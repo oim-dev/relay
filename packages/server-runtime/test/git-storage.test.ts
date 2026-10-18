@@ -9,7 +9,7 @@ import { synchronize, resolveConflict } from "@relay/project-runtime/git-storage
 import { readState } from "@relay/project-runtime/git-storage/state";
 import { git } from "@relay/project-runtime/git-storage/git";
 import { openWorkspace } from "@relay/core/storage/workspace";
-import { withWorkspaceMaintenance } from "@relay/core/storage/access";
+import { withWorkspaceMaintenance, gitMetadataDirectory } from "@relay/core/storage/access";
 import { exists } from "@relay/core/storage/files";
 import { EntityEngine } from "@relay/core/application/entities/service";
 import { createServer } from "../src/bootstrap.js";
@@ -31,6 +31,7 @@ test(
     });
     assert(config);
     const root = dirname(config),
+      gitDir = await gitMetadataDirectory(root),
       workspace = await openWorkspace(root, config),
       engine = new EntityEngine(workspace);
     const doc = await withWorkspaceMaintenance(() =>
@@ -49,7 +50,11 @@ test(
       ),
     );
     await synchronize(root);
-    const otherConfig = await managedConfiguration(code, { home: join(directory, "other") });
+    const otherCode = join(directory, "other-code");
+    await mkdir(otherCode);
+    await git(otherCode, ["init"]);
+    await git(otherCode, ["remote", "add", "origin", origin]);
+    const otherConfig = await managedConfiguration(otherCode, { home: join(directory, "other") });
     assert(otherConfig);
     const otherRoot = dirname(otherConfig),
       other = new EntityEngine(await openWorkspace(otherRoot, otherConfig));
@@ -61,8 +66,8 @@ test(
       const deadline = Date.now() + 15000;
       while (
         Date.now() < deadline &&
-        ((await exists(join(root, ".git/relay-worker/write.lock"))) ||
-          (await exists(join(root, ".git/relay-worker-start.json"))))
+        ((await exists(join(gitDir, "relay-worker/write.lock"))) ||
+          (await exists(join(gitDir, "relay-worker-start.json"))))
       )
         await delay(50);
       await rm(directory, { recursive: true, force: true });
