@@ -33,6 +33,9 @@ import { DATA_BRANCH, marker, initialState, saveState, readState } from "./state
 import { snapshotAt, writeSnapshot, commitSnapshot, prepareSnapshot } from "./snapshots.js";
 import { attachManagedStorage } from "./access.js";
 import { synchronize } from "./service.js";
+import { assertInitializationTarget } from "@relay/core/storage/initialization";
+import { templateOriginSchema, templateRequest, loadTemplate } from "./template.js";
+import type { TemplateOptions, TemplateRequest, TemplateOrigin } from "./template.js";
 
 const bindingSchema = z.strictObject({
   version: z.literal(2),
@@ -53,6 +56,7 @@ const installIntentSchema = z.strictObject({
   commit: z.string().regex(/^[a-f0-9]{40,64}$/),
   remote: z.string().nullable(),
   migratedFrom: z.string().optional(),
+  template: templateOriginSchema.optional(),
 });
 type InstallIntent = z.infer<typeof installIntentSchema>;
 const migratedCopySchema = z.strictObject({
@@ -193,6 +197,16 @@ type InstallOptions = {
   create?: boolean;
   home?: string;
   imported?: { files: PersistentSnapshot; sourceConfig: string; parent?: string };
+  template?: TemplateRequest;
+};
+type Installation = {
+  configPath: string;
+  template?: TemplateOrigin;
+  validation?: Awaited<ReturnType<typeof validateWorkspace>>;
+  synchronization?: {
+    status: "local" | "synchronized" | "pending";
+    error?: { code: string; message: string };
+  };
 };
 async function finishInstall(
   repository: RepositoryContext,
@@ -228,7 +242,7 @@ async function finishInstall(
     );
   const workspace = await openWorkspace(root, join(root, "config.json"));
   await new StorageService(workspace).reindex();
-  await validateWorkspace(workspace);
+  const validation = await validateWorkspace(workspace);
   const projectId = workspace.config.projectId;
   invariant(
     projectId && projectId === (files["config.json"] as { projectId?: string }).projectId,
@@ -236,6 +250,15 @@ async function finishInstall(
     "У базы отсутствует постоянная идентичность",
     4,
   );
+  if (intent.template)
+    invariant(
+      projectId === intent.template.projectId &&
+        workspace.config.projectSettings?.name === intent.template.name &&
+        workspace.config.projectSettings.slug === intent.template.slug,
+      "SYNC_RECOVERY_CONFLICT",
+      "Подготовленная база не соответствует идентичности установки шаблона",
+      4,
+    );
   const origin = await repositoryOrigin(repository.root);
   if (!(await marker(root)))
     await atomicJson(
@@ -261,18 +284,72 @@ async function finishInstall(
   await rm(journal, { force: true });
   await syncDirectory(dirname(journal));
   await attachManagedStorage(root);
-  if (options.create && origin) await synchronize(root);
-  return join(root, "config.json");
+  let synchronization: Installation["synchronization"] = { status: "local" };
+  if ((options.create || intent.template) && origin) {
+    try {
+      const state = await synchronize(root);
+      synchronization = { status: state.origin === null ? "local" : "synchronized" };
+    } catch (error) {
+      if (!intent.template) throw error;
+      synchronization = {
+        status: "pending",
+        error: {
+          code: error instanceof AppError ? error.code : "SYNC_FAILED",
+          message: error instanceof Error ? error.message : "Ошибка синхронизации",
+        },
+      };
+    }
+  }
+  return {
+    configPath: join(root, "config.json"),
+    validation,
+    synchronization,
+    ...(intent.template ? { template: intent.template } : {}),
+  };
 }
 
-async function install(repository: RepositoryContext, options: InstallOptions) {
+async function install(
+  repository: RepositoryContext,
+  options: InstallOptions,
+): Promise<Installation> {
   const control = join(repository.commonDir, "relay-install");
   await mkdir(control, { recursive: true });
   return withStorageLock(
     control,
     async () => {
+      const journal = join(control, "pending.json");
+      const pending = (await exists(journal))
+        ? installIntentSchema.parse(await readJson(journal))
+        : undefined;
       const binding = await registeredWorktree(repository.root);
-      if (binding) {
+      if (options.template) {
+        invariant(
+          !binding || pending?.template,
+          "ALREADY_INITIALIZED",
+          "У проекта уже есть база Relay; шаблон не заменяет её",
+          4,
+          { configPath: binding && join(binding.root, "config.json") },
+        );
+        invariant(
+          !pending || pending.template,
+          "ALREADY_INITIALIZED",
+          "У проекта есть другая незавершённая установка базы",
+          4,
+        );
+        if (pending?.template) {
+          const source = pending.template;
+          invariant(
+            source.repository === options.template.repository &&
+              source.ref === options.template.ref &&
+              (options.template.name === undefined || source.name === options.template.name) &&
+              (options.template.slug === undefined || source.slug === options.template.slug),
+            "TEMPLATE_INSTALL_MISMATCH",
+            "Продолжите установку с тем же шаблоном, именем и slug",
+            4,
+          );
+        }
+      }
+      if (binding && !pending?.template) {
         invariant(
           !options.imported || binding.migratedFrom === options.imported.sourceConfig,
           "SYNC_ALREADY_MANAGED",
@@ -295,12 +372,8 @@ async function install(repository: RepositoryContext, options: InstallOptions) {
           4,
         );
         await attachManagedStorage(binding.root);
-        return join(binding.root, "config.json");
+        return { configPath: join(binding.root, "config.json") };
       }
-      const journal = join(control, "pending.json");
-      const pending = (await exists(journal))
-        ? installIntentSchema.parse(await readJson(journal))
-        : undefined;
       invariant(
         !pending || pending.identity === repository.identity,
         "SYNC_IDENTITY_MISMATCH",
@@ -333,6 +406,26 @@ async function install(repository: RepositoryContext, options: InstallOptions) {
       }
       await mkdir(dirname(root), { recursive: true });
       if (pending) {
+        if (pending.template) {
+          const local = await git(
+            repository.root,
+            ["rev-parse", "--verify", `refs/heads/${DATA_BRANCH}`],
+            { allowFailure: true },
+          );
+          invariant(
+            local.code || local.stdout.toString("utf8").trim() === pending.commit,
+            "SYNC_RECOVERY_CONFLICT",
+            "Ветка незавершённой установки изменена извне",
+            4,
+          );
+          if (local.code)
+            await git(repository.root, [
+              "update-ref",
+              `refs/heads/${DATA_BRANCH}`,
+              pending.commit,
+              "",
+            ]);
+        }
         if (!(await exists(root))) {
           // Только точный адрес собственного намерения; чужие worktree не очищаются.
           await git(repository.root, ["worktree", "remove", "--force", "--force", root], {
@@ -350,6 +443,19 @@ async function install(repository: RepositoryContext, options: InstallOptions) {
         }
         return finishInstall(repository, pending, options, journal);
       }
+      if (options.template) {
+        const target = await lstat(root).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return undefined;
+          throw error;
+        });
+        invariant(
+          !target,
+          "ALREADY_INITIALIZED",
+          "Каталог целевой базы уже существует; шаблон не заменяет его",
+          4,
+          { root },
+        );
+      }
       if (await exists(root)) {
         const info = await marker(root);
         invariant(
@@ -361,7 +467,7 @@ async function install(repository: RepositoryContext, options: InstallOptions) {
         );
         await saveBinding(repository, root, info.projectId);
         await attachManagedStorage(root);
-        return join(root, "config.json");
+        return { configPath: join(root, "config.json") };
       }
       const local = await git(
         repository.root,
@@ -369,7 +475,48 @@ async function install(repository: RepositoryContext, options: InstallOptions) {
         { allowFailure: true },
       );
       let commit = local.code ? undefined : local.stdout.toString("utf8").trim();
-      const remote = await remoteHead(repository);
+      let remote: string | undefined;
+      let template: TemplateOrigin | undefined;
+      if (options.template) {
+        const codeBranch = await git(repository.root, ["symbolic-ref", "--quiet", "HEAD"], {
+          allowFailure: true,
+        });
+        invariant(
+          codeBranch.code ||
+            codeBranch.stdout.toString("utf8").trim() !== `refs/heads/${DATA_BRANCH}`,
+          "TEMPLATE_BRANCH_IN_USE",
+          "Ветка relay-data предназначена для базы; выберите другую ветку кода перед установкой шаблона",
+          4,
+        );
+        invariant(
+          !commit,
+          "ALREADY_INITIALIZED",
+          "Локальная ветка relay-data уже существует; шаблон не заменяет её",
+          4,
+        );
+        if (repository.origin) {
+          const found = await git(
+            repository.root,
+            ["ls-remote", "--exit-code", "--heads", repository.origin, `refs/heads/${DATA_BRANCH}`],
+            { allowFailure: true },
+          );
+          invariant(
+            found.code !== 0,
+            "ALREADY_INITIALIZED",
+            "Origin уже содержит базу Relay; шаблон не заменяет её",
+            4,
+          );
+          invariant(
+            found.code === 2,
+            "SYNC_NETWORK_UNAVAILABLE",
+            "Не удалось проверить origin; ошибка сети не означает отсутствие базы",
+            4,
+          );
+        }
+        const prepared = await loadTemplate(dirname(root), options.template, repository.name);
+        template = prepared.template;
+        commit = await commitSnapshot(repository.root, prepared.files, []);
+      } else remote = await remoteHead(repository);
       if (options.imported) {
         invariant(
           !commit,
@@ -433,16 +580,19 @@ async function install(repository: RepositoryContext, options: InstallOptions) {
         }
       }
       await validateBranch(repository, commit);
-      if (local.code)
-        await git(repository.root, ["update-ref", `refs/heads/${DATA_BRANCH}`, commit, ""]);
       const intent: InstallIntent = {
         identity: repository.identity,
         root,
         commit,
         remote: remote ?? null,
         ...(options.imported ? { migratedFrom: options.imported.sourceConfig } : {}),
+        ...(template ? { template } : {}),
       };
-      await atomicJson(journal, intent, control);
+      // Шаблон фиксирует точный новый коммит до создания ref: сбой не создаёт вторую копию.
+      if (template) await atomicJson(journal, intent, control);
+      if (local.code)
+        await git(repository.root, ["update-ref", `refs/heads/${DATA_BRANCH}`, commit, ""]);
+      if (!template) await atomicJson(journal, intent, control);
       await git(repository.root, [
         "worktree",
         "add",
@@ -517,7 +667,7 @@ export async function migrateToWorktree(cwd: string, sourceConfig: string, home?
         4,
       );
     });
-    const config = await install(repository, {
+    const { configPath: config } = await install(repository, {
       create: true,
       ...(home ? { home } : {}),
       imported: { files, sourceConfig: source, ...(parent ? { parent } : {}) },
@@ -542,7 +692,54 @@ export async function managedConfiguration(
 ): Promise<string | undefined> {
   const repository = await discoverRepository(cwd);
   if (!repository) return;
-  return withWorkspaceMaintenance(() => install(repository, options));
+  return (await withWorkspaceMaintenance(() => install(repository, options))).configPath;
+}
+
+/** Новая независимая база: источник используется однократно и не регистрируется как remote. */
+export async function initializeFromTemplate(cwd: string, input: TemplateOptions) {
+  const request = templateRequest(cwd, input);
+  const repository = await discoverRepository(cwd);
+  invariant(
+    repository,
+    "TEMPLATE_GIT_REQUIRED",
+    "Для установки шаблона сначала выполните git init в новом проекте",
+    4,
+  );
+  const { locateConfiguration } = await import("../config.js");
+  const configuration = await locateConfiguration(cwd).catch((error: unknown) => {
+    if (error instanceof AppError && error.code === "CONFIG_NOT_FOUND") return undefined;
+    throw error;
+  });
+  invariant(
+    !configuration,
+    "ALREADY_INITIALIZED",
+    "Найдена конфигурация Relay; шаблон устанавливается только в новый Git-проект",
+    4,
+  );
+  await assertInitializationTarget(join(repository.root, ".relay/config.json"));
+  return withWorkspaceMaintenance(async () => {
+    const result = await install(repository, {
+      create: true,
+      template: request,
+      ...(input.home ? { home: input.home } : {}),
+    });
+    invariant(
+      result.template && result.validation && result.synchronization,
+      "SYNC_STATE_INVALID",
+      "Установка шаблона не вернула проверенный результат",
+      4,
+    );
+    return {
+      configPath: result.configPath,
+      storageDir: dirname(result.configPath),
+      projectId: result.template.projectId,
+      name: result.template.name,
+      slug: result.template.slug,
+      template: result.template,
+      validation: result.validation,
+      synchronization: result.synchronization,
+    };
+  });
 }
 
 export async function managedRoot(cwd: string, explicit?: string, home?: string) {

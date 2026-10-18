@@ -1,11 +1,15 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { invariant } from "@relay/core/shared/errors";
 import { openWorkspace } from "@relay/core/storage/workspace";
 import { StorageService } from "@relay/core/application/storage/service";
 import { validateWorkspace } from "@relay/core/application/validate";
-import { readSnapshotFiles, persistentPath } from "@relay/core/application/storage/snapshot";
+import {
+  readSnapshotFiles,
+  persistentPath,
+  writeSnapshotFiles,
+} from "@relay/core/application/storage/snapshot";
 import type { PersistentSnapshot } from "@relay/core/application/storage/snapshot";
 import { digest, jsonValue } from "@relay/core/storage/entity-store/format";
 import { git, gitText } from "./git.js";
@@ -64,13 +68,7 @@ export async function snapshotAt(root: string, commit: string): Promise<Persiste
 }
 
 export async function writeSnapshot(root: string, files: PersistentSnapshot) {
-  for (const [path, data] of Object.entries(files)) {
-    invariant(persistentPath(path), "SYNC_UNSAFE_PATH", "Недопустимый путь Git-снимка", 4, {
-      path,
-    });
-    await mkdir(dirname(join(root, path)), { recursive: true });
-    await writeFile(join(root, path), JSON.stringify(data, null, 2) + "\n");
-  }
+  await writeSnapshotFiles(root, files);
   await writeFile(join(root, ".gitignore"), IGNORE);
 }
 
