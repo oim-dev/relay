@@ -5,7 +5,7 @@ import type { WorkspaceSignal } from "infra/workspace-events";
 import { useGetProject } from "./use-get-project/use-get-project.hook";
 
 /** Состояние синхронизации рабочего проекта. */
-export type ProjectConnection = WorkspaceSignal;
+export type ProjectConnection = WorkspaceSignal & { blocked: boolean };
 
 /**
  * Разделяет подписку проекта и публикует состояние совместной работы.
@@ -16,6 +16,16 @@ export const useProjectConnection = (): SWRSubscriptionResponse<ProjectConnectio
   return useSWRSubscription(
     key,
     (scope, { next }: SWRSubscriptionOptions<ProjectConnection, Error>) =>
-      subscribeWorkspace(scope[1], (signal) => next(null, { ...signal })),
+      subscribeWorkspace(scope[1], (signal) =>
+        next(null, {
+          ...signal,
+          blocked: [
+            "SYNC_CONFLICT",
+            "SYNC_RECOVERY_REQUIRED",
+            "SYNC_RECOVERY_CONFLICT",
+            "SYNC_STATE_INVALID",
+          ].includes(signal.code ?? ""),
+        }),
+      ),
   );
 };

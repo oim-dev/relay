@@ -5,11 +5,12 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { commandsFor, requiredJobs, runPhase } from "./ci.mjs";
-import { runCheck } from "./check.mjs";
+import { setImmediate } from "node:timers/promises";
+import { commandsFor, jobDependencies, requiredJobs, runPhase } from "./ci.mjs";
+import { checkOptions, DEFAULT_JOBS, runCheck } from "./check.mjs";
 import { subprocessEnv } from "./release/test-env.mjs";
 
-test("полный runner последовательно исполняет обязательные PR-фазы без публикации", async () => {
+test("полный runner исполняет обязательные PR-фазы по зависимостям без публикации", async () => {
   const actual = [];
   const logs = [];
   const result = await runCheck({
@@ -34,6 +35,106 @@ test("полный runner последовательно исполняет об
         /publish|capture|restore|artifact-id|verified-pr|gate/,
       );
   }
+});
+
+test("jobs: безопасный default, последовательный режим и строгая проверка аргументов", () => {
+  assert.deepEqual(checkOptions([]), { jobs: DEFAULT_JOBS });
+  assert.deepEqual(checkOptions(["--jobs", "1"]), { jobs: 1 });
+  assert.deepEqual(checkOptions(["-j", "3"]), { jobs: 3 });
+  assert.deepEqual(checkOptions(["--jobs=4"]), { jobs: 4 });
+  for (const args of [
+    ["--jobs"],
+    ["--jobs", "0"],
+    ["--jobs", "-1"],
+    ["--jobs", "1.5"],
+    ["--jobs", "Infinity"],
+    ["--jobs", "9007199254740992"],
+    ["--unknown"],
+    ["extra"],
+  ])
+    assert.throws(() => checkOptions(args), /--jobs/);
+});
+
+for (const jobs of [1, 2, 3]) {
+  test(`параллельный runner: jobs=${jobs}, build-barrier и ограничение одновременно активных фаз`, async () => {
+    const completed = new Set();
+    let active = 0,
+      maximum = 0;
+    const result = await runCheck({
+      jobs,
+      log() {},
+      async execute(phase) {
+        for (const dependency of jobDependencies[phase])
+          assert(completed.has(dependency), `${phase} обогнала ${dependency}`);
+        maximum = Math.max(maximum, ++active);
+        assert(active <= jobs);
+        await setImmediate();
+        active--;
+        completed.add(phase);
+        return { status: 0 };
+      },
+    });
+    assert.equal(result.status, 0);
+    assert.equal(maximum, jobs);
+    assert.equal(active, 0);
+    assert.equal(completed.size, Object.keys(requiredJobs).length);
+  });
+}
+
+test("ошибка параллельной фазы прекращает новые запуски и дожидается уже работающей", async () => {
+  const started = [],
+    releases = new Map();
+  let finished = false;
+  const pending = runCheck({
+    jobs: 2,
+    log() {},
+    execute(phase) {
+      started.push(phase);
+      if (["preflight", "build"].includes(phase)) return Promise.resolve({ status: 0 });
+      return new Promise((resolve) => releases.set(phase, resolve));
+    },
+  }).then((result) => {
+    finished = true;
+    return result;
+  });
+  await setImmediate();
+  assert.deepEqual(started, ["preflight", "build", "tooling", "lint-types"]);
+  releases.get("tooling")({ status: 17 });
+  await setImmediate();
+  assert.equal(finished, false);
+  assert.deepEqual(started, ["preflight", "build", "tooling", "lint-types"]);
+  releases.get("lint-types")({ status: 0 });
+  assert.equal((await pending).status, 17);
+});
+
+test("параллельный runner: отмена передаётся каждой работающей фазе", async () => {
+  const controller = new AbortController(),
+    active = [],
+    cancelled = [];
+  const pending = runCheck({
+    jobs: 2,
+    signal: controller.signal,
+    log() {},
+    execute(phase, { signal }) {
+      if (["preflight", "build"].includes(phase)) return Promise.resolve({ status: 0 });
+      active.push(phase);
+      return new Promise((resolve) =>
+        signal.addEventListener(
+          "abort",
+          () => {
+            cancelled.push(phase);
+            resolve({ signal: signal.reason });
+          },
+          { once: true },
+        ),
+      );
+    },
+  });
+  await setImmediate();
+  controller.abort("SIGTERM");
+  assert.equal((await pending).signal, "SIGTERM");
+  assert.deepEqual(active, ["tooling", "lint-types"]);
+  assert.deepEqual(cancelled, active);
 });
 
 for (const failure of [{ status: 7 }, { signal: "SIGTERM" }, { error: new Error("ENOENT") }]) {
@@ -100,6 +201,14 @@ test("workflow, gate и локальный runner используют один 
       phases.filter((phase) => !["capture", "restore", "artifact-id"].includes(phase)),
       [id],
     );
+    if (id !== "gate") {
+      const needs = body.match(/^    needs: ([\w-]+)\s*$/m);
+      assert.deepEqual(
+        needs ? [needs[1]] : [],
+        jobDependencies[id],
+        `${id}: зависимости workflow и локального runner различаются`,
+      );
+    }
   }
   const gate = blocks.find((match) => match[1] === "gate")[2];
   const needs = gate.match(/needs:\s*\[([^\]]+)\]/);

@@ -211,6 +211,9 @@ class ProjectEvents implements OnModuleInit, OnModuleDestroy {
             const name = filename?.toString();
             if (path === this.unifiedRoot && name !== undefined) {
               const relative = name.replaceAll("\\", "/");
+              // Git-состояние меняется и при чтении. Оно не должно запускать новое
+              // чтение через собственный fs.watch; блокировка обнаруживается poll.
+              if (relative === ".git" || relative.startsWith(".git/")) return;
               if (
                 /^(entities|relations|keyspaces)\/.+\.json$/.test(relative) &&
                 !relative.includes("/.indexes/")

@@ -20,7 +20,7 @@ const DEFAULT_NEXT =
  * обслуживания (migrate, recovery, reindex) владельцем, а не повтора запроса.
  */
 const isStorageCode = (code: string): boolean =>
-  code.startsWith("STORAGE_") || code === "UNKNOWN_ENTITY_KIND";
+  code.startsWith("STORAGE_") || code.startsWith("SYNC_") || code === "UNKNOWN_ENTITY_KIND";
 
 /**
  * Собирает объяснение для человека: причина и код сервера, отсутствие действия
@@ -28,7 +28,13 @@ const isStorageCode = (code: string): boolean =>
  */
 const formatStorageFailure = (code: string, message: string, next?: string): string => {
   const reason = message.replace(/[.\s]+$/, "");
-  const action = (next ?? DEFAULT_NEXT).replace(/[.\s]+$/, "");
+  const fallback =
+    code === "SYNC_CONFLICT"
+      ? "npx @oim-dev/relay-cli sync conflicts"
+      : code.startsWith("SYNC_")
+        ? "npx @oim-dev/relay-cli sync status"
+        : DEFAULT_NEXT;
+  const action = (next ?? fallback).replace(/[.\s]+$/, "");
   return `${reason} (${code}). Web не изменяет хранилище. Следующий шаг: ${action}.`;
 };
 

@@ -1,6 +1,18 @@
-import { useState } from "react";
+import { useEffectEvent, useLayoutEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ActionIcon, Drawer, Group, Select, Text, Tooltip } from "@mantine/core";
+import {
+  ActionIcon,
+  Button,
+  Code,
+  CopyButton,
+  Drawer,
+  Group,
+  Modal,
+  Select,
+  Stack,
+  Text,
+  Tooltip,
+} from "@mantine/core";
 import { ClipboardList, Layers3, Menu, Moon, Settings, Sun } from "lucide-react";
 import {
   useGetProject,
@@ -51,7 +63,7 @@ export const ProjectLayout = () => {
   const nextTheme = isDark ? "light" : "dark";
   const state = connection.data?.state ?? "connecting";
   const connectionLabel = {
-    connected: "Синхронизировано",
+    connected: "Подключено к серверу",
     connecting: "Соединяемся",
     reconnecting: "Переподключаемся",
     disconnected: "Нет соединения",
@@ -60,6 +72,24 @@ export const ProjectLayout = () => {
   const isSettingsPage = location.pathname === `${base}/settings`;
   const settingsVariant = isSettingsPage ? "light" : "subtle";
   const settingsCurrent = isSettingsPage ? "page" : undefined;
+  const isBlocked = connection.data?.blocked ?? false;
+  const syncAction = connection.data?.code === "SYNC_CONFLICT" ? "conflicts" : "status";
+  const configArgument = project.data
+    ? ` --local --config '${project.data.configPath.replaceAll("'", "'\\''")}'`
+    : "";
+  const syncCommand = `npx @oim-dev/relay-cli${configArgument} sync ${syncAction}`;
+  const handleBlockedKey = useEffectEvent((event: KeyboardEvent) => {
+    if (!isBlocked || event.key === "Tab") return;
+    // Mantine слушает Escape в capture-фазе window: обработчик внутри dialog
+    // вызывается слишком поздно и не защищает форму в нижнем модальном окне.
+    event.stopImmediatePropagation();
+    if (event.key === "Escape") event.preventDefault();
+  });
+  useLayoutEffect(() => {
+    const listener = (event: KeyboardEvent) => handleBlockedKey(event);
+    window.addEventListener("keydown", listener, true);
+    return () => window.removeEventListener("keydown", listener, true);
+  }, []);
   return (
     <div className={styles.root}>
       <header className={styles.header}>
@@ -160,6 +190,43 @@ export const ProjectLayout = () => {
       >
         <ProjectNavigation basePath={base} onNavigate={() => setNavigationOpen(false)} />
       </Drawer>
+      <Modal.Root
+        opened={isBlocked}
+        onClose={() => {}}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        zIndex={1000}
+        centered
+      >
+        <Modal.Overlay />
+        <Modal.Content>
+          <Modal.Header role="presentation">
+            <Modal.Title>Работа с базой приостановлена</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <Stack gap="md">
+              <Text>{connection.data?.message}</Text>
+              <Text size="sm">
+                Выполните команду на стороне Server и разрешите конфликт. Открытая форма остаётся на
+                странице; после разблокировки проверьте актуальные данные перед сохранением.
+              </Text>
+              <Code block className={styles.syncCommand}>
+                {syncCommand}
+              </Code>
+              <CopyButton value={syncCommand}>
+                {({ copied, copy }) => {
+                  const label = copied ? "Команда скопирована" : "Скопировать команду";
+                  return (
+                    <Button data-autofocus onClick={copy}>
+                      {label}
+                    </Button>
+                  );
+                }}
+              </CopyButton>
+            </Stack>
+          </Modal.Body>
+        </Modal.Content>
+      </Modal.Root>
     </div>
   );
 };

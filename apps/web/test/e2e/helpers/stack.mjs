@@ -98,7 +98,35 @@ export async function createWorkspace(keys = ["alpha", "beta"]) {
   for (const key of keys) {
     const directory = join(root, key);
     await mkdir(directory);
-    await run(process.execPath, [cliBinary, "init"], { cwd: directory, env: isolatedEnv() });
+    await run(
+      process.execPath,
+      [cliBinary, "init", "--config", join(directory, ".relay/config.json")],
+      { cwd: directory, env: isolatedEnv() },
+    );
+    // Регрессии обзора проверяют также существующие проекты с инфраструктурной доской.
+    const { openWorkspace } = await import(
+      new URL("../../../../../packages/core/dist/storage/workspace.js", import.meta.url).href
+    );
+    const { BoardRepository } = await import(
+      new URL("../../../../../packages/core/dist/storage/boards.js", import.meta.url).href
+    );
+    const workspace = await openWorkspace(directory);
+    await workspace.locked((owned) =>
+      new BoardRepository(workspace).ensure(
+        {
+          version: 1,
+          id: "Infra001",
+          slug: "infrastructure",
+          prefix: "INFRA",
+          kind: "infrastructure",
+          applicationId: null,
+          revision: 1,
+          createdAt: "2026-09-26T00:00:00.000Z",
+          createdBy: "relay",
+        },
+        owned,
+      ),
+    );
     projects[key] = { key, directory, config: join(directory, ".relay/config.json") };
   }
   const config = join(root, "relay.workspace.json");

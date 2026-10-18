@@ -128,7 +128,7 @@ jobs:
       - *artifact-id
       - *download-build
       - *restore-build
-      - name: Тесты Core, Contracts и project-runtime
+      - name: Тесты Core, Contracts, project-runtime и coverage Git-хранилища
         run: node scripts/ci.mjs libraries
 
   server:

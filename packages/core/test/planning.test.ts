@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { legacyWorkspace, seedLegacyTask } from "./helpers/workspace.js";
+import { legacyWorkspace, seedLegacyTask, seedInfrastructureBoard } from "./helpers/workspace.js";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
@@ -568,6 +568,7 @@ test("планы: ревизии, одна текущая принадлежно
 
 test("релиз: актуальные планы и обязательства после выпуска и перезапуска, без снимков", async (t) => {
   const { root, workspace, plans, tasks, releases, progress, entities } = await fixture(t);
+  await seedInfrastructureBoard(workspace);
   const dependency = await tasks.create(
     { board: "infrastructure", title: "Инфраструктура", column: "done", requestId: "dependency" },
     "agent",

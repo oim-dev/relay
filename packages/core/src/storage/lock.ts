@@ -27,6 +27,7 @@ export async function withStorageLock<T>(
   root: string,
   operation: (assertOwned: () => void) => Promise<T>,
   runtime?: string,
+  options: { wait?: boolean } = {},
 ): Promise<T> {
   const directory = runtime ?? (await prepareRuntime(root));
   let compromised: Error | undefined;
@@ -35,7 +36,10 @@ export async function withStorageLock<T>(
     realpath: false,
     stale: 10000,
     update: 2000,
-    retries: { retries: 60, factor: 1.2, minTimeout: 25, maxTimeout: 250, randomize: true },
+    retries:
+      options.wait === false
+        ? 0
+        : { retries: 60, factor: 1.2, minTimeout: 25, maxTimeout: 250, randomize: true },
     onCompromised(error) {
       compromised = error;
     },

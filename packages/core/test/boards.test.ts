@@ -4,7 +4,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { BoardsService } from "@relay/core/application/boards/service";
 import { ProductService } from "@relay/core/application/product/service";
-import { initialize } from "@relay/core/storage/workspace";
+import { initialize, openWorkspace } from "@relay/core/storage/workspace";
+import { ProductQueries } from "@relay/core/application/product/queries";
+import { StorageService } from "@relay/core/application/storage/service";
+import { validateWorkspace } from "@relay/core/application/validate";
 import type { ProductMutation } from "@relay/core/domain/product";
 import { fixture } from "./helpers/workspace.js";
 import { BoardTasksService } from "../src/application/board-tasks/service.js";
@@ -25,11 +28,11 @@ const application = (slug: string, requestId = slug) =>
     },
   }) satisfies ProductMutation;
 
-test("init создаёт две системные доски и повтор не стирает данные", async (t) => {
-  const { root, workspace } = await fixture(t);
+test("init создаёт только продуктовую доску; повтор и обслуживание сохраняют состав и задачи", async (t) => {
+  const { root, workspace } = await fixture(t, false);
   assert.deepEqual(
     (await new BoardsService(workspace).list()).items.map((board) => board.slug),
-    ["product", "infrastructure"],
+    ["product"],
   );
   const task = await new BoardTasksService(workspace).create(
     { board: "product", title: "Сохранить", requestId: "task" },
@@ -39,6 +42,25 @@ test("init создаёт две системные доски и повтор �
   const before = await readFile(path, "utf8");
   await assert.rejects(initialize(root, "tasks"), { code: "ALREADY_INITIALIZED" });
   assert.equal(await readFile(path, "utf8"), before);
+  await new StorageService(workspace).reindex();
+  const reopened = await openWorkspace(root);
+  assert.deepEqual(
+    (await new BoardsService(reopened).list()).items.map((board) => board.slug),
+    ["product"],
+  );
+  await assert.rejects(new BoardsService(reopened).get("infrastructure"), { code: "NOT_FOUND" });
+  assert.deepEqual((await new ProductQueries(reopened).overview()).snapshot.boards.byKind, {
+    product: 1,
+    application: 0,
+    infrastructure: 0,
+  });
+  assert.equal((await new BoardTasksService(reopened).get(task.id)).title, "Сохранить");
+  assert.equal((await validateWorkspace(reopened)).valid, true);
+  await new ProductService(reopened).mutate(application("web"), "tester");
+  assert.deepEqual(
+    (await new BoardsService(reopened).list()).items.map((board) => board.slug),
+    ["product", "web"],
+  );
 });
 
 test("создание приложения создаёт контейнер доски; повтор и переименование сохраняют адрес", async (t) => {

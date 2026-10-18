@@ -34,6 +34,7 @@ import {
 import { HashIndex } from "./entity-store/hash-index.js";
 import { stateSchema, STATE_PATH } from "./entity-store/format.js";
 import { assertInitializationTarget } from "./initialization.js";
+import { workspaceAccess, assertWorkspaceAvailable } from "./access.js";
 
 const lockContext = new AsyncLocalStorage<{
   root: string;
@@ -107,6 +108,7 @@ export class Workspace {
     actor: string,
     operation: (owned: () => void) => Promise<T>,
   ): Promise<T> {
+    if (!this.storageSession) await (await workspaceAccess(this.dataRoot))?.before(true);
     invariant(
       (namespace === "graph" && this.recoveringDocumentLinks) || (await this.hasUnifiedStorage()),
       "STORAGE_MIGRATION_REQUIRED",
@@ -232,29 +234,46 @@ export class Workspace {
       context.assertOwned();
       return operation(context.assertOwned);
     }
-    if (await this.hasUnifiedStorage())
-      return this.withEntityStorage(async (store, assertOwned) => {
-        invariant(
-          !(await exists(join(store.root, "runtime/index-stale.json"))),
-          "STORAGE_INDEX_STALE",
-          "Обнаружены внешние изменения данных. Выполните storage reindex и перечитайте записи",
-          4,
-        );
-        return store.transaction(assertOwned, (session) =>
-          this.inStorageSession(session, assertOwned, async () => {
-            const settings = await session.indexGet("configuration", "project");
-            invariant(settings, "STORAGE_INDEX_CORRUPT", "Отсутствует индекс настроек проекта", 5);
-            this.config.projectSettings = storedProjectSettingsSchema.parse(settings);
-            const result = await operation(assertOwned);
-            if ([...session.files.keys()].some((path) => path.startsWith("entities/"))) {
-              const { refreshEntityCards } =
-                await import("../application/entities/storage-projection.js");
-              await refreshEntityCards(this, assertOwned);
-            }
-            return result;
-          }),
-        );
-      });
+    if (await this.hasUnifiedStorage()) {
+      const access = await workspaceAccess(this.dataRoot);
+      await access?.before(false);
+      try {
+        return await this.withEntityStorage(async (store, assertOwned) => {
+          await assertWorkspaceAvailable(store.root);
+          invariant(
+            !(await exists(join(store.root, "runtime/index-stale.json"))),
+            "STORAGE_INDEX_STALE",
+            "Обнаружены внешние изменения данных. Выполните storage reindex и перечитайте записи",
+            4,
+          );
+          let changed = false;
+          const result = await store.transaction(assertOwned, (session) =>
+            this.inStorageSession(session, assertOwned, async () => {
+              const settings = await session.indexGet("configuration", "project");
+              invariant(
+                settings,
+                "STORAGE_INDEX_CORRUPT",
+                "Отсутствует индекс настроек проекта",
+                5,
+              );
+              this.config.projectSettings = storedProjectSettingsSchema.parse(settings);
+              const result = await operation(assertOwned);
+              if ([...session.files.keys()].some((path) => path.startsWith("entities/"))) {
+                const { refreshEntityCards } =
+                  await import("../application/entities/storage-projection.js");
+                await refreshEntityCards(this, assertOwned);
+              }
+              changed = session.files.size > 0;
+              return result;
+            }),
+          );
+          if (changed) await access?.published();
+          return result;
+        });
+      } finally {
+        await access?.after();
+      }
+    }
     if (context?.active && context.root === this.root) {
       context.assertOwned();
       return operation(context.assertOwned);

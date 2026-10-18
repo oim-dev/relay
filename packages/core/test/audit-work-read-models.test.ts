@@ -33,11 +33,13 @@ import {
   updateReleaseByRefsSchema,
 } from "@relay/contracts/releases";
 import { taskDependenciesPageSchema, releaseProgressSchema } from "@relay/contracts/progress";
+import { seedInfrastructureBoard } from "./helpers/workspace.js";
 
 async function fixture(t: TestContext) {
   const root = await mkdtemp(join(tmpdir(), "relay-work-read-models-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = await initialize(root, "tasks");
+  await seedInfrastructureBoard(workspace);
   return {
     root,
     workspace,

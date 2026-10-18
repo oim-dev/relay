@@ -7,7 +7,7 @@ import { createTools } from "./tools.js";
 export async function startStdio(options: { cwd: string; config?: string; serverUrl?: string }) {
   const source = options.serverUrl
     ? undefined
-    : await readConfiguration(options.cwd, options.config);
+    : await readConfiguration(options.cwd, options.config, false, { managed: false });
   const projects = new Projects(options.serverUrl ?? serverAddress(source!));
   const server = createTools(projects);
   const transport = new StdioServerTransport();

@@ -9,7 +9,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { initialize } from "@relay/core/storage/workspace";
+import { initialize, openWorkspace } from "@relay/core/storage/workspace";
+import { BoardRepository } from "@relay/core/storage/boards";
 import { defaultConfig } from "@relay/core/domain/config";
 import { startServer } from "@relay/server-runtime";
 import { initializeRegistry, registerProject } from "@relay/project-runtime/registry";
@@ -805,6 +806,24 @@ test("MCP движка: discovery из контрактов, публичные 
 
 test("MCP канбана: предметные аргументы, блокеры, повтор и перенос со стабильным ID", async (t) => {
   const app = await setup(t);
+  // Существующий проект: инфраструктурная доска сохранена, хотя новый init её не создаёт.
+  const workspace = await openWorkspace(join(app.root, "a"));
+  await workspace.locked((owned) =>
+    new BoardRepository(workspace).ensure(
+      {
+        version: 1,
+        id: "Infra001",
+        slug: "infrastructure",
+        prefix: "INFRA",
+        kind: "infrastructure",
+        applicationId: null,
+        revision: 1,
+        createdAt: "2026-09-26T00:00:00.000Z",
+        createdBy: "relay",
+      },
+      owned,
+    ),
+  );
   const server = await app.start(join(app.root, "a/.relay/config.json"));
   const client = await app.connect(server.url);
   const definition = (await client.listTools()).tools.find(

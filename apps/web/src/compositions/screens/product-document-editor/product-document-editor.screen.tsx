@@ -31,7 +31,7 @@ export const ProductDocumentEditorScreen = () => {
         <Skeleton height={350} />
       </ProductPage>
     );
-  if ((!isNew && query.data === undefined) || target.error)
+  if ((!isNew && query.data === undefined) || (target.error && target.data === undefined))
     return (
       <StatePanel
         title="Не удалось открыть редактор"

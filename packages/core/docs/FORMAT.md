@@ -110,6 +110,13 @@ runtime/                                           # замок и времен�
 `runtime`, `transactions`, `.indexes` создаются с `.gitignore`; это не разрешение
 удалять незавершённый WAL.
 
+У управляемой Git-базы `.git` может быть каталогом прежней самостоятельной копии или
+gitfile настоящего worktree. Guard Core разрешает указатель на метаданные конкретного
+worktree и читает оттуда `relay.json`, `relay-sync.json` и намерение Git-публикации.
+Общий индекс исходного checkout не используется. Отсутствие Git-метаданных владельца
+не отключает guard: возвращается `SYNC_GIT_OWNER_MISSING`, файлы базы сохраняются.
+Эти служебные метаданные не входят в постоянный снимок и ветку `relay-data`.
+
 `entity-store/codecs.ts` выводит коллекции из реестра схем:
 `projects`, `products`, `features`, `scenarios`, `applications`, `implementations`,
 `boards`, `tasks`, `documents`, `work-plans`, `releases`.

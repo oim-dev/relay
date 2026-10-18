@@ -7,6 +7,8 @@ import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { TestContext } from "node:test";
 import type { CliPage } from "../../src/queries/result.js";
+import { openWorkspace } from "@relay/core/storage/workspace";
+import { BoardRepository } from "@relay/core/storage/boards";
 
 export const binary = fileURLToPath(
   new URL(
@@ -236,9 +238,11 @@ export function failed(result: Invocation<unknown>, code: string, exitCode = 2):
   assert.equal(result.body.error.code, code, result.stdout);
 }
 
-export async function fixture(t: FixtureContext) {
+/** Подготовленный существующий проект; infrastructure=false оставляет результат чистого init. */
+export async function fixture(t: FixtureContext, infrastructure = true) {
   const root = await tempDirectory(t);
   successful(await invoke(root, ["init"]));
+  if (infrastructure) await seedInfrastructureBoard(root);
   return {
     root,
     run: <T = unknown>(args: Array<string | number>, options?: RunOptions) =>
@@ -257,4 +261,25 @@ export async function fixture(t: FixtureContext) {
       ).data.ref.id;
     },
   };
+}
+
+/** Явно готовит прежний состав досок для тестов существующего проекта. */
+export async function seedInfrastructureBoard(root: string) {
+  const workspace = await openWorkspace(root);
+  await workspace.locked((owned) =>
+    new BoardRepository(workspace).ensure(
+      {
+        version: 1,
+        id: "Infra001",
+        slug: "infrastructure",
+        prefix: "INFRA",
+        kind: "infrastructure",
+        applicationId: null,
+        revision: 1,
+        createdAt: "2026-09-26T00:00:00.000Z",
+        createdBy: "relay",
+      },
+      owned,
+    ),
+  );
 }

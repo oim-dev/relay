@@ -70,14 +70,14 @@ export async function deletionFixture(backend: Backend) {
   });
   const external = await create({
     kind: "task",
-    board: "BOARD-INFRA",
+    board: "BOARD-PRODUCT",
     title: "Внешняя",
     parent: task.key,
     related: [task.key],
   });
   const dependent = await create({
     kind: "task",
-    board: "BOARD-INFRA",
+    board: "BOARD-PRODUCT",
     title: "Зависимая",
     dependencies: [second.key],
   });

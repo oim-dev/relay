@@ -10,6 +10,24 @@ import {
 
 export { storageCompatibilityCodes };
 const conflicts = new Set([
+  "SYNC_CONFLICT",
+  "SYNC_RECOVERY_REQUIRED",
+  "SYNC_RECOVERY_CONFLICT",
+  "SYNC_STATE_INVALID",
+  "SYNC_RUNTIME_REQUIRED",
+  "SYNC_PROJECT_MISMATCH",
+  "SYNC_IDENTITY_MISMATCH",
+  "SYNC_GIT_OWNER_MISSING",
+  "SYNC_ORIGIN_CHANGED",
+  "SYNC_WORKTREE_MIGRATION_REQUIRED",
+  "SYNC_HOME_MISMATCH",
+  "SYNC_ALREADY_MANAGED",
+  "SYNC_REMOTE_DATABASE_EXISTS",
+  "SYNC_RESOLUTION_STALE",
+  "SYNC_UNRELATED_HISTORY",
+  "SYNC_SNAPSHOT_CHANGED",
+  "SYNC_INIT_RACE",
+  "SYNC_PUSH_REJECTED",
   "WORK_SESSION_CLOSED",
   "WORK_RUN_NOT_CURRENT",
   "WORK_INTENT_REQUIRED",
@@ -137,21 +155,24 @@ export function httpFailure(error: unknown): { status: number; body: ApiFailure 
     const failure = error instanceof AppError ? error : asAppError(error);
     exitCode = failure.exitCode;
     code = failure.code;
-    status = missing.has(code)
-      ? 404
-      : conflicts.has(code) || isStorageCompatibility(code, failure.exitCode)
-        ? 409
-        : failure.exitCode === 2 ||
-            [
-              "VALIDATION_ERROR",
-              "INVALID_ID",
-              "INVALID_CURSOR",
-              "UNKNOWN_STATUS",
-              "TASK_TOO_LARGE",
-              "RESPONSE_TOO_LARGE",
-            ].includes(code)
-          ? 400
-          : 500;
+    status =
+      code === "SYNC_NETWORK_UNAVAILABLE"
+        ? 503
+        : missing.has(code)
+          ? 404
+          : conflicts.has(code) || isStorageCompatibility(code, failure.exitCode)
+            ? 409
+            : failure.exitCode === 2 ||
+                [
+                  "VALIDATION_ERROR",
+                  "INVALID_ID",
+                  "INVALID_CURSOR",
+                  "UNKNOWN_STATUS",
+                  "TASK_TOO_LARGE",
+                  "RESPONSE_TOO_LARGE",
+                ].includes(code)
+              ? 400
+              : 500;
     message = failure.message;
     details = failure.details;
     if (!(error instanceof AppError) && code === "IO_ERROR")

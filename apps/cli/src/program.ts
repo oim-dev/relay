@@ -9,6 +9,7 @@ import { registerEntities } from "./commands/entities.js";
 import { registerStorage } from "./commands/storage.js";
 import { registerPlanning } from "./commands/planning.js";
 import { registerWorkHistory } from "./commands/work-history.js";
+import { registerSync } from "./commands/sync.js";
 import type { Runtime } from "./context.js";
 import { packageVersion } from "./package-info.js";
 import { addCommandHelp, commandPath, groupHelpAction } from "./command.js";
@@ -53,6 +54,7 @@ export function createProgram(runtime: Runtime): Command {
   registerEntities(program, runtime);
   registerGraph(program, runtime);
   registerStorage(program, runtime);
+  registerSync(program, runtime);
   addCommandHelp(program, {
     details:
       "Режимы: .relay/config.json → local; relay.workspace.json → workspace.\nВ workspace укажите проект: npx @oim-dev/relay-cli <проект> <команда>. Рабочие операции идут через общий сервер.\nВ local URL выбирает HTTP, отсутствие URL — Core; --local явно выбирает файлы.\nURL: --server-url → RELAY_SERVER_URL → server.url. Сервер поставляется отдельно в @oim-dev/relay-server.\nЗадачи адресуются постоянным ID или ключом доски, например PRODUCT-1. Автор записи: --actor или RELAY_ACTOR.\nСправка: npx @oim-dev/relay-cli <команда> -h или --help; группа без подкоманды показывает доступные действия. Справка работает без проекта.\nВ синтаксисе <значение> обязательно, [значение] необязательно, <значения...> — несколько аргументов через пробел. Обязательные флаги помечены «обязательно». Адреса, пути и ревизии в примерах заменяйте прочитанными значениями своего проекта.\n\nФормат работы агента — только читаемый текст по умолчанию: пользователь должен видеть понятные команды и результаты. Все предметные команды поддерживают --format json исключительно для отладки CLI или передачи данных в скрипты. Агенту запрещено переключаться на JSON при обычной работе через CLI, в том числе ради удобства собственного разбора. Справка и версия всегда текстовые.",

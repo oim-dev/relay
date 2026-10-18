@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { subprocessEnv } from "./test-env.mjs";
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  glob,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -70,7 +80,7 @@ test("план CI покрывает все фактические workspace tes
   for (const [phase, owners] of Object.entries(testOwners)) {
     if (phase === "tooling") continue;
     assert.deepEqual(
-      commandsFor(phase),
+      commandsFor(phase).filter((command) => command.at(-1) === "test"),
       owners.map((owner) => ["pnpm", "--filter", owner, "run", "test"]),
     );
   }
@@ -106,6 +116,57 @@ test("план CI покрывает все фактические workspace tes
       assert(buildOutputs.includes(path), `Потерян generated output ${output}`);
     }
   }
+});
+
+test("Git-хранилище: новые тесты, coverage и worker входят в обязательные фазы CI", async () => {
+  for (const [phase, directory, name, file] of [
+    ["libraries", "packages/project-runtime", "@relay/project-runtime", "test/git-storage.test.ts"],
+    [
+      "libraries",
+      "packages/project-runtime",
+      "@relay/project-runtime",
+      "test/git-worktree.test.ts",
+    ],
+    ["server", "packages/server-runtime", "@relay/server-runtime", "test/git-storage.test.ts"],
+    ["cli", "apps/cli", "@oim-dev/relay-cli", "test/command-sync.test.ts"],
+  ]) {
+    const manifest = JSON.parse(await readFile(join(root, directory, "package.json"), "utf8"));
+    assert(
+      commandsFor(phase).some(
+        (command) =>
+          JSON.stringify(command) === JSON.stringify(["pnpm", "--filter", name, "run", "test"]),
+      ),
+    );
+    assert.doesNotMatch(manifest.scripts.test, /--test-(?:only|name-pattern|skip-pattern)/);
+    const patterns = manifest.scripts.test.match(/test\/[\w*/.-]+\.test\.(?:ts|mjs)/g);
+    assert(patterns?.length, `${name}: не найден шаблон тестов`);
+    const included = [];
+    for await (const path of glob(patterns, { cwd: join(root, directory) })) included.push(path);
+    assert(included.includes(file), `${name}: ${file} отсутствует в штатном запуске`);
+  }
+  assert(
+    commandsFor("libraries").some(
+      (command) => command[2] === "@relay/project-runtime" && command.at(-1) === "test:git-storage",
+    ),
+  );
+  const runtime = JSON.parse(
+    await readFile(join(root, "packages/project-runtime/package.json"), "utf8"),
+  );
+  const coverage = runtime.scripts["test:git-storage"];
+  for (const flag of [
+    "--conditions=tasks-source",
+    "--experimental-test-coverage",
+    "--test-coverage-lines=90",
+    "--test-coverage-branches=80",
+    "--test-coverage-functions=90",
+    "test/git-storage.test.ts",
+    "test/git-worktree.test.ts",
+  ])
+    assert(coverage.includes(flag), `Потеряна проверка ${flag}`);
+  assert.doesNotMatch(coverage, /\b(?:build|turbo)\b|--test-(?:only|name-pattern|skip-pattern)/);
+  assert(buildOutputs.includes("packages/project-runtime/dist"));
+  await lstat(join(root, "packages/project-runtime/src/git-storage/worker.ts"));
+  assert(commandsFor("package-smoke").some((command) => command.at(-1) === "package:smoke"));
 });
 
 test("pack вызывает только штатные упаковщики, smoke отдельно; команды проверены без их запуска", async () => {
