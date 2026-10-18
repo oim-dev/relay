@@ -7,6 +7,7 @@ import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { WORK_HISTORY_CAPABILITY } from "@relay/contracts/work-history";
 import { WORK_HISTORY_GRAPH_CAPABILITY } from "@relay/contracts/work-history-graph";
+import { SYNCHRONIZATION_CAPABILITY } from "@relay/contracts/synchronization";
 import { defaultConfig } from "@relay/core/domain/config";
 import { initialize, readWorkspaceConfig } from "@relay/core/storage/workspace";
 import type { Workspace } from "@relay/core/storage/workspace";
@@ -121,6 +122,7 @@ for (const mode of ["local", "workspace"] as const) {
           data: {
             project: settings.name,
             capabilities: [
+              SYNCHRONIZATION_CAPABILITY,
               "relay-projects-v1",
               "relay-full-context-v1",
               "relay-overview-metrics-v1",
@@ -137,6 +139,7 @@ for (const mode of ["local", "workspace"] as const) {
             configPath: target.projectConfig,
             storagePath: join(directory, "tasks"),
             actor: "config-reader",
+            synchronizationMode: "file",
             config,
           },
         });

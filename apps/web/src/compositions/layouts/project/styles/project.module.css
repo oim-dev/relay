@@ -155,3 +155,48 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.synchronization {
+  margin: 0.5rem 1rem;
+  border: 1px solid var(--tasks-border);
+  border-radius: 0.5rem;
+  background: var(--tasks-surface);
+  color: var(--tasks-muted);
+  font-size: 0.75rem;
+
+  &[data-state="offline"],
+  &[data-state="conflict"] {
+    color: var(--tasks-warning-ink);
+    background: var(--tasks-warning-surface);
+  }
+
+  & summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+
+    &:focus-visible {
+      outline: 2px solid var(--tasks-focus-ring);
+      outline-offset: 2px;
+    }
+  }
+}
+
+.syncQueue {
+  color: var(--tasks-muted);
+}
+
+.syncDetails {
+  padding: 0.25rem 0.75rem 0.75rem;
+  color: var(--tasks-ink);
+  overflow-wrap: anywhere;
+}
+
+.syncError {
+  color: var(--tasks-warning-ink);
+}

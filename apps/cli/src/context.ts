@@ -13,6 +13,7 @@ import { terminalOptions } from "./terminal.js";
 import type { ColorMode } from "./terminal.js";
 import { commandInvocation } from "./command-kit.js";
 import type { RecoveryContext } from "./presentation/recovery.js";
+import { synchronizationText, synchronizationWarning } from "./presentation/synchronization.js";
 
 export interface GlobalOptions {
   config?: string;
@@ -39,6 +40,7 @@ export interface Runtime {
   recovery?: RecoveryContext;
 }
 export interface CommandContext {
+  writeRequested?: boolean;
   /** Версия, проверяемая Backend при продолжении offset-страницы. */
   offsetVersion?: string;
   /** Подключение, разрешённое один раз до открытия Backend. */
@@ -117,11 +119,38 @@ export function action(
       throw error;
     }
     if (globals.project) result.meta = { ...result.meta, project: globals.project };
+    const isOverview =
+      command.name() === "overview" && !command.opts().metric && command.opts().view !== "map";
+    if (backend.synchronization && (context.writeRequested || isOverview)) {
+      try {
+        const status = await backend.synchronization.status();
+        if (status.mode === "git") {
+          result.meta = { ...result.meta, synchronization: status };
+          if (isOverview) {
+            const original = result.text;
+            result.text = (options) =>
+              [
+                typeof original === "function" ? original(options) : (original ?? ""),
+                synchronizationText(status, options),
+              ].join("\n\n");
+          } else {
+            const warning = synchronizationWarning(status);
+            if (warning) result.warnings = [...(result.warnings ?? []), warning];
+          }
+        }
+      } catch {
+        result.warnings = [
+          ...(result.warnings ?? []),
+          "Результат локальной операции подтверждён, но статус синхронизации получить не удалось.",
+        ];
+      }
+    }
     printResult(runtime.stdout, result, output);
   });
 }
 
 export function author(context: CommandContext): string {
+  context.writeRequested = true;
   const value = context.globals.actor ?? context.runtime.env.RELAY_ACTOR;
   invariant(value, "ACTOR_REQUIRED", "Для записи укажите --actor или RELAY_ACTOR");
   return parse(actorSchema, value, "автор");

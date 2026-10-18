@@ -12,6 +12,7 @@ import type { ProjectCatalogPageQuery } from "@relay/contracts/server-context";
 import { actorSchema, parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { openWorkspace, readWorkspaceConfig } from "@relay/core/storage/workspace";
+import { SYNCHRONIZATION_CAPABILITY } from "@relay/contracts/synchronization";
 import type { OpenWorkspaceOptions, Workspace } from "@relay/core/storage/workspace";
 import { configurationMode, entryTarget, readConfiguration } from "@relay/project-runtime/config";
 import { registerProject, unregisterProject } from "@relay/project-runtime/registry";
@@ -93,6 +94,7 @@ export class ProjectContext {
     return {
       project: projectSettings(workspace.config, workspace.configPath).name,
       capabilities: [
+        SYNCHRONIZATION_CAPABILITY,
         "relay-projects-v1",
         "relay-full-context-v1",
         // Детализация метрик оператора обзора и snapshot.operator.

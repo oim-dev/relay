@@ -63,13 +63,21 @@ JSON-операции возвращают `{ "ok": true, "data": ... }`. Оши
 чтения. POST предметных операций возвращает 200, а не обязательно 201.
 SSE — отдельный поток, не JSON-конверт успешного ответа.
 
-Внешняя Git-база сохраняет те же предметные маршруты. `SYNC_CONFLICT` возвращает 409
-и блокирует обычные чтения/записи до разрешения через локальный CLI; SSE передаёт
-`workspace-error` с тем же кодом. `SYNC_NETWORK_UNAVAILABLE` перед записью — 503:
-мутация не повторяется. `SYNC_GIT_OWNER_MISSING`, `SYNC_ORIGIN_CHANGED` и
-`SYNC_WORKTREE_MIGRATION_REQUIRED` возвращают 409: сохранённые файлы не подменяются
-новой базой. Управление `sync status/now/conflicts/resolve/migrate` пока доступно
-только локально, отдельных REST-операций разрешения конфликта нет.
+Внешняя Git-база сохраняет те же предметные маршруты. Успешная запись подтверждает
+локальный WAL; fetch/push выполняются в фоне. Недоступность origin и `SYNC_CONFLICT`
+не блокируют локальные чтения/записи и не превращают их в HTTP-ошибку. Состояние доставки
+читается отдельно через `GET /context/sync`; `POST /context/sync` возвращает 202 и
+запрашивает фоновую попытку без ожидания сети. Оба маршрута имеют scoped-варианты и
+объявляются capability `relay-background-sync-v1` выбранного проекта.
+
+Схема `SynchronizationStatus` сообщает mode/status, origin, queuedCommits (null при
+неизвестном удалённом состоянии), uncommittedChanges, localHead/remoteHead, времена
+lastSuccessAt/lastAttemptAt/nextAttemptAt, conflictId и error. Счётчик относится к
+последнему проверенному origin; неопределённый ответ push не доказывает отсутствие
+коммита на сервере. Файловая база и Git без origin имеют состояние local.
+Разрешение конфликтов и миграция остаются локальными CLI-действиями.
+`SYNC_GIT_OWNER_MISSING` и `SYNC_WORKTREE_MIGRATION_REQUIRED` сохраняют отказ при
+реально недоступном владельце базы: сохранённые файлы не подменяются новой базой.
 
 Для POST/PUT/PATCH нужен `Content-Type: application/json`; лимит тела — 1 МиБ.
 API отдаётся с `Cache-Control: no-store`. Listener — loopback; разрешены локальные Host,
@@ -103,6 +111,8 @@ API отдаётся с `Cache-Control: no-store`. Listener — loopback; раз
 | `PUT /projects/:project/registration`    | Регистрация с `RegisterProjectRequest` → `ProjectRegistrationReceipt`, без полного каталога            |
 | `DELETE /projects/:project/registration` | Удаление регистрации → `ProjectUnregistrationReceipt`, без полного каталога                            |
 | `GET /context`                           | `ContextResponse`: projectId, capability, конфиг, пути, автор                                          |
+| `GET /context/sync`                      | Локальный статус доставки и очередь (`SynchronizationStatus`), без обращения к origin                  |
+| `POST /context/sync`                     | Тело `{}` (`SynchronizationRequest`), ответ 202 со статусом; запуск фоновой попытки                    |
 | `GET /context/settings`                  | Имя, slug и ревизия (`ProjectSettings`)                                                                |
 | `PUT /context/settings`                  | Сохранить имя и slug с `ifRevision` (`SaveProjectSettings`)                                            |
 | `GET /validation`                        | Проверить целостность выбранного проекта (`ValidationData`)                                            |
@@ -111,6 +121,8 @@ API отдаётся с `Cache-Control: no-store`. Listener — loopback; раз
 и не подборка знаний продукта. Настройки не заменяют реестр. Разделы библиотеки
 меняются через `POST /documents/sections` либо `entities.update` вида `project`,
 не через `PUT /context/settings`.
+`ContextResponse.synchronizationMode` сообщает `file`/`git`, чтобы клиенты не опрашивали
+Git-статус обычной файловой базы. Статус доставки не меняет предметную доступность.
 
 `/server` и `/projects` возвращают весь каталог без выбора проекта и без серверной
 пагинации, в том числе в local-режиме. Пути ответа относятся к серверу. `path` и

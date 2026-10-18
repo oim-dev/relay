@@ -7,6 +7,8 @@ const STATUS_SCHEMA = z.object({
   color: z.string().optional(),
 });
 const CONTEXT_SCHEMA = z.object({
+  capabilities: z.array(z.string()).optional(),
+  synchronizationMode: z.enum(["file", "git"]).optional(),
   project: z.string(),
   projectId: z.string(),
   actor: z.string(),
@@ -34,6 +36,8 @@ export type TaskStatus = {
 
 /** Рабочий проект и автор текущего запуска сервера. */
 export type Project = {
+  /** Сервер предоставляет отдельный статус фоновой доставки базы. */
+  hasBackgroundSynchronization: boolean;
   /** Идентификатор области данных и предпочтений. */
   id: string;
   /** Название рабочего каталога. */
@@ -65,6 +69,9 @@ export const getProject = async (projectId: string): Promise<Project> => {
   const response = await getProjectApi(projectId).context.getContext();
   const context = CONTEXT_SCHEMA.parse(response.data);
   return {
+    hasBackgroundSynchronization:
+      (context.capabilities?.includes("relay-background-sync-v1") ?? false) &&
+      context.synchronizationMode !== "file",
     id: context.projectId,
     name: context.project,
     actor: context.actor,
