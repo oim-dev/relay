@@ -180,7 +180,7 @@ pnpm run test:web:e2e
 Первая команда один раз устанавливает Chrome for Testing (на Linux — с `--with-deps`).
 Корневая `test:web:e2e` собирает Server (вместе с Web) и CLI, затем запускает
 `pnpm --filter @relay/web run test:e2e`; при готовых `dist` можно вызвать эту команду
-напрямую. Suite не входит в `pnpm run test` и `check`; в CI его выполняет отдельная
+напрямую. Suite входит в корневой `check`, но не в `pnpm run test`; в CI его выполняет отдельная
 обязательная стадия, см. [scripts](../../../scripts/README.md).
 
 Каждый запуск поднимает собственные Server, Vite и управляющий HTTP-прокси на свободных

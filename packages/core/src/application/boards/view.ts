@@ -46,10 +46,9 @@ export function boardViews(boards: Board[], products: BoardApplication[]): Board
     boardView(board, applications.get(board.applicationId ?? "")),
   );
   invariant(
-    views.some((board) => board.kind === "product") &&
-      views.some((board) => board.kind === "infrastructure"),
+    views.some((board) => board.kind === "product"),
     "INVALID_DATA",
-    "Системные доски отсутствуют: требуется новый инициализированный проект",
+    "Продуктовая доска отсутствует: требуется инициализированный проект",
     5,
   );
   const owners = new Set(views.map((board) => board.applicationId));

@@ -26,6 +26,8 @@ import {
 } from "@relay/core/storage/data-model/manifest";
 import type { ProjectEntry } from "@relay/project-runtime/config";
 import { serverConfiguration } from "./source.js";
+import { restoreManagedConfiguration } from "@relay/project-runtime/git-storage/bootstrap";
+import { attachManagedStorage } from "@relay/project-runtime/git-storage/access";
 
 export interface WorkspaceOptions {
   cwd: string;
@@ -79,6 +81,8 @@ export class ProjectContext {
 
   async open(options: OpenWorkspaceOptions = {}): Promise<Workspace> {
     try {
+      await restoreManagedConfiguration(this.options.configPath);
+      await attachManagedStorage(dirname(this.options.configPath));
       return await openWorkspace(this.options.cwd, this.options.configPath, options);
     } catch (error) {
       throw openFailure(error);

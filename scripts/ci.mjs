@@ -30,6 +30,14 @@ export const requiredJobs = {
 };
 export const gateName = "PR / Все проверки";
 
+/** Зависимости локального runner совпадают с needs в PR workflow. */
+export const jobDependencies = Object.fromEntries(
+  Object.keys(requiredJobs).map((phase) => [
+    phase,
+    phase === "preflight" ? [] : phase === "build" ? ["preflight"] : ["build"],
+  ]),
+);
+
 const rootScript = (name, ...args) => ["pnpm", "run", name, ...args];
 const workspaceScript = (name, script) => ["pnpm", "--filter", name, "run", script];
 export const testOwners = {
@@ -69,6 +77,11 @@ export function commandsFor(phase) {
     );
   // Браузерный suite Web не входит в `test`: ему нужен Chrome, установленный шагом workflow.
   if (phase === "web-e2e") return [workspaceScript("@relay/web", "test:e2e")];
+  if (phase === "libraries")
+    return [
+      ...testOwners.libraries.map((name) => workspaceScript(name, "test")),
+      workspaceScript("@relay/project-runtime", "test:git-storage"),
+    ];
   if (Object.hasOwn(testOwners, phase))
     return testOwners[phase].map((name) => workspaceScript(name, "test"));
   if (phase === "pack")

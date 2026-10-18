@@ -2,7 +2,6 @@
   width: 100%;
   min-width: 0;
   padding: 28px 28px 0;
-  height: calc(100dvh - 7rem);
   min-height: 420px;
   display: flex;
   flex-direction: column;

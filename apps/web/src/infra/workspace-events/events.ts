@@ -35,6 +35,8 @@ export type WorkspaceSignal = {
   sequence: number;
   /** Диагностика повреждённого хранилища. */
   message?: string;
+  /** Машинный код отказа для предметной интерпретации подписчиком. */
+  code?: string;
 };
 
 const createConnection = (projectId: string, onReleased: () => void) => {
@@ -50,13 +52,13 @@ const createConnection = (projectId: string, onReleased: () => void) => {
   /**
    * Публикует последнее состояние всем подписчикам единственного транспорта.
    */
-  const emit = (state: WorkspaceSignal["state"], message?: string): void => {
+  const emit = (state: WorkspaceSignal["state"], message?: string, code?: string): void => {
     if (state === "connected" || state === "storage-error") {
       reconnectDelay = RECONNECT_DELAY;
       clearTimeout(disconnectTimer);
       disconnectTimer = undefined;
     }
-    signal = { state, sequence: nextSequence(), message };
+    signal = { state, sequence: nextSequence(), message, code };
     for (const listener of listeners) listener(signal);
   };
 
@@ -105,7 +107,7 @@ const createConnection = (projectId: string, onReleased: () => void) => {
       if (source !== connection) return;
       try {
         const error = ERROR_SCHEMA.parse(JSON.parse(event.data));
-        emit("storage-error", error.message);
+        emit("storage-error", error.message, error.code);
       } catch {
         emit("storage-error", "Проверьте конфигурацию и документы задач");
       }

@@ -67,7 +67,8 @@ export async function copyPackageContent(directory, content) {
 export function assertPackedContent(archive, manifest, content) {
   assert(Array.isArray(archive.files), "npm pack не вернул список файлов архива");
   const files = new Map(archive.files.map((file) => [file.path, file]));
-  const required = ["package.json", ...Object.values(manifest.bin), ...content.keys()];
+  const worker = "dist/relay-sync-worker.js";
+  const required = ["package.json", ...Object.values(manifest.bin), worker, ...content.keys()];
   if (manifest.name === "@oim-dev/relay-cli") required.push(...cliDocuments);
   if (manifest.name === "@oim-dev/relay-server") required.push("dist/web/index.html");
   for (const path of required) {
@@ -79,6 +80,10 @@ export function assertPackedContent(archive, manifest, content) {
   for (const [path, bytes] of content) {
     assert.equal(files.get(path).size, bytes.length, `${manifest.name}: неверный размер ${path}`);
   }
+  assert(
+    Number.isSafeInteger(files.get(worker).size) && files.get(worker).size > 0,
+    `${manifest.name}: неверный размер ${worker}`,
+  );
 }
 
 /** Сверяет документацию независимой установки с исходным снимком, включая вложенные файлы. */

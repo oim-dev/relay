@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fixture, successful, failed, invokeRaw } from "./helpers/cli.js";
 
+test("init: новый проект содержит только продуктовую доску", async (t) => {
+  const app = await fixture(t, false);
+  const boards = successful(
+    await app.run<{ items: Array<{ slug: string }>; total: number }>(["board", "list"]),
+  ).data;
+  assert.equal(boards.total, 1);
+  assert.deepEqual(
+    boards.items.map((board) => board.slug),
+    ["product"],
+  );
+  failed(await app.run(["board", "get", "infrastructure"]), "ENTITY_NOT_FOUND", 3);
+});
+
 test(
   "board list/get: системные доски, доска приложения, страницы и свойства",
   { timeout: 120_000 },

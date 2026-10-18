@@ -5,7 +5,6 @@
   overflow-x: auto;
   padding: 2px 2px 14px;
   flex: 1;
-  min-height: 0;
   scrollbar-width: thin;
   overscroll-behavior-x: contain;
 }

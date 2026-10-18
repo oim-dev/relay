@@ -20,6 +20,8 @@ export interface ServerOptions {
   cwd: string;
   actor: string;
   config?: string;
+  /** Общий корень внешних Git-баз; env разбирает приложение Server. */
+  relayHome?: string;
   /** Переопределяет server.port из конфигурации проекта. */
   port?: number;
   /** Статика подключается явно; undefined или false запускает только API. */
@@ -34,7 +36,7 @@ async function initializeServer(
   options: ServerOptions,
 ): Promise<{ app: NestFastifyApplication; port: number }> {
   const actor = parse(actorSchema, options.actor, "автор");
-  const source = await serverConfiguration(options.cwd, options.config);
+  const source = await serverConfiguration(options.cwd, options.config, options.relayHome);
   const port = parse(serverPortSchema, options.port ?? source.value.server.port, "порт");
   const candidate = options.webRoot ? resolve(options.webRoot) : undefined;
   let webRoot: string | undefined;

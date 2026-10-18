@@ -127,25 +127,23 @@ export class BoardRepository {
   }
 
   async initialize(assertOwned: () => void): Promise<void> {
-    for (const kind of ["product", "infrastructure"] as const) {
-      const existing = await this.all();
-      await this.ensure(
-        {
-          version: 1,
-          id:
-            existing.find((board) => board.kind === kind)?.id ??
-            shortId(existing.map((board) => board.id)),
-          slug: kind,
-          prefix: defaultBoardPrefix(kind),
-          kind,
-          applicationId: null,
-          revision: 1,
-          createdAt: new Date().toISOString(),
-          createdBy: "relay",
-        },
-        assertOwned,
-      );
-    }
+    const existing = await this.all();
+    await this.ensure(
+      {
+        version: 1,
+        id:
+          existing.find((board) => board.kind === "product")?.id ??
+          shortId(existing.map((board) => board.id)),
+        slug: "product",
+        prefix: defaultBoardPrefix("product"),
+        kind: "product",
+        applicationId: null,
+        revision: 1,
+        createdAt: new Date().toISOString(),
+        createdBy: "relay",
+      },
+      assertOwned,
+    );
   }
 
   /** До публикации двух файлов фиксируется возобновляемое намерение вне временного runtime. */

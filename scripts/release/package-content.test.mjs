@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { promisify } from "node:util";
 import { packageComponent } from "../package.mjs";
 import { runNpm } from "./npm.mjs";
 import {
@@ -33,6 +35,21 @@ async function fixture(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   await put(root, "package.json", JSON.stringify({ private: true }));
   await mkdir(join(root, "packages"));
+  await put(
+    root,
+    "packages/project-runtime/package.json",
+    JSON.stringify({
+      name: "@relay/project-runtime",
+      version: "0.0.0",
+      private: true,
+      type: "module",
+    }),
+  );
+  await put(
+    root,
+    "packages/project-runtime/dist/git-storage/worker.js",
+    'console.log("worker-fixture");\n',
+  );
   // Корневая библиотека и не объявленные в files материалы не должны попасть в архивы.
   await put(root, "docs/private-guide.md", "Документ вне состава поставки.\n");
   const manifests = {};
@@ -94,7 +111,12 @@ test("упаковщик переносит files в реальные архив
       const binary = Object.values(manifest.bin)[0];
       const compiled = await readFile(join(app, binary));
       const { archive, archivePath } = await packageComponent(component, { root, executeNpm });
-      const expectedPaths = ["package.json", ...Object.values(manifest.bin), ...expected.keys()];
+      const expectedPaths = [
+        "package.json",
+        ...Object.values(manifest.bin),
+        "dist/relay-sync-worker.js",
+        ...expected.keys(),
+      ];
       if (component === "server") expectedPaths.push("dist/web/index.html");
       assert.deepEqual(archive.files.map(({ path }) => path).sort(), expectedPaths.sort());
       assert.equal(archive.version, "0.6.1");
@@ -132,6 +154,12 @@ test("упаковщик переносит files в реальные архив
         installation,
       );
       assert.equal(launched.stdout.trim(), "0.6.1");
+      const worker = await promisify(execFile)(
+        process.execPath,
+        [join(installed, "dist/relay-sync-worker.js")],
+        { cwd: installation },
+      );
+      assert.equal(worker.stdout.trim(), "worker-fixture");
 
       // Независимая сверка обнаруживает пропажу, правки и лишние вложенные документы.
       for (const path of expected.keys()) {
@@ -163,10 +191,24 @@ test("утрата любого обязательного файла в npm pac
     const files = [
       { path: "package.json", size: 1 },
       ...Object.values(manifest.bin).map((path) => ({ path, size: 1 })),
+      { path: "dist/relay-sync-worker.js", size: 1 },
       ...[...content].map(([path, bytes]) => ({ path, size: bytes.length })),
     ];
     if (component === "server") files.push({ path: "dist/web/index.html", size: 1 });
     assertPackedContent({ files }, manifest, content);
+    assert.throws(
+      () =>
+        assertPackedContent(
+          {
+            files: files.map((file) =>
+              file.path === "dist/relay-sync-worker.js" ? { ...file, size: 0 } : file,
+            ),
+          },
+          manifest,
+          content,
+        ),
+      /неверный размер dist\/relay-sync-worker\.js/,
+    );
     for (const missing of files) {
       assert.throws(
         () =>

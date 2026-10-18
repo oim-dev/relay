@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { test } from "node:test";
-import { initialize } from "@relay/core/storage/workspace";
+import { initialize, openWorkspace } from "@relay/core/storage/workspace";
+import { BoardRepository } from "@relay/core/storage/boards";
 import { initializeRegistry, registerProject } from "@relay/project-runtime/registry";
 import { startServer } from "@relay/server-runtime";
 import { createProgram } from "../../../apps/cli/src/program.ts";
@@ -45,6 +46,24 @@ async function fixture(t, mode) {
     }
   });
   await initialize(join(root, "app"), "tasks");
+  // Сценарий существующего проекта: новый init уже не создаёт инфраструктурную доску.
+  const workspace = await openWorkspace(join(root, "app"));
+  await workspace.locked((owned) =>
+    new BoardRepository(workspace).ensure(
+      {
+        version: 1,
+        id: "Infra001",
+        slug: "infrastructure",
+        prefix: "INFRA",
+        kind: "infrastructure",
+        applicationId: null,
+        revision: 1,
+        createdAt: "2026-09-26T00:00:00.000Z",
+        createdBy: "relay",
+      },
+      owned,
+    ),
+  );
   let connection = ["--local", "--config", join(root, "app/.relay/config.json")];
   if (mode === "workspace") {
     const registry = await initializeRegistry(root);

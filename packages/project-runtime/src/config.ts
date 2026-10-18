@@ -1,4 +1,5 @@
 import { basename, dirname, join, resolve } from "node:path";
+import { realpath } from "node:fs/promises";
 import { z } from "zod";
 import {
   configSchema,
@@ -10,6 +11,12 @@ import { parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { exists, readJson } from "@relay/core/storage/files";
 import { CONFIG_NAME, readWorkspaceConfig } from "@relay/core/storage/workspace";
+import {
+  managedConfiguration,
+  restoreManagedConfiguration,
+  registeredWorktree,
+} from "./git-storage/bootstrap.js";
+import { attachManagedStorage } from "./git-storage/access.js";
 
 export const REGISTRY_NAME = "relay.workspace.json";
 export const projectNameSchema = z.string().regex(/^[\p{L}\p{N}][\p{L}\p{N}_-]{0,63}$/u);
@@ -76,7 +83,11 @@ export async function locateConfiguration(cwd: string, explicit?: string, regist
 
 /** Общий поиск и классификация файла; проектная база здесь не открывается. */
 async function readConfigurationFile(cwd: string, explicit?: string, registryOnly = false) {
-  const path = await locateConfiguration(cwd, explicit, registryOnly);
+  let path = await locateConfiguration(cwd, explicit, registryOnly);
+  if (explicit === undefined && !registryOnly) {
+    const binding = await registeredWorktree(cwd);
+    if (binding?.migratedFrom === (await realpath(path))) path = join(binding.root, "config.json");
+  }
   const value = await readJson(path);
   const localPath = basename(path) === "config.json" && basename(dirname(path)) === ".relay";
   if (
@@ -107,10 +118,40 @@ export async function readConfiguration(
   cwd: string,
   explicit?: string,
   registryOnly = false,
+  options: { managed?: boolean; home?: string } = {},
 ): Promise<Configuration> {
-  const source = await readConfigurationFile(cwd, explicit, registryOnly);
+  let source;
+  try {
+    source = await readConfigurationFile(cwd, explicit, registryOnly);
+  } catch (error) {
+    if (
+      options.managed !== false &&
+      explicit !== undefined &&
+      !registryOnly &&
+      error instanceof AppError &&
+      error.code === "NOT_FOUND" &&
+      (await restoreManagedConfiguration(resolve(cwd, explicit)))
+    ) {
+      return readConfiguration(cwd, explicit, registryOnly, options);
+    }
+    if (
+      !(error instanceof AppError) ||
+      error.code !== "CONFIG_NOT_FOUND" ||
+      explicit !== undefined ||
+      registryOnly ||
+      options.managed === false
+    )
+      throw error;
+    const managed = await managedConfiguration(
+      cwd,
+      options.home === undefined ? {} : { home: options.home },
+    );
+    if (!managed) throw error;
+    source = await readConfigurationFile(cwd, managed);
+  }
   if (source.kind === "registry") return source;
   const path = source.path;
+  if (options.managed !== false) await attachManagedStorage(dirname(path));
   const project = await readWorkspaceConfig(cwd, path);
   return { kind: "project", path: project.configPath, value: project.config };
 }

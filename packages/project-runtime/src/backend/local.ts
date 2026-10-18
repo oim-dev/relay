@@ -14,12 +14,17 @@ import { ProgressService } from "@relay/core/application/progress/service";
 import { PlanningService } from "@relay/core/application/planning/service";
 import { ReleasesService } from "@relay/core/application/releases/service";
 import { WorkHistoryService } from "@relay/core/application/work-history/service";
+import { attachManagedStorage } from "../git-storage/access.js";
+import { dirname, resolve } from "node:path";
+import { readConfiguration } from "../config.js";
 
 export async function createLocalBackend(
   cwd: string,
   config?: string,
-  options: { createLegacyDirectories?: boolean } = {},
+  options: { createLegacyDirectories?: boolean; home?: string } = {},
 ): Promise<Backend> {
+  if (config === undefined) config = (await readConfiguration(cwd, undefined, false, options)).path;
+  if (config) await attachManagedStorage(dirname(resolve(cwd, config)));
   const workspace = await openWorkspace(cwd, config, options);
   return {
     kind: "local",

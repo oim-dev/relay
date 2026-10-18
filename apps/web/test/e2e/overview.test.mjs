@@ -613,6 +613,11 @@ test("O-18: SSE-обновление сохраняет фокус и прокр
 });
 
 test("O-19: ширины, темы, длинные названия, доступность, touch и reduced motion", async () => {
+  await browser.open(overviewUrl(alpha));
+  await browser.waitFor(`${metric("Задачи")} !== null`);
+  await browser.eval(
+    `const link = [...document.querySelectorAll('main a')].find((item) => item.textContent.includes('Библиотека знаний')); link.focus(); true`,
+  );
   const report = [];
   for (const scheme of ["light", "dark"]) {
     for (const width of [1440, 1100, 1024, 768, 390]) {
@@ -620,6 +625,11 @@ test("O-19: ширины, темы, длинные названия, досту�
       await browser.media(scheme);
       await browser.waitFor(
         `document.documentElement.getAttribute('data-mantine-color-scheme') === ${q(scheme)} && ${metric("Задачи")} !== null`,
+      );
+      // Атрибут темы меняется раньше завершения 150-мс перехода фона карточек.
+      // Проверяем устойчивое состояние, сохраняя фокус; фиксированной паузы нет.
+      await browser.eval(
+        `(async () => { await document.fonts.ready; await Promise.all(document.getAnimations().filter((animation) => animation instanceof CSSTransition).map((animation) => animation.finished.catch(() => undefined))); return true; })()`,
       );
       const layout = await browser.eval(
         `(() => { const root = document.documentElement; const small = [...document.querySelectorAll('main a, main button')].filter((el) => !el.closest('p')).map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height < 24).length; const overflow = [...document.querySelectorAll('main *')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1).length; const containers = [...document.querySelectorAll('main section[aria-labelledby], main header, main [role="alert"], ul[aria-label="Операционные показатели"] a, ul[aria-label="Размер проекта"] li')]; const escaped = []; for (const container of containers) { const box = container.getBoundingClientRect(); for (const child of container.querySelectorAll('*')) { const rect = child.getBoundingClientRect(); if (rect.width === 0 || rect.height === 0) continue; if (rect.right > box.right + 1 || rect.left < box.left - 1) escaped.push((container.querySelector('h2, h3, span')?.textContent ?? container.tagName) + ': ' + (child.textContent ?? '').trim().slice(0, 40) + ' +' + Math.round(Math.max(rect.right - box.right, box.left - rect.left)) + 'px'); } } return { scroll: root.scrollWidth, width: innerWidth, small, overflow, escaped: [...new Set(escaped)] }; })()`,
@@ -640,7 +650,11 @@ test("O-19: ширины, темы, длинные названия, досту�
         [],
         `${scheme} ${width}: содержимое выходит за пределы панели`,
       );
-      assert.deepEqual(violations, [], `${scheme} ${width}: нарушения доступности`);
+      assert.deepEqual(
+        violations,
+        [],
+        `${scheme} ${width}: нарушения доступности\n${JSON.stringify(audit.violations, null, 2)}`,
+      );
     }
   }
   measurements.layout = report;
