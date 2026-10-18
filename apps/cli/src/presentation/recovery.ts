@@ -50,7 +50,8 @@ export function diagnosticRecovery(
   context?: RecoveryContext,
 ): string | undefined {
   if (error.code === "SYNC_CONFLICT" && context) {
-    const local = context.maintenance;
+    // Наличие maintenance подтверждает локальный доступ; sync сохраняет исходные селекторы.
+    const local = context.maintenance ? context.command : undefined;
     return [
       wrap(
         "Следующий шаг: изучите конфликт и согласуйте решение. Предметная работа приостановлена до его публикации.",

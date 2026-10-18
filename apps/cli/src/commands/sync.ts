@@ -24,7 +24,7 @@ export function registerSync(program: Command, runtime: Runtime) {
     name: "sync",
     description: "Git-синхронизация внешней базы и разрешение конфликтов",
     details:
-      "Работает с локальной служебной копией в ~/.relay. Статус и материалы доступны при SYNC_CONFLICT. now отправляет согласованный снимок без ожидания debounce. Решение конфликта требует его исходный ID; обычные предметные команды заблокированы до успешной публикации решения.",
+      "Работает с локальной служебной копией в ~/.relay. База текущего Git-проекта определяется автоматически; без настроенного HTTP дополнительные флаги подключения не нужны. Статус и материалы доступны при SYNC_CONFLICT. now отправляет согласованный снимок без ожидания debounce. Решение конфликта требует его исходный ID; обычные предметные команды заблокированы до успешной публикации решения.",
     examples: [["npx @oim-dev/relay-cli sync status", "Проверить состояние синхронизации"]],
   });
   for (const name of ["status", "now", "conflicts", "resolve"] as const) {
@@ -42,7 +42,7 @@ export function registerSync(program: Command, runtime: Runtime) {
           ? "Передайте --decisions-file с объектом путь → {take: local|remote} либо {value: полный JSON записи}; '-' читает stdin. Остальные однозначные изменения сохраняются. Для каждого конфликтующего файла нужно решение. Вместо файла --take выбирает весь снимок базы, включая неконфликтующие изменения: сначала изучите sync conflicts. Выбранный снимок проверяется Core. --if-conflict берётся из актуального списка; изменение origin отклоняет старое решение. Отправка не использует force-push."
           : name === "conflicts"
             ? "Показывает ID, причины, пути и полное сохранённое содержание B/L/R конфликтующих файлов. $integrity обозначает нарушение предметной целостности; в этом случае показываются все файлы. Markdown в диагностике отражён в дисковом JSON без потери содержания."
-            : "Только локальный Git-доступ; --local явно отключает HTTP-подключение. Выбор проекта workspace не поддерживается: укажите прямой config базы. Статус не означает публикацию ещё ожидающих данных. now выполняет сетевую проверку, объединение и публикацию; предметные команды не повторяются.",
+            : "База текущего Git-проекта определяется автоматически. --local нужен для отключения настроенного HTTP; --config — для явного выбора другой базы. Выбор через --project не поддерживается: для зарегистрированной Git-базы запускайте команду из её проекта либо укажите прямой --config. Статус не означает публикацию ещё ожидающих данных. now выполняет сетевую проверку, объединение и публикацию; предметные команды не повторяются.",
       examples: [
         [
           `npx @oim-dev/relay-cli sync ${name}${name === "resolve" ? " --if-conflict conflict-id --take local" : ""}`,
@@ -92,9 +92,15 @@ export function registerSync(program: Command, runtime: Runtime) {
         }
       }
       invariant(
-        !globals.project && (globals.local || !(globals.serverUrl ?? runtime.env.RELAY_SERVER_URL)),
+        !globals.project,
         "LOCAL_REQUIRED",
-        "Управление Git-синхронизацией выполняется локально: укажите --local при настроенном URL и прямой config вместо --project",
+        "sync не принимает --project. Выполните команду из каталога нужного Git-проекта или укажите его прямой --config.",
+        2,
+      );
+      invariant(
+        globals.local || !(globals.serverUrl ?? runtime.env.RELAY_SERVER_URL),
+        "LOCAL_REQUIRED",
+        "Для управления Git-синхронизацией при настроенном HTTP укажите --local.",
         2,
       );
       let config = globals.config ?? runtime.env.RELAY_CONFIG;
@@ -123,7 +129,7 @@ export function registerSync(program: Command, runtime: Runtime) {
       const info = await marker(root);
       const prefix = localInvocation(
         runtime,
-        { ...globals, local: true },
+        globals,
         config ? resolve(runtime.cwd, config) : join(root, "config.json"),
       );
       const recovery = (args: readonly string[]) => shellCommand([...prefix, ...args]);

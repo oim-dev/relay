@@ -88,22 +88,65 @@ test("Git CLI: блокировка, полный просмотр и адрес
   await synchronize(dirname(peerConfig));
   await assert.rejects(synchronize(root), { code: "SYNC_CONFLICT" });
   failed(await invoke(code, ["task", "list"], options), "SYNC_CONFLICT", 4);
-  const blocked = await invokeRaw(directory, ["--config", config, "task", "list"], options);
-  assert.equal(blocked.code, 4);
-  const command = blocked.stdout
-    .split("\n")
-    .find((line) => line.startsWith("npx ") && line.includes("sync conflicts"));
-  assert(command, blocked.stdout);
-  assert.match(command, /--config/);
   const executable = [process.execPath, ...cliNodeArgs, binary]
     .map((value) => `'${value.replaceAll("'", "'\\''")}'`)
     .join(" ");
-  const copied = await promisify(execFile)(
-    "bash",
-    ["-c", command.replace(/^npx @oim-dev\/relay-cli/, executable)],
-    { cwd: directory, env: cliEnv(options.env) },
-  );
-  assert.match(copied.stdout, /Локальный текст/);
+  for (const selection of [
+    { name: "текущий проект", cwd: code, args: [], env: {}, local: false, config: false },
+    {
+      name: "явный config",
+      cwd: directory,
+      args: ["--config", config],
+      env: {},
+      local: false,
+      config: true,
+    },
+    {
+      name: "config из окружения",
+      cwd: directory,
+      args: [],
+      env: { RELAY_CONFIG: config },
+      local: false,
+      config: true,
+    },
+    {
+      name: "явный local при HTTP",
+      cwd: code,
+      args: ["--local"],
+      env: { RELAY_SERVER_URL: "http://127.0.0.1:1" },
+      local: true,
+      config: false,
+    },
+  ]) {
+    await t.test(`подсказка конфликта: ${selection.name}`, async () => {
+      const env = { ...options.env, ...selection.env };
+      for (const action of [
+        ["task", "list"],
+        ["sync", "now"],
+      ]) {
+        const blocked = await invokeRaw(selection.cwd, [...selection.args, ...action], {
+          ...options,
+          env,
+        });
+        assert.equal(blocked.code, 4, blocked.stdout);
+        const command = blocked.stdout
+          .split("\n")
+          .find((line) => line.startsWith("npx ") && line.includes("sync conflicts"));
+        assert(command, blocked.stdout);
+        assert.equal(command.includes("--config"), selection.config, command);
+        assert.equal(command.includes("--local"), selection.local, command);
+        if (!selection.local && !selection.config)
+          assert.equal(command, "npx @oim-dev/relay-cli sync conflicts");
+        const copied = await promisify(execFile)(
+          "bash",
+          ["-c", command.replace(/^npx @oim-dev\/relay-cli/, executable)],
+          { cwd: selection.cwd, env: cliEnv(env) },
+        );
+        assert.match(copied.stdout, /Локальный текст/);
+        assert.match(copied.stdout, /Удалённый текст/);
+      }
+    });
+  }
   successful(
     await invoke(code, ["--local", "sync", "status"], {
       ...options,
@@ -218,4 +261,25 @@ test("Git CLI: отсутствующая ветка предлагает init, 
   assert.equal(help.code, 0);
   assert.match(help.stdout, /conflicts/);
   failed(await invoke(code, ["project", "get"], options), "SYNC_NETWORK_UNAVAILABLE", 4);
+});
+
+test("Git CLI: отказ объясняет только нужный параметр подключения до поиска базы", async (t) => {
+  const directory = await tempDirectory(t);
+  for (const connection of [
+    { args: ["--server-url", "http://127.0.0.1:1"], env: {} },
+    { args: [], env: { RELAY_SERVER_URL: "http://127.0.0.1:1" } },
+  ]) {
+    const result = await invokeRaw(directory, [...connection.args, "sync", "status"], {
+      env: connection.env,
+    });
+    assert.equal(result.code, 2, result.stdout);
+    assert.match(result.stdout, /LOCAL_REQUIRED/);
+    assert.match(result.stdout, /укажите --local/);
+    assert.doesNotMatch(result.stdout, /--config|--project/);
+  }
+  const selected = await invokeRaw(directory, ["--project", "demo", "sync", "status"]);
+  assert.equal(selected.code, 2, selected.stdout);
+  assert.match(selected.stdout, /sync не принимает --project/);
+  assert.match(selected.stdout, /из каталога нужного Git-проекта/);
+  assert.doesNotMatch(selected.stdout, /--local/);
 });

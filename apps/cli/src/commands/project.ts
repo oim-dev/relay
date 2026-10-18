@@ -44,7 +44,7 @@ export function registerProject(program: Command, runtime: Runtime): void {
     examples: [
       ["npx @oim-dev/relay-cli init", "Начать в текущем проекте"],
       [
-        "npx @oim-dev/relay-cli init --config /work/project/.relay/config.json --storage tasks",
+        "npx @oim-dev/relay-cli init --config /work/project/.relay/config.json",
         "Подготовить общее хранилище для нескольких worktree",
       ],
     ],
