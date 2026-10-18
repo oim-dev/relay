@@ -20,7 +20,7 @@ export function textOption(command: Command, name: string, description: string):
 const INPUT_READ_LIMIT = 128 * 1024 * 1024;
 
 export async function readTextFields(
-  context: CommandContext,
+  context: Pick<CommandContext, "runtime">,
   options: object,
   names: readonly string[],
 ): Promise<Record<string, string>> {

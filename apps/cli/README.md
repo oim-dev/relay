@@ -63,6 +63,11 @@ npx @oim-dev/relay-cli task list
 вверх от рабочего каталога. Для уже настроенного workspace нужен выбранный проект;
 сервер с Web запускается отдельно пакетом `@oim-dev/relay-server`.
 
+После развёртывания кода шаблона через tiged и `git init` можно установить его полную
+базу: `npx @oim-dev/relay-cli init --template <Git-репозиторий> --name "Новый проект" --slug new-project`.
+Документы, сущности, связи и история сохраняются; ID проекта и Git-история базы — новые.
+Выбор ветки, тега или SHA и восстановление описаны в [инициализации](docs/CLI.md#полная-база-из-шаблона).
+
 ```bash
 npx @oim-dev/relay-cli a task list
 npx @oim-dev/relay-cli task get PRODUCT-1 \

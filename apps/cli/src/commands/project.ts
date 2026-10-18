@@ -3,7 +3,11 @@ import { AppError, invariant } from "@relay/core/shared/errors";
 import { selectProject } from "@relay/project-runtime/config";
 import { cliInitializationConfiguration } from "../configuration.js";
 import { initialize, openWorkspace } from "@relay/core/storage/workspace";
-import { managedConfiguration } from "@relay/project-runtime/git-storage/bootstrap";
+import {
+  managedConfiguration,
+  initializeFromTemplate,
+} from "@relay/project-runtime/git-storage/bootstrap";
+import { defaultConfig } from "@relay/core/domain/config";
 import { outputOptions } from "../context.js";
 import type { GlobalOptions, Runtime } from "../context.js";
 import { PresentedError, printResult } from "../output.js";
@@ -11,6 +15,7 @@ import { createCommand, commandGroup, registerCommand } from "../command.js";
 import {
   configText,
   initializedText,
+  templateInitializedText,
   initializationBlockedText,
   projectText,
   projectSavedText,
@@ -39,24 +44,65 @@ export function registerProject(program: Command, runtime: Runtime): void {
     name: "init",
     description: "Создать конфиг и хранилище проекта",
     details:
-      "В Git-проекте без найденного или явного конфига создаёт worktree в ~/.relay/{repo-name}-{hash} и независимую ветку relay-data только с базой. HEAD, индекс и файлы кода не меняются. Origin и первый коммит кода не обязательны: до появления origin база работает локально, затем синхронизирует те же данные. RELAY_HOME выбирает корень первой установки. Для файловой базы используйте явный --config. Прежнюю базу переносит sync migrate --from-config. Синхронизация: npx @oim-dev/relay-cli sync --help.\n\nФайловый режим: " +
+      "В Git-проекте без найденного или явного конфига создаёт worktree в ~/.relay/{repo-name}-{hash} и независимую ветку relay-data только с базой. HEAD, индекс и файлы кода не меняются. Origin и первый коммит кода не обязательны: до появления origin база работает локально, затем синхронизирует те же данные. RELAY_HOME выбирает корень первой установки. Для файловой базы используйте явный --config. Прежнюю базу переносит sync migrate --from-config. Синхронизация: npx @oim-dev/relay-cli sync --help.\n\nШаблон: --template <репозиторий> переносит полную базу, включая историю, статусы, комментарии и связи, с новым ID проекта. --template-ref выбирает ветку, тег или полный SHA базы; по умолчанию relay-data. --name/--name-file и --slug задают новые настройки; без них имя берётся из нового репозитория, slug создаётся заново. Нужен новый Git-проект без конфигурации Relay; --config, --project и --storage несовместимы с шаблоном. Существующая база не заменяется. Источник должен быть совместим и пройти полную проверку. После прерывания повторите ту же команду: используется сохранённый снимок, а не новая версия источника. Готовая локальная база при ошибке публикации сохраняется; продолжение — sync now.\n\nФайловый режим: " +
       "Создаёт .relay/config.json и единое ID-хранилище рядом с конфигом: entities, relations и индексы. Существующие данные не заменяются; init не восстанавливает неполную базу или незавершённую запись.\n--storage сохраняется для совместимости конфигурации; новый формат не создаёт прежний каталог задач. --config задаёт путь конфигурации. Новое имя файла: латинские буквы, цифры, «_», «-», «.»; кроме «.», «..», служебных имён Relay и relay.workspace.json. Расширение .json необязательно. Unicode, пробелы и кавычки в каталоге разрешены.\nURL из --server-url, RELAY_SERVER_URL или найденного конфига требует --local: init не обращается к серверу. Выбранный проект workspace задаёт локальный путь регистрации; без выбора создаётся отдельная база в текущем каталоге, без регистрации.\nПосле init проверьте config get и подготовьте паспорт продукта: npx @oim-dev/relay-cli product create --help.",
     examples: [
       ["npx @oim-dev/relay-cli init", "Начать в текущем проекте"],
+      [
+        'npx @oim-dev/relay-cli init --template https://github.com/oim-dev/turbo-starter.git --name "Новый проект" --slug new-project',
+        "Создать независимую полную копию базы шаблона после git init",
+      ],
       [
         "npx @oim-dev/relay-cli init --config /work/project/.relay/config.json",
         "Подготовить общее хранилище для нескольких worktree",
       ],
     ],
-    configure: (command) =>
-      command.option(
-        "--storage <path>",
-        "Прежняя привязка storageDir/runtime относительно конфига",
-        "tasks",
-      ),
+    configure: (command) => {
+      command
+        .option(
+          "--storage <path>",
+          "Прежняя привязка storageDir/runtime относительно конфига",
+          "tasks",
+        )
+        .option(
+          "--template <repository>",
+          "Git-репозиторий полной базы шаблона (URL или локальный путь)",
+        )
+        .option(
+          "--template-ref <ref>",
+          "Ветка, тег или полный SHA базы шаблона; по умолчанию relay-data",
+        )
+        .option("--slug <slug>", "Новый slug проекта из шаблона; по умолчанию создаётся заново");
+      textOption(command, "name", "Имя нового проекта из шаблона");
+    },
   });
   init.action(async () => {
     const globals = init.optsWithGlobals<GlobalOptions>();
+    const options = init.opts<{
+      storage: string;
+      template?: string;
+      templateRef?: string;
+      name?: string;
+      nameFile?: string;
+      slug?: string;
+    }>();
+    invariant(
+      options.template !== undefined ||
+        [options.templateRef, options.name, options.nameFile, options.slug].every(
+          (value) => value === undefined,
+        ),
+      "CONFLICTING_OPTIONS",
+      "--template-ref, --name/--name-file и --slug требуют --template",
+    );
+    if (options.template !== undefined)
+      invariant(
+        globals.config === undefined &&
+          runtime.env.RELAY_CONFIG === undefined &&
+          globals.project === undefined &&
+          init.getOptionValueSource("storage") !== "cli",
+        "CONFLICTING_OPTIONS",
+        "--template несовместим с --config, RELAY_CONFIG, --project и --storage",
+      );
     let config = globals.config ?? runtime.env.RELAY_CONFIG;
     const source = await cliInitializationConfiguration(runtime, globals).catch(
       (error: unknown) => {
@@ -82,6 +128,33 @@ export function registerProject(program: Command, runtime: Runtime): void {
       "LOCAL_ONLY",
       "Для инициализации локальной рабочей копии при настроенном HTTP укажите --local.",
     );
+    if (options.template !== undefined) {
+      const fields = await readTextFields({ runtime }, options, ["name"]);
+      const result = await initializeFromTemplate(runtime.cwd, {
+        repository: options.template,
+        ...(options.templateRef === undefined ? {} : { ref: options.templateRef }),
+        ...(fields.name === undefined ? {} : { name: fields.name }),
+        ...(options.slug === undefined ? {} : { slug: options.slug }),
+        ...(runtime.env.RELAY_HOME === undefined
+          ? {}
+          : { home: resolve(runtime.cwd, runtime.env.RELAY_HOME) }),
+      });
+      runtime.output = outputOptions(runtime, globals, defaultConfig.output);
+      const sync = shellCommand([
+        ...localInvocation(runtime, globals, result.configPath),
+        "sync",
+        "now",
+      ]);
+      printResult(
+        runtime.stdout,
+        {
+          data: result,
+          text: (textOptions) => templateInitializedText(result, textOptions, sync),
+        },
+        runtime.output,
+      );
+      return;
+    }
     const managed =
       !config && !source && !globals.project
         ? await managedConfiguration(runtime.cwd, {
