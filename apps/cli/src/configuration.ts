@@ -4,6 +4,7 @@ import { AppError } from "@relay/core/shared/errors";
 import { PresentedError } from "./output.js";
 import { wrap } from "./presentation/layout.js";
 import { safeText } from "./presentation/safe.js";
+import { resolve } from "node:path";
 
 export async function cliConfiguration(
   runtime: Runtime,
@@ -25,7 +26,22 @@ async function readCliConfiguration(
 ) {
   const explicit = globals.config ?? runtime.env.RELAY_CONFIG;
   try {
-    return await read(runtime.cwd, explicit);
+    // Явное HTTP-подключение не запускает установку локальной Git-базы.
+    if (
+      read === readConfiguration &&
+      !globals.local &&
+      (globals.serverUrl ?? runtime.env.RELAY_SERVER_URL)
+    ) {
+      return readConfiguration(runtime.cwd, explicit, false, { managed: false });
+    }
+    return await read(
+      runtime.cwd,
+      explicit,
+      false,
+      runtime.env.RELAY_HOME === undefined
+        ? {}
+        : { home: resolve(runtime.cwd, runtime.env.RELAY_HOME) },
+    );
   } catch (error) {
     // Сохраняем код и машинные details ошибки пути, меняем только human-восстановление.
     if (explicit !== undefined && error instanceof AppError && error.code === "NOT_FOUND") {

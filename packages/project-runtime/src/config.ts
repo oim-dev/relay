@@ -10,6 +10,8 @@ import { parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { exists, readJson } from "@relay/core/storage/files";
 import { CONFIG_NAME, readWorkspaceConfig } from "@relay/core/storage/workspace";
+import { managedConfiguration, restoreManagedConfiguration } from "./git-storage/bootstrap.js";
+import { attachManagedStorage } from "./git-storage/access.js";
 
 export const REGISTRY_NAME = "relay.workspace.json";
 export const projectNameSchema = z.string().regex(/^[\p{L}\p{N}][\p{L}\p{N}_-]{0,63}$/u);
@@ -107,10 +109,40 @@ export async function readConfiguration(
   cwd: string,
   explicit?: string,
   registryOnly = false,
+  options: { managed?: boolean; home?: string } = {},
 ): Promise<Configuration> {
-  const source = await readConfigurationFile(cwd, explicit, registryOnly);
+  let source;
+  try {
+    source = await readConfigurationFile(cwd, explicit, registryOnly);
+  } catch (error) {
+    if (
+      options.managed !== false &&
+      explicit !== undefined &&
+      !registryOnly &&
+      error instanceof AppError &&
+      error.code === "NOT_FOUND" &&
+      (await restoreManagedConfiguration(resolve(cwd, explicit)))
+    ) {
+      return readConfiguration(cwd, explicit, registryOnly, options);
+    }
+    if (
+      !(error instanceof AppError) ||
+      error.code !== "CONFIG_NOT_FOUND" ||
+      explicit !== undefined ||
+      registryOnly ||
+      options.managed === false
+    )
+      throw error;
+    const managed = await managedConfiguration(
+      cwd,
+      options.home === undefined ? {} : { home: options.home },
+    );
+    if (!managed) throw error;
+    source = await readConfigurationFile(cwd, managed);
+  }
   if (source.kind === "registry") return source;
   const path = source.path;
+  if (options.managed !== false) await attachManagedStorage(dirname(path));
   const project = await readWorkspaceConfig(cwd, path);
   return { kind: "project", path: project.configPath, value: project.config };
 }

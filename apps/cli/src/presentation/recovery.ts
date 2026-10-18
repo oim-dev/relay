@@ -49,6 +49,35 @@ export function diagnosticRecovery(
   options: TextOptions,
   context?: RecoveryContext,
 ): string | undefined {
+  if (error.code === "SYNC_CONFLICT" && context) {
+    const local = context.maintenance;
+    return [
+      wrap(
+        "Следующий шаг: изучите конфликт и согласуйте решение. Предметная работа приостановлена до его публикации.",
+        options.width,
+      ),
+      ...(local
+        ? []
+        : [
+            wrap(
+              "Разрешение выполняется локально на стороне Server. Серверный путь не подставляется как локальная база клиента.",
+              options.width,
+            ),
+          ]),
+      actionsText(
+        [
+          {
+            purpose: "recovery",
+            label: local
+              ? "Прочитать конфликт выбранной базы"
+              : "Прочитать конфигурацию выбранного проекта на сервере",
+            command: local ? local(["sync", "conflicts"]) : context.command(["config", "get"]),
+          },
+        ],
+        options,
+      ),
+    ].join("\n\n");
+  }
   const deletion = context?.deletion;
   if (context && deletion) {
     if (error.code === "REVISION_CONFLICT")

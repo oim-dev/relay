@@ -9,7 +9,7 @@
     "packages/relay-skill/scripts/check.mjs": "54de70d08d486d8e20dd0f4c7d03b59d4d322a95e9f3a049a857b77805b828f4",
     "packages/relay-skill/scripts/lib.mjs": "70ba53c5f7572a2af342846428770e8e6ac8388d364a1da219b9825dac1f5951",
     "packages/relay-skill/scripts/skill-contract.test.mjs": "69461eb7a93f1314a48e8ea6d9f5a5be826ee0c35f0119eaccddfa525a72fd17",
-    "packages/relay-skill/scripts/workflow.test.mjs": "30037b6683384015ba15480ff98644082d10d431d97f6df6074ac0f26108ba33",
+    "packages/relay-skill/scripts/workflow.test.mjs": "1ca2af672b40d1c947769d2c8d1bec23dce9ca63b35c67507b2295440bd80569",
     "packages/relay-skill/src/bundle.json": "523b0da075b1aa6c6fb243f76ca4dda003b446bd693456cf9623f8bd98e08f53",
     "packages/relay-skill/src/references/APPLICATIONS.md": "11ee59782f9f247e31603e9afc797d87ec05b0a79fabdcdf5ba3a633f0b3f4d2",
     "packages/relay-skill/src/references/FEATURES.md": "0442f1fc2ab7615255f00982a66aa5e5b1eb364b3fd540605a4db5cbdd56e1c4",

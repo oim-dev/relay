@@ -34,6 +34,7 @@ try {
   const webPort = process.env.RELAY_WEB_PORT ?? "5173";
   const server = await startServer({
     cwd: process.cwd(),
+    ...(process.env.RELAY_HOME === undefined ? {} : { relayHome: process.env.RELAY_HOME }),
     ...(config === undefined ? {} : { config }),
     ...(port === undefined ? {} : { port: /^\d+$/.test(port) ? Number(port) : NaN }),
     actor: options.actor ?? process.env.RELAY_ACTOR ?? "human",

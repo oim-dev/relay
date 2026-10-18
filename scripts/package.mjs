@@ -51,7 +51,10 @@ export async function packageComponent(
   const entry = component === "cli" ? "cli/main" : "main";
   await build({
     absWorkingDir: root,
-    entryPoints: { [entry]: join(app, "dist", `${entry}.js`) },
+    entryPoints: {
+      [entry]: join(app, "dist", `${entry}.js`),
+      "relay-sync-worker": join(root, "packages/project-runtime/dist/git-storage/worker.js"),
+    },
     outdir: join(stage, "dist"),
     bundle: true,
     platform: "node",

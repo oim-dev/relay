@@ -2,7 +2,8 @@ import type { Command } from "commander";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { selectProject } from "@relay/project-runtime/config";
 import { cliInitializationConfiguration } from "../configuration.js";
-import { initialize } from "@relay/core/storage/workspace";
+import { initialize, openWorkspace } from "@relay/core/storage/workspace";
+import { managedConfiguration } from "@relay/project-runtime/git-storage/bootstrap";
 import { outputOptions } from "../context.js";
 import type { GlobalOptions, Runtime } from "../context.js";
 import { PresentedError, printResult } from "../output.js";
@@ -16,6 +17,7 @@ import {
   projectSettingsSavedText,
 } from "../presentation/project.js";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { entityUpdateSchema, entityRenameSchema } from "@relay/contracts/entities";
 import { saveProjectSettingsSchema } from "@relay/contracts/entities/project-settings";
 import { parse } from "@relay/core/domain/validation";
@@ -37,6 +39,7 @@ export function registerProject(program: Command, runtime: Runtime): void {
     name: "init",
     description: "Создать конфиг и хранилище проекта",
     details:
+      "В Git-проекте с origin без найденного или явного конфига создаёт внешнюю базу ~/.relay/{repo-name}-{hash} и публикует служебную ветку relay-data. Существующая ветка подключается автоматически. RELAY_HOME меняет общий корень. Для файловой базы используйте явный --config. Синхронизация: npx @oim-dev/relay-cli sync --help.\n\nФайловый режим: " +
       "Создаёт .relay/config.json и единое ID-хранилище рядом с конфигом: entities, relations и индексы. Существующие данные не заменяются; init не восстанавливает неполную базу или незавершённую запись.\n--storage сохраняется для совместимости конфигурации; новый формат не создаёт прежний каталог задач. --config задаёт путь конфигурации. Новое имя файла: латинские буквы, цифры, «_», «-», «.»; кроме «.», «..», служебных имён Relay и relay.workspace.json. Расширение .json необязательно. Unicode, пробелы и кавычки в каталоге разрешены.\nURL из --server-url, RELAY_SERVER_URL или найденного конфига требует --local: init не обращается к серверу. Выбранный проект workspace задаёт локальный путь регистрации; без выбора создаётся отдельная база в текущем каталоге, без регистрации.\nПосле init проверьте config get и подготовьте паспорт продукта: npx @oim-dev/relay-cli product create --help.",
     examples: [
       ["npx @oim-dev/relay-cli init", "Начать в текущем проекте"],
@@ -79,10 +82,19 @@ export function registerProject(program: Command, runtime: Runtime): void {
       "LOCAL_ONLY",
       "Для инициализации локальной рабочей копии при настроенном HTTP укажите --local.",
     );
-    const workspace = await initialize(
-      runtime.cwd,
-      init.opts<{ storage: string }>().storage,
-      config,
+    const managed =
+      !config && !source && !globals.project
+        ? await managedConfiguration(runtime.cwd, {
+            create: true,
+            ...(runtime.env.RELAY_HOME === undefined
+              ? {}
+              : { home: resolve(runtime.cwd, runtime.env.RELAY_HOME) }),
+          })
+        : undefined;
+    const workspace = await (
+      managed
+        ? openWorkspace(runtime.cwd, managed)
+        : initialize(runtime.cwd, init.opts<{ storage: string }>().storage, config)
     ).catch((error: unknown) => {
       if (!(error instanceof AppError) || error.code !== "ALREADY_INITIALIZED") throw error;
       const details = error.details as

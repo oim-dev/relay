@@ -98,7 +98,11 @@ export async function createWorkspace(keys = ["alpha", "beta"]) {
   for (const key of keys) {
     const directory = join(root, key);
     await mkdir(directory);
-    await run(process.execPath, [cliBinary, "init"], { cwd: directory, env: isolatedEnv() });
+    await run(
+      process.execPath,
+      [cliBinary, "init", "--config", join(directory, ".relay/config.json")],
+      { cwd: directory, env: isolatedEnv() },
+    );
     // Регрессии обзора проверяют также существующие проекты с инфраструктурной доской.
     const { openWorkspace } = await import(
       new URL("../../../../../packages/core/dist/storage/workspace.js", import.meta.url).href

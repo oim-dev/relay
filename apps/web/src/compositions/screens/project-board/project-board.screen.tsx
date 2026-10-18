@@ -26,6 +26,14 @@ import { TaskModal } from "./ui/task-modal";
 import { BOARD_BACKGROUND_SCHEMA } from "./config/route.schema";
 import styles from "./styles/project-board.module.css";
 
+const REFRESH_ERROR_VARS = {
+  root: {
+    "--alert-bg": "var(--tasks-danger-surface)",
+    "--alert-color": "var(--tasks-danger)",
+    "--alert-bd": "1px solid var(--tasks-danger-border)",
+  },
+};
+
 /**
  * Показывает самостоятельную доску проекта по её slug.
  *
@@ -186,7 +194,7 @@ export const ProjectBoardScreen = () => {
         </Button>
       </Alert>
     );
-  if (query.error !== undefined || board === undefined) {
+  if (board === undefined) {
     return (
       <section className={styles.root}>
         <Skeleton height={40} mb="md" />
@@ -212,6 +220,14 @@ export const ProjectBoardScreen = () => {
   const blockedColor = isBlockedOnly ? "red" : "gray";
   return (
     <section className={styles.root}>
+      {query.error !== undefined && (
+        <Alert vars={() => REFRESH_ERROR_VARS} title="Не удалось обновить доску">
+          {query.error.message}
+          <Button variant="subtle" onClick={() => void query.mutate().catch(() => undefined)}>
+            Повторить
+          </Button>
+        </Alert>
+      )}
       <header className={styles.toolbar}>
         <Stack gap={6} className={styles.heading}>
           <Group gap="sm" wrap="nowrap">

@@ -15,7 +15,7 @@ export async function startMcp(options: {
 }) {
   const source = options.serverUrl
     ? undefined
-    : await readConfiguration(options.cwd, options.config);
+    : await readConfiguration(options.cwd, options.config, false, { managed: false });
   const port = parse(
     serverPortSchema,
     options.port ?? source?.value.mcp?.port ?? DEFAULT_MCP_PORT,

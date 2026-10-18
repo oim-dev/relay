@@ -8,7 +8,10 @@ import type { Configuration } from "@relay/project-runtime/config";
 import { isStorageCompatibility } from "@relay/project-runtime/storage-errors";
 
 function storageIncompatible(error: unknown): error is AppError {
-  return error instanceof AppError && isStorageCompatibility(error.code, error.exitCode);
+  return (
+    error instanceof AppError &&
+    (isStorageCompatibility(error.code, error.exitCode) || error.code === "SYNC_CONFLICT")
+  );
 }
 
 /**
@@ -17,9 +20,13 @@ function storageIncompatible(error: unknown): error is AppError {
  * проект становится доступен без перезапуска. Нужна только текущая схема конфигурации
  * для порта; повреждённая конфигурация и ошибка реестра по-прежнему останавливают запуск.
  */
-export async function serverConfiguration(cwd: string, explicit?: string): Promise<Configuration> {
+export async function serverConfiguration(
+  cwd: string,
+  explicit?: string,
+  home?: string,
+): Promise<Configuration> {
   try {
-    return await readConfiguration(cwd, explicit);
+    return await readConfiguration(cwd, explicit, false, home === undefined ? {} : { home });
   } catch (error) {
     if (!storageIncompatible(error)) throw error;
     try {
