@@ -20,7 +20,6 @@ export const useProjectConnection = (): SWRSubscriptionResponse<ProjectConnectio
         next(null, {
           ...signal,
           blocked: [
-            "SYNC_CONFLICT",
             "SYNC_RECOVERY_REQUIRED",
             "SYNC_RECOVERY_CONFLICT",
             "SYNC_STATE_INVALID",

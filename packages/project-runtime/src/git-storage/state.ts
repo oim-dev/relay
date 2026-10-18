@@ -43,7 +43,16 @@ export const stateSchema = z.strictObject({
   lastDirty: z.number().nullable(),
   requested: z.number().int().nonnegative(),
   checked: z.number().int().nonnegative(),
+  attempted: z.number().int().nonnegative().default(0),
   generation: z.number().int().nonnegative(),
+  committedGeneration: z.number().int().nonnegative().default(0),
+  commitPendingSince: z.number().nullable().default(null),
+  lastCommit: z.number().nullable().default(null),
+  lastSuccess: z.number().nullable().default(null),
+  lastAttempt: z.number().nullable().default(null),
+  retryAt: z.number().nullable().default(null),
+  failures: z.number().int().nonnegative().default(0),
+  observedOrigin: z.string().nullable().default(null),
   sendingGeneration: z.number().int().nonnegative().nullable(),
   lastFetch: z.number().nullable(),
   remote: oid.nullable(),
@@ -59,7 +68,16 @@ export const initialState = (): SyncState => ({
   lastDirty: null,
   requested: 0,
   checked: 0,
+  attempted: 0,
   generation: 0,
+  committedGeneration: 0,
+  commitPendingSince: null,
+  lastCommit: null,
+  lastSuccess: null,
+  lastAttempt: null,
+  retryAt: null,
+  failures: 0,
+  observedOrigin: null,
   sendingGeneration: null,
   lastFetch: null,
   remote: null,
@@ -104,4 +122,11 @@ export function pushDeadline(
   return state.firstDirty === null || state.lastDirty === null
     ? null
     : Math.min(state.lastDirty + debounce, state.firstDirty + maxWait);
+}
+
+/** Частота локальных коммитов не зависит от доступности origin и сетевого backoff. */
+export function commitDeadline(state: SyncState): number | null {
+  if (state.generation <= state.committedGeneration) return null;
+  const first = state.commitPendingSince ?? state.firstDirty ?? 0;
+  return Math.min((state.lastDirty ?? first) + 2000, first + 15000);
 }

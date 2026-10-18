@@ -16,6 +16,41 @@ export type ProductOverviewMetric =
   | "ready-releases"
   | "plans-outside-releases";
 
+export interface SynchronizationStatus {
+  /** Файловая база либо база в Git */
+  mode: SynchronizationStatusModeEnum;
+  /** Состояние фоновой доставки; offline и conflict не запрещают локальную работу */
+  status: SynchronizationStatusStatusEnum;
+  /** Адрес origin без credentials; null, если не настроен */
+  origin: string | null;
+  /** Локальные коммиты без подтверждения в последнем проверенном origin; null, если удалённое состояние неизвестно */
+  queuedCommits: number | null;
+  /** В локальной базе есть изменения, ещё не собранные в Git-коммит */
+  uncommittedChanges: boolean;
+  /** Текущий локальный коммит базы; null для файлового режима */
+  localHead: string | null;
+  /** Последний проверенный коммит origin, не утверждение о его текущем состоянии */
+  remoteHead: string | null;
+  /** Время последнего подтверждённого согласования с origin */
+  lastSuccessAt: string | null;
+  /** Время начала последней сетевой попытки */
+  lastAttemptAt: string | null;
+  /** План следующей фоновой попытки; не ограничение запросов к базе */
+  nextAttemptAt: string | null;
+  /** ID сохранённого конфликта синхронизации */
+  conflictId: string | null;
+  /** Последняя ошибка; данные доступны локально */
+  error: {
+    /** Машинный код ошибки доставки */
+    code: string;
+    /** Пояснение ошибки доставки */
+    message: string;
+  } | null;
+}
+
+/** Запрос фоновой попытки без ожидания origin */
+export type SynchronizationRequest = object;
+
 /** Отдельное чтение графа выбранной ветки/дерева или проекта, без новых q/status и иных фильтров каталога */
 export interface WorkHistoryGraphQuery {
   /**
@@ -17837,6 +17872,8 @@ export interface HealthResponse {
 }
 
 export interface ContextResponse {
+  /** Режим доставки выбранной базы */
+  synchronizationMode?: ContextResponseSynchronizationModeEnum;
   capabilities?: string[];
   project: string;
   /** Стабильный идентификатор пути конфигурации проекта */
@@ -18145,6 +18182,19 @@ export interface ApiFailure {
     exitCode?: number;
   };
 }
+
+/** Файловая база либо база в Git */
+export type SynchronizationStatusModeEnum = "file" | "git";
+
+/** Состояние фоновой доставки; offline и conflict не запрещают локальную работу */
+export type SynchronizationStatusStatusEnum =
+  | "local"
+  | "synced"
+  | "pending"
+  | "syncing"
+  | "offline"
+  | "conflict"
+  | "unknown";
 
 /**
  * Порядок точек по (at, sessionId, sequence, id): asc или полностью обратный desc; по умолчанию desc
@@ -21480,6 +21530,9 @@ export type ServerEventSourceEnum = "api" | "storage";
 
 export type HealthResponseStageEnum = "scaffold" | "ready";
 
+/** Режим доставки выбранной базы */
+export type ContextResponseSynchronizationModeEnum = "file" | "git";
+
 export type ContextResponseColorEnum =
   | "black"
   | "red"
@@ -21564,6 +21617,10 @@ export type GetContextOkEnum = true;
 export type GetProjectSettingsOkEnum = true;
 
 export type SaveProjectSettingsOkEnum = true;
+
+export type GetSynchronizationStatusOkEnum = true;
+
+export type RequestSynchronizationOkEnum = true;
 
 export type ValidateProjectOkEnum = true;
 
@@ -23913,6 +23970,20 @@ export interface GetProjectSettingsForProjectParams {
 export type SaveProjectSettingsForProjectOkEnum = true;
 
 export interface SaveProjectSettingsForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type GetSynchronizationStatusForProjectOkEnum = true;
+
+export interface GetSynchronizationStatusForProjectParams {
+  /** Slug, имя из реестра или постоянный идентификатор проекта */
+  project: string;
+}
+
+export type RequestSynchronizationForProjectOkEnum = true;
+
+export interface RequestSynchronizationForProjectParams {
   /** Slug, имя из реестра или постоянный идентификатор проекта */
   project: string;
 }

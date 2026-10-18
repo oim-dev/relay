@@ -20,6 +20,7 @@ export interface Result {
   data: unknown;
   meta?: Record<string, unknown>;
   page?: CliPage;
+  warnings?: string[];
   /** Человекочитаемое представление не входит в JSON-контракт. */
   text?: string | ((options: TextOptions) => string);
 }
@@ -48,7 +49,11 @@ export function serializeResult(
   options: TextOptions = defaultTextOptions,
 ): string {
   if (format === "json") {
-    const meta = { ...result.meta, ...(result.page ? { page: result.page } : {}) };
+    const meta = {
+      ...result.meta,
+      ...(result.page ? { page: result.page } : {}),
+      ...(result.warnings?.length ? { warnings: result.warnings } : {}),
+    };
     return `${safeJson({ ok: true, data: result.data, ...(Object.keys(meta).length ? { meta } : {}) })}\n`;
   }
   const body =
@@ -64,7 +69,10 @@ export function serializeResult(
       : result.meta?.truncated
         ? "\n\nПоказана часть данных."
         : "";
-  const rendered = safeText(body + footer);
+  const warnings = result.warnings
+    ?.map((message) => `Предупреждение: ${safeText(message)}`)
+    .join("\n");
+  const rendered = safeText(body + footer + (warnings ? `\n\n${warnings}` : ""));
   return rendered.endsWith("\n") ? rendered : `${rendered}\n`;
 }
 

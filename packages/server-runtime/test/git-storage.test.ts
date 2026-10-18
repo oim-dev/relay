@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { managedConfiguration } from "@relay/project-runtime/git-storage/bootstrap";
-import { synchronize, resolveConflict } from "@relay/project-runtime/git-storage/service";
+import {
+  synchronize,
+  resolveConflict,
+  conflicts,
+} from "@relay/project-runtime/git-storage/service";
 import { readState } from "@relay/project-runtime/git-storage/state";
 import { git } from "@relay/project-runtime/git-storage/git";
 import { openWorkspace } from "@relay/core/storage/workspace";
@@ -15,7 +19,7 @@ import { EntityEngine } from "@relay/core/application/entities/service";
 import { createServer } from "../src/bootstrap.js";
 
 test(
-  "Git-база: HTTP и scoped отказывают при конфликте, SSE уведомляет и снимает блокировку",
+  "Git-база: HTTP/scoped продолжают работу при конфликте, статус доставки доступен отдельно",
   { timeout: 30000 },
   async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "relay-git-server-"));
@@ -121,23 +125,21 @@ test(
     await assert.rejects(synchronize(root), { code: "SYNC_CONFLICT" });
     for (const prefix of ["/api/v1", `/api/v1/projects/${workspace.config.projectId}`]) {
       const result = await app.inject(`${prefix}/boards`);
-      assert.equal(result.statusCode, 409, result.body);
-      assert.equal(result.json().error.code, "SYNC_CONFLICT");
+      assert.equal(result.statusCode, 200, result.body);
+      const status = await app.inject(`${prefix}/context/sync`);
+      assert.equal(status.json().data.status, "conflict", status.body);
       const write = await app.inject({
         method: "POST",
         url: `${prefix}/entities`,
         payload: {
-          requestId: "blocked",
-          data: { kind: "task", board: "product", title: "Не создавать" },
+          requestId: "local",
+          data: { kind: "task", board: "product", title: "Локальная работа" },
         },
       });
-      assert.equal(write.statusCode, 409, write.body);
-      assert.equal(write.json().error.code, "SYNC_CONFLICT");
+      assert.equal(write.statusCode, 200, write.body);
     }
-    const deadline = Date.now() + 6000;
-    while (!received.includes('"code":"SYNC_CONFLICT"') && Date.now() < deadline) await delay(50);
-    assert(received.includes('"code":"SYNC_CONFLICT"'), received);
-    const conflict = (await readState(root)).conflict!;
+    assert(!received.includes('"code":"SYNC_CONFLICT"'), received);
+    const conflict = (await conflicts(root))!;
     await resolveConflict(root, conflict.id, "local");
     assert.equal((await app.inject("/api/v1/boards")).statusCode, 200);
     abort.abort();

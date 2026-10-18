@@ -32,7 +32,7 @@ import {
   withDataLock,
 } from "../src/git-storage/service.js";
 import { readState, pushDeadline, initialState, saveState } from "../src/git-storage/state.js";
-import { runWorker, ensureWorker } from "../src/git-storage/launcher.js";
+import { runWorker, requestSynchronization } from "../src/git-storage/launcher.js";
 import { git, gitText } from "../src/git-storage/git.js";
 import { mergeSnapshots } from "../src/git-storage/snapshots.js";
 import { prepareSnapshot } from "../src/git-storage/snapshots.js";
@@ -145,13 +145,15 @@ test("Lifecycle: потеря сети сохраняет очередь; сле
   const snapshot = await internal(() => captureSnapshot(f.workspace));
   const offline = join(f.directory, "offline.git");
   await rename(f.origin, offline);
-  await runWorker(f.root);
+  const worker = runWorker(f.root);
+  const deadline = Date.now() + 10000;
+  while (!(await readState(f.root)).error && Date.now() < deadline) await delay(30);
   const failed = await readState(f.root);
   assert.equal(failed.error?.code, "SYNC_NETWORK_UNAVAILABLE");
   assert.notEqual(failed.firstDirty, null);
   assert.equal((await internal(() => captureSnapshot(f.workspace))).version, snapshot.version);
   await rename(offline, f.origin);
-  await runWorker(f.root);
+  await worker;
   const restored = await readState(f.root);
   assert.equal(restored.error, null);
   assert.equal(restored.firstDirty, null);
@@ -167,7 +169,7 @@ test("Lifecycle: устаревшая reservation после сбоя запус
     join(f.gitDir, "relay-worker-start.json"),
     JSON.stringify({ at: Date.now() - 10000 }),
   );
-  await ensureWorker(f.root);
+  await requestSynchronization(f.root);
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
     if (
@@ -410,7 +412,7 @@ test("Адресное решение сохраняет независимые 
   await internal(() => validateWorkspace(f.workspace));
 });
 
-test("Настройки проекта проверяют origin до мутации и не подставляют свежую ревизию", async (t) => {
+test("Настройки проекта записываются локально; удалённый конфликт обнаруживается в фоне", async (t) => {
   const f = await fixture(t),
     peer = await f.peer();
   const initial = f.workspace.config.projectSettings!;
@@ -422,16 +424,14 @@ test("Настройки проекта проверяют origin до мута�
     }),
   );
   await synchronize(peer.root);
-  await assert.rejects(
-    saveProjectSettings(f.workspace, {
-      name: "Устаревшее",
-      slug: initial.slug,
-      ifRevision: initial.revision,
-    }),
-    { code: "REVISION_CONFLICT" },
-  );
+  await saveProjectSettings(f.workspace, {
+    name: "Локальное имя",
+    slug: initial.slug,
+    ifRevision: initial.revision,
+  });
+  await assert.rejects(synchronize(f.root), { code: "SYNC_CONFLICT" });
   const detail = await internal(() => f.engine.get({ ref: "PROJECT" }));
-  assert.equal(detail.title, "Удалённое имя");
+  assert.equal(detail.title, "Локальное имя");
   const deadline = Date.now() + 10000;
   while (
     Date.now() < deadline &&
@@ -600,7 +600,7 @@ test("Синхронизация: точный Markdown, две копии, по
   await internal(() => validateWorkspace(peer.workspace));
 });
 
-test("Конфликт: блокировка чтения/записи, устойчивые материалы и явное решение по ID", async (t) => {
+test("Конфликт: локальные чтение/запись доступны, решение защищено от новых изменений", async (t) => {
   const f = await fixture(t);
   const doc = await internal(() =>
     f.engine.create(
@@ -645,29 +645,32 @@ test("Конфликт: блокировка чтения/записи, усто
   await assert.rejects(synchronize(f.root), { code: "SYNC_CONFLICT" });
   const state = await readState(f.root);
   assert(state.conflict);
-  await assert.rejects(f.engine.get({ ref: doc.key }), { code: "SYNC_CONFLICT" });
-  await assert.rejects(
-    f.engine.update(
-      {
-        ref: doc.key,
-        ifRevision: 2,
-        requestId: "blocked",
-        changes: { kind: "document", body: "Не записывать" },
-      },
-      "agent",
-    ),
-    { code: "SYNC_CONFLICT" },
+  assert.equal((await f.engine.get({ ref: doc.key })).revision, 2);
+  await f.engine.update(
+    {
+      ref: doc.key,
+      ifRevision: 2,
+      requestId: "blocked",
+      changes: { kind: "document", body: "Продолжили локальную работу\n" },
+    },
+    "agent",
   );
   const materials = await conflicts(f.root);
   assert(materials);
-  assert.equal(materials.id, state.conflict.id);
+  assert.notEqual(materials.id, state.conflict.id);
+  await assert.rejects(resolveConflict(f.root, state.conflict.id, "remote"), {
+    code: "SYNC_RESOLUTION_STALE",
+  });
   await assert.rejects(resolveConflict(f.root, "old-id", "local"), {
     code: "SYNC_RESOLUTION_STALE",
   });
-  await resolveConflict(f.root, state.conflict.id, "local");
+  await resolveConflict(f.root, materials.id, "local");
   assert.equal((await readState(f.root)).conflict, null);
   const detail = await internal(() => f.engine.get({ ref: doc.key }));
-  assert.equal(detail.data.kind === "document" && detail.data.body, "Локальная версия\n");
+  assert.equal(
+    detail.data.kind === "document" && detail.data.body,
+    "Продолжили локальную работу\n",
+  );
   await synchronize(peer.root);
   await internal(() => validateWorkspace(f.workspace));
 });

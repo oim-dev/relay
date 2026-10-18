@@ -38,6 +38,16 @@ export async function withDataLock<T>(root: string, operation: () => Promise<T>)
   return withStorageLock(root, operation, join(root, "runtime"));
 }
 
+/** Git-публикации локального снимка и merge сериализуются отдельно от сетевого ожидания. */
+export async function withPublicationLock<T>(
+  root: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const directory = await managedPath(root, "relay-local-lock");
+  await mkdir(directory, { recursive: true });
+  return withStorageLock(directory, operation, directory);
+}
+
 async function fetchRemote(root: string, origin: RepositoryIdentity | undefined) {
   if (!origin) return;
   const found = await git(
@@ -94,7 +104,7 @@ async function finishPublication(root: string, oldHead: string, newHead: string)
   await syncDirectory(await gitMetadataDirectory(root));
 }
 
-export async function recoverPublication(root: string) {
+async function recoverPublicationUnlocked(root: string) {
   const path = await managedPath(root, "relay-publication.json");
   if (!(await exists(path))) return;
   const record = publicationSchema.parse(await readJson(path));
@@ -119,6 +129,49 @@ export async function recoverPublication(root: string) {
   });
 }
 
+export async function recoverPublication(root: string) {
+  return withPublicationLock(root, () => recoverPublicationUnlocked(root));
+}
+
+/** Согласованный локальный коммит создаётся даже без сети и при Git-конфликте. */
+export async function checkpointLocal(root: string): Promise<void> {
+  return withWorkspaceMaintenance(() =>
+    withPublicationLock(root, async () => {
+      await recoverPublicationUnlocked(root);
+      const workspace = await workspaceAt(root);
+      const captured = await workspace.locked(async () => ({
+        files: await readSnapshotFiles(root),
+        generation: (await readState(root)).generation,
+        oldHead: await head(root),
+      }));
+      const previous = await snapshotAt(root, captured.oldHead);
+      const changed = snapshotVersion(previous) !== snapshotVersion(captured.files);
+      const commit = changed
+        ? await commitSnapshot(root, captured.files, [captured.oldHead])
+        : captured.oldHead;
+      const origin = await currentOrigin(root);
+      // Новые локальные записи не откатываются: меняются только Git ref/index и квитанция поколения.
+      if (changed)
+        await git(root, ["update-ref", `refs/heads/${DATA_BRANCH}`, commit, captured.oldHead]);
+      await git(root, ["read-tree", commit]);
+      await withDataLock(root, async () => {
+        const state = await readState(root);
+        state.committedGeneration = Math.max(state.committedGeneration, captured.generation);
+        if (state.generation === captured.generation) state.commitPendingSince = null;
+        if (changed) {
+          state.lastCommit = Date.now();
+          state.firstDirty ??= state.lastCommit;
+          state.lastDirty ??= state.lastCommit;
+        }
+        if (origin && commit !== state.remote) state.firstDirty ??= Date.now();
+        if (!origin && state.generation === captured.generation)
+          state.firstDirty = state.lastDirty = null;
+        await saveState(root, state);
+      });
+    }),
+  );
+}
+
 async function publishLocal(
   root: string,
   files: PersistentSnapshot,
@@ -129,35 +182,43 @@ async function publishLocal(
   resolution = false,
 ) {
   const workspace = await workspaceAt(root);
-  await workspace.locked(async () => {
-    invariant(
-      snapshotVersion(await readSnapshotFiles(root)) === source,
-      "SYNC_SNAPSHOT_CHANGED",
-      "Локальные данные изменились; снимок нужно подготовить заново",
-      4,
-    );
-    await git(root, ["update-ref", "refs/relay/pending", newHead]);
-    await atomicJson(
-      await managedPath(root, "relay-publication.json"),
-      { oldHead, newHead, source, target: snapshotVersion(files), resolution },
-      await gitMetadataDirectory(root),
-    );
-    try {
-      await applySnapshot(workspace, prepared, source);
-    } catch (error) {
-      // Отказ до durable WAL (например, бюджет) не оставляет невыполнимое намерение.
-      // Начатая публикация и изменённые данные всегда сохраняют журнал восстановления.
-      if (
-        !(await exists(join(root, "transactions/pending.json"))) &&
-        snapshotVersion(await readSnapshotFiles(root)) === source
-      ) {
-        await rm(await managedPath(root, "relay-publication.json"), { force: true });
-        await syncDirectory(await gitMetadataDirectory(root));
+  await withPublicationLock(root, () =>
+    workspace.locked(async () => {
+      invariant(
+        (await head(root)) === oldHead,
+        "SYNC_SNAPSHOT_CHANGED",
+        "Локальная Git-версия изменилась во время подготовки синхронизации",
+        4,
+      );
+      invariant(
+        snapshotVersion(await readSnapshotFiles(root)) === source,
+        "SYNC_SNAPSHOT_CHANGED",
+        "Локальные данные изменились; снимок нужно подготовить заново",
+        4,
+      );
+      await git(root, ["update-ref", "refs/relay/pending", newHead]);
+      await atomicJson(
+        await managedPath(root, "relay-publication.json"),
+        { oldHead, newHead, source, target: snapshotVersion(files), resolution },
+        await gitMetadataDirectory(root),
+      );
+      try {
+        await applySnapshot(workspace, prepared, source);
+      } catch (error) {
+        // Отказ до durable WAL (например, бюджет) не оставляет невыполнимое намерение.
+        // Начатая публикация и изменённые данные всегда сохраняют журнал восстановления.
+        if (
+          !(await exists(join(root, "transactions/pending.json"))) &&
+          snapshotVersion(await readSnapshotFiles(root)) === source
+        ) {
+          await rm(await managedPath(root, "relay-publication.json"), { force: true });
+          await syncDirectory(await gitMetadataDirectory(root));
+        }
+        throw error;
       }
-      throw error;
-    }
-    await finishPublication(root, oldHead, newHead);
-  });
+      await finishPublication(root, oldHead, newHead);
+    }),
+  );
 }
 
 async function block(
@@ -171,24 +232,26 @@ async function block(
     fingerprint: string;
   },
 ) {
-  await withDataLock(root, async () => {
-    invariant(
-      snapshotVersion(await readSnapshotFiles(root)) === input.fingerprint,
-      "SYNC_SNAPSHOT_CHANGED",
-      "Данные изменились до установки блокировки",
-      4,
-    );
-    const state = await readState(root);
-    const id = createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 24);
-    await git(root, ["update-ref", "refs/relay/conflict-local", input.local]);
-    await git(root, ["update-ref", "refs/relay/conflict-remote", input.remote]);
-    state.conflict = { id, ...input };
-    state.resolution = null;
-    await saveState(root, state);
-  });
+  await withPublicationLock(root, () =>
+    withDataLock(root, async () => {
+      invariant(
+        snapshotVersion(await readSnapshotFiles(root)) === input.fingerprint,
+        "SYNC_SNAPSHOT_CHANGED",
+        "Данные изменились до установки блокировки",
+        4,
+      );
+      const state = await readState(root);
+      const id = createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 24);
+      await git(root, ["update-ref", "refs/relay/conflict-local", input.local]);
+      await git(root, ["update-ref", "refs/relay/conflict-remote", input.remote]);
+      state.conflict = { id, ...input };
+      state.resolution = null;
+      await saveState(root, state);
+    }),
+  );
   throw new AppError(
     "SYNC_CONFLICT",
-    "Работа с базой приостановлена: разрешите конфликт синхронизации",
+    "Синхронизация приостановлена конфликтом; локальная работа доступна",
     4,
     { paths: input.paths },
   );
@@ -232,25 +295,34 @@ async function send(
     "Origin изменился во время отправки; результат нового подключения требует проверки",
     4,
   );
-  await withDataLock(root, async () => {
-    const state = await readState(root);
-    if (
-      state.generation === generation &&
-      snapshotVersion(await readSnapshotFiles(root)) === sentVersion
-    ) {
-      state.firstDirty = null;
-      state.lastDirty = null;
-    } else if (state.firstDirty === null) state.firstDirty = state.lastDirty = Date.now();
-    state.remote = remote;
-    state.origin = origin.identity;
-    state.checked = Math.max(state.checked, request);
-    state.error = null;
-    if (state.resolution === commit) {
-      state.conflict = null;
-      state.resolution = null;
-    }
-    await saveState(root, state);
-  });
+  const resolution = (await readState(root)).resolution;
+  const resolutionSent =
+    resolution !== null &&
+    !(await git(root, ["merge-base", "--is-ancestor", resolution, commit], { allowFailure: true }))
+      .code;
+  await withPublicationLock(root, () =>
+    withDataLock(root, async () => {
+      const state = await readState(root);
+      if (
+        state.generation === generation &&
+        (await head(root)) === commit &&
+        snapshotVersion(await readSnapshotFiles(root)) === sentVersion
+      ) {
+        state.firstDirty = null;
+        state.lastDirty = null;
+      } else if (state.firstDirty === null) state.firstDirty = state.lastDirty = Date.now();
+      state.remote = remote;
+      state.origin = origin.identity;
+      state.checked = Math.max(state.checked, request);
+      state.error = null;
+      state.lastSuccess = Date.now();
+      if (state.resolution === resolution && resolutionSent) {
+        state.conflict = null;
+        state.resolution = null;
+      }
+      await saveState(root, state);
+    }),
+  );
 }
 
 type Outgoing = { commit: string; generation: number; request: number; origin: RepositoryIdentity };
@@ -268,7 +340,7 @@ async function synchronizeOnce(
   invariant(
     !state.conflict || state.resolution,
     "SYNC_CONFLICT",
-    "База заблокирована конфликтом; сначала изучите и согласуйте обе версии",
+    "Синхронизация приостановлена конфликтом; локальная работа доступна",
     4,
     state.conflict ? { conflictId: state.conflict.id, paths: state.conflict.paths } : undefined,
   );
@@ -283,9 +355,11 @@ async function synchronizeOnce(
   const request = state.requested;
   const remote = await fetchRemote(root, origin);
   const workspace = await workspaceAt(root);
-  const source = await captureSnapshot(workspace);
-  const oldHead = await head(root);
-  const localHead = await snapshotAt(root, oldHead);
+  const { source, oldHead, localHead } = await withPublicationLock(root, async () => {
+    const source = await captureSnapshot(workspace);
+    const oldHead = await head(root);
+    return { source, oldHead, localHead: await snapshotAt(root, oldHead) };
+  });
   if (!remote) {
     const dirty = source.version !== snapshotVersion(localHead);
     let nextHead = oldHead;
@@ -404,6 +478,7 @@ async function synchronizeOnce(
     state.lastFetch = Date.now();
     state.checked = Math.max(state.checked, request);
     state.error = null;
+    if (!dirty && nextHead === remote) state.lastSuccess = Date.now();
     if ((nextHead !== remote || (dirty && !publish)) && state.firstDirty === null)
       state.firstDirty = state.lastDirty = Date.now();
     await saveState(root, state);
@@ -411,14 +486,16 @@ async function synchronizeOnce(
   if (publish && nextHead !== remote && origin)
     return { commit: nextHead, generation, request, origin };
   else if (publish)
-    await withDataLock(root, async () => {
-      const current = await readState(root);
-      if (current.generation === generation) {
-        current.firstDirty = null;
-        current.lastDirty = null;
-      }
-      await saveState(root, current);
-    });
+    await withPublicationLock(root, () =>
+      withDataLock(root, async () => {
+        const current = await readState(root);
+        if (current.generation === generation && (await head(root)) === nextHead) {
+          current.firstDirty = null;
+          current.lastDirty = null;
+        }
+        await saveState(root, current);
+      }),
+    );
 }
 
 /** Повторяются только снимки/доставка Git, никогда предметные команды пользователя. */
@@ -427,6 +504,16 @@ export async function synchronize(
   options: { publish?: boolean; requestedAt?: number } = {},
 ) {
   return withWorkspaceMaintenance(async () => {
+    // Сетевой отказ не препятствует фиксации локальных изменений в собственной истории.
+    await checkpointLocal(root);
+    const attemptedOrigin = await currentOrigin(root);
+    await withDataLock(root, async () => {
+      const state = await readState(root);
+      state.lastAttempt = Date.now();
+      state.attempted = Math.max(state.attempted, state.requested);
+      state.observedOrigin = attemptedOrigin?.identity ?? null;
+      await saveState(root, state);
+    });
     for (let attempt = 0; ; attempt++) {
       try {
         const outgoing = await withSyncLock(root, () =>
@@ -442,6 +529,12 @@ export async function synchronize(
             directory,
           );
         }
+        await withDataLock(root, async () => {
+          const state = await readState(root);
+          state.failures = 0;
+          state.retryAt = Date.now() + 30000;
+          await saveState(root, state);
+        });
         return await readState(root);
       } catch (error) {
         if (
@@ -456,6 +549,8 @@ export async function synchronize(
             code: error instanceof AppError ? error.code : "SYNC_FAILED",
             message: error instanceof Error ? error.message : "Ошибка синхронизации",
           };
+          state.failures++;
+          state.retryAt = Date.now() + Math.min(60000, 2000 * 2 ** Math.min(state.failures - 1, 5));
           await saveState(root, state);
         });
         throw error;
@@ -464,8 +559,37 @@ export async function synchronize(
   });
 }
 
+async function refreshConflict(root: string) {
+  await checkpointLocal(root);
+  return withPublicationLock(root, () =>
+    withDataLock(root, async () => {
+      const state = await readState(root);
+      if (!state.conflict || state.resolution) return;
+      const local = await head(root);
+      const fingerprint = snapshotVersion(await readSnapshotFiles(root));
+      if (local === state.conflict.local && fingerprint === state.conflict.fingerprint) return;
+      const input = {
+        base: state.conflict.base,
+        local,
+        remote: state.conflict.remote,
+        paths: ["$local-changed"],
+        reason:
+          "Локальная работа продолжилась после обнаружения конфликта; согласуйте актуальные версии",
+        fingerprint,
+      };
+      state.conflict = {
+        ...input,
+        id: createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 24),
+      };
+      await git(root, ["update-ref", "refs/relay/conflict-local", local]);
+      await saveState(root, state);
+    }),
+  );
+}
+
 export async function conflicts(root: string) {
-  return withSyncLock(root, async () => {
+  return withWorkspaceMaintenance(async () => {
+    await refreshConflict(root);
     const state = await readState(root);
     if (!state.conflict) return null;
     return {
@@ -493,6 +617,7 @@ export async function resolveConflict(root: string, conflictId: string, choice: 
   await withWorkspaceMaintenance(() =>
     withSyncLock(root, async () => {
       await recoverPublication(root);
+      await refreshConflict(root);
       const state = await readState(root),
         info = await marker(root);
       const conflict = state.conflict;

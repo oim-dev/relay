@@ -18,19 +18,21 @@ import { safeText } from "../presentation/safe.js";
 import { localInvocation, shellCommand } from "../command-kit.js";
 import { readInitializationConfiguration } from "@relay/project-runtime/config";
 import { AppError } from "@relay/core/shared/errors";
+import { synchronizationStatus } from "@relay/project-runtime/git-storage/status";
+import { synchronizationText } from "../presentation/synchronization.js";
 
-/** Управление Git доступно и при блокировке предметного Backend. */
+/** Управление доставкой отделено от доступной локальной предметной работы. */
 export function registerSync(program: Command, runtime: Runtime) {
   const group = commandGroup(program, {
     name: "sync",
     description: "Git-синхронизация внешней базы и разрешение конфликтов",
     details:
-      "Работает с локальной служебной копией в ~/.relay. База текущего Git-проекта определяется автоматически; без настроенного HTTP дополнительные флаги подключения не нужны. Статус и материалы доступны при SYNC_CONFLICT. now отправляет согласованный снимок без ожидания debounce. Решение конфликта требует его исходный ID; обычные предметные команды заблокированы до успешной публикации решения.",
+      "Работает с локальной служебной копией в ~/.relay. База текущего Git-проекта определяется автоматически. Сеть и Git-конфликт не блокируют локальную работу. status показывает неподтверждённые коммиты и изменения вне коммитов. now явно ожидает синхронизацию. Решение конфликта требует его исходный ID; новые локальные изменения делают прежнее решение устаревшим.",
     examples: [["npx @oim-dev/relay-cli sync status", "Проверить состояние синхронизации"]],
   });
   for (const name of ["status", "now", "conflicts", "resolve", "migrate"] as const) {
     const description = {
-      status: "Прочитать состояние отправки и блокировки",
+      status: "Прочитать состояние доставки и очередь коммитов",
       now: "Получить origin и отправить текущий снимок",
       conflicts: "Прочитать причины и версии конфликтующих файлов",
       resolve: "Разрешить конфликт по файлам или выбрать полный снимок",
@@ -208,7 +210,9 @@ export function registerSync(program: Command, runtime: Runtime) {
             text: (options) =>
               cardText(
                 {
-                  title: data ? "База заблокирована конфликтом" : "Конфликтов нет",
+                  title: data
+                    ? "Конфликт синхронизации; локальная работа доступна"
+                    : "Конфликтов нет",
                   fields: data
                     ? [
                         ["ID", data.id, "opaque"],
@@ -261,25 +265,25 @@ export function registerSync(program: Command, runtime: Runtime) {
                 decision,
               )
             : await readState(root);
+      const status = await synchronizationStatus(root);
       printResult(
         runtime.stdout,
         {
-          data: { ...data, identity: info?.identity, origin: origin?.origin ?? null, root },
+          data: {
+            ...data,
+            identity: info?.identity,
+            origin: origin?.origin ?? null,
+            root,
+            synchronization: status,
+          },
           text: (options) =>
+            synchronizationText(status, options) +
+            "\n\n" +
             cardText(
               {
-                title: data.conflict
-                  ? "Синхронизация: конфликт"
-                  : data.error
-                    ? "Синхронизация требует внимания"
-                    : !origin
-                      ? "Синхронизация: локальная база, origin не настроен"
-                      : data.firstDirty === null
-                        ? "Синхронизация: нет ожидающей отправки"
-                        : "Синхронизация: ожидается отправка",
+                title: "Локальная Git-база",
                 fields: [
                   ["Репозиторий", info?.version === 2 ? info.sourceRoot : info?.identity],
-                  ["Origin", origin?.origin ?? "не настроен", "opaque"],
                   ["База", root, "opaque"],
                   ["Последняя удалённая версия", data.remote, "opaque"],
                   [
@@ -288,8 +292,6 @@ export function registerSync(program: Command, runtime: Runtime) {
                       ? "не выполнена"
                       : new Date(data.lastFetch).toISOString(),
                   ],
-                  ["Конфликт", data.conflict?.id, "opaque"],
-                  ["Ошибка", data.error?.message],
                 ],
               },
               options,

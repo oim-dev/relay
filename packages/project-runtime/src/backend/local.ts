@@ -17,6 +17,9 @@ import { WorkHistoryService } from "@relay/core/application/work-history/service
 import { attachManagedStorage } from "../git-storage/access.js";
 import { dirname, resolve } from "node:path";
 import { readConfiguration } from "../config.js";
+import { synchronizationStatus } from "../git-storage/status.js";
+import { requestSynchronization } from "../git-storage/launcher.js";
+import { marker } from "../git-storage/state.js";
 
 export async function createLocalBackend(
   cwd: string,
@@ -28,6 +31,13 @@ export async function createLocalBackend(
   const workspace = await openWorkspace(cwd, config, options);
   return {
     kind: "local",
+    synchronization: {
+      status: () => synchronizationStatus(workspace.dataRoot),
+      request: async () => {
+        if (await marker(workspace.dataRoot)) await requestSynchronization(workspace.dataRoot);
+        return synchronizationStatus(workspace.dataRoot);
+      },
+    },
     workHistory: new WorkHistoryService(workspace),
     projectSettings: {
       get: () =>

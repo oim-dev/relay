@@ -34,7 +34,7 @@ async function until(check: () => Promise<boolean>, message: string) {
   assert.fail(message);
 }
 
-test("Git CLI: блокировка, полный просмотр и адресное решение из файла без потери соседних изменений", async (t) => {
+test("Git CLI: локальная работа при конфликте, просмотр и адресное решение без потери соседних изменений", async (t) => {
   const directory = await tempDirectory(t),
     code = join(directory, "code"),
     origin = join(directory, "origin.git");
@@ -92,7 +92,7 @@ test("Git CLI: блокировка, полный просмотр и адрес
     );
   await synchronize(dirname(peerConfig));
   await assert.rejects(synchronize(root), { code: "SYNC_CONFLICT" });
-  failed(await invoke(code, ["task", "list"], options), "SYNC_CONFLICT", 4);
+  successful(await invoke(code, ["task", "list"], options));
   const executable = [process.execPath, ...cliNodeArgs, binary]
     .map((value) => `'${value.replaceAll("'", "'\\''")}'`)
     .join(" ");
@@ -125,10 +125,7 @@ test("Git CLI: блокировка, полный просмотр и адрес
   ]) {
     await t.test(`подсказка конфликта: ${selection.name}`, async () => {
       const env = { ...options.env, ...selection.env };
-      for (const action of [
-        ["task", "list"],
-        ["sync", "now"],
-      ]) {
+      for (const action of [["sync", "now"]]) {
         const blocked = await invokeRaw(selection.cwd, [...selection.args, ...action], {
           ...options,
           env,
@@ -230,7 +227,7 @@ test("Git CLI: init вне кода, один пакет после серии �
   assert(pid.pid > 0);
   const output = await invokeRaw(code, ["sync", "status"], options);
   assert.equal(output.code, 0, output.stdout + output.stderr);
-  assert.match(output.stdout, /нет ожидающей отправки/);
+  assert.match(output.stdout, /Синхронизировано/);
   for (let i = 0; i < 2; i++) successful(await invoke(code, ["project", "get"], options));
   await until(
     async () =>

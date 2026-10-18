@@ -1,5 +1,9 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
+import {
+  SYNCHRONIZATION_CAPABILITY,
+  synchronizationStatusSchema,
+} from "@relay/contracts/synchronization";
 import { actorSchema } from "@relay/contracts/primitives";
 import { workHistoryOperations, WORK_HISTORY_CAPABILITY } from "@relay/contracts/work-history";
 import {
@@ -397,6 +401,23 @@ export async function createHttpBackend(url: string, project?: string): Promise<
   };
   return {
     kind: "http",
+    ...(context.capabilities.includes(SYNCHRONIZATION_CAPABILITY) &&
+    context.synchronizationMode !== "file"
+      ? {
+          synchronization: {
+            status: async () =>
+              decode(
+                synchronizationStatusSchema,
+                await call(() => api.context.getSynchronizationStatus()),
+              ),
+            request: async () =>
+              decode(
+                synchronizationStatusSchema,
+                await call(() => api.context.requestSynchronization({}), "write"),
+              ),
+          },
+        }
+      : {}),
     workHistory: {
       list: (input) =>
         readWorkHistory(workHistoryOperations.list, input, (query) =>

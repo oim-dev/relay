@@ -1,5 +1,5 @@
-import { lstat, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, readdir, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { JsonValue } from "@relay/contracts/storage";
 import type { Workspace } from "../../storage/workspace.js";
 import { readJson } from "../../storage/files.js";
@@ -60,6 +60,17 @@ export async function readSnapshotFiles(
 }
 
 export const snapshotVersion = (files: PersistentSnapshot) => digest(files);
+
+/** Запись постоянного снимка в подготовительный каталог; не обход записи действующей базы. */
+export async function writeSnapshotFiles(root: string, files: PersistentSnapshot): Promise<void> {
+  for (const [path, data] of Object.entries(files)) {
+    invariant(persistentPath(path), "SYNC_UNSAFE_PATH", "Недопустимый путь снимка базы", 4, {
+      path,
+    });
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), JSON.stringify(data, null, 2) + "\n");
+  }
+}
 
 export async function captureSnapshot(workspace: Workspace) {
   return workspace.locked(async () => {

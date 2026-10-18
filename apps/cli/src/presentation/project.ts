@@ -13,6 +13,57 @@ import { section, table, wrap } from "./layout.js";
 import { cardText, listText, receiptText, type OutputField, type OutputCommand } from "./common.js";
 import { shellCommand } from "../command-kit.js";
 import type { ConnectionInfo } from "../backend/connect.js";
+import type { initializeFromTemplate } from "@relay/project-runtime/git-storage/bootstrap";
+
+export function templateInitializedText(
+  result: Awaited<ReturnType<typeof initializeFromTemplate>>,
+  options: TextOptions,
+  syncCommand: string,
+): string {
+  return receiptText(
+    {
+      title: "✓ Проект создан из шаблона",
+      fields: [
+        ["Имя", result.name],
+        ["Slug", result.slug],
+        ["ID проекта", result.projectId, "opaque"],
+        ["Конфигурация", result.configPath, "opaque"],
+        ["Хранилище", result.storageDir, "opaque"],
+        ["Шаблон", result.template.repository, "opaque"],
+        ["Ссылка шаблона", result.template.ref, "opaque"],
+        ["SHA шаблона", result.template.commit, "opaque"],
+        ["Целостность", "Проверена: источник и новая база"],
+        [
+          "Синхронизация",
+          {
+            local: "Локальная база; origin пока не задан",
+            synchronized: "База опубликована в origin нового проекта",
+            pending: "База создана локально; синхронизация не подтверждена",
+          }[result.synchronization.status],
+        ],
+        ...(result.synchronization.error
+          ? [
+              [
+                "Причина",
+                `${result.synchronization.error.code}: ${result.synchronization.error.message}`,
+              ] as OutputField,
+            ]
+          : []),
+      ],
+      commands:
+        result.synchronization.status === "pending"
+          ? [
+              {
+                purpose: "recovery",
+                label: "Продолжить синхронизацию созданной базы",
+                command: syncCommand,
+              },
+            ]
+          : [],
+    },
+    options,
+  );
+}
 
 export function initializedText(
   configPath: string,

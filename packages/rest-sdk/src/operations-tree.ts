@@ -127,6 +127,8 @@ import { getScenarioProgressForProject } from "./operations/get-scenario-progres
 import { getScenarioProgress } from "./operations/get-scenario-progress.js";
 import { getServerCapabilities } from "./operations/get-server-capabilities.js";
 import { getServerContext } from "./operations/get-server-context.js";
+import { getSynchronizationStatusForProject } from "./operations/get-synchronization-status-for-project.js";
+import { getSynchronizationStatus } from "./operations/get-synchronization-status.js";
 import { getTaskCommentForProject } from "./operations/get-task-comment-for-project.js";
 import { getTaskComment } from "./operations/get-task-comment.js";
 import { getTaskCommentsForProject } from "./operations/get-task-comments-for-project.js";
@@ -199,6 +201,8 @@ import { renameEntityKeyForProject } from "./operations/rename-entity-key-for-pr
 import { renameEntityKey } from "./operations/rename-entity-key.js";
 import { replaceProductParticipationForProject } from "./operations/replace-product-participation-for-project.js";
 import { replaceProductParticipation } from "./operations/replace-product-participation.js";
+import { requestSynchronizationForProject } from "./operations/request-synchronization-for-project.js";
+import { requestSynchronization } from "./operations/request-synchronization.js";
 import { resolveEntityForProject } from "./operations/resolve-entity-for-project.js";
 import { resolveEntity } from "./operations/resolve-entity.js";
 import { resumeWorkSessionForProject } from "./operations/resume-work-session-for-project.js";
@@ -258,9 +262,13 @@ export const operationsTree = {
     getContext: getContext,
     getProjectSettings: getProjectSettings,
     saveProjectSettings: saveProjectSettings,
+    getSynchronizationStatus: getSynchronizationStatus,
+    requestSynchronization: requestSynchronization,
     getContextForProject: getContextForProject,
     getProjectSettingsForProject: getProjectSettingsForProject,
     saveProjectSettingsForProject: saveProjectSettingsForProject,
+    getSynchronizationStatusForProject: getSynchronizationStatusForProject,
+    requestSynchronizationForProject: requestSynchronizationForProject,
   },
   project: {
     validateProject: validateProject,

@@ -7,6 +7,7 @@ import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { TestContext } from "node:test";
 import type { CliPage } from "../../src/queries/result.js";
+import type { SynchronizationStatus } from "@relay/contracts/synchronization";
 import { openWorkspace } from "@relay/core/storage/workspace";
 import { BoardRepository } from "@relay/core/storage/boards";
 
@@ -21,6 +22,8 @@ interface Success<T> {
   ok: true;
   data: T;
   meta?: {
+    synchronization?: SynchronizationStatus;
+    warnings?: string[];
     page?: CliPage;
     project?: string;
   };
