@@ -7,3 +7,8 @@ export { useProjectId, useProjectBasePath } from "./providers/project-scope/cont
 export { useProjectSettings, useSaveProjectSettings } from "./hooks/use-project-settings.hook";
 export { ProjectSettingsError } from "./settings";
 export type { ProjectSettings, SaveProjectSettingsInput } from "./settings";
+export {
+  useProjectSynchronization,
+  useRequestProjectSynchronization,
+} from "./hooks/use-project-synchronization.hook";
+export { ProjectSynchronizationError } from "./synchronization";

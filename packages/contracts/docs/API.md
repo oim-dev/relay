@@ -27,6 +27,7 @@
 | `@relay/contracts/product-query`         | Проверка продукта, адресуемые рекомендации lint и отдельная страница карты обзора                                   |
 | `@relay/contracts/product-participation` | Компактный состав, атомарный выбор прежних и новых вкладов, полная реализация с savedStatus                         |
 | `@relay/contracts/server-context`        | Runtime-схемы каталога Server и его успешного конверта                                                              |
+| `@relay/contracts/synchronization`       | Статус фоновой доставки, очередь Git-коммитов и запрос попытки без ожидания сети                                    |
 | `@relay/contracts/storage`               | Переносимые оболочки хранения, ключевые пространства и карточки; не дисковый движок                                 |
 | `@relay/contracts/storage-maintenance`   | Результаты `storage status`, `storage migrate --dry-run` и `storage migrate`, коды ошибок совместимости с exit code |
 

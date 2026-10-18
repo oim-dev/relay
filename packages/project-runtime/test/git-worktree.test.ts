@@ -189,15 +189,16 @@ test("Worktree: чужая база нового origin не заменяет л
   const remoteHead = await gitText(origin, ["rev-parse", "relay-data"]);
   const before = await internal(() => captureSnapshot(app.workspace));
   await git(f.code, ["remote", "add", "origin", origin]);
-  await assert.rejects(
-    app.engine.create(
-      { requestId: "blocked", data: { kind: "task", board: "product", title: "Не создавать" } },
-      "test",
-    ),
-    { code: "SYNC_PROJECT_MISMATCH" },
+  const local = await app.engine.create(
+    { requestId: "local", data: { kind: "task", board: "product", title: "Локальная работа" } },
+    "test",
   );
-  assert.equal((await internal(() => captureSnapshot(app.workspace))).version, before.version);
+  await assert.rejects(synchronize(app.root), { code: "SYNC_PROJECT_MISMATCH" });
+  assert.notEqual((await internal(() => captureSnapshot(app.workspace))).version, before.version);
+  assert.equal((await app.engine.get({ ref: local.key })).title, "Локальная работа");
   assert.equal(await gitText(origin, ["rev-parse", "relay-data"]), remoteHead);
+  await git(f.code, ["remote", "remove", "origin"]);
+  await synchronize(app.root);
 });
 
 test("Worktree: имеющаяся ветка relay-data с кодом не принимается и не очищается", async (t) => {

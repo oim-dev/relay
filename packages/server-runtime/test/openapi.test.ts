@@ -39,7 +39,7 @@ for (const scoped of [false, true])
           );
       }
     }
-    assert.equal(operations.size, 233);
+    assert.equal(operations.size, 237);
     for (const path of [
       "/api/v1/tasks",
       "/api/v1/board",
@@ -98,6 +98,9 @@ for (const scoped of [false, true])
     await request("PUT", "/api/v1/projects/{project}", "/api/v1/projects/a", { path: "." }, 400);
     await request("DELETE", "/api/v1/projects/{project}", "/api/v1/projects/a", undefined, 400);
     await request("GET", "/api/v1/context");
+    const synchronization = await request("GET", "/api/v1/context/sync");
+    assert.equal(synchronization.data.mode, "file");
+    await request("POST", "/api/v1/context/sync", undefined, {}, 202);
     const graph = await request("GET", "/api/v1/graph");
     const fullContext = await request(
       "GET",
@@ -493,7 +496,7 @@ for (const scoped of [false, true])
     });
     const metricSchema = document.components!.schemas!.ProductOverviewMetricPage as SchemaObject;
     assert.equal(metricSchema.oneOf?.length, 9);
-    assert.equal(visited.size, 60);
+    assert.equal(visited.size, 62);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
     assert(!("$ref" in sse) && sse.content?.["text/event-stream"]);
     const updateSchema = document.components!.schemas!.UpdateBoardTask as SchemaObject;

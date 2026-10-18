@@ -13,6 +13,7 @@ import type { ProgressService } from "@relay/core/application/progress/service";
 import type { PlanningService } from "@relay/core/application/planning/service";
 import type { ReleasesService } from "@relay/core/application/releases/service";
 import type { WorkHistoryServiceContract } from "@relay/contracts/work-history";
+import type { SynchronizationStatus } from "@relay/contracts/synchronization";
 
 export interface WorkspaceInfo {
   /** Подтверждённый ID HTTP-контекста; в local — только сохранённый config.projectId. */
@@ -22,6 +23,10 @@ export interface WorkspaceInfo {
   root: string;
 }
 export interface Backend {
+  synchronization?: {
+    status(): Promise<SynchronizationStatus>;
+    request(): Promise<SynchronizationStatus>;
+  };
   workHistory: WorkHistoryServiceContract;
   projectSettings: {
     get(): Promise<ProjectSettings>;

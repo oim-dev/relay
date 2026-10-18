@@ -127,6 +127,8 @@ export { getScenarioProgressForProject } from "./get-scenario-progress-for-proje
 export { getScenarioProgress } from "./get-scenario-progress.js";
 export { getServerCapabilities } from "./get-server-capabilities.js";
 export { getServerContext } from "./get-server-context.js";
+export { getSynchronizationStatusForProject } from "./get-synchronization-status-for-project.js";
+export { getSynchronizationStatus } from "./get-synchronization-status.js";
 export { getTaskCommentForProject } from "./get-task-comment-for-project.js";
 export { getTaskComment } from "./get-task-comment.js";
 export { getTaskCommentsForProject } from "./get-task-comments-for-project.js";
@@ -199,6 +201,8 @@ export { renameEntityKeyForProject } from "./rename-entity-key-for-project.js";
 export { renameEntityKey } from "./rename-entity-key.js";
 export { replaceProductParticipationForProject } from "./replace-product-participation-for-project.js";
 export { replaceProductParticipation } from "./replace-product-participation.js";
+export { requestSynchronizationForProject } from "./request-synchronization-for-project.js";
+export { requestSynchronization } from "./request-synchronization.js";
 export { resolveEntityForProject } from "./resolve-entity-for-project.js";
 export { resolveEntity } from "./resolve-entity.js";
 export { resumeWorkSessionForProject } from "./resume-work-session-for-project.js";

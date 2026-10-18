@@ -74,6 +74,8 @@ export interface ProjectConfig {
   output: { format: "text" | "json"; defaultLimit: number; maxBytes: number };
 }
 export interface ContextResponse {
+  /** Режим фоновой доставки; позволяет клиенту не опрашивать Git-статус файловой базы. */
+  synchronizationMode?: "file" | "git";
   capabilities?: string[];
   project: string;
   projectId: string;

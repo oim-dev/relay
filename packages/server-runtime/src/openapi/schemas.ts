@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  synchronizationStatusSchema,
+  synchronizationRequestSchema,
+} from "@relay/contracts/synchronization";
 import { workspaceCatalogSchemas } from "../modules/workspace/catalog-schemas.js";
 import { planningTransportSchemas } from "../modules/planning/transport.js";
 import { releaseTransportSchemas } from "../modules/releases/transport.js";
@@ -137,6 +141,7 @@ import { boardViewSchema, boardsQuerySchema, boardsPageSchema } from "@relay/cor
 import { API_CONTRACT_VERSION } from "@relay/contracts";
 
 const contextSchema = z.strictObject({
+  synchronizationMode: z.enum(["file", "git"]).optional().describe("Режим доставки выбранной базы"),
   capabilities: z.array(z.string()).optional(),
   project: z.string(),
   projectId: z.string().describe("Стабильный идентификатор пути конфигурации проекта"),
@@ -159,6 +164,8 @@ const serverEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export const schemas = {
+  SynchronizationStatus: synchronizationStatusSchema,
+  SynchronizationRequest: synchronizationRequestSchema,
   ...workHistoryTransportSchemas,
   ...workspaceCatalogSchemas,
   ...planningTransportSchemas,

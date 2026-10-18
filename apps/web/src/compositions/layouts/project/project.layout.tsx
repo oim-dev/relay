@@ -13,16 +13,20 @@ import {
   Text,
   Tooltip,
 } from "@mantine/core";
-import { ClipboardList, Layers3, Menu, Moon, Settings, Sun } from "lucide-react";
+import { ClipboardList, Layers3, Menu, Moon, Settings, Sun, CloudUpload } from "lucide-react";
 import {
   useGetProject,
   useProjectId,
   useProjectBasePath,
   useProjectConnection,
+  useProjectSynchronization,
+  useRequestProjectSynchronization,
+  ProjectSynchronizationError,
 } from "domains/project";
 import { useWorkspace } from "domains/workspace";
 import { useThemeColorScheme } from "ui/themes";
 import { ProjectBreadcrumbs } from "compositions/widgets/page-breadcrumbs";
+import { isDefined } from "shared/value-predicates";
 import { ProjectNavigation } from "./ui/project-navigation";
 import styles from "./styles/project.module.css";
 
@@ -38,6 +42,10 @@ export const ProjectLayout = () => {
   const project = useGetProject();
   const workspace = useWorkspace();
   const connection = useProjectConnection();
+  const synchronization = useProjectSynchronization();
+  const requestSynchronization = useRequestProjectSynchronization();
+  const [isSyncRequested, setSyncRequested] = useState(false);
+  const [syncRequestError, setSyncRequestError] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const [isNavigationOpen, setNavigationOpen] = useState(false);
@@ -78,6 +86,45 @@ export const ProjectLayout = () => {
     ? ` --local --config '${project.data.configPath.replaceAll("'", "'\\''")}'`
     : "";
   const syncCommand = `npx @oim-dev/relay-cli${configArgument} sync ${syncAction}`;
+  const syncData = synchronization.data;
+  const hasSyncStatus = syncData?.isGit === true || synchronization.error !== undefined;
+  const syncState = syncData?.state ?? "unknown";
+  const syncLabel = {
+    local: "База локальная · origin не настроен",
+    synced: "База синхронизирована",
+    pending: "Есть изменения для отправки",
+    syncing: "База синхронизируется в фоне",
+    offline: "Работаем локально · доставка не завершена",
+    conflict: "Работаем локально · конфликт синхронизации",
+    unknown: "Синхронизация ещё не подтверждена",
+  }[syncState];
+  const syncQueue = syncData?.queuedCommits ?? null;
+  const syncQueueLabel =
+    syncQueue === null
+      ? "Число коммитов пока неизвестно"
+      : `Коммитов без подтверждения: ${syncQueue}`;
+  const hasUncommittedChanges = syncData?.hasUncommittedChanges === true;
+  const syncLastSuccess = syncData?.lastSuccessAt ?? "ещё не подтверждена";
+  const syncError = syncRequestError ?? synchronization.error?.message ?? syncData?.error;
+  const hasSyncError = isDefined(syncError);
+  const canRequestSync = isDefined(syncData?.origin);
+  const hasSyncConflict = syncState === "conflict";
+  const conflictCommand = `npx @oim-dev/relay-cli${configArgument} sync conflicts`;
+  const handleSyncRequest = async () => {
+    setSyncRequested(true);
+    setSyncRequestError(null);
+    try {
+      await requestSynchronization();
+    } catch (error) {
+      setSyncRequestError(
+        error instanceof ProjectSynchronizationError
+          ? error.message
+          : "Не удалось обработать ответ синхронизации. Обновите статус перед новой попыткой.",
+      );
+    } finally {
+      setSyncRequested(false);
+    }
+  };
   const handleBlockedKey = useEffectEvent((event: KeyboardEvent) => {
     if (!isBlocked || event.key === "Tab") return;
     // Mantine слушает Escape в capture-фазе window: обработчик внутри dialog
@@ -176,6 +223,49 @@ export const ProjectLayout = () => {
         </aside>
         <main className={styles.content}>
           <ProjectBreadcrumbs />
+          {hasSyncStatus && (
+            <details className={styles.synchronization} data-state={syncState}>
+              <summary aria-label="Синхронизация базы">
+                <CloudUpload size={16} aria-hidden="true" />
+                <span role="status">{syncLabel}</span>
+                <span className={styles.syncQueue}>{syncQueueLabel}</span>
+              </summary>
+              <Stack gap="xs" className={styles.syncDetails}>
+                <Text size="sm">
+                  Чтение и запись работают с локальной базой без ожидания Git. Очередь показана по
+                  последнему проверенному состоянию origin.
+                </Text>
+                {hasUncommittedChanges && (
+                  <Text size="sm">
+                    Есть изменения вне Git-коммитов; они уже сохранены в локальной базе.
+                  </Text>
+                )}
+                <Text size="xs">Последняя успешная синхронизация: {syncLastSuccess}</Text>
+                {hasSyncError && (
+                  <Text size="sm" className={styles.syncError}>
+                    {syncError}
+                  </Text>
+                )}
+                {hasSyncConflict && (
+                  <Code block className={styles.syncCommand}>
+                    {conflictCommand}
+                  </Code>
+                )}
+                {canRequestSync && (
+                  <Group>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      loading={isSyncRequested}
+                      onClick={() => void handleSyncRequest()}
+                    >
+                      Повторить сейчас
+                    </Button>
+                  </Group>
+                )}
+              </Stack>
+            </details>
+          )}
           <Outlet />
         </main>
       </div>

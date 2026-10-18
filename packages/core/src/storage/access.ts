@@ -79,7 +79,7 @@ export async function workspaceAccess(root: string): Promise<WorkspaceAccess | u
   return hooks;
 }
 
-/** Guard читается под тем же замком, что защищает предметную операцию. */
+/** Локальная целостность проверяется под замком; Git-конфликт не запрещает локальную работу. */
 export async function assertWorkspaceAvailable(root: string): Promise<void> {
   if (maintenance.getStore() || !(await hasManagedMetadata(root))) return;
   if (await exists(await managedPath(root, "relay-publication.json")))
@@ -91,15 +91,4 @@ export async function assertWorkspaceAvailable(root: string): Promise<void> {
     .safeParse(await readSyncStateFile(root));
   if (!state.success)
     throw new AppError("SYNC_STATE_INVALID", "Состояние синхронизации повреждено", 4);
-  if (state.data.conflict)
-    throw new AppError(
-      "SYNC_CONFLICT",
-      "Работа с базой приостановлена: разрешите конфликт синхронизации",
-      4,
-      {
-        conflictId: state.data.conflict.id,
-        paths: state.data.conflict.paths.slice(0, 20),
-        total: state.data.conflict.paths.length,
-      },
-    );
 }
