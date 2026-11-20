@@ -9,6 +9,7 @@ import { releaseTransportSchemas } from "../modules/releases/transport.js";
 import { productTransportSchemas } from "../modules/product/transport.js";
 import { workHistoryTransportSchemas } from "../modules/work-history/transport.js";
 import { taskDependenciesQuerySchema, taskDependenciesPageSchema } from "@relay/contracts/progress";
+import { taskContextQuerySchema, taskContextSchema } from "@relay/contracts/task-context";
 import { serverContextSchema } from "@relay/contracts/server-context";
 import {
   documentLinksQuerySchema,
@@ -316,6 +317,9 @@ export const schemas = {
       exitCode: z.number().int().min(1).max(255).optional(),
     }),
   }),
+  // Новые схемы добавляются в конец: порядок генерируемого SDK остаётся прежним.
+  TaskContext: taskContextSchema,
+  TaskContextQuery: taskContextQuerySchema,
 };
 
 export type SchemaName = keyof typeof schemas;

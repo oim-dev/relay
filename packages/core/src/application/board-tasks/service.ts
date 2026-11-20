@@ -355,6 +355,27 @@ export class BoardTasksService {
     );
   }
 
+  /** Полная задача с полными критериями и прямыми связями задач из одного чтения. */
+  async execution(reference: string) {
+    return this.read((tasks, boards, completion) => {
+      const task = resolveTask(tasks, reference);
+      const index = completion();
+      const byId = new Map(tasks.map((entry) => [entry.id, entry]));
+      return {
+        task: view(task, tasks, boards, index),
+        criteria: structuredClone(task.acceptanceCriteria),
+        dependencies: task.dependencies.flatMap((id) => {
+          const dependency = byId.get(id);
+          return dependency ? [boardTaskSummary(dependency, boards, index)] : [];
+        }),
+        children: tasks
+          .filter((entry) => entry.parentId === task.id)
+          .sort(ordered)
+          .map((entry) => boardTaskSummary(entry, boards, index)),
+      };
+    });
+  }
+
   /** Ограниченная лента, без чтения полного Markdown всех событий. */
   /** Обсуждение не предоставляет доступа к автоматическим событиям прежней ленты. */
   async listComments(reference: string, input: TaskCommentsQuery = {}): Promise<TaskCommentsPage> {

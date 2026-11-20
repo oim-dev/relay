@@ -3,6 +3,7 @@ import type { BoardTasksService } from "@relay/core/application/board-tasks/serv
 import type { BoardsService } from "@relay/core/application/boards/service";
 import type { EntityDetail, EntitySaved, EntitiesPage } from "@relay/contracts/entities";
 import type { TaskProgress } from "@relay/contracts/progress";
+import type { TaskContext } from "@relay/contracts/task-context";
 import type { CommandContext } from "../context.js";
 import { commandInvocation } from "../command-kit.js";
 import { actionsText, cardText, listText, receiptText, type OutputField } from "./common.js";
@@ -480,4 +481,98 @@ export function taskErrorRecovery(error: AppError, options: TextOptions): string
       options,
     ),
   ].join("\n\n");
+}
+
+const contextReasons: Record<string, string> = {
+  "task-target": "цель задачи",
+  "target-feature": "фича цели",
+  "target-scenario": "сценарий цели",
+  "target-application": "приложение реализации",
+  "product-passport": "паспорт продукта",
+  "task-document": "прикреплён к задаче",
+  "target-document": "прикреплён к цели",
+};
+
+/** Человекочитаемый пакет исполнения: полные Markdown-тексты без сокращения. */
+export function taskContextText(
+  context: TaskContext,
+  options: TextOptions,
+  invoke = defaultInvocation,
+): string {
+  const { task } = context;
+  const markdown = (record: EntityDetail) => {
+    const data = record.data as { body?: unknown; description?: unknown };
+    const text = typeof data.body === "string" ? data.body : data.description;
+    return typeof text === "string" && text.trim() ? text : "Содержание пока не заполнено.";
+  };
+  const groups = [
+    ["Цель", context.targets],
+    ["Требование", context.requirements],
+    ["Приложение", context.applications],
+    ["Паспорт", context.product ? [context.product] : []],
+    ["Документ", context.documents],
+  ] as const;
+  const records = groups.flatMap(([label, items]) =>
+    items.map(({ record, reasons }) => ({
+      title: `${label}: ${record.key} · ${record.title} · ревизия ${record.revision}`,
+      body: [
+        wrap(
+          `Основание: ${reasons
+            .map(
+              (reason) =>
+                `${contextReasons[reason.code] ?? reason.code}${reason.from ? ` (${reason.from.kind}:${reason.from.id})` : ""}`,
+            )
+            .join("; ")}`,
+          options.width,
+        ),
+        renderMarkdown(markdown(record), options),
+      ].join("\n\n"),
+    })),
+  );
+  const tasksLine = (items: TaskContext["dependencies"]) =>
+    items
+      .map(
+        (item) =>
+          `${item.key} · ${item.title || "без названия"} · ${columns[item.column] ?? item.column}`,
+      )
+      .join("\n");
+  return cardText(
+    {
+      title: `Контекст исполнения ${task.key} · ${task.title}`,
+      fields: [
+        ["Ревизия задачи", task.revision],
+        ["Колонка", columns[task.column] ?? task.column],
+        [
+          "Критерии",
+          `${task.criteria.filter((item) => item.completed).length}/${task.criteria.length} выполнено`,
+        ],
+        ["Записей контекста", records.length],
+        ["Версия формы", context.contractVersion],
+        ["Отпечаток", context.consistency],
+        ["Постоянный ID", task.id],
+      ],
+      sections: [
+        {
+          title: "Описание задачи",
+          body: renderMarkdown(task.description || "Описание пока не заполнено.", options),
+        },
+        ...task.criteria.map((criterion, index) => ({
+          title: `Критерий ${index + 1}: ${criterion.title} · ID ${criterion.id} · ${criterion.completed ? "выполнен" : "не выполнен"}`,
+          body: renderMarkdown(
+            [criterion.summary, criterion.description].filter((part) => part.trim()).join("\n\n") ||
+              "Описание критерия не заполнено.",
+            options,
+          ),
+        })),
+        ...records,
+        { title: "Прямые зависимости", body: tasksLine(context.dependencies) },
+        { title: "Подзадачи", body: tasksLine(context.children) },
+      ],
+      commands: [
+        { label: "Полная задача", command: invoke(["task", "get", task.key]) },
+        { label: "Прогресс и причины", command: invoke(["task", "progress", task.key]) },
+      ],
+    },
+    options,
+  );
 }

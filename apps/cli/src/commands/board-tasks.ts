@@ -40,6 +40,7 @@ import {
   boardText,
   taskChildrenText,
   taskDependenciesText,
+  taskContextText,
   criteriaText,
   criterionText,
   taskInvocation,
@@ -263,6 +264,35 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     async run(context, input) {
       const data = await context.backend.boardTasks.get(input.argument());
       return { data, text: (options) => boardTaskText(data, options, taskInvocation(context)) };
+    },
+  });
+  registerTaskCommand<{ targetDocuments?: boolean }>(group, runtime, {
+    name: "context <task>",
+    description: "Прочитать контекст исполнения задачи одним чтением",
+    arguments: { task: "Текущий/прежний ключ или ID задачи" },
+    details:
+      "Полная задача и все критерии с постоянными ID, её цели FI/SI, фичи и сценарии целей, приложения реализаций, паспорт продукта и документы, прикреплённые к задаче, — с полным Markdown, ключами, ревизиями и основаниями включения. --target-documents добавляет документы, прикреплённые к целям и их требованиям. Зависимости и подзадачи — краткими карточками. Ответ всегда полный: превышение пределов — ошибка CONTEXT_TOO_LARGE, а не усечение. consistency меняется при изменении любой включённой записи; contractVersion — версия формы ответа. Предназначено для передачи постановки исполнителю без доступа к Relay; изменения выполняются прежними командами.",
+    examples: [
+      ["npx @oim-dev/relay-cli task context PRODUCT-1", "Прочитать постановку целиком"],
+      [
+        "npx @oim-dev/relay-cli task context PRODUCT-1 --target-documents --format json",
+        "Получить пакет контекста для внешнего контроллера",
+      ],
+    ],
+    configure: (command) =>
+      command.option(
+        "--target-documents",
+        "Включить документы, прикреплённые к целям задачи, их фичам, сценариям и приложениям",
+      ),
+    async run(context, input) {
+      const data = await context.backend.taskContext.read(
+        input.argument(),
+        input.options.targetDocuments ? { targetDocuments: "true" } : {},
+      );
+      return {
+        data,
+        text: (options) => taskContextText(data, options, taskInvocation(context)),
+      };
     },
   });
   registerTaskCommand<PageOptions>(group, runtime, {

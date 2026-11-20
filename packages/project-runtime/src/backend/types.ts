@@ -4,6 +4,7 @@ import type { validateWorkspace } from "@relay/core/application/validate";
 import type { Workspace } from "@relay/core/storage/workspace";
 import type { ProductQueries } from "@relay/core/application/product/queries";
 import type { BoardTasksService } from "@relay/core/application/board-tasks/service";
+import type { TaskContextService } from "@relay/core/application/board-tasks/context";
 import type { BoardsService } from "@relay/core/application/boards/service";
 import type { GraphService } from "@relay/core/application/graph/service";
 import type { EntityEngine } from "@relay/core/application/entities/service";
@@ -112,6 +113,8 @@ export interface Backend {
     | "getComment"
     | "publishComment"
   >;
+  /** Контекст исполнения задачи; HTTP требует relay-task-context-v1. */
+  taskContext: Pick<TaskContextService, "read">;
   boards: Pick<BoardsService, "list" | "get">;
   product: Pick<
     ProductQueries,

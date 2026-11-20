@@ -9,6 +9,7 @@ import {
   PRODUCT_QUERIES_CAPABILITY,
   RELEASE_REFS_CAPABILITY,
 } from "../src/backend/http.js";
+import { TASK_CONTEXT_CAPABILITY } from "@relay/contracts/task-context";
 
 function context(capabilities: string[] = []) {
   return {
@@ -80,6 +81,7 @@ const guarded: Array<[string, (backend: Backend) => Promise<unknown>]> = [
   ],
   ["entities.search", (b) => b.entities.list({ q: "содержание" })],
   ["entities.FI", (b) => b.entities.list({ implementationTarget: "feature" })],
+  ["taskContext.read", (b) => b.taskContext.read("TASK-1", { targetDocuments: "true" })],
 ];
 
 for (const [name, operation] of guarded)
@@ -98,13 +100,15 @@ for (const [name, operation] of guarded)
   test(`HTTP ${name}: невалидный успешный ответ отклоняется без повторов`, async (t) => {
     let requests = 0;
     t.mock.method(globalThis, "fetch", async (input: string) => {
-      if (new URL(input).pathname.endsWith("/context"))
+      // Handshake — проектный /context, не одноимённое чтение контекста задачи.
+      if (/\/projects\/[^/]+\/context$/.test(new URL(input).pathname))
         return Response.json(
           context([
             ENTITY_SEARCH_CAPABILITY,
             WORK_READ_MODELS_CAPABILITY,
             PRODUCT_QUERIES_CAPABILITY,
             RELEASE_REFS_CAPABILITY,
+            TASK_CONTEXT_CAPABILITY,
           ]),
         );
       requests++;

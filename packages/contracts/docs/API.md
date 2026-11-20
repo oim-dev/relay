@@ -23,6 +23,7 @@
 | `@relay/contracts/work-history`          | Ветки работы агентов, отдельные участия, неизменяемые checkpoints и предметные операции истории                     |
 | `@relay/contracts/work-history-graph`    | Компактный граф истории проекта/ветки, явные границы страниц и полные материалы выбранной точки                     |
 | `@relay/contracts/progress`              | Предметные показатели и выборки прогресса                                                                           |
+| `@relay/contracts/task-context`          | Контекст исполнения задачи: форма ответа, `contractVersion`, причины включения, пределы и capability                |
 | `@relay/contracts/product`               | Совместимые типы продуктовых представлений                                                                          |
 | `@relay/contracts/product-query`         | Проверка продукта, адресуемые рекомендации lint и отдельная страница карты обзора                                   |
 | `@relay/contracts/product-participation` | Компактный состав, атомарный выбор прежних и новых вкладов, полная реализация с savedStatus                         |
