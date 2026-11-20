@@ -8,6 +8,7 @@ import type { TestContext } from "node:test";
 import { WORK_HISTORY_CAPABILITY } from "@relay/contracts/work-history";
 import { WORK_HISTORY_GRAPH_CAPABILITY } from "@relay/contracts/work-history-graph";
 import { SYNCHRONIZATION_CAPABILITY } from "@relay/contracts/synchronization";
+import { TASK_CONTEXT_CAPABILITY } from "@relay/contracts/task-context";
 import { defaultConfig } from "@relay/core/domain/config";
 import { initialize, readWorkspaceConfig } from "@relay/core/storage/workspace";
 import type { Workspace } from "@relay/core/storage/workspace";
@@ -134,6 +135,7 @@ for (const mode of ["local", "workspace"] as const) {
               "relay-project-catalog-v1",
               WORK_HISTORY_CAPABILITY,
               WORK_HISTORY_GRAPH_CAPABILITY,
+              TASK_CONTEXT_CAPABILITY,
             ],
             projectId: config.projectId,
             configPath: target.projectConfig,

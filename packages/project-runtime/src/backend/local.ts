@@ -5,6 +5,7 @@ import { projectSettings } from "@relay/core/storage/project-settings";
 import type { Backend } from "./types.js";
 import { ProductQueries } from "@relay/core/application/product/queries";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
+import { TaskContextService } from "@relay/core/application/board-tasks/context";
 import { BoardsService } from "@relay/core/application/boards/service";
 import { GraphService } from "@relay/core/application/graph/service";
 import { EntityEngine } from "@relay/core/application/entities/service";
@@ -52,6 +53,7 @@ export async function createLocalBackend(
     documents: new DocumentLibraryService(workspace),
     graph: new GraphService(workspace),
     boardTasks: new BoardTasksService(workspace),
+    taskContext: new TaskContextService(workspace),
     boards: new BoardsService(workspace),
     product: new ProductQueries(workspace),
     workspace: {

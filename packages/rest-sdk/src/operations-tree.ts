@@ -44,6 +44,8 @@ import { getApplicationProgressForProject } from "./operations/get-application-p
 import { getApplicationProgress } from "./operations/get-application-progress.js";
 import { getBoardBySlugForProject } from "./operations/get-board-by-slug-for-project.js";
 import { getBoardBySlug } from "./operations/get-board-by-slug.js";
+import { getBoardTaskContextForProject } from "./operations/get-board-task-context-for-project.js";
+import { getBoardTaskContext } from "./operations/get-board-task-context.js";
 import { getBoardTaskForProject } from "./operations/get-board-task-for-project.js";
 import { getBoardTaskLinksForProject } from "./operations/get-board-task-links-for-project.js";
 import { getBoardTaskLinks } from "./operations/get-board-task-links.js";
@@ -442,6 +444,7 @@ export const operationsTree = {
     linkBoardTask: linkBoardTask,
     getTaskCriteria: getTaskCriteria,
     changeTaskCriterion: changeTaskCriterion,
+    getBoardTaskContext: getBoardTaskContext,
     getTaskComments: getTaskComments,
     publishTaskComment: publishTaskComment,
     getTaskComment: getTaskComment,
@@ -455,6 +458,7 @@ export const operationsTree = {
     linkBoardTaskForProject: linkBoardTaskForProject,
     getTaskCriteriaForProject: getTaskCriteriaForProject,
     changeTaskCriterionForProject: changeTaskCriterionForProject,
+    getBoardTaskContextForProject: getBoardTaskContextForProject,
     getTaskCommentsForProject: getTaskCommentsForProject,
     publishTaskCommentForProject: publishTaskCommentForProject,
     getTaskCommentForProject: getTaskCommentForProject,

@@ -13,6 +13,7 @@ import { actorSchema, parse } from "@relay/core/domain/validation";
 import { AppError, invariant } from "@relay/core/shared/errors";
 import { openWorkspace, readWorkspaceConfig } from "@relay/core/storage/workspace";
 import { SYNCHRONIZATION_CAPABILITY } from "@relay/contracts/synchronization";
+import { TASK_CONTEXT_CAPABILITY } from "@relay/contracts/task-context";
 import type { OpenWorkspaceOptions, Workspace } from "@relay/core/storage/workspace";
 import { configurationMode, entryTarget, readConfiguration } from "@relay/project-runtime/config";
 import { registerProject, unregisterProject } from "@relay/project-runtime/registry";
@@ -107,6 +108,7 @@ export class ProjectContext {
         PROJECT_CATALOG_CAPABILITY,
         WORK_HISTORY_CAPABILITY,
         WORK_HISTORY_GRAPH_CAPABILITY,
+        TASK_CONTEXT_CAPABILITY,
       ],
       projectId: this.projectId,
       configPath: workspace.configPath,

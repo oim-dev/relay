@@ -39,7 +39,7 @@ for (const scoped of [false, true])
           );
       }
     }
-    assert.equal(operations.size, 237);
+    assert.equal(operations.size, 239);
     for (const path of [
       "/api/v1/tasks",
       "/api/v1/board",
@@ -191,6 +191,7 @@ for (const scoped of [false, true])
       },
     );
     await request("GET", "/api/v1/board-tasks/{reference}/criteria", `${cardBase}/criteria`);
+    await request("GET", "/api/v1/board-tasks/{reference}/context", `${cardBase}/context`);
     await request(
       "GET",
       "/api/v1/board-tasks/{reference}/criteria/{criterionId}",
@@ -496,7 +497,7 @@ for (const scoped of [false, true])
     });
     const metricSchema = document.components!.schemas!.ProductOverviewMetricPage as SchemaObject;
     assert.equal(metricSchema.oneOf?.length, 9);
-    assert.equal(visited.size, 62);
+    assert.equal(visited.size, 63);
     const sse = operations.get("GET /api/v1/events")!.responses[200]!;
     assert(!("$ref" in sse) && sse.content?.["text/event-stream"]);
     const updateSchema = document.components!.schemas!.UpdateBoardTask as SchemaObject;

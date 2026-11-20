@@ -461,6 +461,7 @@ exitCode 2, совместимый с прежними командами биб
 | `GET /board-tasks`                                  | Поиск задач; `BoardTasksQuery` → `BoardTasksPage`                        |
 | `GET /board-tasks/:reference`                       | Полная задача → `BoardTaskView`                                          |
 | `GET /board-tasks/:reference/links`                 | Прямые/обратные связи; `BoardTasksQuery` → `BoardTaskLinksPage`          |
+| `GET /board-tasks/:reference/context`               | Контекст исполнения; `TaskContextQuery` → `TaskContext`                  |
 | `POST /board-tasks`                                 | Создать; `CreateBoardTask` → `BoardTaskSaved`                            |
 | `POST /board-tasks/:reference/update`               | Содержание/продуктовые цели; `UpdateBoardTask` → `BoardTaskSaved`        |
 | `POST /board-tasks/:reference/move`                 | Колонка, порядок, доска; `MoveBoardTask` → `BoardTaskSaved`              |
@@ -477,6 +478,24 @@ exitCode 2, совместимый с прежними командами биб
 автора/роль и не меняет ревизию содержания задачи. Редактирования/удаления опубликованного
 комментария нет. После потери ответа повтор публикации может создать новое сообщение.
 Для целей, зависимостей и родительства используйте предметные операции, не POST графа.
+
+`GET /board-tasks/:reference/context` (operationId `getBoardTaskContext` /
+`getBoardTaskContextForProject`) — одно согласованное чтение всего, что исполнителю нужно
+прочитать по задаче: задача с полными критериями (`task.criteria`, постоянные ID),
+явные цели (`targets`), их фичи и сценарии (`requirements`), приложения реализаций
+(`applications`), паспорт (`product`, незаполненный — с ревизией 0) и неархивные документы,
+прикреплённые к задаче (`documents`).
+`targetDocuments=true` добавляет документы, прикреплённые к целям, их фичам, сценариям
+и приложениям.
+Каждая запись имеет форму `EntityDetail` (ключ, ревизия, полный Markdown) и `reasons`
+с основаниями включения; запись не повторяется между разделами. `dependencies` и
+`children` — краткие карточки задач. `contractVersion` — версия формы ответа,
+`consistency` — отпечаток всего содержания ответа, `complete` всегда `true`:
+превышение `limits` возвращает `CONTEXT_TOO_LARGE` (exit 4, как у `/graph/context`),
+а не усечённый ответ.
+Маршрут объявляется capability `relay-task-context-v1` выбранного проекта; HTTP Backend
+без неё возвращает `SERVER_INCOMPATIBLE`, без обхода прежними чтениями. Прежние
+`GET /board-tasks/:reference` и чтения критериев не меняются.
 
 ## История работы агентов
 

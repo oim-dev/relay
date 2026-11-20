@@ -12,6 +12,8 @@ import {
 import { ApiParam, ApiTags } from "@nestjs/swagger";
 import { success } from "@relay/contracts";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
+import { TaskContextService } from "@relay/core/application/board-tasks/context";
+import { taskContextQuerySchema, type TaskContextQuery } from "@relay/contracts/task-context";
 import {
   boardTaskReferenceSchema,
   boardTasksQuerySchema,
@@ -126,6 +128,24 @@ class BoardTasksController {
   ) {
     return success(
       await new BoardTasksService(await this.workspace.open()).listCriteria(reference, query),
+    );
+  }
+
+  @Get(":reference/context")
+  @ApiParam({ name: "reference", description: "ID или ключ задачи" })
+  @ApiEndpoint({
+    id: "getBoardTaskContext",
+    summary:
+      "Контекст исполнения задачи одним чтением: критерии, цели FI/SI, требования, приложения, паспорт и документы",
+    response: "TaskContext",
+    query: "TaskContextQuery",
+  })
+  async context(
+    @Param("reference", new ZodValidationPipe(boardTaskReferenceSchema)) reference: string,
+    @Query(new ZodValidationPipe(taskContextQuerySchema)) query: TaskContextQuery,
+  ) {
+    return success(
+      await new TaskContextService(await this.workspace.open()).read(reference, query),
     );
   }
 

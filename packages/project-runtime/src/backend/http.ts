@@ -5,6 +5,11 @@ import {
   synchronizationStatusSchema,
 } from "@relay/contracts/synchronization";
 import { actorSchema } from "@relay/contracts/primitives";
+import {
+  TASK_CONTEXT_CAPABILITY,
+  taskContextQuerySchema,
+  taskContextSchema,
+} from "@relay/contracts/task-context";
 import { workHistoryOperations, WORK_HISTORY_CAPABILITY } from "@relay/contracts/work-history";
 import {
   productValidationSchema,
@@ -1023,6 +1028,20 @@ export async function createHttpBackend(url: string, project?: string): Promise<
             input.requestId,
           ),
         ),
+    },
+    taskContext: {
+      read: async (reference, input = {}) => {
+        requireCapability(TASK_CONTEXT_CAPABILITY);
+        return decode(
+          taskContextSchema,
+          await call(() =>
+            api.kanban.getBoardTaskContext({
+              reference,
+              ...defined(taskContextQuerySchema.parse(input)),
+            }),
+          ),
+        );
+      },
     },
     boards: {
       list: async (input = {}) =>

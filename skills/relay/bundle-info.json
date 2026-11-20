@@ -13,12 +13,12 @@
     "packages/relay-skill/src/bundle.json": "523b0da075b1aa6c6fb243f76ca4dda003b446bd693456cf9623f8bd98e08f53",
     "packages/relay-skill/src/references/APPLICATIONS.md": "11ee59782f9f247e31603e9afc797d87ec05b0a79fabdcdf5ba3a633f0b3f4d2",
     "packages/relay-skill/src/references/FEATURES.md": "0442f1fc2ab7615255f00982a66aa5e5b1eb364b3fd540605a4db5cbdd56e1c4",
-    "packages/relay-skill/src/references/HISTORY.md": "f71577c3348f97e422e66ff21b3ec6a781b5e0d690a97f3a024786f6d2eeb5f2",
-    "packages/relay-skill/src/references/KNOWLEDGE.md": "912ad57d8811441f80ac37f09bd8ed63557036e7b5414a6f7973daa72f38414d",
+    "packages/relay-skill/src/references/HISTORY.md": "02786cbcc73dbdaf1c185169a0d58011981d3c65fd51396bf233d9d898838c45",
+    "packages/relay-skill/src/references/KNOWLEDGE.md": "5f9d968d5a644789f2e94807037b595c73f95da2f971ef45370a54252607083b",
     "packages/relay-skill/src/references/PLANNING.md": "40c0bc633ee26c680f7bc72c99dfb2a4a3d2be3e6fdac56f29d1caf7bad78892",
     "packages/relay-skill/src/references/RELEASES.md": "5d04b3be105a83d91ac83d5f8541c94c676cd5f0606d3c350f6a5d84505ffaff",
-    "packages/relay-skill/src/references/TASKS.md": "9f01b890b15d27dd1af41166a67de683f3f5741db284c9ab4115e7734de9ae2b",
-    "packages/relay-skill/src/skill.md": "62cc9a318ae77c1a4a39872f1cfb51b2e73258140603418592653b9bfcaadbc5",
+    "packages/relay-skill/src/references/TASKS.md": "d79eb61c44423ffb66c75867886e07ba810fffa11cc1c50c76d8d9ebd3a61488",
+    "packages/relay-skill/src/skill.md": "082c2d3793a5f22d64ff6c925b3bd16c9ed6923b89e4c059f6cb3392f60f2546",
     "packages/relay-skill/turbo.json": "351261f2118cb7287968a282d2bcaf2fb86b3e807297aa6582ffb1049f9b6c87",
     "pnpm-lock.yaml": "91e307de0ade505cbce5a35ae88110444f4c36ef56aeaeb6e1b93fe932b8db8f"
   }

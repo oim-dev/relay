@@ -72,7 +72,7 @@ MCP поддерживает Streamable HTTP и управляемый клие�
 | Изменить отображаемое имя проекта                | Есть | Есть | Есть | Есть | Есть | CLI: `project update`; MCP: общая операция изменения проекта.                                                                                                     |
 | Изменить slug проекта                            | Есть | Есть | Есть | Есть | Нет  | CLI: `project update --slug`; REST settings сохраняет пару name/slug.                                                                                             |
 
-Входы: `init`, `workspace project`, `config get`, `project get/update/rename`; MCP `projects_list`,
+Входы: `init`, `workspace project`, `config get`, `config contract`, `project get/update/rename`; MCP `projects_list`,
 `project_register`, `project_unregister`, `project_config`, `entity_project_update`;
 REST `/server`, `/projects`, `/context`, `/context/settings`.
 
@@ -234,6 +234,7 @@ settings PUT разделы не изменяет.
 | Найти задачи по доске, состоянию и другим фильтрам     | Есть | Есть | Есть     | Есть | Есть | Предметные списки и общий каталог сущностей.                                                                          |
 | Создать или изменить содержание задачи                 | Есть | Есть | Есть     | Есть | Есть | Предметные и общие операции сущностей.                                                                                |
 | Прочитать полное содержание задачи                     | Есть | Есть | Есть     | Есть | Есть | Отдельная карточка задачи.                                                                                            |
+| Прочитать контекст исполнения задачи одним чтением     | Есть | Есть | Нет      | Есть | Нет  | Задача, критерии, цели FI/SI, их требования и приложения, паспорт и документы; HTTP — `relay-task-context-v1`.        |
 | Переместить задачу в другую колонку                    | Есть | Есть | Есть     | Есть | Есть | Предметное перемещение, а не произвольная запись графа.                                                               |
 | Изменить порядок задач на доске                        | Есть | Есть | Есть     | Есть | Есть | Позиция относительно следующей задачи.                                                                                |
 | Перенести задачу на другую доску                       | Есть | Есть | Есть     | Есть | Есть | Постоянный ID и читаемый ключ имеют разные роли.                                                                      |
@@ -250,11 +251,11 @@ settings PUT разделы не изменяет.
 | Опубликовать комментарий                               | Есть | Есть | Есть     | Есть | Есть | Повторная публикация не является получением прежнего результата.                                                      |
 | Изменить или удалить опубликованный комментарий        | Нет  | Нет  | Нет      | Нет  | Нет  | Таких операций нет.                                                                                                   |
 
-Входы: `board list/get`, `task`, `task parent`, `task dependency`, `task criterion`,
+Входы: `board list/get`, `task`, `task context`, `task parent`, `task dependency`, `task criterion`,
 `task comment list/get/add`;
 MCP `boards_list`, `board_task_*`, `board_tasks_list`, `task_criterion_*`,
 `task_criteria_list`, `task_comment_*`, `task_comments_list`;
-REST `/boards`, `/board-tasks` с подмаршрутами `links`, `move`, `update`, `criteria`, `comments`.
+REST `/boards`, `/board-tasks` с подмаршрутами `links`, `move`, `update`, `criteria`, `comments`, `context`.
 
 Основания: [Core задачи](../packages/core/src/application/board-tasks/service.ts),
 [CLI задачи](../apps/cli/src/commands/board-tasks.ts),

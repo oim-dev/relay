@@ -358,7 +358,7 @@ npx @oim-dev/relay-server --open
 и taskDependencies; `relay-release-refs-v1` — createByRefs/updateByRefs релиза;
 `relay-entity-search-v2` — новая семантика entities.list при implementationTarget,
 при переданном q или sort=updated вне явного kind=document, а также при active/section
-без kind;
+без kind; `relay-task-context-v1` — контекст исполнения задачи `taskContext.read`;
 без них вызов даёт `SERVER_INCOMPATIBLE`, а не 404 маршрута. Переназначение ключа регистрации не
 должно переносить существующий клиент на другую базу; исчезновение выбранной регистрации
 даёт ошибку. Runtime проверяет конверт и предметные ответы схемами, а не доверяет только
