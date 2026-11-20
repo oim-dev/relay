@@ -220,7 +220,7 @@ test("контекст задачи: цели FI/SI, требования, пр�
   // По умолчанию только документы самой задачи; несвязанные не попадают.
   assert.deepEqual(
     context.documents.map(({ record, reasons }) => [record.ref.id, reasons]),
-    [[f.spec.ref.id, [{ code: "task-document", from: null }]]],
+    [[f.spec.ref.id, [{ code: "task-document", from: { kind: "task", id: f.task.id } }]]],
   );
   const spec = context.documents[0]!.record;
   assert(spec.data.kind === "document" && spec.data.body === "# ТЗ\nПолный текст");
@@ -247,7 +247,7 @@ test("контекст задачи: цели FI/SI, требования, пр�
   assert.deepEqual(
     withTargets.documents.map(({ record, reasons }) => [record.ref.id, reasons]),
     [
-      [f.spec.ref.id, [{ code: "task-document", from: null }]],
+      [f.spec.ref.id, [{ code: "task-document", from: { kind: "task", id: f.task.id } }]],
       [
         f.rules.ref.id,
         [{ code: "target-document", from: { kind: "implementation", id: f.fi.id } }],

@@ -72,7 +72,7 @@ MCP поддерживает Streamable HTTP и управляемый клие�
 | Изменить отображаемое имя проекта                | Есть | Есть | Есть | Есть | Есть | CLI: `project update`; MCP: общая операция изменения проекта.                                                                                                     |
 | Изменить slug проекта                            | Есть | Есть | Есть | Есть | Нет  | CLI: `project update --slug`; REST settings сохраняет пару name/slug.                                                                                             |
 
-Входы: `init`, `workspace project`, `config get`, `project get/update/rename`; MCP `projects_list`,
+Входы: `init`, `workspace project`, `config get`, `config contract`, `project get/update/rename`; MCP `projects_list`,
 `project_register`, `project_unregister`, `project_config`, `entity_project_update`;
 REST `/server`, `/projects`, `/context`, `/context/settings`.
 

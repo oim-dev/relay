@@ -463,7 +463,7 @@ export function taskErrorRecovery(error: AppError, options: TextOptions): string
           : ["task", "list"];
   } else if (
     ["SERVER_UNAVAILABLE", "INVALID_SERVER_RESPONSE"].includes(error.code) &&
-    !["get", "list", "children", "links"].includes(action)
+    !["get", "list", "children", "links", "context"].includes(action)
   ) {
     prose =
       "Ответ записи не получен: действие могло завершиться. Сначала перечитайте состояние, не повторяйте запись вслепую; request-id не защищает от дубликатов.";
@@ -543,7 +543,7 @@ export function taskContextText(
         (item) =>
           `${item.key} · ${item.title || "без названия"} · ${columns[item.column] ?? item.column}`,
       )
-      .join("\n");
+      .join("\n") || "нет";
   return cardText(
     {
       title: `Контекст исполнения ${task.key} · ${task.title}`,

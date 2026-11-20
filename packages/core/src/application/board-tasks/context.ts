@@ -135,7 +135,7 @@ export class TaskContextService {
           for (const item of page.items)
             await include(item.ref, "documents", {
               code: reason,
-              from: owner.kind === "task" ? null : owner,
+              from: owner,
             });
           offset = page.nextOffset;
         }

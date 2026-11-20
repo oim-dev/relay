@@ -151,6 +151,17 @@ test("task context: JSON local и HTTP совпадают, флаг докуме
     assert(text.stdout.includes(fragment), `${fragment}\n${text.stdout}`);
 
   failed(await app.run(["task", "context", "WEB-404"]), "NOT_FOUND", 3);
+  // Недоступный сервер: чтение не выдаётся за неподтверждённую запись.
+  const offline = await invokeRaw(app.root, [
+    "--server-url",
+    "http://127.0.0.1:9",
+    "task",
+    "context",
+    task.key,
+  ]);
+  assert.notEqual(offline.code, 0);
+  assert.match(offline.stdout + offline.stderr, /SERVER_UNAVAILABLE|недоступен/);
+  assert.doesNotMatch(offline.stdout + offline.stderr, /Ответ записи не получен/);
   const help = await invokeRaw(app.root, ["task", "context", "--help"]);
   assert.equal(help.code, 0);
   assert(help.stdout.includes("--target-documents"));
@@ -169,6 +180,7 @@ test("config contract: версии договора без проекта и с
   ).data;
   assert.equal(json.contractVersion, API_CONTRACT_VERSION);
   assert.equal(json.taskContextContractVersion, 1);
+  assert.equal((json as unknown as { package: string }).package, "@oim-dev/relay-cli");
   const version = await invokeRaw(empty, ["-V"]);
   assert.equal(version.stdout.trim(), json.version);
   const text = await invokeRaw(empty, ["config", "contract"], { env });

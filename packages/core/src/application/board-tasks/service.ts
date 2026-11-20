@@ -364,9 +364,10 @@ export class BoardTasksService {
       return {
         task: view(task, tasks, boards, index),
         criteria: structuredClone(task.acceptanceCriteria),
-        dependencies: task.dependencies.flatMap((id) => {
+        dependencies: task.dependencies.map((id) => {
           const dependency = byId.get(id);
-          return dependency ? [boardTaskSummary(dependency, boards, index)] : [];
+          invariant(dependency, "INVALID_DATA", "Зависимость задачи не найдена", 5, { id });
+          return boardTaskSummary(dependency, boards, index);
         }),
         children: tasks
           .filter((entry) => entry.parentId === task.id)
