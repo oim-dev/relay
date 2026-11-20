@@ -320,3 +320,127 @@ test("контекст задачи: фича и сценарий как пря�
     code: "VALIDATION_ERROR",
   });
 });
+
+test("контекст задачи: отпечаток видит документ, критерий и транзитивный блокер", async (t) => {
+  const f = await contextFixture(t);
+  const service = new TaskContextService(f.workspace);
+  const engine = new EntityEngine(f.workspace);
+  let previous = (await service.read(f.task.id)).consistency;
+  const changed = async (label: string) => {
+    const next = (await service.read(f.task.id)).consistency;
+    assert.notEqual(next, previous, label);
+    previous = next;
+  };
+  await engine.update(
+    {
+      ref: f.spec.key,
+      ifRevision: f.spec.revision,
+      requestId: "spec-edit",
+      changes: { kind: "document", body: "# ТЗ\nНовый текст" },
+    },
+    "agent",
+  );
+  await changed("правка документа задачи");
+  const current = await f.tasks.get(f.task.id);
+  const criterion = (await f.tasks.listCriteria(f.task.id)).items[0]!;
+  await f.tasks.changeCriterion(
+    f.task.id,
+    {
+      action: "complete",
+      criterionId: criterion.id,
+      completed: true,
+      ifRevision: current.revision,
+      requestId: "complete",
+    },
+    "agent",
+  );
+  await changed("отметка критерия");
+
+  // D — прямая зависимость, E — её зависимость. Возврат E из done меняет блокеры задачи,
+  // хотя ревизия и колонка D прежние.
+  const e = await f.tasks.create({ board: "web", title: "E", requestId: "e" }, "agent");
+  await f.tasks.link(
+    f.dependency.id,
+    { relation: "depends-on", target: e.id, ifRevision: 1, requestId: "d-e" },
+    "agent",
+  );
+  const move = async (id: string, column: "done" | "in-progress", requestId: string) =>
+    f.tasks.move(id, { column, ifRevision: (await f.tasks.get(id)).revision, requestId }, "agent");
+  await move(e.id, "done", "e-done");
+  await move(f.dependency.id, "done", "d-done");
+  const ready = await service.read(f.task.id);
+  assert.deepEqual(ready.task.blockers, [f.child.id]);
+  previous = ready.consistency;
+  const dependency = (await f.tasks.get(f.dependency.id)).revision;
+  await move(e.id, "in-progress", "e-back");
+  assert.equal((await f.tasks.get(f.dependency.id)).revision, dependency);
+  const blocked = await service.read(f.task.id);
+  assert.notDeepEqual(blocked.task.blockers, ready.task.blockers);
+  await changed("транзитивный блокер");
+});
+
+test("контекст задачи: архивные документы исключены, основания объединяются, документы владельцев", async (t) => {
+  const f = await contextFixture(t);
+  const service = new TaskContextService(f.workspace);
+  const engine = new EntityEngine(f.workspace);
+  await engine.update(
+    {
+      ref: f.rules.key,
+      ifRevision: f.rules.revision,
+      requestId: "rules-both",
+      changes: {
+        kind: "document",
+        relations: [
+          { target: { kind: "implementation", id: f.fi.id }, type: "documents", description: "" },
+          { target: { kind: "task", id: f.task.id }, type: "references", description: "" },
+        ],
+      },
+    },
+    "agent",
+  );
+  const archived = await engine.create(
+    {
+      requestId: "archived",
+      data: {
+        kind: "document",
+        name: "Устаревшее",
+        summary: "",
+        body: "Старое",
+        documentKind: "rules",
+        documentStatus: "archived",
+        relations: [
+          { target: { kind: "task", id: f.task.id }, type: "references", description: "" },
+        ],
+      },
+    },
+    "agent",
+  );
+  const featureDoc = await engine.create(
+    {
+      requestId: "feature-doc",
+      data: {
+        kind: "document",
+        name: "Правила фичи",
+        summary: "",
+        body: "Фича",
+        documentKind: "rules",
+        relations: [
+          { target: { kind: "feature", id: f.feature.id }, type: "documents", description: "" },
+        ],
+      },
+    },
+    "agent",
+  );
+  const context = await service.read(f.task.id, { targetDocuments: "true" });
+  const documents = new Map(
+    context.documents.map(({ record, reasons }) => [record.ref.id, reasons.map((r) => r.code)]),
+  );
+  assert.equal(documents.has(archived.ref.id), false, "архивный документ не передаётся");
+  assert.deepEqual(documents.get(f.rules.ref.id), ["task-document", "target-document"]);
+  assert.deepEqual(documents.get(featureDoc.ref.id), ["target-document"]);
+  const plain = await service.read(f.task.id);
+  assert.equal(
+    plain.documents.some(({ record }) => record.ref.id === featureDoc.ref.id),
+    false,
+  );
+});

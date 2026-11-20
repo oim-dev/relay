@@ -483,12 +483,13 @@ exitCode 2, совместимый с прежними командами биб
 `getBoardTaskContextForProject`) — одно согласованное чтение всего, что исполнителю нужно
 прочитать по задаче: задача с полными критериями (`task.criteria`, постоянные ID),
 явные цели (`targets`), их фичи и сценарии (`requirements`), приложения реализаций
-(`applications`), паспорт (`product`) и документы, прикреплённые к задаче (`documents`).
+(`applications`), паспорт (`product`, незаполненный — с ревизией 0) и неархивные документы,
+прикреплённые к задаче (`documents`).
 `targetDocuments=true` добавляет документы, прикреплённые к целям и их требованиям.
 Каждая запись имеет форму `EntityDetail` (ключ, ревизия, полный Markdown) и `reasons`
 с основаниями включения; запись не повторяется между разделами. `dependencies` и
 `children` — краткие карточки задач. `contractVersion` — версия формы ответа,
-`consistency` — отпечаток ревизий и состава выборки, `complete` всегда `true`:
+`consistency` — отпечаток всего содержания ответа, `complete` всегда `true`:
 превышение `limits` возвращает `CONTEXT_TOO_LARGE` (exit 4, как у `/graph/context`),
 а не усечённый ответ.
 Маршрут объявляется capability `relay-task-context-v1` выбранного проекта; HTTP Backend

@@ -220,3 +220,26 @@ test("HTTP entities: FI-фильтр, карточки приложения/це
   });
   assert.equal(calls, 2);
 });
+
+test("HTTP taskContext.read: адрес задачи и targetDocuments передаются в запросе", async (t) => {
+  const requests: URL[] = [];
+  t.mock.method(globalThis, "fetch", async (input: string) => {
+    const url = new URL(input);
+    if (/\/projects\/[^/]+\/context$/.test(url.pathname))
+      return Response.json(context([TASK_CONTEXT_CAPABILITY]));
+    requests.push(url);
+    return Response.json({ ok: true, data: {} });
+  });
+  const backend = await createHttpBackend("http://127.0.0.1:4700", "registration");
+  await assert.rejects(backend.taskContext.read("WEB 1", { targetDocuments: "true" }), {
+    code: "INVALID_SERVER_RESPONSE",
+  });
+  await assert.rejects(backend.taskContext.read("WEB-2"), { code: "INVALID_SERVER_RESPONSE" });
+  assert.deepEqual(
+    requests.map((url) => [url.pathname, url.searchParams.get("targetDocuments")]),
+    [
+      ["/api/v1/projects/fixed-project/board-tasks/WEB%201/context", "true"],
+      ["/api/v1/projects/fixed-project/board-tasks/WEB-2/context", null],
+    ],
+  );
+});

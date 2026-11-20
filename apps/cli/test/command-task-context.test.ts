@@ -6,7 +6,7 @@ import { ProductQueries } from "@relay/core/application/product/queries";
 import { BoardTasksService } from "@relay/core/application/board-tasks/service";
 import { API_CONTRACT_VERSION } from "@relay/contracts";
 import { taskContextSchema, type TaskContext } from "@relay/contracts/task-context";
-import { fixture, invokeRaw, successful, failed } from "./helpers/cli.js";
+import { fixture, invoke, invokeRaw, successful, failed, tempDirectory } from "./helpers/cli.js";
 import { httpServer } from "./helpers/http.js";
 
 /** Продукт с FI, задачей с критерием и двумя документами: задачи и реализации. */
@@ -123,6 +123,17 @@ test("task context: JSON local и HTTP совпадают, флаг докуме
     await app.run<TaskContext>(["--server-url", server.url, "task", "context", task.id]),
   ).data;
   assert.deepEqual(remote, local);
+  const remoteExtended = successful(
+    await app.run<TaskContext>([
+      "--server-url",
+      server.url,
+      "task",
+      "context",
+      task.key,
+      "--target-documents",
+    ]),
+  ).data;
+  assert.deepEqual(remoteExtended, extended);
 
   const text = await invokeRaw(app.root, ["task", "context", task.key, "--target-documents"]);
   assert.equal(text.code, 0, text.stderr);
@@ -145,18 +156,22 @@ test("task context: JSON local и HTTP совпадают, флаг докуме
   assert(help.stdout.includes("--target-documents"));
 });
 
-test("meta: версии договора без открытия проекта, прежний -V не меняется", async (t) => {
-  const app = await fixture(t);
+test("config contract: версии договора без проекта и сервера, прежний -V не меняется", async (t) => {
+  const empty = await tempDirectory(t);
+  // Закрытый порт: команда не должна обращаться к серверу или искать проект.
+  const env = { RELAY_SERVER_URL: "http://127.0.0.1:9" };
   const json = successful(
-    await app.run<{ contractVersion: number; taskContextContractVersion: number; version: string }>(
-      ["meta"],
+    await invoke<{ contractVersion: number; taskContextContractVersion: number; version: string }>(
+      empty,
+      ["config", "contract"],
+      { env },
     ),
   ).data;
   assert.equal(json.contractVersion, API_CONTRACT_VERSION);
   assert.equal(json.taskContextContractVersion, 1);
-  const version = await invokeRaw(app.root, ["-V"]);
+  const version = await invokeRaw(empty, ["-V"]);
   assert.equal(version.stdout.trim(), json.version);
-  const text = await invokeRaw(app.root, ["meta"]);
-  assert.equal(text.code, 0);
+  const text = await invokeRaw(empty, ["config", "contract"], { env });
+  assert.equal(text.code, 0, text.stderr);
   assert(text.stdout.includes("Версия договора API"));
 });

@@ -19,7 +19,6 @@ import { EntityEngine } from "../entities/service.js";
 import { BoardTasksService } from "./service.js";
 
 type Section = "targets" | "requirements" | "applications" | "product" | "documents";
-const sections: Section[] = ["targets", "requirements", "applications", "product", "documents"];
 const address = (ref: EntityRef) => `${ref.kind}:${ref.id}`;
 
 /**
@@ -122,9 +121,12 @@ export class TaskContextService {
         let offset: number | null = 0;
         let version: string | undefined;
         while (offset !== null) {
+          // Типизированный адрес исключает совпадение ID с ключом другой сущности;
+          // архивные документы не передаются как действующие материалы.
           const page = await entities.list({
             kind: "document",
-            target: owner.id,
+            target: address(owner),
+            archived: "false",
             limit: 100,
             offset,
             ...(version === undefined ? {} : { version }),
@@ -152,21 +154,7 @@ export class TaskContextService {
         [...included.values()]
           .filter((entry) => entry.section === section)
           .map(({ record, reasons }) => ({ record, reasons }));
-      const fingerprint = createHash("sha256")
-        .update(
-          JSON.stringify([
-            TASK_CONTEXT_CONTRACT_VERSION,
-            query.targetDocuments ?? "false",
-            [execution.task.id, execution.task.revision, execution.task.column],
-            sections.map((section) =>
-              grouped(section).map(({ record }) => [address(record.ref), record.revision]),
-            ),
-            execution.dependencies.map((task) => [task.id, task.revision, task.column]),
-            execution.children.map((task) => [task.id, task.revision, task.column]),
-          ]),
-        )
-        .digest("hex");
-      const result: TaskContext = {
+      const body: Omit<TaskContext, "consistency"> = {
         contractVersion: TASK_CONTEXT_CONTRACT_VERSION,
         task: { ...execution.task, criteria: execution.criteria },
         targets: grouped("targets"),
@@ -176,9 +164,14 @@ export class TaskContextService {
         documents: grouped("documents"),
         dependencies: execution.dependencies,
         children: execution.children,
-        consistency: `task-context-v1:${fingerprint}`,
         complete: true,
         limits: { ...TASK_CONTEXT_LIMITS },
+      };
+      // Отпечаток всего содержания, включая вычисляемые блокеры, статусы и ключи ссылок.
+      const encoded = JSON.stringify([query.targetDocuments ?? "false", body]);
+      const result: TaskContext = {
+        ...body,
+        consistency: `task-context-v1:${createHash("sha256").update(encoded).digest("hex")}`,
       };
       invariant(
         Buffer.byteLength(JSON.stringify(result), "utf8") <= TASK_CONTEXT_LIMITS.bytes,

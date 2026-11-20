@@ -512,15 +512,23 @@ export function taskContextText(
     ["Паспорт", context.product ? [context.product] : []],
     ["Документ", context.documents],
   ] as const;
+  const keys = new Map<string, string>([[`task:${task.id}`, task.key]]);
+  for (const [, items] of groups)
+    for (const { record } of items) keys.set(`${record.ref.kind}:${record.ref.id}`, record.key);
   const records = groups.flatMap(([label, items]) =>
     items.map(({ record, reasons }) => ({
-      title: `${label}: ${record.key} · ${record.title} · ревизия ${record.revision}`,
+      title: [
+        `${label}: ${record.key} · ${record.title}`,
+        `ревизия ${record.revision}`,
+        ...(record.status ? [`состояние ${record.status}`] : []),
+        ...(record.active ? [] : ["снята с участия"]),
+      ].join(" · "),
       body: [
         wrap(
           `Основание: ${reasons
             .map(
               (reason) =>
-                `${contextReasons[reason.code] ?? reason.code}${reason.from ? ` (${reason.from.kind}:${reason.from.id})` : ""}`,
+                `${contextReasons[reason.code] ?? reason.code}${reason.from ? ` (${keys.get(`${reason.from.kind}:${reason.from.id}`) ?? `${reason.from.kind}:${reason.from.id}`})` : ""}`,
             )
             .join("; ")}`,
           options.width,

@@ -9,14 +9,22 @@ import { printResult } from "../output.js";
 import { packageVersion } from "../package-info.js";
 import { cardText } from "../presentation/common.js";
 
-/** Машиночитаемые версии договора для интеграций; проект не открывается. */
-export function registerMeta(program: Command, runtime: Runtime): void {
-  const meta = createCommand(program, {
-    name: "meta",
+/**
+ * Машиночитаемые версии договора для интеграций; проект не открывается.
+ * Подкоманда config, а не корневая: новый корневой токен перекрыл бы проект workspace
+ * с таким именем.
+ */
+export function registerContract(program: Command, runtime: Runtime): void {
+  const config = program.commands.find((command) => command.name() === "config");
+  if (!config) throw new Error("Группа config не зарегистрирована");
+  const meta = createCommand(config, {
+    name: "contract",
     description: "Показать версии пакета и договора интеграций",
     details:
       "Не открывает проект и не обращается к серверу. contractVersion совпадает с contractVersion в GET /api/v1/health сервера той же версии; taskContextContractVersion — версия формы task context. Интеграции сверяют их до первой записи. -V показывает только версию пакета.",
-    examples: [["npx @oim-dev/relay-cli meta --format json", "Проверить версии договора"]],
+    examples: [
+      ["npx @oim-dev/relay-cli config contract --format json", "Проверить версии договора"],
+    ],
   });
   meta.action(async () => {
     const globals = meta.optsWithGlobals<GlobalOptions>();

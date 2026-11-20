@@ -79,11 +79,13 @@ export const taskContextSchema = z
     applications: z.array(taskContextRecordSchema).describe("Приложения реализаций из целей"),
     product: taskContextRecordSchema
       .nullable()
-      .describe("Паспорт продукта; null, если он недоступен в проекте"),
+      .describe(
+        "Паспорт продукта; незаполненный паспорт возвращается с ревизией 0, null — только если паспорт недоступен",
+      ),
     documents: z
       .array(taskContextRecordSchema)
       .describe(
-        "Прикреплённые документы с полным содержанием: к задаче, а при targetDocuments=true — и к целям",
+        "Прикреплённые неархивные документы с полным содержанием: к задаче, а при targetDocuments=true — и к целям",
       ),
     dependencies: z
       .array(boardTaskSummarySchema)
@@ -92,7 +94,7 @@ export const taskContextSchema = z
     consistency: z
       .string()
       .describe(
-        "Отпечаток выборки: меняется при изменении ревизии или состава любой включённой записи",
+        "Отпечаток всего ответа: меняется при любом изменении содержания, включая вычисляемые блокеры, статусы и ключи ссылок",
       ),
     complete: z
       .literal(true)

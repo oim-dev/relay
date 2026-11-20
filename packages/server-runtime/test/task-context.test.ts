@@ -42,6 +42,22 @@ test("HTTP контекста задачи: local/scoped, равенство с 
     },
     "agent",
   );
+  await new EntityEngine(workspace).create(
+    {
+      requestId: "feature-doc",
+      data: {
+        kind: "document",
+        name: "Правила фичи",
+        summary: "",
+        body: "# Правила",
+        documentKind: "rules",
+        relations: [
+          { target: { kind: "feature", id: feature.id }, type: "documents", description: "" },
+        ],
+      },
+    },
+    "agent",
+  );
   const projectId = workspace.config.projectId;
   const context = await app.inject(`/api/v1/projects/${projectId}/context`);
   assert(context.json().data.capabilities.includes(TASK_CONTEXT_CAPABILITY));
@@ -63,6 +79,16 @@ test("HTTP контекста задачи: local/scoped, равенство с 
     `/api/v1/projects/${projectId}/board-tasks/${task.id}/context?targetDocuments=true`,
   );
   assert.equal(withTargets.statusCode, 200, withTargets.body);
+  assert.deepEqual(
+    withTargets
+      .json()
+      .data.documents.map((item: { record: { title: string } }) => item.record.title),
+    ["ТЗ", "Правила фичи"],
+  );
+  assert.deepEqual(
+    taskContextSchema.parse(withTargets.json().data),
+    await new TaskContextService(workspace).read(task.id, { targetDocuments: "true" }),
+  );
   const invalid = await app.inject(
     `/api/v1/projects/${projectId}/board-tasks/${task.id}/context?targetDocuments=yes`,
   );
