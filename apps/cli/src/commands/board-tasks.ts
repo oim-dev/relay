@@ -275,8 +275,8 @@ export function registerBoardTasks(program: Command, runtime: Runtime): void {
     examples: [
       ["npx @oim-dev/relay-cli task context PRODUCT-1", "Прочитать постановку целиком"],
       [
-        "npx @oim-dev/relay-cli task context PRODUCT-1 --target-documents --format json",
-        "Получить пакет контекста для внешнего контроллера",
+        "npx @oim-dev/relay-cli task context PRODUCT-1 --target-documents",
+        "Включить документы целей в пакет для исполнителя",
       ],
     ],
     configure: (command) =>

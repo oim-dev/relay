@@ -22,9 +22,7 @@ export function registerContract(program: Command, runtime: Runtime): void {
     description: "Показать версии пакета и договора интеграций",
     details:
       "Не открывает проект и не обращается к серверу. contractVersion совпадает с contractVersion в GET /api/v1/health сервера той же версии; taskContextContractVersion — версия формы task context. Интеграции сверяют их до первой записи. -V показывает только версию пакета.",
-    examples: [
-      ["npx @oim-dev/relay-cli config contract --format json", "Проверить версии договора"],
-    ],
+    examples: [["npx @oim-dev/relay-cli config contract", "Проверить версии договора"]],
   });
   meta.action(async () => {
     const globals = meta.optsWithGlobals<GlobalOptions>();
